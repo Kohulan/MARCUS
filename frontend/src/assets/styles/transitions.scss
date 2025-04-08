@@ -1,0 +1,11 @@
+/* 
+ * This prevents layout shifts during theme changes by locking 
+ * the body size during the transition.
+ */
+ html.theme-transition,
+ html.theme-transition *,
+ html.theme-transition *:before,
+ html.theme-transition *:after {
+   transition: all 0s !important;
+   animation: none !important;
+ }

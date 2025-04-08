@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <radialGradient id="bg-gradient" cx="50%" cy="50%" r="70%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#f0f4ff" stop-opacity="0.6" />
+      <stop offset="70%" stop-color="#e6edff" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d0e0ff" stop-opacity="0.3" />
+    </radialGradient>
+   
+    <linearGradient id="document-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f7faff" />
+    </linearGradient>
+   
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+   
+    <linearGradient id="benzene-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a7bff" />
+      <stop offset="100%" stop-color="#1e3fff" />
+    </linearGradient>
+   
+    <pattern id="grid-pattern" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="none" />
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e0e8ff" stroke-width="0.5" stroke-opacity="0.3" />
+    </pattern>
+  </defs>
+  
+  <circle cx="400" cy="300" r="250" fill="url(#bg-gradient)" opacity="0.6" />
+  <circle cx="200" cy="200" r="120" fill="#e6edff" opacity="0.4" />
+  <circle cx="600" cy="400" r="150" fill="#e6edff" opacity="0.3" />
+  <rect width="800" height="600" fill="url(#grid-pattern)" opacity="0.2" />
+  
+  <g opacity="0.5">
+    <circle cx="150" cy="120" r="2" fill="#3461ff" />
+    <circle cx="220" cy="180" r="1.5" fill="#3461ff" />
+    <circle cx="300" cy="100" r="2.5" fill="#3461ff" />
+    <circle cx="480" cy="150" r="2" fill="#3461ff" />
+    <circle cx="580" cy="200" r="1.5" fill="#3461ff" />
+    <circle cx="650" cy="300" r="2" fill="#3461ff" />
+    <circle cx="700" cy="380" r="2.5" fill="#3461ff" />
+    <circle cx="600" cy="500" r="1.5" fill="#3461ff" />
+    <circle cx="480" cy="520" r="2" fill="#3461ff" />
+    <circle cx="320" cy="480" r="1.5" fill="#3461ff" />
+    <circle cx="200" cy="520" r="2" fill="#3461ff" />
+    <circle cx="100" cy="400" r="1.5" fill="#3461ff" />
+    <circle cx="80" cy="300" r="2" fill="#3461ff" />
+    <circle cx="120" cy="220" r="1.5" fill="#3461ff" />
+  </g>
+  
+  <rect x="250" y="150" width="300" height="380" rx="10" fill="url(#document-gradient)" fill-opacity="0.7" stroke="#dde6ff" stroke-width="2" />
+  <rect x="275" y="180" width="250" height="30" rx="5" fill="#eef2ff" opacity="0.6" />
+  <rect x="275" y="220" width="170" height="20" rx="5" fill="#eef2ff" opacity="0.6" />
+  <rect x="275" y="250" width="200" height="20" rx="5" fill="#eef2ff" opacity="0.6" />
+  
+  <rect x="290" y="290" width="220" height="180" rx="5" fill="#f7f9ff" fill-opacity="0.5" stroke="#dde6ff" stroke-width="2" />
+  
+  <g id="caffeine-molecule" transform="translate(300,300) scale(5.0)">
+    
+    <animate attributeName="opacity" values="1;0.4;1" dur="5s" repeatCount="indefinite" />
+    <g stroke-linecap='round' stroke-linejoin='round' stroke='#3461ff' stroke-width='.3' fill='url(#benzene-gradient)'>
+      
+      <rect x='-5.0' y='.0' width='30.0' height='29.0' fill='rgba(0,0,0,0.00)' stroke='none'/>
+      <g id='mol1' class='mol'>
+        <line id='mol1bnd1' class='bond' x1='27.128' y1='3.406' x2='25.662' y2='7.916'/>
+        <line id='mol1bnd2' class='bond' x1='26.312' y1='11.371' x2='28.961' y2='15.013'/>
+        <g id='mol1bnd3' class='bond'>
+          <line x1='26.312' y1='18.655' x2='28.961' y2='15.013'/>
+          <line x1='25.457' y1='18.034' x2='27.654' y2='15.013'/>
+        </g>
+        <line id='mol1bnd4' class='bond' x1='23.608' y1='19.862' x2='18.835' y2='18.315'/>
+        <g id='mol1bnd5' class='bond'>
+          <line x1='18.835' y1='18.315' x2='18.835' y2='11.711'/>
+          <line x1='17.778' y1='17.705' x2='17.778' y2='12.322'/>
+        </g>
+        <line id='mol1bnd6' class='bond' x1='23.608' y1='10.165' x2='18.835' y2='11.711'/>
+        <line id='mol1bnd7' class='bond' x1='18.835' y1='11.711' x2='13.111' y2='8.409'/>
+        <g id='mol1bnd8' class='bond'>
+          <line x1='12.583' y1='8.714' x2='12.583' y2='3.651'/>
+          <line x1='13.639' y1='8.714' x2='13.639' y2='3.651'/>
+        </g>
+        <line id='mol1bnd9' class='bond' x1='13.111' y1='8.409' x2='8.815' y2='10.888'/>
+        <line id='mol1bnd10' class='bond' x1='7.388' y1='13.511' x2='7.388' y2='18.315'/>
+        <g id='mol1bnd11' class='bond'>
+          <line x1='7.916' y1='18.62' x2='3.518' y2='21.161'/>
+          <line x1='7.388' y1='17.705' x2='2.989' y2='20.246'/>
+        </g>
+        <line id='mol1bnd12' class='bond' x1='7.388' y1='18.315' x2='11.684' y2='20.794'/>
+        <line id='mol1bnd13' class='bond' x1='18.835' y1='18.315' x2='14.538' y2='20.794'/>
+        <line id='mol1bnd14' class='bond' x1='13.111' y1='23.417' x2='13.111' y2='28.221'/>
+        <line id='mol1bnd15' class='bond' x1='5.961' y1='10.887' x2='1.669' y2='8.408'/>
+        <path id='mol1atm2' class='atom' d='M24.179 8.486h.435l1.063 2.009v-2.009h.317v2.4h-.439l-1.064 -2.004v2.004h-.312v-2.4z' stroke='none'/>
+        <path id='mol1atm4' class='atom' d='M24.179 19.141h.435l1.063 2.008v-2.008h.317v2.399h-.439l-1.064 -2.004v2.004h-.312v-2.399z' stroke='none'/>
+        <path id='mol1atm8' class='atom' d='M13.113 .825q-.356 -.0 -.565 .265q-.206 .261 -.206 .715q.0 .455 .206 .72q.209 .261 .565 .261q.352 -.0 .558 -.261q.209 -.265 .209 -.72q.0 -.454 -.209 -.715q-.206 -.265 -.558 -.265zM13.113 .56q.502 -.0 .803 .34q.304 .34 .304 .905q.0 .57 -.304 .91q-.301 .336 -.803 .336q-.506 -.0 -.81 -.336q-.3 -.34 -.3 -.91q.0 -.565 .3 -.905q.305 -.34 .81 -.34z' stroke='none'/>
+        <path id='mol1atm9' class='atom' d='M6.48 10.511h.435l1.064 2.009v-2.009h.316v2.4h-.439l-1.063 -2.004v2.004h-.313v-2.4z' stroke='none'/>
+        <path id='mol1atm11' class='atom' d='M1.671 20.638q-.356 -.0 -.565 .265q-.206 .261 -.206 .715q.0 .455 .206 .72q.209 .261 .565 .261q.352 -.0 .557 -.261q.21 -.265 .21 -.72q-.0 -.454 -.21 -.715q-.205 -.265 -.557 -.265zM1.671 20.373q.502 -.0 .803 .34q.304 .34 .304 .905q-.0 .57 -.304 .91q-.301 .336 -.803 .336q-.506 -.0 -.811 -.336q-.3 -.34 -.3 -.91q.0 -.565 .3 -.905q.305 -.34 .81 -.34z' stroke='none'/>
+        <path id='mol1atm12' class='atom' d='M12.204 20.417h.435l1.063 2.009v-2.009h.316v2.4h-.438l-1.064 -2.004v2.004h-.312v-2.4z' stroke='none'/>
+      </g>
+    </g>
+  </g>
+
+  <g opacity="0.9">
+    <rect x="530" y="220" width="100" height="15" rx="2" fill="#dde6ff">
+      <animate attributeName="opacity" values="0.9;1;0.9" dur="5s" repeatCount="indefinite" />
+    </rect>
+    <rect x="560" y="240" width="70" height="15" rx="2" fill="#dde6ff">
+      <animate attributeName="opacity" values="0.9;1;0.9" dur="5s" repeatCount="indefinite" begin="0.5s" />
+    </rect>
+    <rect x="540" y="260" width="90" height="15" rx="2" fill="#dde6ff">
+      <animate attributeName="opacity" values="0.9;1;0.9" dur="5s" repeatCount="indefinite" begin="1s" />
+    </rect>
+    <rect x="550" y="280" width="80" height="15" rx="2" fill="#dde6ff">
+      <animate attributeName="opacity" values="0.9;1;0.9" dur="5s" repeatCount="indefinite" begin="1.5s" />
+    </rect>
+    <rect x="570" y="300" width="60" height="15" rx="2" fill="#dde6ff">
+      <animate attributeName="opacity" values="0.9;1;0.9" dur="5s" repeatCount="indefinite" begin="2s" />
+    </rect>
+   
+    <path d="M510 320 C 540 340, 540 360, 510 380" fill="none" stroke="#3461ff" stroke-width="2" stroke-dasharray="5,5">
+      <animate attributeName="stroke-dashoffset" values="0;20" dur="2s" repeatCount="indefinite" />
+    </path>
+    <path d="M510 380 C 490 400, 470 400, 450 380" fill="none" stroke="#3461ff" stroke-width="2" stroke-dasharray="5,5">
+      <animate attributeName="stroke-dashoffset" values="0;20" dur="2s" repeatCount="indefinite" />
+    </path>
+  </g>
+  
+  <g opacity="0.85">
+    <rect x="150" y="320" width="100" height="20" rx="5" fill="#eef2ff" fill-opacity="0.7" stroke="#3461ff" stroke-width="1" />
+    <rect x="170" y="350" width="80" height="20" rx="5" fill="#eef2ff" fill-opacity="0.7" stroke="#3461ff" stroke-width="1" />
+    <rect x="190" y="380" width="60" height="20" rx="5" fill="#eef2ff" fill-opacity="0.7" stroke="#3461ff" stroke-width="1" />
+   
+    <path d="M250 330 C 280 340, 280 350, 290 360" fill="none" stroke="#3461ff" stroke-width="2" stroke-dasharray="5,5">
+      <animate attributeName="stroke-dashoffset" values="0;20" dur="3s" repeatCount="indefinite" />
+    </path>
+    <path d="M250 360 C 270 370, 275 375, 290 380" fill="none" stroke="#3461ff" stroke-width="2" stroke-dasharray="5,5">
+      <animate attributeName="stroke-dashoffset" values="0;20" dur="3s" repeatCount="indefinite" begin="0.5s" />
+    </path>
+    <path d="M250 390 C 270 390, 280 400, 290 400" fill="none" stroke="#3461ff" stroke-width="2" stroke-dasharray="5,5">
+      <animate attributeName="stroke-dashoffset" values="0;20" dur="3s" repeatCount="indefinite" begin="1s" />
+    </path>
+  </g>
+  
+  <circle cx="200" cy="150" r="6" fill="#3461ff" opacity="0.7">
+    <animate attributeName="r" values="6;7;6" dur="4s" repeatCount="indefinite" />
+  </circle>
+  <circle cx="600" cy="180" r="6" fill="#3461ff" opacity="0.7">
+    <animate attributeName="r" values="6;7;6" dur="4s" repeatCount="indefinite" begin="1s" />
+  </circle>
+  <circle cx="560" cy="400" r="6" fill="#3461ff" opacity="0.7">
+    <animate attributeName="r" values="6;7;6" dur="4s" repeatCount="indefinite" begin="2s" />
+  </circle>
+  <circle cx="180" cy="450" r="6" fill="#3461ff" opacity="0.7">
+    <animate attributeName="r" values="6;7;6" dur="4s" repeatCount="indefinite" begin="3s" />
+  </circle>
+  
+  <path d="M200 150 C 300 120, 500 130, 600 180" fill="none" stroke="#3461ff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="stroke-width" values="1.5;2;1.5" dur="4s" repeatCount="indefinite" />
+    <animate attributeName="opacity" values="0.5;0.7;0.5" dur="4s" repeatCount="indefinite" />
+  </path>
+  <path d="M600 180 C 650 250, 600 350, 560 400" fill="none" stroke="#3461ff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="stroke-width" values="1.5;2;1.5" dur="4s" repeatCount="indefinite" begin="1s" />
+    <animate attributeName="opacity" values="0.5;0.7;0.5" dur="4s" repeatCount="indefinite" begin="1s" />
+  </path>
+  <path d="M560 400 C 500 450, 300 500, 180 450" fill="none" stroke="#3461ff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="stroke-width" values="1.5;2;1.5" dur="4s" repeatCount="indefinite" begin="2s" />
+    <animate attributeName="opacity" values="0.5;0.7;0.5" dur="4s" repeatCount="indefinite" begin="2s" />
+  </path>
+  <path d="M180 450 C 100 350, 100 200, 200 150" fill="none" stroke="#3461ff" stroke-width="1.5" opacity="0.5">
+    <animate attributeName="stroke-width" values="1.5;2;1.5" dur="4s" repeatCount="indefinite" begin="3s" />
+    <animate attributeName="opacity" values="0.5;0.7;0.5" dur="4s" repeatCount="indefinite" begin="3s" />
+  </path>
+  
+  <g opacity="0.5">
+    <text x="120" y="140" font-family="monospace" font-size="8" fill="#3461ff">01001</text>
+    <text x="680" y="220" font-family="monospace" font-size="8" fill="#3461ff">10110</text>
+    <text x="630" y="480" font-family="monospace" font-size="8" fill="#3461ff">01101</text>
+    <text x="90" y="380" font-family="monospace" font-size="8" fill="#3461ff">10010</text>
+    
+    <!-- Small decorative molecule fragments -->
+    <g transform="translate(150, 250) scale(0.4)">
+      <line x1="0" y1="0" x2="20" y2="20" stroke="#3461ff" stroke-width="2" />
+      <line x1="20" y1="20" x2="40" y2="0" stroke="#3461ff" stroke-width="2" />
+      <circle cx="0" cy="0" r="4" fill="#3461ff" opacity="0.5" />
+      <circle cx="20" cy="20" r="4" fill="#3461ff" opacity="0.5" />
+      <circle cx="40" cy="0" r="4" fill="#3461ff" opacity="0.5" />
+    </g>
+    
+    <g transform="translate(650, 350) scale(0.4)">
+      <line x1="0" y1="0" x2="20" y2="20" stroke="#3461ff" stroke-width="2" />
+      <line x1="20" y1="20" x2="40" y2="0" stroke="#3461ff" stroke-width="2" />
+      <circle cx="0" cy="0" r="4" fill="#3461ff" opacity="0.5" />
+      <circle cx="20" cy="20" r="4" fill="#3461ff" opacity="0.5" />
+      <circle cx="40" cy="0" r="4" fill="#3461ff" opacity="0.5" />
+    </g>
+  </g>
+</svg>

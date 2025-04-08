@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: marcus-backend
+    restart: always
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL_ID=${OPENAI_MODEL_ID}
+      - RELEASE_VERSION=${RELEASE_VERSION:-1.0}
+      - HOMEPAGE_URL=${HOMEPAGE_URL:-/latest/docs}
+      - DOCLING_MODELS_PATH=/app/models/docling
+      - CORS_ORIGINS=http://frontend
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/models:/app/models
+    ports:
+      - "9000:9000"
+    networks:
+      - marcus-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Number of GPUs to use, adjust as needed
+              capabilities: [gpu]  
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: marcus-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    networks:
+      - marcus-network
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# Network configuration
+networks:
+  marcus-network:
+    driver: bridge
+
+# Volumes for persistent data
+volumes:
+  uploads-data:
+    driver: local
+  models-data:
+    driver: local

@@ -1,0 +1,154 @@
+/* Light Theme Variables (Default) */
+:root {
+  /* Main colors */
+  --color-primary: #4a4de7;
+  --color-primary-dark: #3538d2;
+  --color-primary-light: #6b6feb;
+  --color-secondary: #8a2be2;
+  --color-secondary-dark: #7823c7;
+  --color-secondary-light: #9c4ee7;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(45deg, #4a4de7, #8a2be2);
+  --gradient-secondary: linear-gradient(45deg, #4a4de7, #6b6feb);
+  
+  /* UI Colors */
+  --color-success: #00c853;
+  --color-warning: #ffab00;
+  --color-error: #ff3d71;
+  --color-info: #0095ff;
+  
+  /* Text Colors */
+  --color-text: #2a2c42;
+  --color-text-light: #5a5c7a;
+  --color-text-dark: #1a1c32;
+  --color-heading: #1a1c32;
+  
+  /* Background Colors */
+  --color-bg: #f5f7fa;
+  --color-panel-bg: rgba(255, 255, 255, 0.9);
+  --color-card-bg: #ffffff;
+  --color-hover-bg: #f0f2f5;
+  --color-input-bg: #ffffff;
+  --color-hover: rgba(0, 0, 0, 0.05);
+  
+  /* Border Colors */
+  --color-border: #e2e8f0;
+  --color-border-hover: #cbd5e0;
+  
+  /* Scroll Bar Colors */
+  --color-scrollbar-track: #f1f1f1;
+  --color-scrollbar-thumb: #ccced8;
+  --color-scrollbar-thumb-hover: #999;
+  
+  /* Shadow */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 12px 16px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.07), 0 20px 40px rgba(0, 0, 0, 0.1);
+  --shadow: var(--shadow-md);
+  
+  /* Typography */
+  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  
+  /* Spacing */
+  --spacing-unit: 0.25rem;
+  --spacing-xs: calc(var(--spacing-unit) * 1);  /* 0.25rem */
+  --spacing-sm: calc(var(--spacing-unit) * 2);  /* 0.5rem */
+  --spacing-md: calc(var(--spacing-unit) * 4);  /* 1rem */
+  --spacing-lg: calc(var(--spacing-unit) * 6);  /* 1.5rem */
+  --spacing-xl: calc(var(--spacing-unit) * 8);  /* 2rem */
+  --spacing-2xl: calc(var(--spacing-unit) * 12); /* 3rem */
+  
+  /* Transition */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+  --transition-slow: 0.4s ease;
+  
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  
+  /* Z-index */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* Dark Theme Variables - Applied when 'data-theme="dark"' is set on the root element */
+[data-theme="dark"] {
+  /* Text Colors */
+  --color-text: #e4e6f1;
+  --color-text-light: #a5a8c0;
+  --color-text-dark: #ffffff;
+  --color-heading: #ffffff;
+  
+  /* Background Colors */
+  --color-bg: #15172a;
+  --color-panel-bg: rgba(30, 32, 55, 0.9);
+  --color-card-bg: #1e2037;
+  --color-hover-bg: #2a2c42;
+  --color-input-bg: #2a2c42;
+  --color-hover: rgba(255, 255, 255, 0.1);
+  
+  /* Border Colors */
+  --color-border: #2e324d;
+  --color-border-hover: #454970;
+  
+  /* Scroll Bar Colors */
+  --color-scrollbar-track: #1e2037;
+  --color-scrollbar-thumb: #4a4d75;
+  --color-scrollbar-thumb-hover: #5a5d85;
+  
+  /* Main Colors Adjustments for Dark Theme */
+  --color-primary: #6166ff;
+  --color-primary-dark: #4a4de7;
+  --color-primary-light: #8084ff;
+  --color-secondary: #a64dff;
+  --color-secondary-dark: #8a2be2;
+  
+  /* Shadows are softer in dark mode */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.15), 0 12px 16px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.15), 0 20px 40px rgba(0, 0, 0, 0.2);
+  --shadow: var(--shadow-md);
+}
+
+/* For proper transition handling when toggling themes */
+.theme-transition {
+  transition: none !important;
+}
+
+.theme-transition * {
+  transition: none !important;
+}
+
+/* Media query breakpoints */
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
+$breakpoint-xxl: 1400px;
+
+/* Component-specific dark mode fixes */
+[data-theme="dark"] .segment-image {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .structure-display {
+  background-color: #252740 !important;
+}
+
+[data-theme="dark"] .pdf-wrapper {
+  background-color: #17182b !important;
+}
+
+[data-theme="dark"] .pdf-controls {
+  background-color: #1e2037 !important;
+}

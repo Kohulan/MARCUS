@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+    <title>MARCUS - Molecular Annotation and Recognition for Curating Unravelled Structures</title>
+    
+    <!-- Meta tags for SEO and social sharing -->
+    <meta name="description" content="MARCUS: Extract and analyze chemical structures from scientific papers using AI-powered tools including DECIMER, MolNexTR, and OCSR">
+    <meta name="keywords" content="chemical structure extraction, DECIMER, MolNexTR, OCSR, cheminformatics, molecular recognition, COCONUT database, chemical image recognition">
+    <meta name="author" content="Kohulan Rajan">
+    <meta name="robots" content="index, follow">
+    <meta name="canonical" content="https://marcus.decimer.ai/">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://marcus.decimer.ai/">
+    <meta property="og:title" content="MARCUS - Molecular Annotation and Recognition for Curating Unravelled Structures">
+    <meta property="og:description" content="AI-powered tool for extracting and analyzing chemical structures from scientific papers">
+    <meta property="og:image" content="https://marcus.decimer.ai/logo.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="MARCUS">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://marcus.decimer.ai/">
+    <meta name="twitter:title" content="MARCUS - Molecular Annotation and Recognition for Curating Unravelled Structures">
+    <meta name="twitter:description" content="AI-powered tool for extracting and analyzing chemical structures from scientific papers">
+    <meta name="twitter:image" content="https://marcus.decimer.ai/logo.png">
+    <meta name="twitter:creator" content="@decimer_ai">
+    
+    <!-- Structured data for rich search results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "MARCUS - Molecular Annotation and Recognition for Curating Unravelled Structures",
+      "url": "https://marcus.decimer.ai/",
+      "description": "AI-powered tool for extracting and analyzing chemical structures from scientific papers",
+      "applicationCategory": "ScientificApplication",
+      "operatingSystem": "Web",
+      "image": "https://marcus.decimer.ai/logo.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "creator": {
+        "@type": "Person",
+        "name": "Kohulan Rajan"
+      }
+    }
+    </script>
+    
+    <!-- Performance optimizations -->
+    <link rel="preconnect" href="<%= process.env.VUE_APP_API_URL %>">
+    <link rel="dns-prefetch" href="<%= process.env.VUE_APP_API_URL %>">
+    
+    <!-- Load Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Preload logo for faster rendering -->
+    <link rel="preload" href="<%= BASE_URL %>logo.png" as="image">
+    
+    <!-- Inline CSS for the loading state -->
+    <style>
+      .initial-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+        text-align: center;
+        padding: 1rem;
+      }
+      .logo-container {
+        position: relative;
+        width: 240px;
+        height: 240px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .logo-fallback {
+        display: none;
+        background-color: #f0f0f0;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-weight: bold;
+        color: #333;
+      }
+      .logo-image {
+        max-width: 100%;
+        height: auto;
+      }
+      .logo-image[data-loaded="false"] + .logo-fallback {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <strong>We're sorry but MARCUS doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+    </noscript>
+    <div id="app">
+      <!-- Fallback content while Vue loads -->
+      <div class="initial-loading">
+        <div class="logo-container">
+          <img 
+            src="<%= BASE_URL %>logo.png" 
+            alt="MARCUS - Molecular Annotation and Recognition for Curating Unravelled Structures" 
+            class="logo-image"
+            data-loaded="false"
+            onload="this.setAttribute('data-loaded', 'true')"
+            onerror="this.style.display='none'; document.querySelector('.logo-fallback').style.display='flex';"
+            loading="eager"
+          >
+          <div class="logo-fallback">MARCUS</div>
+        </div>
+        <h1>MARCUS</h1>
+        <p>Molecular Annotation and Recognition for Curating Unravelled Structures</p>
+        <p>Loading application...</p>
+      </div>
+    </div>
+    <!-- built files will be auto injected -->
+    
+    <!-- Script to handle image loading issues -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Check if logo loaded successfully
+        const logoImg = document.querySelector('.logo-image');
+        if (logoImg && !logoImg.complete) {
+          logoImg.setAttribute('data-loaded', 'false');
+        }
+      });
+    </script>
+  </body>
+</html>

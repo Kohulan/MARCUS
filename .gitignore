@@ -172,3 +172,45 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# VS Code settings
+.vscode/
+# VS Code workspace settings
+.vscode-test/
+
+# upload
+backend/uploads/
+
+# dockling models
+backend/dockling_models/
+
+# fronend
+frontend/node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+
+#backend
+backend/.env
+backend/.env.local
+backend/.env.development.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Additional secrets/keys
+*.pem
+*.key
+**/secrets.json
+
+# Large media files
+*.mp4
+*.mov
+*.wav

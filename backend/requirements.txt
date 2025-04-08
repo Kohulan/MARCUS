@@ -1,0 +1,47 @@
+# Core dependencies
+pdf2doi==1.7
+fastapi==0.115.11
+fastapi-versioning==0.10.0
+httpx==0.28.1
+pdf2image==1.17.0
+pyparsing==3.2.1
+pyyaml==6.0.2
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+openai==1.65.3
+IPython==8.33.0
+pystow==0.7.0
+slowapi
+websockets==15.0.0
+jinja2==3.1.5
+
+# ML/DL Frameworks
+# Note: PyTorch and TorchVision are installed separately with CUDA support
+pytorch-lightning==2.2.5
+six==1.17.0
+albumentations==1.1.0
+SmilesPE==0.0.3
+timm==0.4.12
+pyonmttok==1.37.1
+OpenNMT-py==2.2.0
+tensorflow[and-cuda]==2.15.1
+Keras-Preprocessing==1.1.2
+efficientnet==1.1.1
+transformers==4.49.0
+huggingface-hub>=0.11.0
+tensorboardX
+scipy==1.13.1
+
+# Image processing
+opencv-python
+pillow
+pillow-heif==0.21.0
+scikit-image==0.24.0
+matplotlib==3.9.0
+pandas==2.2.3
+
+# Chemistry-specific
+jpype1==1.5.2
+selfies==2.2.0
+unicodedata2==15.0.0
+rdkit==2024.9.5

@@ -1,0 +1,40 @@
+{
+    "name": "MARCUS",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Chemical Structure Extraction for COCONUT",
+    "author": "Kohulan Rajan <kohulan.rajan@uni-jena.de>",
+    "scripts": {
+      "serve": "vue-cli-service serve",
+      "build": "vue-cli-service build",
+      "lint": "vue-cli-service lint"
+    },
+    "dependencies": {
+      "axios": "^0.27.2",
+      "core-js": "^3.26.1",
+      "vue": "^3.2.45",
+      "vue-feather": "^2.0.0",
+      "vuex": "^4.1.0"
+    },
+    "devDependencies": {
+      "@vue/cli-plugin-babel": "~5.0.8",
+      "@vue/cli-plugin-eslint": "~5.0.8",
+      "@vue/cli-plugin-vuex": "~5.0.8",
+      "@vue/cli-service": "~5.0.8",
+      "@vue/compiler-sfc": "^3.2.45",
+      "babel-eslint": "^10.1.0",
+      "eslint": "^7.32.0",
+      "eslint-plugin-vue": "^9.8.0",
+      "sass": "^1.56.1",
+      "sass-loader": "^10.3.1"
+    },
+    "engines": {
+      "node": ">=14.0.0",
+      "npm": ">=6.0.0"
+    },
+    "browserslist": [
+      "> 1%",
+      "last 2 versions",
+      "not dead"
+    ]
+  }
