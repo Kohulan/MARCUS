@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 # Add environment variable loading
 from dotenv import load_dotenv
 
@@ -17,7 +18,8 @@ from .routers import docling_conversion
 from .routers import open_ai_annotation
 from .routers import decimer_segmentation
 from .routers import ocsr_engine
-from .routers import depiction_router  # Import the new depiction router
+from .routers import depiction_router
+from .routers import similarity_router
 from app.exception_handlers import input_exception_handler
 from app.exception_handlers import InvalidInputException
 from app.schemas.healthcheck import HealthCheck
@@ -41,7 +43,8 @@ app.include_router(docling_conversion.router)
 app.include_router(open_ai_annotation.router)
 app.include_router(decimer_segmentation.router)
 app.include_router(ocsr_engine.router)
-app.include_router(depiction_router.router)  # Add the depiction router
+app.include_router(depiction_router.router)
+app.include_router(similarity_router.router)
 
 app = VersionedFastAPI(
     app,

@@ -17,6 +17,11 @@
         <p>Processing with all engines...</p>
       </div>
       
+      <div v-else-if="findingMCS" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Finding maximum common substructure...</p>
+      </div>
+      
       <div v-else class="comparison-grid">
         <div v-for="(result, index) in results" :key="index" class="comparison-item">
           <div class="engine-header" :class="engineClass(result.engine)">
@@ -36,6 +41,7 @@
                 :name="segment.filename"
                 :source-engine="result.engine"
                 :use-coordinates="shouldUseCoordinates(result)"
+                :highlight="mcsSmarts"
                 class="structure-viewer"
               />
               
@@ -63,6 +69,28 @@
       </div>
     </div>
     
+    <div v-if="mcsResult" class="mcs-info">
+      <div class="mcs-header">
+        <h4>
+          <vue-feather type="target" class="mcs-icon"></vue-feather>
+          Maximum Common Substructure
+        </h4>
+        <button class="btn btn-icon" @click="clearMCS" title="Clear MCS Highlight">
+          <vue-feather type="x"></vue-feather>
+        </button>
+      </div>
+      <div class="mcs-stats">
+        <div class="stat-item">
+          <span class="stat-label">Atoms:</span>
+          <span class="stat-value">{{ mcsResult.atom_count }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Bonds:</span>
+          <span class="stat-value">{{ mcsResult.bond_count }}</span>
+        </div>
+      </div>
+    </div>
+    
     <div class="comparison-footer">
       <div class="comparison-options">
         <label class="checkbox-container">
@@ -77,11 +105,20 @@
       </div>
       
       <div class="action-buttons">
+        <button 
+          class="btn btn-highlight" 
+          @click="findMCS" 
+          :disabled="isLoading || findingMCS || !canFindMCS"
+          v-tooltip="!canFindMCS ? 'Need at least 2 valid structures with molfiles' : ''"
+        >
+          <vue-feather type="target" class="btn-icon"></vue-feather>
+          Highlight Common Structure
+        </button>
         <button class="btn btn-secondary" @click="$emit('close')">
           <vue-feather type="x" class="btn-icon"></vue-feather>
           Close
         </button>
-        <button class="btn btn-primary" @click="runComparison" :disabled="isLoading">
+        <button class="btn btn-primary" @click="runComparison" :disabled="isLoading || findingMCS">
           <vue-feather type="refresh-cw" class="btn-icon"></vue-feather>
           {{ isLoading ? 'Processing...' : 'Run Comparison Again' }}
         </button>
@@ -94,6 +131,7 @@
 import ImprovedChemicalStructureViewer from './ImprovedChemicalStructureViewer.vue';
 import ocsrService from '@/services/ocsrService';
 import depictionService from '@/services/depictionService';
+import similarityService from '@/services/similarityService';
 
 export default {
   name: 'OCSRComparison',
@@ -110,13 +148,26 @@ export default {
   data() {
     return {
       isLoading: true,
+      findingMCS: false,
       useCoordinatesForDepiction: true, // Default to using coordinates for better depiction
       results: [
         { engine: 'decimer', smiles: '', molfile: null, error: null, processingTime: null, useCoordinates: false },
         { engine: 'molnextr', smiles: '', molfile: null, error: null, processingTime: null, useCoordinates: true },
         { engine: 'molscribe', smiles: '', molfile: null, error: null, processingTime: null, useCoordinates: true }
-      ]
+      ],
+      mcsResult: null,
+      mcsSmarts: '',
+      mcsError: null
     };
+  },
+  computed: {
+    canFindMCS() {
+      // Need at least two valid results with either molfiles or SMILES to find MCS
+      const validResults = this.results.filter(r => 
+        (!r.error) && (r.molfile || r.smiles)
+      );
+      return validResults.length >= 2;
+    }
   },
   mounted() {
     this.runComparison();
@@ -146,10 +197,116 @@ export default {
       // 2. The global useCoordinatesForDepiction flag is true
       return this.useCoordinatesForDepiction && !!result.molfile;
     },
+    async findMCS() {
+      if (this.findingMCS || !this.canFindMCS) return;
+      
+      this.findingMCS = true;
+      this.mcsError = null;
+      
+      try {
+        // Collect valid molfiles and their engine names
+        const molfiles = [];
+        const engineNames = [];
+        
+        // First pass: collect all results with direct molfiles
+        const hasValidMolfiles = this.results.filter(result => 
+          result.molfile && !result.error
+        ).length >= 2;
+        
+        // If we don't have at least 2 valid molfiles, but we have valid SMILES,
+        // convert SMILES to molfiles using the depiction service first
+        if (!hasValidMolfiles) {
+          // Generate molfiles for engines that only provide SMILES (like DECIMER)
+          for (const result of this.results) {
+            if (!result.error && result.smiles && !result.molfile) {
+              try {
+                console.log(`Converting SMILES to molfile for ${result.engine}...`);
+                
+                // Call the depiction service to generate a molfile from SMILES
+                const response = await depictionService.generateMolfileFromSmiles(result.smiles);
+                
+                if (response && response.molfile) {
+                  // Store the generated molfile
+                  result.molfile = response.molfile;
+                  console.log(`Successfully generated molfile for ${result.engine}`);
+                }
+              } catch (error) {
+                console.error(`Error generating molfile for ${result.engine}:`, error);
+              }
+            }
+          }
+        }
+        
+        // Now collect all valid molfiles after conversion
+        this.results.forEach(result => {
+          if (result.molfile && !result.error) {
+            molfiles.push(result.molfile);
+            engineNames.push(result.engine);
+          }
+        });
+        
+        if (molfiles.length < 2) {
+          throw new Error('Need at least 2 valid structures to find maximum common substructure');
+        }
+        
+        // Call the MCS service
+        const result = await similarityService.findMCS(molfiles, engineNames);
+        this.mcsResult = result;
+        this.mcsSmarts = result.mcs_smarts;
+        
+        // Update all the viewers with the new highlight
+        await this.regenerateDepictionsWithHighlight();
+        
+      } catch (error) {
+        console.error('Error finding MCS:', error);
+        this.mcsError = error.message || 'Failed to find maximum common substructure';
+        this.mcsResult = null;
+        this.mcsSmarts = '';
+      } finally {
+        this.findingMCS = false;
+      }
+    },
+    clearMCS() {
+      this.mcsResult = null;
+      this.mcsSmarts = '';
+      this.mcsError = null;
+      // Regenerate depictions without highlight
+      this.regenerateDepictionsWithHighlight();
+    },
+    async regenerateDepictionsWithHighlight() {
+      // Regenerate all depictions with the current highlight status
+      try {
+        for (let i = 0; i < this.results.length; i++) {
+          const result = this.results[i];
+          if (result.error || (!result.smiles && !result.molfile)) continue;
+          
+          const useCoords = this.shouldUseCoordinates(result);
+          
+          const depictionOptions = {
+            engine: 'cdk', // Always use CDK for depiction
+            smiles: result.smiles,
+            molfile: useCoords ? result.molfile : null,
+            useMolfileDirectly: useCoords,
+            format: 'svg',
+            highlight: this.mcsSmarts // Apply the highlight if we have one
+          };
+          
+          const svg = await depictionService.generateDepiction(depictionOptions);
+          this.results[i].svg = svg;
+        }
+      } catch (error) {
+        console.error('Error regenerating depictions:', error);
+      }
+    },
     async runComparison() {
       if (this.isLoading) return;
       
       this.isLoading = true;
+      
+      // Clear any previous MCS result
+      this.mcsResult = null;
+      this.mcsSmarts = '';
+      this.mcsError = null;
       
       // Reset results
       this.results.forEach(result => {
@@ -222,7 +379,8 @@ export default {
             smiles: response.smiles,
             molfile: useCoords ? response.molfile : null,
             useMolfileDirectly: useCoords,
-            format: 'svg'
+            format: 'svg',
+            highlight: this.mcsSmarts // Apply highlight if we have one
           };
           
           // Only create a new depiction if we have the necessary input
@@ -269,6 +427,11 @@ export default {
           result.useCoordinates = newValue;
         }
       });
+      
+      // If we had an MCS result, regenerate the depictions with the highlight
+      if (this.mcsSmarts) {
+        this.regenerateDepictionsWithHighlight();
+      }
     }
   }
 };
@@ -462,6 +625,69 @@ export default {
     }
   }
   
+  .mcs-info {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: rgba(0, 122, 255, 0.05);
+    border: 1px solid rgba(0, 122, 255, 0.2);
+    border-radius: var(--radius-md);
+    
+    .mcs-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      
+      h4 {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1rem;
+        
+        .mcs-icon {
+          color: #007aff;
+        }
+      }
+      
+      .btn-icon {
+        padding: 0.25rem;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--color-text-light);
+        border-radius: 50%;
+        transition: all 0.2s ease;
+        
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.05);
+          color: var(--color-text);
+        }
+      }
+    }
+    
+    .mcs-stats {
+      display: flex;
+      gap: 1rem;
+      
+      .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        
+        .stat-label {
+          font-size: 0.875rem;
+          color: var(--color-text-light);
+        }
+        
+        .stat-value {
+          font-weight: 600;
+          font-size: 0.875rem;
+        }
+      }
+    }
+  }
+  
   .comparison-footer {
     display: flex;
     justify-content: space-between;
@@ -585,6 +811,21 @@ export default {
           border-color: var(--color-text-light);
         }
       }
+      
+      &.btn-highlight {
+        background-color: #007aff;
+        color: white;
+        border: none;
+        
+        &:hover:not(:disabled) {
+          background-color: #0062cc;
+        }
+        
+        &:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+      }
     }
   }
   
@@ -600,6 +841,7 @@ export default {
       .action-buttons {
         width: 100%;
         justify-content: flex-end;
+        flex-wrap: wrap;
       }
     }
   }

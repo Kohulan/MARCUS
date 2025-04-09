@@ -60,6 +60,11 @@ export default {
     useCoordinates: {
       type: Boolean,
       default: false
+    },
+    // SMARTS pattern to highlight in the structure
+    highlight: {
+      type: String,
+      default: ''
     }
   },
   data() {
@@ -116,6 +121,10 @@ export default {
     useCoordinates() {
       // Regenerate depiction if useCoordinates changes
       this.generateDepiction()
+    },
+    highlight() {
+      // Regenerate depiction if highlight pattern changes
+      this.generateDepiction()
     }
   },
   mounted() {
@@ -151,6 +160,12 @@ export default {
         } else {
           console.log('Using SMILES for depiction');
           options.smiles = this.smiles
+        }
+        
+        // Add highlight pattern if provided
+        if (this.highlight) {
+          options.highlight = this.highlight
+          console.log(`Adding highlight pattern: ${this.highlight}`)
         }
         
         // Generate the depiction

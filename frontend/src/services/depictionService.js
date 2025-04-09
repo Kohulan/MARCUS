@@ -45,9 +45,9 @@ const depictionService = {
       
       // Make sure we're prioritizing molfile properly when useMolfileDirectly is true
       if (requestData.useMolfileDirectly && requestData.molfile) {
-        // When using molfile directly, we need to signal this to the backend
-        requestData.use_molfile_directly = true;
-        console.log('Using molfile directly for depiction');
+        // When using molfile directly, we need to send the proper parameter name
+        // The backend expects camelCase version (useMolfileDirectly)
+        console.log('Using molfile directly for depiction with coordinates');
       } else if (!requestData.smiles && !requestData.molfile) {
         throw new Error('Either SMILES or molfile must be provided');
       }
@@ -56,6 +56,13 @@ const depictionService = {
       const config = {
         responseType: requestData.format === 'png' ? 'arraybuffer' : 'text'
       }
+      
+      console.log('Depiction request data:', {
+        smiles: requestData.smiles ? `${requestData.smiles.substring(0, 20)}...` : 'none',
+        hasMolfile: !!requestData.molfile,
+        useMolfileDirectly: requestData.useMolfileDirectly,
+        format: requestData.format
+      });
       
       const response = await api.post('/depiction/generate', requestData, config)
       
@@ -70,6 +77,33 @@ const depictionService = {
     } catch (error) {
       console.error('Error generating depiction:', error)
       throw error
+    }
+  },
+  
+  /**
+   * Generate a molfile from a SMILES string
+   * This is useful for engines like DECIMER that only provide SMILES
+   * @param {string} smiles - SMILES string to convert to molfile
+   * @returns {Promise<Object>} - Promise with the generated molfile
+   */
+  generateMolfileFromSmiles: async (smiles) => {
+    try {
+      if (!smiles) {
+        throw new Error('SMILES string is required');
+      }
+      
+      const requestData = {
+        smiles: smiles,
+        outputFormat: 'molfile'
+      };
+      
+      // Call the API to convert SMILES to molfile
+      const response = await api.post('/depiction/smiles_to_molfile', requestData);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error generating molfile from SMILES:', error);
+      throw error;
     }
   },
   
@@ -93,7 +127,9 @@ const depictionService = {
       // Add molfile if provided and useMolfile is true
       if (options.molfile && (options.useMolfile !== false)) {
         formData.append('molfile', options.molfile)
-        formData.append('use_molfile_directly', 'true')
+        // Use camelCase version which the backend expects
+        formData.append('useMolfileDirectly', 'true')
+        console.log('Using molfile coordinates for OCSR depiction');
       }
       
       // Always use CDK engine
@@ -144,9 +180,10 @@ const depictionService = {
     // Ensure we're using CDK
     const updatedOptions = { ...options, engine: 'cdk' };
     
-    // If molfile is provided and useMolfileDirectly is true, adjust params accordingly
+    // No need to rename useMolfileDirectly - the backend already accepts the camelCase version
+    // Just ensure it's set correctly
     if (updatedOptions.molfile && updatedOptions.useMolfileDirectly) {
-      updatedOptions.use_molfile_directly = true;
+      console.log('Using molfile with coordinates for visualization URL');
     }
     
     // Convert options to query parameters

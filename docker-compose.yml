@@ -6,7 +6,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: marcus-backend
+    container_name: marcus
     restart: always
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}

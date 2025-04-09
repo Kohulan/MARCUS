@@ -183,7 +183,7 @@ backend/uploads/
 
 # dockling models
 backend/dockling_models/
-
+backend/models/
 # fronend
 frontend/node_modules/
 frontend/build/

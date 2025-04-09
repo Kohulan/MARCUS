@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import List
-from typing import Union
+from typing import List, Any, Union
 
 import pystow
 from jpype import getDefaultJVMPath
@@ -30,7 +29,7 @@ def setup_jvm():
         paths = {
             "cdk-2.10": "https://github.com/cdk/cdk/releases/download/cdk-2.10/cdk-2.10.jar",
             "centres": "https://github.com/SiMolecule/centres/releases/download/1.0/centres.jar",
-            }
+        }
 
         jar_paths = {
             key: str(pystow.join("CDK_Jar")) + f"/{key}.jar" for key in paths.keys()
@@ -105,7 +104,7 @@ def get_CDK_SDG_mol(molecule: any, V3000=False) -> str:
     return mol_str
 
 
-def get_cip_annotation(molecule: any) -> str:
+def get_cip_annotation(molecule: any, add_coordinates=False) -> str:
     """Return the CIP (Cahn–Ingold–Prelog) annotations using the CDK CIP.
 
     toolkit.
@@ -119,7 +118,10 @@ def get_cip_annotation(molecule: any) -> str:
     Returns:
         str: A CIP annotated molecule block.
     """
-    SDGMol = get_CDK_SDG(molecule)
+    if add_coordinates == True:
+        SDGMol = get_CDK_SDG(molecule)
+    else:
+        SDGMol = molecule
     centres_base = "com.simolecule.centres"
     Cycles = JClass(cdk_base + ".graph.Cycles")
     IBond = JClass(cdk_base + ".interfaces.IBond")
@@ -264,45 +266,55 @@ def get_canonical_SMILES(molecule: any) -> str:
     CanonicalSMILES = SmilesGenerator.create(SDGMol)
     return str(CanonicalSMILES)
 
+
 def read_molfile_as_cdk_mol(molfile_string: str) -> Any:
     """
     Convert a molfile string directly to a CDK molecule object with its existing coordinates.
-    
+
     Args:
         molfile_string: String representation of a molfile
-        
+
     Returns:
         CDK IAtomContainer molecule with existing coordinates
-        
+
     Raises:
         ValueError: If the molfile cannot be parsed
     """
     if not molfile_string:
         raise ValueError("No molfile content provided")
-    
+
     try:
         # Import necessary Java classes
         from jpype import JClass, java
-        
+
         cdk_base = "org.openscience.cdk"
         SCOB = JClass(cdk_base + ".silent.SilentChemObjectBuilder")
-        
+
         # Create Java string reader
-        string_reader = java.io.StringReader(molfile_string)
-        
+        try:
+            string_reader = java.io.StringReader(molfile_string)
+        except Exception as e:
+            raise ValueError(f"Error creating Java StringReader: {str(e)}")
+
         # Create a reader
-        reader = JClass(cdk_base + ".io.MDLV2000Reader")(string_reader)
-        
+        try:
+            reader = JClass(cdk_base + ".io.MDLV2000Reader")(string_reader)
+        except Exception as e:
+            raise ValueError(f"Error creating MDLV2000Reader: {str(e)}")
+
         # Read the molecule
-        molecule = reader.read(SCOB.getInstance().newAtomContainer())
-        
+        try:
+            molecule = reader.read(SCOB.getInstance().newAtomContainer())
+        except Exception as e:
+            raise ValueError(f"Error reading molecule from molfile: {str(e)}")
+
         # Verify the molecule was created
         if molecule is None:
-            raise ValueError("Failed to parse molfile")
-        
+            raise ValueError("Failed to parse molfile - returned None")
+
         # Close the reader
         reader.close()
-        
+
         return molecule
     except Exception as e:
         raise ValueError(f"Error parsing molfile: {str(e)}")

@@ -63,6 +63,56 @@ const similarityService = {
       console.error('Error comparing SMILES:', error)
       throw error
     }
+  },
+
+  /**
+   * Find Maximum Common Substructure (MCS) across multiple molfiles
+   * @param {Array} molfiles - Array of molfiles from different engines
+   * @param {Array} engineNames - Array of engine names corresponding to the molfiles
+   * @returns {Promise} - Promise with the MCS analysis results including SMARTS pattern for highlighting
+   */
+  findMCS: async (molfiles, engineNames) => {
+    try {
+      // Validate input
+      if (!Array.isArray(molfiles) || !Array.isArray(engineNames)) {
+        throw new Error('Molfiles list and engine names must be arrays')
+      }
+      
+      if (molfiles.length !== engineNames.length) {
+        throw new Error('Number of molfiles must match number of engine names')
+      }
+      
+      // Filter out empty molfiles
+      const filteredData = molfiles.map((molfile, index) => ({
+        molfile,
+        engine: engineNames[index],
+        valid: !!molfile && molfile.trim() !== ''
+      })).filter(item => item.valid);
+      
+      // If we have fewer than 2 valid molfiles, we can't find MCS
+      if (filteredData.length < 2) {
+        return {
+          error: 'Insufficient valid molfiles for MCS analysis',
+          mcs_smarts: '',
+          atom_count: 0,
+          bond_count: 0,
+          original_molecules: []
+        }
+      }
+      
+      // Prepare request payload
+      const payload = {
+        molfiles: filteredData.map(item => item.molfile),
+        engine_names: filteredData.map(item => item.engine)
+      }
+      
+      // Call the API
+      const response = await api.post('/similarity/find_mcs', payload)
+      return response.data
+    } catch (error) {
+      console.error('Error finding MCS:', error)
+      throw error
+    }
   }
 }
 

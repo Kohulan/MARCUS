@@ -27,20 +27,59 @@ router = APIRouter(
 # Pydantic models for request validation
 class DepictionRequest(BaseModel):
     """Model for depiction request parameters."""
+
     smiles: Optional[str] = Field(None, description="SMILES string to depict")
     molfile: Optional[str] = Field(None, description="Molfile string to depict")
-    useMolfileDirectly: Optional[bool] = Field(False, description="Whether to use molfile directly with CDK without generating coordinates")
+    use_molfile_directly: Optional[bool] = Field(
+        False,
+        alias="useMolfileDirectly",
+        description="Whether to use molfile directly with CDK without generating coordinates",
+    )
     # Engine is ignored - always uses CDK
-    engine: Literal["cdk"] = Field("cdk", description="Depiction engine to use (always CDK)")
-    width: int = Field(512, description="Width of the depiction in pixels", ge=100, le=2000)
-    height: int = Field(512, description="Height of the depiction in pixels", ge=100, le=2000)
+    engine: Literal["cdk", "rdkit"] = Field(
+        "cdk", description="Depiction engine to use (always CDK)"
+    )
+    width: int = Field(
+        512, description="Width of the depiction in pixels", ge=100, le=2000
+    )
+    height: int = Field(
+        512, description="Height of the depiction in pixels", ge=100, le=2000
+    )
     rotate: float = Field(0, description="Rotation angle in degrees", ge=0, lt=360)
     kekulize: bool = Field(True, description="Whether to kekulize the molecule")
-    cip: bool = Field(True, description="Whether to display CIP stereochemistry annotations")
-    unicolor: bool = Field(False, description="Whether to use a single color for all atoms")
+    cip: bool = Field(
+        True, description="Whether to display CIP stereochemistry annotations"
+    )
+    unicolor: bool = Field(
+        False, description="Whether to use a single color for all atoms"
+    )
     highlight: str = Field("", description="SMARTS pattern to highlight")
-    transparent: bool = Field(False, description="Whether to use transparent background")
+    transparent: bool = Field(
+        False, description="Whether to use transparent background"
+    )
     format: Literal["svg", "png", "base64"] = Field("svg", description="Output format")
+
+    class Config:
+        # Allow conversion between camelCase and snake_case
+        populate_by_name = True
+
+
+class SmilesToMolfileRequest(BaseModel):
+    """Model for SMILES to molfile conversion request."""
+
+    smiles: str = Field(..., description="SMILES string to convert to molfile")
+    outputFormat: Literal["molfile"] = Field(
+        "molfile", description="Output format (currently only 'molfile' is supported)"
+    )
+
+
+class SmilesToMolfileResponse(BaseModel):
+    """Model for SMILES to molfile conversion response."""
+
+    smiles: str = Field(..., description="Original SMILES string")
+    molfile: str = Field(..., description="Generated molfile")
+    success: bool = Field(True, description="Whether the conversion was successful")
+
 
 # Health check endpoint
 @router.get("/", include_in_schema=False)
@@ -61,6 +100,7 @@ def get_health() -> HealthCheck:
     """
     return HealthCheck(status="OK")
 
+
 # Depiction endpoint (JSON body)
 @router.post(
     "/generate",
@@ -68,28 +108,27 @@ def get_health() -> HealthCheck:
     response_description="Return molecular depiction",
     status_code=status.HTTP_200_OK,
 )
-async def create_depiction(
-    request: DepictionRequest
-):
+async def create_depiction(request: DepictionRequest):
     """
     Generate a molecular depiction using the specified parameters.
-    
+
     Provide either a SMILES string or a molfile (or both).
-    
+
     Args:
         request: Depiction request parameters
-        
+
     Returns:
         Response with the generated depiction in the requested format
     """
+    print(f"Received request: {request.json()}")
     try:
         # Validate input - require either SMILES or molfile
         if not request.smiles and not request.molfile:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either SMILES or molfile must be provided"
+                detail="Either SMILES or molfile must be provided",
             )
-        
+
         # Generate depiction - always use CDK
         result = generate_depiction(
             smiles=request.smiles,
@@ -103,35 +142,26 @@ async def create_depiction(
             highlight=request.highlight,
             transparent=request.transparent,
             format=request.format,
-            use_molfile_directly=request.useMolfileDirectly
+            use_molfile_directly=request.use_molfile_directly,
         )
-        
+        print(result)
         # Return response based on format
         if request.format == "svg":
-            return Response(
-                content=result["depiction"],
-                media_type="image/svg+xml"
-            )
+            return Response(content=result["depiction"], media_type="image/svg+xml")
         elif request.format == "png":
-            return Response(
-                content=result["depiction"],
-                media_type="image/png"
-            )
+            return Response(content=result["depiction"], media_type="image/png")
         else:  # base64
-            return {
-                "format": "base64",
-                "engine": "cdk",
-                "data": result["depiction"]
-            }
-    
+            return {"format": "base64", "engine": "cdk", "data": result["depiction"]}
+
     except HTTPException:
         raise
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating depiction: {str(e)}"
+            detail=f"Error generating depiction: {str(e)}",
         )
+
 
 # Depiction endpoint (form data)
 @router.post(
@@ -143,28 +173,39 @@ async def create_depiction(
 async def visualize_structure(
     smiles: Optional[str] = Form(None, description="SMILES string to depict"),
     molfile: Optional[str] = Form(None, description="Molfile string to depict"),
-    useMolfileDirectly: Optional[bool] = Form(False, description="Whether to use molfile directly with CDK without generating coordinates"),
+    useMolfileDirectly: Optional[bool] = Form(
+        False,
+        description="Whether to use molfile directly with CDK without generating coordinates",
+    ),
     # Engine is ignored - always uses CDK
-    engine: Literal["cdk"] = Form("cdk", description="Depiction engine to use (always CDK)"),
+    engine: Literal["cdk"] = Form(
+        "cdk", description="Depiction engine to use (always CDK)"
+    ),
     width: int = Form(512, description="Width of the depiction in pixels"),
     height: int = Form(512, description="Height of the depiction in pixels"),
     rotate: float = Form(0, description="Rotation angle in degrees"),
     kekulize: bool = Form(True, description="Whether to kekulize the molecule"),
-    cip: bool = Form(True, description="Whether to display CIP stereochemistry annotations"),
-    unicolor: bool = Form(False, description="Whether to use a single color for all atoms"),
+    cip: bool = Form(
+        True, description="Whether to display CIP stereochemistry annotations"
+    ),
+    unicolor: bool = Form(
+        False, description="Whether to use a single color for all atoms"
+    ),
     highlight: str = Form("", description="SMARTS pattern to highlight"),
-    transparent: bool = Form(False, description="Whether to use transparent background"),
-    format: Literal["svg", "png", "base64"] = Form("svg", description="Output format")
+    transparent: bool = Form(
+        False, description="Whether to use transparent background"
+    ),
+    format: Literal["svg", "png", "base64"] = Form("svg", description="Output format"),
 ):
     """
     Visualize a molecular structure using form data.
-    
+
     This endpoint is suitable for direct form submissions and browser use.
     Provide either a SMILES string or a molfile (or both).
-    
+
     Args:
         Various form fields for depiction parameters
-        
+
     Returns:
         Response with the generated depiction in the requested format
     """
@@ -173,9 +214,9 @@ async def visualize_structure(
         if not smiles and not molfile:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either SMILES or molfile must be provided"
+                detail="Either SMILES or molfile must be provided",
             )
-        
+
         # Generate depiction - always use CDK
         result = generate_depiction(
             smiles=smiles,
@@ -189,35 +230,26 @@ async def visualize_structure(
             highlight=highlight,
             transparent=transparent,
             format=format,
-            use_molfile_directly=useMolfileDirectly
+            use_molfile_directly=useMolfileDirectly,
         )
-        
+
         # Return response based on format
         if format == "svg":
-            return Response(
-                content=result["depiction"],
-                media_type="image/svg+xml"
-            )
+            return Response(content=result["depiction"], media_type="image/svg+xml")
         elif format == "png":
-            return Response(
-                content=result["depiction"],
-                media_type="image/png"
-            )
+            return Response(content=result["depiction"], media_type="image/png")
         else:  # base64
-            return {
-                "format": "base64",
-                "engine": "cdk",
-                "data": result["depiction"]
-            }
-    
+            return {"format": "base64", "engine": "cdk", "data": result["depiction"]}
+
     except HTTPException:
         raise
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating depiction: {str(e)}"
+            detail=f"Error generating depiction: {str(e)}",
         )
+
 
 # Endpoint to integrate with OCSR results
 @router.post(
@@ -228,25 +260,31 @@ async def visualize_structure(
 )
 async def depict_from_ocsr(
     smiles: Optional[str] = Form(None, description="SMILES string from OCSR"),
-    molfile: Optional[str] = Form(None, description="Molfile string from OCSR (if available)"),
+    molfile: Optional[str] = Form(
+        None, description="Molfile string from OCSR (if available)"
+    ),
     # Engine is ignored - always uses CDK
-    engine: Literal["cdk"] = Form("cdk", description="Depiction engine to use (always CDK)"),
+    engine: Literal["cdk"] = Form(
+        "cdk", description="Depiction engine to use (always CDK)"
+    ),
     width: int = Form(512, description="Width of the depiction in pixels"),
     height: int = Form(512, description="Height of the depiction in pixels"),
     use_molfile: bool = Form(True, description="Whether to use molfile when available"),
-    cip: bool = Form(True, description="Whether to display CIP stereochemistry annotations"),
-    format: Literal["svg", "png", "base64"] = Form("svg", description="Output format")
+    cip: bool = Form(
+        True, description="Whether to display CIP stereochemistry annotations"
+    ),
+    format: Literal["svg", "png", "base64"] = Form("svg", description="Output format"),
 ):
     """
     Generate depictions from OCSR (Optical Chemical Structure Recognition) results.
-    
+
     This endpoint is designed to work with the output from DECIMER or MolNexTR.
     If use_molfile is True and molfile is provided, it will use the molfile for depiction.
     Otherwise, it will use the SMILES string.
-    
+
     Args:
         Various form fields for OCSR results and depiction parameters
-        
+
     Returns:
         Response with the generated depiction in the requested format
     """
@@ -255,13 +293,13 @@ async def depict_from_ocsr(
         if not smiles and not molfile:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either SMILES or molfile must be provided"
+                detail="Either SMILES or molfile must be provided",
             )
-        
+
         # Determine which input to use based on parameters
         use_smiles = smiles
         use_molfile = molfile if use_molfile and molfile else None
-        
+
         # Generate depiction - always use CDK
         result = generate_depiction(
             smiles=use_smiles,
@@ -275,36 +313,33 @@ async def depict_from_ocsr(
             highlight="",
             transparent=False,
             format=format,
-            use_molfile_directly=True if use_molfile else False  # Use molfile directly if available
+            use_molfile_directly=True
+            if use_molfile
+            else False,  # Use molfile directly if available
         )
-        
+
         # Return response based on format
         if format == "svg":
-            return Response(
-                content=result["depiction"],
-                media_type="image/svg+xml"
-            )
+            return Response(content=result["depiction"], media_type="image/svg+xml")
         elif format == "png":
-            return Response(
-                content=result["depiction"],
-                media_type="image/png"
-            )
+            return Response(content=result["depiction"], media_type="image/png")
         else:  # base64
             return {
                 "format": "base64",
                 "engine": "cdk",
                 "data": result["depiction"],
-                "source": "molfile" if use_molfile else "smiles"
+                "source": "molfile" if use_molfile else "smiles",
             }
-    
+
     except HTTPException:
         raise
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating depiction from OCSR results: {str(e)}"
+            detail=f"Error generating depiction from OCSR results: {str(e)}",
         )
+
 
 # Batch depiction endpoint
 @router.post(
@@ -314,33 +349,37 @@ async def depict_from_ocsr(
     status_code=status.HTTP_200_OK,
 )
 async def batch_depiction(
-    structures: List[DepictionRequest] = Body(..., description="List of structures to depict")
+    structures: List[DepictionRequest] = Body(
+        ..., description="List of structures to depict"
+    )
 ):
     """
     Generate multiple molecular depictions in a single request.
-    
+
     This endpoint is useful for creating multiple depictions at once,
     such as for gallery views or comparison tables.
-    
+
     Args:
         structures: List of depiction requests
-        
+
     Returns:
         JSON: List of depiction results
     """
     results = []
-    
+
     for i, request in enumerate(structures):
         try:
             # Validate input
             if not request.smiles and not request.molfile:
-                results.append({
-                    "index": i,
-                    "success": False,
-                    "error": "Either SMILES or molfile must be provided"
-                })
+                results.append(
+                    {
+                        "index": i,
+                        "success": False,
+                        "error": "Either SMILES or molfile must be provided",
+                    }
+                )
                 continue
-            
+
             # Generate depiction - always use CDK
             result = generate_depiction(
                 smiles=request.smiles,
@@ -354,27 +393,91 @@ async def batch_depiction(
                 highlight=request.highlight,
                 transparent=request.transparent,
                 format=request.format,
-                use_molfile_directly=request.useMolfileDirectly
+                use_molfile_directly=request.use_molfile_directly,
             )
-            
+
             # Add result
-            results.append({
-                "index": i,
-                "success": True,
-                "format": request.format,
-                "engine": "cdk",
-                "data": result["depiction"],
-                "smiles": request.smiles,
-                "molfile_provided": request.molfile is not None
-            })
-        
+            results.append(
+                {
+                    "index": i,
+                    "success": True,
+                    "format": request.format,
+                    "engine": "cdk",
+                    "data": result["depiction"],
+                    "smiles": request.smiles,
+                    "molfile_provided": request.molfile is not None,
+                }
+            )
+
         except Exception as e:
-            results.append({
-                "index": i,
-                "success": False,
-                "error": str(e),
-                "smiles": request.smiles,
-                "molfile_provided": request.molfile is not None
-            })
-    
+            results.append(
+                {
+                    "index": i,
+                    "success": False,
+                    "error": str(e),
+                    "smiles": request.smiles,
+                    "molfile_provided": request.molfile is not None,
+                }
+            )
+
     return {"results": results}
+
+
+# SMILES to molfile conversion endpoint
+@router.post(
+    "/smiles_to_molfile",
+    summary="Convert SMILES to molfile format",
+    response_description="Return molfile representation of the input SMILES",
+    status_code=status.HTTP_200_OK,
+    response_model=SmilesToMolfileResponse,
+)
+async def convert_smiles_to_molfile(request: SmilesToMolfileRequest = Body(...)):
+    """
+    Convert a SMILES string to a molfile.
+
+    This endpoint is useful for generating molfiles from SMILES strings
+    for engines like DECIMER that only provide SMILES output.
+
+    Args:
+        request: SMILES to molfile conversion request
+
+    Returns:
+        JSONResponse: Molfile representation of the input SMILES
+    """
+    try:
+        # Validate input
+        if not request.smiles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SMILES string must be provided",
+            )
+
+        # Import necessary functions
+        from app.modules.cdk_wrapper import get_CDK_IAtomContainer, get_CDK_SDG_mol
+
+        # Convert SMILES to molfile using CDK
+        try:
+            # Create CDK molecule from SMILES
+            molecule = get_CDK_IAtomContainer(request.smiles)
+
+            # Generate 2D coordinates and get molfile
+            molfile = get_CDK_SDG_mol(molecule)
+
+            # Return response
+            return SmilesToMolfileResponse(
+                smiles=request.smiles, molfile=molfile, success=True
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error converting SMILES to molfile: {str(e)}",
+            )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing request: {str(e)}",
+        )

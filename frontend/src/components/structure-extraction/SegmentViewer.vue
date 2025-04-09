@@ -147,12 +147,16 @@
         </div>
       </div>
 
+      <!-- IMPROVED COMPARISON MODE VIEW -->
       <div v-else class="comparison-mode">
         <div class="comparison-header">
-          <h3 class="comparison-title">
-            <vue-feather type="bar-chart-2" class="title-icon"></vue-feather>
-            <span class="title-text">Engine Comparison: Segment #{{ segmentNumber }}</span>
-          </h3>
+          <div class="comparison-title-section">
+            <h3 class="comparison-title">
+              <vue-feather type="bar-chart-2" class="title-icon"></vue-feather>
+              <span class="title-text">Engine Comparison: Segment #{{ segmentNumber }}</span>
+            </h3>
+            <p class="comparison-description">Compare structure recognition results across all available engines</p>
+          </div>
           <button class="back-btn" @click="comparisonMode = false">
             <vue-feather type="arrow-left" size="14"></vue-feather>
             <span>Back to Details</span>
@@ -160,162 +164,298 @@
         </div>
 
         <div class="comparison-content">
-          <div class="original-section">
-            <h4 class="content-title">Original Segment</h4>
-            <div class="original-preview">
-              <div class="preview-image">
+          <!-- Comparison Layout with Original Segment -->
+          <div class="comparison-layout">
+            <!-- Original Segment Column -->
+            <div class="original-segment-column">
+              <h4 class="column-title">
+                <vue-feather type="image" class="column-icon"></vue-feather>
+                Original Segment
+              </h4>
+              <div class="segment-preview">
                 <img
                   v-if="segmentUrl"
                   :src="segmentUrl"
                   alt="Original chemical structure segment"
                   class="original-img"
                 />
-              </div>
-              <div class="preview-info">
-                <div class="info-item">
-                  <span class="info-key">Filename:</span>
-                  <span class="info-value">{{ segment.filename }}</span>
+                <div class="segment-file-info">
+                  <div class="file-info-row">
+                    <span class="info-key">Filename:</span>
+                    <span class="info-value truncate" :title="segment.filename">{{ segment.filename }}</span>
+                  </div>
+                  <div class="file-info-row">
+                    <span class="info-key">Page:</span>
+                    <span class="info-value">{{ segment.pageNumber || '1' }}</span>
+                  </div>
                 </div>
-                <div class="info-item">
-                  <span class="info-key">Page:</span>
-                  <span class="info-value">{{ segment.pageNumber || '1' }}</span>
+              </div>
+            </div>
+
+            <!-- Results Column -->
+            <div class="engines-results-column">
+              <h4 class="column-title">
+                <vue-feather type="cpu" class="column-icon"></vue-feather>
+                Engine Results
+              </h4>
+
+              <!-- Loading spinner when processing -->
+              <div v-if="isComparing" class="engine-loading">
+                <div class="fancy-spinner">
+                  <div class="ring"></div>
+                  <div class="ring"></div>
+                  <div class="dot"></div>
+                </div>
+                <p class="loading-text">Processing with all engines...</p>
+              </div>
+
+              <!-- Engines results grid -->
+              <div v-else class="engine-results-grid">
+                <!-- DECIMER Result Card -->
+                <div class="engine-result-card">
+                  <div class="engine-header decimer">
+                    <div class="engine-icon-container">
+                      <vue-feather type="cpu" class="engine-icon"></vue-feather>
+                    </div>
+                    <h4 class="engine-name">DECIMER</h4>
+                  </div>
+                  <div class="engine-content">
+                    <!-- Structure visualization -->
+                    <div class="structure-preview">
+                      <img
+                        v-if="decimerResult && decimerResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(decimerResult.svg)"
+                        class="result-image"
+                        alt="DECIMER result"
+                      />
+                      <div v-else-if="decimerResult && decimerResult.error" class="error-result">
+                        <vue-feather type="alert-circle" class="error-icon"></vue-feather>
+                        <p>{{ decimerResult.error }}</p>
+                      </div>
+                      <div v-else class="loading-structure">
+                        <vue-feather type="loader" class="loading-icon spin"></vue-feather>
+                      </div>
+                    </div>
+                    
+                    <!-- SMILES data -->
+                    <div v-if="decimerResult && decimerResult.smiles" class="smiles-data">
+                      <div class="smiles-label">SMILES:</div>
+                      <div class="smiles-value">{{ truncateText(decimerResult.smiles, 20) }}</div>
+                      <button class="copy-btn" @click="copyEngineSmiles(decimerResult.smiles)" title="Copy SMILES">
+                        <vue-feather type="copy" size="14"></vue-feather>
+                      </button>
+                    </div>
+
+                    <!-- Processing time -->
+                    <div v-if="decimerResult && decimerResult.processingTime" class="engine-stats">
+                      <div class="stat-item">
+                        <span class="stat-label">Processing Time:</span>
+                        <span class="stat-value">{{ decimerResult.processingTime }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- MolNexTR Result Card -->
+                <div class="engine-result-card">
+                  <div class="engine-header molnextr">
+                    <div class="engine-icon-container">
+                      <vue-feather type="grid" class="engine-icon"></vue-feather>
+                    </div>
+                    <h4 class="engine-name">MolNexTR</h4>
+                  </div>
+                  <div class="engine-content">
+                    <!-- Structure visualization -->
+                    <div class="structure-preview">
+                      <img
+                        v-if="molnextrResult && molnextrResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molnextrResult.svg)"
+                        class="result-image"
+                        alt="MolNexTR result"
+                      />
+                      <div v-else-if="molnextrResult && molnextrResult.error" class="error-result">
+                        <vue-feather type="alert-circle" class="error-icon"></vue-feather>
+                        <p>{{ molnextrResult.error }}</p>
+                      </div>
+                      <div v-else class="loading-structure">
+                        <vue-feather type="loader" class="loading-icon spin"></vue-feather>
+                      </div>
+                    </div>
+                    
+                    <!-- SMILES data -->
+                    <div v-if="molnextrResult && molnextrResult.smiles" class="smiles-data">
+                      <div class="smiles-label">SMILES:</div>
+                      <div class="smiles-value">{{ truncateText(molnextrResult.smiles, 20) }}</div>
+                      <button class="copy-btn" @click="copyEngineSmiles(molnextrResult.smiles)" title="Copy SMILES">
+                        <vue-feather type="copy" size="14"></vue-feather>
+                      </button>
+                    </div>
+
+                    <!-- Processing time -->
+                    <div v-if="molnextrResult && molnextrResult.processingTime" class="engine-stats">
+                      <div class="stat-item">
+                        <span class="stat-label">Processing Time:</span>
+                        <span class="stat-value">{{ molnextrResult.processingTime }}</span>
+                      </div>
+                      <div class="stat-item coordinates-badge" v-if="molnextrResult.molfile">
+                        <span class="coordinate-label">
+                          <vue-feather type="map-pin" size="12" class="coordinate-icon"></vue-feather>
+                          Coordinates Available
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- MolScribe Result Card -->
+                <div class="engine-result-card">
+                  <div class="engine-header molscribe">
+                    <div class="engine-icon-container">
+                      <vue-feather type="edit-3" class="engine-icon"></vue-feather>
+                    </div>
+                    <h4 class="engine-name">MolScribe</h4>
+                  </div>
+                  <div class="engine-content">
+                    <!-- Structure visualization -->
+                    <div class="structure-preview">
+                      <img
+                        v-if="molscribeResult && molscribeResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molscribeResult.svg)"
+                        class="result-image"
+                        alt="MolScribe result"
+                      />
+                      <div v-else-if="molscribeResult && molscribeResult.error" class="error-result">
+                        <vue-feather type="alert-circle" class="error-icon"></vue-feather>
+                        <p>{{ molscribeResult.error }}</p>
+                      </div>
+                      <div v-else class="loading-structure">
+                        <vue-feather type="loader" class="loading-icon spin"></vue-feather>
+                      </div>
+                    </div>
+                    
+                    <!-- SMILES data -->
+                    <div v-if="molscribeResult && molscribeResult.smiles" class="smiles-data">
+                      <div class="smiles-label">SMILES:</div>
+                      <div class="smiles-value">{{ truncateText(molscribeResult.smiles, 20) }}</div>
+                      <button class="copy-btn" @click="copyEngineSmiles(molscribeResult.smiles)" title="Copy SMILES">
+                        <vue-feather type="copy" size="14"></vue-feather>
+                      </button>
+                    </div>
+
+                    <!-- Processing time -->
+                    <div v-if="molscribeResult && molscribeResult.processingTime" class="engine-stats">
+                      <div class="stat-item">
+                        <span class="stat-label">Processing Time:</span>
+                        <span class="stat-value">{{ molscribeResult.processingTime }}</span>
+                      </div>
+                      <div class="stat-item coordinates-badge" v-if="molscribeResult.molfile">
+                        <span class="coordinate-label">
+                          <vue-feather type="map-pin" size="12" class="coordinate-icon"></vue-feather>
+                          Coordinates Available
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <h4 class="content-title results-title">Comparison Results</h4>
-
-          <div class="comparison-loading" v-if="isComparing">
-            <div class="fancy-spinner">
-              <div class="ring"></div>
-              <div class="ring"></div>
-              <div class="dot"></div>
-            </div>
-            <p class="loading-text">Comparing results across engines...</p>
-          </div>
-
-          <div v-else class="results-grid">
-            <div class="result-card">
-              <div class="card-header decimer">
-                <div class="engine-icon-wrapper">
-                  <vue-feather type="cpu" class="engine-icon"></vue-feather>
-                </div>
-                <h4 class="engine-name">DECIMER</h4>
-              </div>
-              <div class="card-body">
-                <div class="result-image-container">
-                  <img
-                    v-if="decimerResult && decimerResult.svg"
-                    :src="'data:image/svg+xml;utf8,' + encodeURIComponent(decimerResult.svg)"
-                    class="result-image"
-                    alt="DECIMER result"
-                  />
-                  <div v-else-if="decimerResult && decimerResult.error" class="error-result">
-                    <vue-feather type="alert-circle" class="error-icon"></vue-feather>
-                    <p>{{ decimerResult.error }}</p>
-                  </div>
-                  <div v-else class="empty-result">
-                    <vue-feather type="help-circle" class="empty-icon"></vue-feather>
-                    <p>No result available</p>
-                  </div>
-                </div>
-
-                <div v-if="decimerResult && decimerResult.smiles" class="result-smiles">
-                  <div class="smiles-header">SMILES:</div>
-                  <div class="smiles-value">{{ truncateText(decimerResult.smiles, 30) }}</div>
-                </div>
+          <!-- Similarity Summary Section -->
+          <div class="similarity-summary" v-if="allEnginesLoaded">
+            <div class="summary-header">
+              <h4 class="summary-title">
+                <vue-feather type="bar-chart-2" class="summary-icon"></vue-feather>
+                Similarity Analysis
+              </h4>
+              <div class="summary-toggle" @click="toggleSimilarityDetails">
+                <span>{{ showSimilarityDetails ? 'Hide Details' : 'Show Details' }}</span>
+                <vue-feather 
+                  :type="showSimilarityDetails ? 'chevron-up' : 'chevron-down'"
+                  size="16" 
+                  class="toggle-icon"
+                ></vue-feather>
               </div>
             </div>
 
-            <div class="result-card">
-              <div class="card-header molnextr">
-                <div class="engine-icon-wrapper">
-                  <vue-feather type="grid" class="engine-icon"></vue-feather>
+            <!-- Quick Summary Stats -->
+            <div class="quick-summary">
+              <div class="summary-stats">
+                <div class="stat-card" :class="getAgreementClass(similarityScore)">
+                  <div class="stat-value">{{ formatPercentage(similarityScore) }}</div>
+                  <div class="stat-label">Overall Agreement</div>
                 </div>
-                <h4 class="engine-name">MolNexTR</h4>
-              </div>
-              <div class="card-body">
-                <div class="result-image-container">
-                  <img
-                    v-if="molnextrResult && molnextrResult.svg"
-                    :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molnextrResult.svg)"
-                    class="result-image"
-                    alt="MolNexTR result"
-                  />
-                  <div v-else-if="molnextrResult && molnextrResult.error" class="error-result">
-                    <vue-feather type="alert-circle" class="error-icon"></vue-feather>
-                    <p>{{ molnextrResult.error }}</p>
-                  </div>
-                  <div v-else class="empty-result">
-                    <vue-feather type="help-circle" class="empty-icon"></vue-feather>
-                    <p>No result available</p>
-                  </div>
+                
+                <div class="stat-card">
+                  <div class="stat-value">{{ validEngineCount }}/3</div>
+                  <div class="stat-label">Valid Results</div>
                 </div>
-
-                <div v-if="molnextrResult && molnextrResult.smiles" class="result-smiles">
-                  <div class="smiles-header">SMILES:</div>
-                  <div class="smiles-value">{{ truncateText(molnextrResult.smiles, 30) }}</div>
+                
+                <div class="stat-card" v-if="hasIdenticalResults">
+                  <div class="stat-value identical">
+                    <vue-feather type="check-circle" size="20" class="identical-icon"></vue-feather>
+                  </div>
+                  <div class="stat-label">Identical Structures</div>
+                </div>
+                <div class="stat-card" v-else>
+                  <div class="stat-value">{{ matchingPairs }}/{{ totalPairs }}</div>
+                  <div class="stat-label">Matching Pairs</div>
                 </div>
               </div>
             </div>
+            
+            <!-- Enhanced Action Button Area -->
+            <div class="analysis-action-buttons">
+              <button class="highlight-btn" @click="findMCS" :disabled="!canFindMCS || findingMCS">
+                <vue-feather type="target" size="16" class="btn-icon"></vue-feather>
+                <span>{{ findingMCS ? 'Finding MCS...' : 'Highlight Common Structure' }}</span>
+              </button>
+              
+              <button class="analyze-btn" @click="compareAcrossEngines" :disabled="!canCompare">
+                <vue-feather type="activity" size="16" class="btn-icon"></vue-feather>
+                <span>Run Full Analysis</span>
+              </button>
+            </div>
 
-            <div class="result-card">
-              <div class="card-header molscribe">
-                <div class="engine-icon-wrapper">
-                  <vue-feather type="edit-3" class="engine-icon"></vue-feather>
-                </div>
-                <h4 class="engine-name">MolScribe</h4>
+            <!-- Detailed Similarity Section (Collapsible) -->
+            <div v-if="showSimilarityDetails" class="similarity-details">
+              <div class="details-content" v-if="comparisonResult">
+                <SimilarityComparison
+                  :comparison-result="comparisonResult"
+                  :is-loading="isComparing"
+                  :error="comparisonError"
+                  :original-smiles-list="smilesListForComparison"
+                />
               </div>
-              <div class="card-body">
-                <div class="result-image-container">
-                  <img
-                    v-if="molscribeResult && molscribeResult.svg"
-                    :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molscribeResult.svg)"
-                    class="result-image"
-                    alt="MolScribe result"
-                  />
-                  <div v-else-if="molscribeResult && molscribeResult.error" class="error-result">
-                    <vue-feather type="alert-circle" class="error-icon"></vue-feather>
-                    <p>{{ molscribeResult.error }}</p>
-                  </div>
-                  <div v-else class="empty-result">
-                    <vue-feather type="help-circle" class="empty-icon"></vue-feather>
-                    <p>No result available</p>
-                  </div>
-                </div>
-
-                <div v-if="molscribeResult && molscribeResult.smiles" class="result-smiles">
-                  <div class="smiles-header">SMILES:</div>
-                  <div class="smiles-value">{{ truncateText(molscribeResult.smiles, 30) }}</div>
-                </div>
+              <div v-else-if="!hasRunFullAnalysis" class="run-analysis-prompt">
+                <p>Click "Run Full Analysis" above to see detailed similarity metrics between engines</p>
+              </div>
+              <div v-else-if="comparisonError" class="analysis-error">
+                <vue-feather type="alert-circle" size="20" class="error-icon"></vue-feather>
+                <p>{{ comparisonError }}</p>
               </div>
             </div>
           </div>
 
+          <!-- Footer Actions -->
           <div class="comparison-footer">
-            <button
-              class="refresh-btn"
-              @click="runComparisonAgain"
-              :disabled="isComparing"
-            >
+            <button class="refresh-btn" @click="runComparisonAgain" :disabled="isComparing">
               <vue-feather type="refresh-cw" class="refresh-icon"></vue-feather>
-              <span>Run Comparison Again</span>
+              <span>Process All Engines Again</span>
             </button>
 
-            <button
-              class="compare-btn"
-              @click="compareAcrossEngines"
-              :disabled="isComparing"
-            >
-              <vue-feather type="bar-chart-2" class="chart-icon"></vue-feather>
-              <span>Compare Similarity</span>
-            </button>
+            <div class="view-options">
+              <label class="option-checkbox">
+                <input type="checkbox" v-model="useCoordinatesForDisplay" :disabled="isComparing">
+                <span class="checkbox-label">Use coordinates for display when available</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Context View (Page View) -->
     <div v-if="showContextView" class="context-view-container">
       <div class="context-view-header">
         <h3>Original Context - Page {{ segment.pageNumber || 1 }}</h3>
@@ -343,6 +483,7 @@
       </div>
     </div>
 
+    <!-- Comparison Modal (Full Analysis) -->
     <ComparisonModal
       v-if="showComparisonModal"
       :comparison-result="comparisonResult"
@@ -357,6 +498,7 @@
 <script>
 import ImprovedChemicalStructureViewer from './ImprovedChemicalStructureViewer.vue'
 import ComparisonModal from './ComparisonModal.vue'
+import SimilarityComparison from './SimilarityComparison.vue'
 import ocsrService from '@/services/ocsrService'
 import depictionService from '@/services/depictionService'
 import similarityService from '@/services/similarityService'
@@ -365,7 +507,8 @@ export default {
   name: 'SegmentViewer',
   components: {
     ImprovedChemicalStructureViewer,
-    ComparisonModal
+    ComparisonModal,
+    SimilarityComparison
   },
   props: {
     segment: {
@@ -401,13 +544,22 @@ export default {
       showComparisonModal: false,
       comparisonResult: null,
       comparisonError: '',
-      smilesListForComparison: []
+      smilesListForComparison: [],
+      // Enhanced comparison properties
+      showSimilarityDetails: false,
+      useCoordinatesForDisplay: false,
+      hasRunFullAnalysis: false,
+      similarityScore: 0,  // 0-100 percentage
+      matchingPairs: 0,
+      totalPairs: 0,
+      hasIdenticalResults: false,
+      findingMCS: false // Property for MCS finding
     }
   },
   computed: {
     segmentNumber() {
       if (!this.segment) return 0
-      return this.segment.segmentNumber || this.segment.id.split('-')[1] || '?'
+      return this.segment.segmentNumber || this.segment.id?.split('-')[1] || '?'
     },
     engineTagClass() {
       if (!this.processedStructure || !this.processedStructure.engine) return ''
@@ -433,6 +585,26 @@ export default {
       return !!this.processedStructure.molfile &&
         (this.processedStructure.engine === 'molnextr' ||
           this.processedStructure.engine === 'molscribe');
+    },
+    // Check if all engines have loaded (either with success or error)
+    allEnginesLoaded() {
+      return this.decimerResult && this.molnextrResult && this.molscribeResult;
+    },
+    // Count engines with valid results
+    validEngineCount() {
+      let count = 0;
+      if (this.decimerResult?.smiles && !this.decimerResult.error) count++;
+      if (this.molnextrResult?.smiles && !this.molnextrResult.error) count++;
+      if (this.molscribeResult?.smiles && !this.molscribeResult.error) count++;
+      return count;
+    },
+    // Check if we can compare (need at least 2 valid engines)
+    canCompare() {
+      return this.validEngineCount >= 2;
+    },
+    // Check if we can find MCS (need at least 2 valid engines)
+    canFindMCS() {
+      return this.validEngineCount >= 2;
     }
   },
   watch: {
@@ -445,35 +617,189 @@ export default {
           this.resetState()
         }
       }
+    },
+    // Watch for engine results to calculate similarity stats
+    allEnginesLoaded: {
+      handler(allLoaded) {
+        if (allLoaded && !this.hasRunFullAnalysis) {
+          this.calculateQuickSimilarity();
+        }
+      }
+    },
+    // Update depiction when coordinates preference changes
+    useCoordinatesForDisplay: {
+      handler() {
+        if (this.allEnginesLoaded) {
+          // Regenerate depictions with the new setting
+          this.updateEnginePicturesWithCoordinates();
+        }
+      }
     }
   },
   methods: {
     resetState() {
-      this.isLoading = true
-      this.hasError = false
-      this.errorMessage = ''
-      this.comparisonMode = false
-      this.isComparing = false
-      this.decimerResult = null
-      this.molnextrResult = null
-      this.molscribeResult = null
-      this.showContextView = false
-      this.contextImageUrl = null
-      this.isLoadingContext = false
-      this.hasContextError = false
+      this.isLoading = true;
+      this.hasError = false;
+      this.errorMessage = '';
+      this.comparisonMode = false;
+      this.isComparing = false;
+      this.decimerResult = null;
+      this.molnextrResult = null;
+      this.molscribeResult = null;
+      this.showContextView = false;
+      this.contextImageUrl = null;
+      this.isLoadingContext = false;
+      this.hasContextError = false;
+      this.showComparisonModal = false;
+      this.comparisonResult = null;
+      this.comparisonError = '';
+      this.smilesListForComparison = [];
+      this.showSimilarityDetails = false;
+      this.hasRunFullAnalysis = false;
+      this.similarityScore = 0;
+      this.matchingPairs = 0;
+      this.totalPairs = 0;
+      this.hasIdenticalResults = false;
+      this.findingMCS = false;
+      
       if (this.segmentUrl) {
-        URL.revokeObjectURL(this.segmentUrl)
-        this.segmentUrl = null
+        URL.revokeObjectURL(this.segmentUrl);
+        this.segmentUrl = null;
       }
       if (this.contextImageUrl) {
-        URL.revokeObjectURL(this.contextImageUrl)
-        this.contextImageUrl = null
+        URL.revokeObjectURL(this.contextImageUrl);
+        this.contextImageUrl = null;
       }
     },
+    
+    // Calculate quick similarity stats for the dashboard
+    calculateQuickSimilarity() {
+      // Default values
+      this.similarityScore = 0;
+      this.matchingPairs = 0;
+      this.totalPairs = 0;
+      this.hasIdenticalResults = false;
+      
+      // Get valid SMILES strings
+      const validSmiles = [];
+      if (this.decimerResult?.smiles) validSmiles.push({engine: 'decimer', smiles: this.decimerResult.smiles});
+      if (this.molnextrResult?.smiles) validSmiles.push({engine: 'molnextr', smiles: this.molnextrResult.smiles});
+      if (this.molscribeResult?.smiles) validSmiles.push({engine: 'molscribe', smiles: this.molscribeResult.smiles});
+      
+      // Need at least 2 engines with SMILES to compare
+      if (validSmiles.length < 2) return;
+      
+      // Check if all SMILES are identical
+      const allIdentical = validSmiles.every(item => item.smiles === validSmiles[0].smiles);
+      this.hasIdenticalResults = allIdentical;
+      
+      if (allIdentical) {
+        this.similarityScore = 100;
+        this.matchingPairs = validSmiles.length * (validSmiles.length - 1) / 2; // All pairs match
+        this.totalPairs = this.matchingPairs;
+        return;
+      }
+      
+      // Calculate number of pairs
+      this.totalPairs = validSmiles.length * (validSmiles.length - 1) / 2;
+      
+      // Calculate matching pairs (simplified - just check exact matches)
+      let matches = 0;
+      for (let i = 0; i < validSmiles.length; i++) {
+        for (let j = i + 1; j < validSmiles.length; j++) {
+          if (validSmiles[i].smiles === validSmiles[j].smiles) {
+            matches++;
+          }
+        }
+      }
+      
+      this.matchingPairs = matches;
+      
+      // Calculate similarity score (percentage of matches)
+      this.similarityScore = (matches / this.totalPairs) * 100;
+    },
+    
+    // Update depictions when useCoordinatesForDisplay changes
+    async updateEnginePicturesWithCoordinates() {
+      // Only update if all engines have loaded
+      if (!this.allEnginesLoaded || this.isComparing) return;
+      
+      try {
+        // Update MolNexTR result
+        if (this.molnextrResult?.smiles && this.molnextrResult?.molfile) {
+          const useCoords = this.useCoordinatesForDisplay;
+          const depictionOptions = {
+            engine: 'cdk',
+            smiles: this.molnextrResult.smiles,
+            molfile: useCoords ? this.molnextrResult.molfile : null,
+            useMolfileDirectly: useCoords,
+            format: 'svg'
+          };
+          
+          const svg = await depictionService.generateDepiction(depictionOptions);
+          this.molnextrResult.svg = svg;
+        }
+        
+        // Update MolScribe result
+        if (this.molscribeResult?.smiles && this.molscribeResult?.molfile) {
+          const useCoords = this.useCoordinatesForDisplay;
+          const depictionOptions = {
+            engine: 'cdk',
+            smiles: this.molscribeResult.smiles,
+            molfile: useCoords ? this.molscribeResult.molfile : null,
+            useMolfileDirectly: useCoords,
+            format: 'svg'
+          };
+          
+          const svg = await depictionService.generateDepiction(depictionOptions);
+          this.molscribeResult.svg = svg;
+        }
+      } catch (error) {
+        console.error('Error updating depictions:', error);
+      }
+    },
+    
+    // Toggle showing detailed similarity information
+    toggleSimilarityDetails() {
+      this.showSimilarityDetails = !this.showSimilarityDetails;
+    },
+    
+    // Get CSS class for agreement level
+    getAgreementClass(score) {
+      if (score >= 90) return 'high-agreement';
+      if (score >= 60) return 'medium-agreement';
+      return 'low-agreement';
+    },
+    
+    // Format percentage value
+    formatPercentage(value) {
+      return value.toFixed(0) + '%';
+    },
+    
+    // Copy SMILES from engine result
+    copyEngineSmiles(smiles) {
+      if (!smiles) return;
+      
+      try {
+        navigator.clipboard.writeText(smiles)
+          .then(() => {
+            this.$emit('copy-complete', 'SMILES copied to clipboard');
+          })
+          .catch(err => {
+            console.error('Could not copy SMILES:', err);
+            this.$emit('error', 'Failed to copy SMILES');
+          });
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        this.$emit('error', 'Failed to copy to clipboard');
+      }
+    },
+    
     showInContext() {
       this.showContextView = true;
       this.loadContextImage();
     },
+    
     closeContextView() {
       this.showContextView = false;
       if (this.contextImageUrl) {
@@ -481,6 +807,7 @@ export default {
         this.contextImageUrl = null;
       }
     },
+    
     async loadContextImage() {
       if (!this.segment) return;
 
@@ -576,29 +903,41 @@ export default {
         this.isLoadingContext = false;
       }
     },
+    
     contextImageLoaded() {
       this.isLoadingContext = false;
     },
+    
     handleContextImageError() {
       this.isLoadingContext = false;
       this.hasContextError = true;
       this.$emit('error', 'Failed to load page context image');
     },
+    
     runComparisonAgain() {
-      this.runComparisonManual()
+      this.runComparisonManual();
     },
+    
     truncateText(text, maxLength) {
       if (!text) return '';
       return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
     },
+    
     runComparison() {
       // Switch to comparison mode
-      this.comparisonMode = true
-      // Run the comparison
-      this.runComparisonManual()
+      this.comparisonMode = true;
+      
+      // Reset analysis state
+      this.hasRunFullAnalysis = false;
+      this.comparisonResult = null;
+      
+      // Run the comparison with all engines
+      this.runComparisonManual();
+      
       // Emit an event to notify parent component
-      this.$emit('run-comparison', this.segment)
+      this.$emit('run-comparison', this.segment);
     },
+    
     async runComparisonManual() {
       if (!this.segment || this.isComparing) return;
 
@@ -609,6 +948,12 @@ export default {
       this.molnextrResult = null;
       this.molscribeResult = null;
 
+      // Reset similarity metrics
+      this.similarityScore = 0;
+      this.matchingPairs = 0;
+      this.totalPairs = 0;
+      this.hasIdenticalResults = false;
+
       // Determine image path format
       const segmentsDirectory = this.segment.path ? this.segment.path.split('/all_segments/')[0] : '';
       const imagePath = segmentsDirectory ? `${segmentsDirectory}/all_segments/${this.segment.filename}` : this.segment.filename;
@@ -616,19 +961,27 @@ export default {
       console.log('Segment path for comparison:', imagePath);
 
       try {
-        // Process with DECIMER
-        this.processEngine('decimer', imagePath);
-
-        // Process with MolNexTR
-        this.processEngine('molnextr', imagePath);
-
-        // Process with MolScribe
-        this.processEngine('molscribe', imagePath);
+        // Process all engines in parallel
+        await Promise.all([
+          this.processEngine('decimer', imagePath),
+          this.processEngine('molnextr', imagePath),
+          this.processEngine('molscribe', imagePath)
+        ]);
+        
+        // Calculate quick similarity metrics once all engines have processed
+        if (this.allEnginesLoaded) {
+          this.calculateQuickSimilarity();
+        }
       } catch (error) {
         console.error('Error initiating comparisons:', error);
+      } finally {
+        this.isComparing = false;
       }
     },
+    
     async processEngine(engine, imagePath) {
+      const startTime = performance.now();
+      
       try {
         console.log(`Processing with ${engine}...`);
 
@@ -646,10 +999,15 @@ export default {
         // Create a depiction
         let svg = null;
         try {
+          const useCoords = this.useCoordinatesForDisplay && 
+                          engine !== 'decimer' && 
+                          response.molfile;
+                          
           const depictionOptions = {
             engine: 'cdk',
             smiles: response.smiles,
-            molfile: response.molfile,
+            molfile: useCoords ? response.molfile : null,
+            useMolfileDirectly: useCoords,
             format: 'svg'
           };
 
@@ -659,12 +1017,17 @@ export default {
           console.error(`Error generating depiction for ${engine}:`, depError);
         }
 
+        // Calculate processing time
+        const endTime = performance.now();
+        const processingTime = ((endTime - startTime) / 1000).toFixed(2) + 's';
+        
         // Store the results based on the engine
         const result = {
           smiles: response.smiles,
           molfile: response.molfile,
           svg: svg,
-          error: null
+          error: null,
+          processingTime: processingTime
         };
 
         if (engine === 'decimer') {
@@ -677,12 +1040,17 @@ export default {
       } catch (error) {
         console.error(`Error processing with ${engine}:`, error);
 
+        // Calculate processing time even for errors
+        const endTime = performance.now();
+        const processingTime = ((endTime - startTime) / 1000).toFixed(2) + 's';
+        
         // Store error in the appropriate result
         const errorResult = {
           smiles: null,
           molfile: null,
           svg: null,
-          error: error.message || `Failed to process with ${engine}`
+          error: error.message || `Failed to process with ${engine}`,
+          processingTime: processingTime
         };
 
         if (engine === 'decimer') {
@@ -692,24 +1060,20 @@ export default {
         } else if (engine === 'molscribe') {
           this.molscribeResult = errorResult;
         }
-      } finally {
-        // Check if all engines have been processed
-        if (this.decimerResult && this.molnextrResult && this.molscribeResult) {
-          this.isComparing = false;
-        }
       }
     },
+    
     async loadSegmentImage() {
-      if (!this.segment) return
+      if (!this.segment) return;
 
-      this.resetState()
+      this.resetState();
 
       // If the segment already has a URL, use it
       if (this.segment.imageUrl) {
         console.log('Using existing segment image URL:', this.segment.imageUrl);
-        this.segmentUrl = this.segment.imageUrl
-        this.isLoading = false
-        return
+        this.segmentUrl = this.segment.imageUrl;
+        this.isLoading = false;
+        return;
       }
 
       try {
@@ -718,29 +1082,32 @@ export default {
           this.segmentUrl = `/api/decimer/get_segment_image/${this.segment.path}`;
           console.log('Created segment URL from path:', this.segmentUrl);
         } else {
-          throw new Error('No image URL or path provided')
+          throw new Error('No image URL or path provided');
         }
       } catch (error) {
-        this.hasError = true
-        this.errorMessage = error.message || 'Failed to load segment image'
-        this.isLoading = false
+        this.hasError = true;
+        this.errorMessage = error.message || 'Failed to load segment image';
+        this.isLoading = false;
 
         // Notify parent component
-        this.$emit('error', this.errorMessage)
+        this.$emit('error', this.errorMessage);
       }
     },
+    
     handleImageLoaded() {
-      this.isLoading = false
-      this.hasError = false
+      this.isLoading = false;
+      this.hasError = false;
     },
+    
     handleImageError() {
-      this.isLoading = false
-      this.hasError = true
-      this.errorMessage = 'Failed to load image'
+      this.isLoading = false;
+      this.hasError = true;
+      this.errorMessage = 'Failed to load image';
 
       // Notify parent component
-      this.$emit('error', this.errorMessage)
+      this.$emit('error', this.errorMessage);
     },
+    
     copySmilesToClipboard() {
       if (!this.processedStructure || !this.processedStructure.smiles) return;
 
@@ -748,44 +1115,46 @@ export default {
         navigator.clipboard.writeText(this.processedStructure.smiles)
           .then(() => {
             // Show success message
-            this.$emit('copy-complete', 'SMILES copied to clipboard')
+            this.$emit('copy-complete', 'SMILES copied to clipboard');
           })
           .catch(err => {
-            console.error('Could not copy SMILES:', err)
-            this.$emit('error', 'Failed to copy SMILES')
+            console.error('Could not copy SMILES:', err);
+            this.$emit('error', 'Failed to copy SMILES');
           });
       } catch (error) {
-        console.error('Error copying to clipboard:', error)
-        this.$emit('error', 'Failed to copy to clipboard')
+        console.error('Error copying to clipboard:', error);
+        this.$emit('error', 'Failed to copy to clipboard');
       }
     },
+    
     async downloadSegmentImage() {
-      if (!this.segmentUrl) return
+      if (!this.segmentUrl) return;
 
       try {
         // Fetch the image as a blob
-        const response = await fetch(this.segmentUrl)
-        const blob = await response.blob()
+        const response = await fetch(this.segmentUrl);
+        const blob = await response.blob();
 
         // Create a download link
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `segment-${this.segmentNumber}.png`
-        a.click()
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `segment-${this.segmentNumber}.png`;
+        a.click();
 
         // Clean up
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(url);
 
         // Notify parent component
-        this.$emit('download-complete', 'Segment image downloaded')
+        this.$emit('download-complete', 'Segment image downloaded');
       } catch (error) {
-        console.error('Error downloading image:', error)
+        console.error('Error downloading image:', error);
 
         // Notify parent component
-        this.$emit('error', 'Failed to download image')
+        this.$emit('error', 'Failed to download image');
       }
     },
+    
     async downloadStructureImage() {
       if (!this.processedStructure) return;
 
@@ -826,29 +1195,34 @@ export default {
         this.$emit('error', 'Failed to download structure image');
       }
     },
+    
     handleCopied(message) {
       // Forward the copied event to parent
-      this.$emit('copy-complete', message)
+      this.$emit('copy-complete', message);
     },
+    
     handleStructureError(message) {
       // Forward the error event to parent
-      this.$emit('error', message)
+      this.$emit('error', message);
     },
+    
     handleDownloadComplete(message) {
       // Forward the download-complete event to parent
-      this.$emit('download-complete', message)
+      this.$emit('download-complete', message);
     },
 
-    // New comparison modal methods
     async compareAcrossEngines() {
       if (!this.segment || this.isComparing) return;
 
       this.isComparing = true;
       this.comparisonError = '';
+      this.hasRunFullAnalysis = true;
 
       try {
-        // Process with all engines first
-        await this.processWithAllEngines();
+        // Make sure all engines have completed processing
+        if (!this.allEnginesLoaded) {
+          await this.runComparisonManual();
+        }
 
         // Define the engines we want to compare
         const engines = ['decimer', 'molnextr', 'molscribe'];
@@ -883,8 +1257,22 @@ export default {
         const result = await similarityService.compareSmiles(smilesList, engineNames);
         this.comparisonResult = result;
 
-        // Show the modal
-        this.showComparisonModal = true;
+        // Show detailed analysis
+        this.showSimilarityDetails = true;
+        
+        // Update quick stats with the actual data from the comparison
+        if (result.agreement_summary) {
+          this.similarityScore = result.agreement_summary.agreement_percentage;
+          this.matchingPairs = result.agreement_summary.total_agreements;
+          this.totalPairs = result.agreement_summary.total_comparisons;
+          this.hasIdenticalResults = result.identical;
+        }
+        
+        // Notify the user with a success message
+        this.$emit('notification', {
+          type: 'success',
+          message: 'Full analysis completed successfully'
+        });
       } catch (error) {
         console.error('Error comparing SMILES:', error);
         this.comparisonError = error.message || 'Error comparing SMILES';
@@ -896,39 +1284,145 @@ export default {
       }
     },
 
-    async processWithAllEngines() {
-      // If we're already in comparison mode, we've already processed with all engines
-      if (this.comparisonMode) {
-        // Make sure all engines are processed
-        if (!this.decimerResult) await this.processEngine('decimer', this.segment.path);
-        if (!this.molnextrResult) await this.processEngine('molnextr', this.segment.path);
-        if (!this.molscribeResult) await this.processEngine('molscribe', this.segment.path);
-        return;
+    async findMCS() {
+      if (!this.segment || this.findingMCS || !this.canFindMCS) return;
+
+      this.findingMCS = true;
+
+      try {
+        // Make sure all engines have completed processing
+        if (!this.allEnginesLoaded) {
+          await this.runComparisonManual();
+        }
+
+        // Collect valid results with molfiles
+        const molfiles = [];
+        const engineNames = [];
+        const validResults = [];
+        
+        if (this.decimerResult?.smiles && !this.decimerResult.error) {
+          // For DECIMER, we don't have molfiles, so we'll use the result object
+          validResults.push(this.decimerResult);
+          if (this.decimerResult.molfile) {
+            molfiles.push(this.decimerResult.molfile);
+            engineNames.push('decimer');
+          }
+        }
+        
+        if (this.molnextrResult?.smiles && !this.molnextrResult.error) {
+          validResults.push(this.molnextrResult);
+          if (this.molnextrResult.molfile) {
+            molfiles.push(this.molnextrResult.molfile);
+            engineNames.push('molnextr');
+          }
+        }
+        
+        if (this.molscribeResult?.smiles && !this.molscribeResult.error) {
+          validResults.push(this.molscribeResult);
+          if (this.molscribeResult.molfile) {
+            molfiles.push(this.molscribeResult.molfile);
+            engineNames.push('molscribe');
+          }
+        }
+
+        // If we don't have enough molfiles, try to convert SMILES to molfiles
+        if (molfiles.length < 2) {
+          // Use the API to convert SMILES to molfiles for any engines that don't have molfiles
+          const smilesList = [];
+          const smilesEngines = [];
+
+          validResults.forEach(result => {
+            if (!result.molfile && result.smiles) {
+              smilesList.push(result.smiles);
+              smilesEngines.push(result.engine || 'unknown');
+            }
+          });
+
+          if (smilesList.length > 0) {
+            try {
+              // Convert SMILES to molfiles using depiction service
+              for (let i = 0; i < smilesList.length; i++) {
+                const depictionResponse = await depictionService.generateDepiction({
+                  smiles: smilesList[i],
+                  engine: 'cdk',
+                  format: 'molfile'
+                });
+
+                if (depictionResponse) {
+                  molfiles.push(depictionResponse);
+                  engineNames.push(smilesEngines[i]);
+                }
+              }
+            } catch (error) {
+              console.error('Error converting SMILES to molfiles:', error);
+            }
+          }
+        }
+
+        // Make sure we have at least 2 molfiles
+        if (molfiles.length < 2) {
+          throw new Error('Need at least 2 valid structures to find common substructure');
+        }
+
+        // Call the MCS API with both molfiles and engineNames
+        const mcsResult = await similarityService.findMCS(molfiles, engineNames);
+        console.log('MCS Result:', mcsResult);
+        
+        if (!mcsResult.mcs_smarts) {
+          throw new Error('No common structure found');
+        }
+        
+        // Generate new depictions with highlighted MCS for each valid result
+        const mcsSmarts = mcsResult.mcs_smarts;
+        
+        // Update each result with a new depiction that highlights the MCS
+        const updatePromises = validResults.map(async (result) => {
+          try {
+            const depictionOptions = {
+              engine: 'cdk',
+              smiles: result.smiles,
+              molfile: this.useCoordinatesForDisplay && result.molfile ? result.molfile : null,
+              useMolfileDirectly: this.useCoordinatesForDisplay && result.molfile ? true : false,
+              format: 'svg',
+              highlight: mcsSmarts
+            };
+            
+            const svg = await depictionService.generateDepiction(depictionOptions);
+            result.svg = svg;
+            result.highlightedMCS = true;
+          } catch (error) {
+            console.error(`Error highlighting MCS for ${result.engine}:`, error);
+          }
+        });
+        
+        // Wait for all depictions to update
+        await Promise.all(updatePromises);
+        
+        // Notify user
+        this.$emit('notification', {
+          type: 'success',
+          message: 'Common structure highlighted across all engines'
+        });
+      } catch (error) {
+        console.error('Error finding MCS:', error);
+        this.$emit('error', error.message || 'Error finding common structure');
+      } finally {
+        this.findingMCS = false;
       }
-
-      // Otherwise, we need to process with all engines first
-      // Show comparison mode to see the progress
-      this.comparisonMode = true;
-
-      // Process with all engines
-      await this.runComparisonManual();
     },
 
     closeComparisonModal() {
       this.showComparisonModal = false;
-      this.comparisonResult = null;
-      this.comparisonError = '';
-      this.smilesListForComparison = [];
     },
-
+    
     formatTimestamp(timestamp) {
-      if (!timestamp) return 'Unknown'
+      if (!timestamp) return 'Unknown';
 
       try {
-        const date = new Date(timestamp)
-        return date.toLocaleString()
+        const date = new Date(timestamp);
+        return date.toLocaleString();
       } catch (e) {
-        return timestamp
+        return timestamp;
       }
     }
   }
@@ -942,9 +1436,9 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f8fafc;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   transition: all 0.3s ease;
   position: relative;
@@ -1315,31 +1809,89 @@ export default {
             }
 
             .smiles-container {
-              padding: 1rem;
+              padding: 1.25rem;
               border-top: 1px solid #e2e8f0;
+              position: relative;
+              background: linear-gradient(120deg, rgba(248, 250, 252, 0.7), rgba(255, 255, 255, 0.9));
+              overflow: hidden;
+              
+              &::before {
+                content: "";
+                position: absolute;
+                top: -2px;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: linear-gradient(90deg, #4f46e5, #a855f7);
+                opacity: 0.7;
+              }
 
               .smiles-header {
-                margin-bottom: 0.5rem;
+                margin-bottom: 0.75rem;
+                display: flex;
+                align-items: center;
 
                 .smiles-label {
                   font-weight: 600;
                   color: #334155;
-                  font-size: 0.875rem;
+                  font-size: 0.95rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.5rem;
+                  
+                  &::before {
+                    content: "";
+                    display: block;
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    background-color: #4f46e5;
+                    box-shadow: 0 0 8px rgba(79, 70, 229, 0.5);
+                  }
                 }
               }
 
               .smiles-content {
                 .smiles-box {
                   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-                  background-color: #f8fafc;
-                  padding: 0.75rem;
-                  border-radius: 6px;
-                  font-size: 0.875rem;
+                  background-color: white;
+                  padding: 1rem;
+                  border-radius: 8px;
+                  font-size: 0.9rem;
                   color: #334155;
                   overflow-x: auto;
                   white-space: pre-wrap;
                   word-break: break-all;
-                  border: 1px solid #e2e8f0;
+                  border: 1px solid rgba(226, 232, 240, 0.8);
+                  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+                  transition: all 0.3s ease;
+                  position: relative;
+                  
+                  &:hover {
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+                    border-color: rgba(79, 70, 229, 0.3);
+                  }
+                  
+                  &::after {
+                    content: "Copy";
+                    position: absolute;
+                    top: 0.5rem;
+                    right: 0.5rem;
+                    background: rgba(79, 70, 229, 0.1);
+                    color: #4f46e5;
+                    font-size: 0.7rem;
+                    padding: 0.2rem 0.5rem;
+                    border-radius: 4px;
+                    opacity: 0;
+                    transition: opacity 0.2s ease;
+                    cursor: pointer;
+                    font-family: system-ui, sans-serif;
+                    font-weight: 500;
+                  }
+                  
+                  &:hover::after {
+                    opacity: 1;
+                  }
                 }
               }
             }
@@ -1513,7 +2065,7 @@ export default {
       }
     }
 
-    /* Comparison mode styling */
+    /* IMPROVED Comparison mode styling */
     .comparison-mode {
       padding: 1.5rem;
       display: flex;
@@ -1529,17 +2081,25 @@ export default {
         padding-bottom: 1rem;
         border-bottom: 1px solid #e2e8f0;
 
-        .comparison-title {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #0f172a;
-          margin: 0;
+        .comparison-title-section {
+          .comparison-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 0.3rem 0;
 
-          .title-icon {
-            color: #4f46e5;
+            .title-icon {
+              color: #4f46e5;
+            }
+          }
+          
+          .comparison-description {
+            color: #64748b;
+            margin: 0;
+            font-size: 0.9rem;
           }
         }
 
@@ -1566,312 +2126,656 @@ export default {
 
       .comparison-content {
         flex: 1;
-
-        .content-title {
-          font-size: 1.25rem;
-          font-weight: 600;
-          color: #334155;
-          margin: 0 0 1rem 0;
-
-          &.results-title {
-            margin-top: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        
+        /* Comparison layout styling */
+        .comparison-layout {
+          display: grid;
+          grid-template-columns: 250px 1fr;
+          gap: 1.5rem;
+          
+          @media (max-width: 768px) {
+            grid-template-columns: 1fr;
           }
-        }
-
-        .original-section {
-          margin-bottom: 2rem;
-
-          .original-preview {
+          
+          .column-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0 0 1rem 0;
             display: flex;
-            flex-direction: column;
-            background-color: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-
-            @media (min-width: 768px) {
-              flex-direction: row;
+            align-items: center;
+            gap: 0.5rem;
+            color: #334155;
+            
+            .column-icon {
+              color: #4f46e5;
             }
-
-            .preview-image {
-              padding: 1.5rem;
+          }
+          
+          /* Original segment styling */
+          .original-segment-column {
+            .segment-preview {
+              background: white;
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
               display: flex;
-              align-items: center;
-              justify-content: center;
-              background-color: white;
-
-              @media (min-width: 768px) {
-                flex: 0 0 300px;
-                border-right: 1px solid #e2e8f0;
-              }
-
+              flex-direction: column;
+              
               .original-img {
                 max-width: 100%;
                 max-height: 200px;
                 object-fit: contain;
+                padding: 1rem;
+                background: white;
+              }
+              
+              .segment-file-info {
+                background: #f8fafc;
+                padding: 0.75rem;
+                border-top: 1px solid #e2e8f0;
+                
+                .file-info-row {
+                  margin-bottom: 0.5rem;
+                  display: flex;
+                  gap: 0.5rem;
+                  font-size: 0.875rem;
+                  
+                  &:last-child {
+                    margin-bottom: 0;
+                  }
+                  
+                  .info-key {
+                    font-weight: 600;
+                    color: #334155;
+                  }
+                  
+                  .info-value {
+                    color: #64748b;
+                    
+                    &.truncate {
+                      white-space: nowrap;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                    }
+                  }
+                }
               }
             }
-
-            .preview-info {
-              padding: 1.5rem;
-              background-color: #f8fafc;
-
-              @media (min-width: 768px) {
-                flex: 1;
+          }
+          
+          /* Engine results styling */
+          .engines-results-column {
+            .engine-loading {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 200px;
+              
+              .fancy-spinner {
+                position: relative;
+                width: 64px;
+                height: 64px;
+                margin-bottom: 1rem;
+                
+                .ring {
+                  position: absolute;
+                  width: 100%;
+                  height: 100%;
+                  border-radius: 50%;
+                  border: 3px solid transparent;
+                  border-top-color: #4f46e5;
+                  animation: spin 1.5s linear infinite;
+                  
+                  &:nth-child(2) {
+                    border: 3px solid transparent;
+                    border-bottom-color: #4f46e5;
+                    animation: spin 2s linear infinite;
+                  }
+                }
+                
+                .dot {
+                  position: absolute;
+                  top: 50%;
+                  left: 50%;
+                  transform: translate(-50%, -50%);
+                  width: 15px;
+                  height: 15px;
+                  border-radius: 50%;
+                  background-color: #4f46e5;
+                  animation: pulse 1s ease infinite alternate;
+                }
               }
-
-              .info-item {
-                margin-bottom: 0.5rem;
-
-                &:last-child {
-                  margin-bottom: 0;
+              
+              .loading-text {
+                font-weight: 500;
+                color: #334155;
+                font-size: 1rem;
+              }
+            }
+            
+            .engine-results-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 1.25rem;
+              
+              @media (max-width: 900px) {
+                grid-template-columns: repeat(3, 1fr);
+              }
+              
+              @media (max-width: 767px) {
+                grid-template-columns: 1fr;
+              }
+              
+              .engine-result-card {
+                background: rgba(255, 255, 255, 0.95);
+                border-radius: 16px;
+                overflow: hidden;
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+                display: flex;
+                flex-direction: column;
+                backdrop-filter: blur(8px);
+                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                border: 1px solid rgba(255, 255, 255, 0.6);
+                
+                &:hover {
+                  transform: translateY(-5px);
+                  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
                 }
-
-                .info-key {
-                  font-weight: 600;
-                  color: #334155;
-                  margin-right: 0.5rem;
-                  font-size: 0.875rem;
+                
+                .engine-header {
+                  display: flex;
+                  align-items: center;
+                  gap: 1rem;
+                  padding: 1rem;
+                  position: relative;
+                  overflow: hidden;
+                  
+                  &:before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    opacity: 0.7;
+                    z-index: 0;
+                  }
+                  
+                  &.decimer {
+                    background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.25) 100%);
+                    border-bottom: 2px solid rgba(249, 115, 22, 0.4);
+                    
+                    &:before {
+                      background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.3), transparent 70%);
+                    }
+                    
+                    .engine-icon {
+                      color: #f97316;
+                      filter: drop-shadow(0 2px 4px rgba(249, 115, 22, 0.3));
+                    }
+                  }
+                  
+                  &.molnextr {
+                    background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0.25) 100%);
+                    border-bottom: 2px solid rgba(14, 165, 233, 0.4);
+                    
+                    &:before {
+                      background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.3), transparent 70%);
+                    }
+                    
+                    .engine-icon {
+                      color: #0ea5e9;
+                      filter: drop-shadow(0 2px 4px rgba(14, 165, 233, 0.3));
+                    }
+                  }
+                  
+                  &.molscribe {
+                    background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.25) 100%);
+                    border-bottom: 2px solid rgba(168, 85, 247, 0.4);
+                    
+                    &:before {
+                      background: radial-gradient(circle at top right, rgba(168, 85, 247, 0.3), transparent 70%);
+                    }
+                    
+                    .engine-icon {
+                      color: #a855f7;
+                      filter: drop-shadow(0 2px 4px rgba(168, 85, 247, 0.3));
+                    }
+                  }
+                  
+                  .engine-icon-container {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 12px;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                    position: relative;
+                    z-index: 1;
+                  }
+                  
+                  .engine-name {
+                    font-size: 1.125rem;
+                    font-weight: 700;
+                    margin: 0;
+                    color: #0f172a;
+                    position: relative;
+                    z-index: 1;
+                    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+                  }
                 }
-
-                .info-value {
-                  color: #64748b;
-                  font-size: 0.875rem;
+                
+                .engine-content {
+                  padding: 1rem;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.75rem;
+                  
+                  .structure-preview {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 180px;
+                    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+                    border: 1px solid rgba(226, 232, 240, 0.8);
+                    border-radius: 12px;
+                    padding: 1rem;
+                    position: relative;
+                    overflow: hidden;
+                    transition: transform 0.3s ease, box-shadow 0.3s ease;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                    
+                    &:hover {
+                      transform: translateY(-2px);
+                      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                    }
+                    
+                    .result-image {
+                      max-width: 100%;
+                      max-height: 150px;
+                      object-fit: contain;
+                      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
+                      transition: transform 0.3s ease, filter 0.3s ease;
+                      
+                      &:hover {
+                        transform: scale(1.03);
+                        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18));
+                      }
+                    }
+                    
+                    .error-result {
+                      padding: 1.25rem;
+                      background: linear-gradient(145deg, #fee2e2 0%, #fecaca 100%);
+                      border-radius: 12px;
+                      color: #b91c1c;
+                      font-size: 0.875rem;
+                      text-align: center;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      gap: 0.625rem;
+                      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.15);
+                      border: 1px solid rgba(239, 68, 68, 0.2);
+                      
+                      .error-icon {
+                        color: #ef4444;
+                        filter: drop-shadow(0 1px 2px rgba(239, 68, 68, 0.3));
+                      }
+                      
+                      p {
+                        margin: 0;
+                        font-weight: 500;
+                      }
+                    }
+                    
+                    .loading-structure {
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      position: relative;
+                      
+                      &:before {
+                        content: '';
+                        position: absolute;
+                        width: 48px;
+                        height: 48px;
+                        border-radius: 50%;
+                        background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, rgba(79, 70, 229, 0.01) 70%);
+                        animation: pulse 1.5s ease-in-out infinite alternate;
+                      }
+                      
+                      .loading-icon {
+                        color: #4f46e5;
+                        filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.4));
+                        position: relative;
+                        z-index: 1;
+                        
+                        &.spin {
+                          animation: spin 1.2s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+                        }
+                      }
+                    }
+                  }
+                  
+                  .smiles-data {
+                    display: flex;
+                    align-items: center;
+                    background: #f8fafc;
+                    border-radius: 6px;
+                    padding: 0.5rem 0.75rem;
+                    font-size: 0.875rem;
+                    border: 1px solid #e2e8f0;
+                    
+                    .smiles-label {
+                      font-weight: 600;
+                      margin-right: 0.5rem;
+                      color: #334155;
+                      white-space: nowrap;
+                    }
+                    
+                    .smiles-value {
+                      font-family: monospace;
+                      color: #64748b;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                      flex: 1;
+                    }
+                    
+                    .copy-btn {
+                      background: none;
+                      border: none;
+                      color: #64748b;
+                      cursor: pointer;
+                      padding: 0.25rem;
+                      border-radius: 4px;
+                      
+                      &:hover {
+                        background: rgba(0, 0, 0, 0.05);
+                        color: #334155;
+                      }
+                    }
+                  }
+                  
+                  .engine-stats {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.75rem;
+                    font-size: 0.8125rem;
+                    
+                    .stat-item {
+                      display: flex;
+                      align-items: center;
+                      gap: 0.5rem;
+                      
+                      .stat-label {
+                        color: #64748b;
+                      }
+                      
+                      .stat-value {
+                        font-weight: 600;
+                        color: #334155;
+                      }
+                      
+                      &.coordinates-badge {
+                        .coordinate-label {
+                          display: flex;
+                          align-items: center;
+                          gap: 0.25rem;
+                          color: #10b981;
+                          background: rgba(16, 185, 129, 0.1);
+                          border: 1px solid rgba(16, 185, 129, 0.3);
+                          padding: 0.25rem 0.5rem;
+                          border-radius: 12px;
+                          font-size: 0.75rem;
+                          
+                          .coordinate-icon {
+                            color: inherit;
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         }
-
-        /* Fancy loading spinner */
-        .comparison-loading {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 3rem;
-
-          .fancy-spinner {
-            position: relative;
-            width: 80px;
-            height: 80px;
-            margin-bottom: 1.5rem;
-
-            .ring {
-              position: absolute;
-              width: 100%;
-              height: 100%;
-              border-radius: 50%;
-              border: 3px solid transparent;
-              border-top-color: #4f46e5;
-              animation: spin 1.5s linear infinite;
-
-              &:nth-child(2) {
-                border: 3px solid transparent;
-                border-bottom-color: #4f46e5;
-                animation: spin 2s linear infinite;
-              }
-            }
-
-            .dot {
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              width: 15px;
-              height: 15px;
-              border-radius: 50%;
-              background-color: #4f46e5;
-              animation: pulse 1s ease infinite alternate;
-            }
-          }
-
-          .loading-text {
-            font-weight: 500;
-            color: #334155;
-            font-size: 1.125rem;
-          }
-        }
-
-        /* Results grid */
-        .results-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 1.5rem;
-          margin-bottom: 2rem;
-
-          @media (min-width: 768px) {
-            grid-template-columns: repeat(2, 1fr);
-          }
-
-          @media (min-width: 1200px) {
-            grid-template-columns: repeat(3, 1fr);
-          }
-
-          .result-card {
+        
+        /* Similarity Summary styling */
+        .similarity-summary {
+          background: white;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+          margin-top: 1rem;
+          
+          .summary-header {
             display: flex;
-            flex-direction: column;
-            background-color: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #e2e8f0;
+            cursor: pointer;
+            
             &:hover {
-              transform: translateY(-3px);
-              box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+              background: #f8fafc;
             }
-
-            .card-header {
+            
+            .summary-title {
               display: flex;
               align-items: center;
-              gap: 0.75rem;
-              padding: 1rem;
-
-              &.decimer {
-                background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(249, 115, 22, 0.2) 100%);
-                border-bottom: 2px solid rgba(249, 115, 22, 0.3);
-
-                .engine-icon {
+              gap: 0.5rem;
+              margin: 0;
+              font-size: 1.1rem;
+              font-weight: 600;
+              color: #334155;
+              
+              .summary-icon {
+                color: #4f46e5;
+              }
+            }
+            
+            .summary-toggle {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+              color: #64748b;
+              font-size: 0.875rem;
+              
+              .toggle-icon {
+                color: inherit;
+              }
+            }
+          }
+          
+          .quick-summary {
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            
+            .summary-stats {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 1rem;
+              justify-content: center;
+              
+              .stat-card {
+                background: #f8fafc;
+                border-radius: 8px;
+                padding: 1.25rem;
+                min-width: 120px;
+                text-align: center;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+                border: 1px solid #e2e8f0;
+                flex: 1;
+                
+                &:hover {
+                  transform: translateY(-3px);
+                  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+                }
+                
+                .stat-value {
+                  font-size: 1.75rem;
+                  font-weight: 700;
+                  margin-bottom: 0.5rem;
+                  color: #334155;
+                  
+                  &.identical {
+                    color: #10b981;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    
+                    .identical-icon {
+                      color: inherit;
+                    }
+                  }
+                }
+                
+                .stat-label {
+                  font-size: 0.875rem;
+                  color: #64748b;
+                }
+                
+                &.high-agreement .stat-value {
+                  color: #10b981;
+                }
+                
+                &.medium-agreement .stat-value {
+                  color: #0ea5e9;
+                }
+                
+                &.low-agreement .stat-value {
                   color: #f97316;
                 }
               }
+            }
+          }
+          
+          /* IMPROVED: Enhanced Action Button area styling */
+          .analysis-action-buttons {
+            padding: 1.25rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(243, 244, 246, 0.5) 0%, rgba(255, 255, 255, 0.5) 100%);
+            border-top: 1px solid #e2e8f0;
 
-              &.molnextr {
-                background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(14, 165, 233, 0.2) 100%);
-                border-bottom: 2px solid rgba(14, 165, 233, 0.3);
+            .highlight-btn,
+            .analyze-btn {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+              background-color: #4f46e5;
+              color: white;
+              border: none;
+              padding: 0.75rem 1.25rem;
+              border-radius: 8px;
+              font-weight: 500;
+              font-size: 0.9375rem;
+              cursor: pointer;
+              transition: all 0.3s ease;
+              flex: 1;
+              justify-content: center;
+              max-width: 280px;
+              box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
 
-                .engine-icon {
-                  color: #0ea5e9;
-                }
+              .btn-icon {
+                opacity: 0.9;
               }
 
-              &.molscribe {
-                background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.2) 100%);
-                border-bottom: 2px solid rgba(168, 85, 247, 0.3);
-
-                .engine-icon {
-                  color: #a855f7;
-                }
+              &:hover:not(:disabled) {
+                background-color: #4338ca;
+                transform: translateY(-1px);
+                box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
               }
 
-              .engine-icon-wrapper {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 36px;
-                height: 36px;
-                border-radius: 8px;
-                background-color: white;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-              }
-
-              .engine-name {
-                font-size: 1rem;
-                font-weight: 700;
-                margin: 0;
-                color: #0f172a;
+              &:disabled {
+                background-color: #818cf8;
+                opacity: 0.7;
+                cursor: not-allowed;
               }
             }
 
-            .card-body {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              padding: 1rem;
-
-              .result-image-container {
-                flex: 1;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 220px;
-                background-color: white;
-                border-radius: 8px;
-                border: 1px solid #e2e8f0;
-                margin-bottom: 1rem;
-                padding: 1rem;
-
-                .result-image {
-                  max-width: 100%;
-                  max-height: 180px;
-                  object-fit: contain;
-                }
-
-                .error-result {
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 0.75rem;
-                  text-align: center;
-                  padding: 1.5rem;
-                  background-color: #fee2e2;
-                  border-radius: 8px;
-
-                  .error-icon {
-                    color: #ef4444;
-                  }
-
-                  p {
-                    margin: 0;
-                    color: #b91c1c;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                  }
-                }
-
-                .empty-result {
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 0.75rem;
-                  text-align: center;
-                  color: #64748b;
-
-                  .empty-icon {
-                    color: #94a3b8;
-                  }
-
-                  p {
-                    margin: 0;
-                    font-size: 0.875rem;
-                  }
-                }
+            .highlight-btn {
+              background-color: #0ea5e9;
+              box-shadow: 0 4px 6px rgba(14, 165, 233, 0.2);
+              
+              &:hover:not(:disabled) {
+                background-color: #0284c7;
+                box-shadow: 0 8px 16px rgba(14, 165, 233, 0.3);
               }
-
-              .result-smiles {
-                background-color: #f8fafc;
-                border-radius: 8px;
-                padding: 0.75rem;
-
-                .smiles-header {
-                  font-weight: 600;
-                  margin-bottom: 0.375rem;
-                  font-size: 0.8125rem;
-                  color: #334155;
-                }
-
-                .smiles-value {
-                  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-                  font-size: 0.8125rem;
-                  color: #334155;
-                  word-break: break-all;
-                }
+              
+              &:disabled {
+                background-color: #7dd3fc;
+              }
+            }
+          }
+          
+          .similarity-details {
+            border-top: 1px solid #e2e8f0;
+            padding: 1.25rem;
+            
+            .run-analysis-prompt {
+              text-align: center;
+              color: #64748b;
+              font-size: 0.9375rem;
+              padding: 2rem 0;
+              background: #f8fafc;
+              border-radius: 8px;
+              border: 1px dashed #cbd5e1;
+            }
+            
+            .analysis-error {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+              color: #ef4444;
+              background: rgba(239, 68, 68, 0.1);
+              border: 1px solid rgba(239, 68, 68, 0.3);
+              padding: 1rem;
+              border-radius: 8px;
+              
+              .error-icon {
+                color: inherit;
+              }
+              
+              p {
+                margin: 0;
               }
             }
           }
         }
 
+        /* Footer actions */
         .comparison-footer {
           display: flex;
-          justify-content: center;
-          margin-top: 1rem;
-
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 1.5rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid #e2e8f0;
+          
+          @media (max-width: 768px) {
+            flex-direction: column;
+            gap: 1rem;
+            align-items: stretch;
+          }
+          
           .refresh-btn {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 0.5rem;
             background-color: #4f46e5;
             color: white;
@@ -1883,57 +2787,135 @@ export default {
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
-
+            
             .refresh-icon {
               opacity: 0.9;
             }
-
+            
             &:hover:not(:disabled) {
               background-color: #4338ca;
-              box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
               transform: translateY(-1px);
+              box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
             }
-
+            
             &:disabled {
               background-color: #818cf8;
               opacity: 0.7;
               cursor: not-allowed;
             }
           }
-
-          .compare-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 500;
-            font-size: 0.9375rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
-            margin-left: 1rem;
-
-            .chart-icon {
-              opacity: 0.9;
-            }
-
-            &:hover:not(:disabled) {
-              background-color: #4338ca;
-              box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-              transform: translateY(-1px);
-            }
-
-            &:disabled {
-              background-color: #818cf8;
-              opacity: 0.7;
-              cursor: not-allowed;
+          
+          .view-options {
+            .option-checkbox {
+              display: flex;
+              align-items: center;
+              position: relative;
+              cursor: pointer;
+              user-select: none;
+              
+              input[type="checkbox"] {
+                margin-right: 0.5rem;
+              }
+              
+              .checkbox-label {
+                font-size: 0.875rem;
+                color: #334155;
+              }
             }
           }
         }
+      }
+    }
+  }
+}
+
+/* Context view styling */
+.context-view-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.75);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(5px);
+  
+  .context-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: white;
+    border-bottom: 1px solid #e2e8f0;
+    
+    h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: #334155;
+    }
+    
+    .btn-close {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+      &:hover {
+        background-color: #f1f5f9;
+        color: #ef4444;
+      }
+    }
+  }
+  
+  .context-view-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    overflow: auto;
+    
+    .loading-context {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      
+      .loader-pulse {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.2);
+        animation: pulse 1.5s ease-in-out infinite;
+        margin-bottom: 1rem;
+      }
+    }
+    
+    .context-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      background-color: white;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    
+    .context-error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      color: white;
+      
+      p {
+        margin: 0;
       }
     }
   }
@@ -1959,40 +2941,78 @@ export default {
 /* Mobile specific styling */
 @media (max-width: 768px) {
   .segment-viewer {
-    padding: 0.75rem;
-
-    .segment-header {
-      padding: 0.5rem;
-      margin: -0.5rem -0.5rem 0.5rem -0.5rem;
-    }
-
-    .content-panels {
-      flex-direction: column;
-
-      .panel {
-        width: 100%;
-        margin-bottom: 1rem;
-      }
-    }
-
     .compare-callout {
       flex-direction: column;
       text-align: center;
-
+      
       .callout-icon {
         margin-right: 0;
         margin-bottom: 0.5rem;
       }
-
+      
       .callout-text {
-        margin-bottom: 0.75rem;
+        margin-bottom: 1rem;
       }
-
+      
       .compare-btn {
         width: 100%;
         justify-content: center;
       }
     }
+    
+    .comparison-mode {
+      .comparison-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        
+        .back-btn {
+          align-self: flex-start;
+        }
+      }
+      
+      .quick-summary {
+        flex-direction: column;
+        
+        .summary-stats {
+          justify-content: center;
+        }
+        
+        .action-buttons {
+          width: 100%;
+          justify-content: center;
+          
+          .highlight-btn,
+          .analyze-btn {
+            flex: 1;
+          }
+        }
+      }
+    }
+    
+    .content-panels {
+      flex-direction: column;
+      
+      .panel {
+        width: 100%;
+      }
+    }
+    
+    .section-headers {
+      flex-direction: column;
+      gap: 0.5rem;
+      
+      .header-item {
+        justify-content: center;
+      }
+    }
+  }
+  
+  .context-view-container {
+    .context-view-content {
+      padding: 0.5rem;
+    }
   }
 }
+
 </style>
