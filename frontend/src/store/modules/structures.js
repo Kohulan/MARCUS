@@ -1,5 +1,6 @@
 import decimerService from '@/services/decimerService'
 import ocsrService from '@/services/ocsrService'
+import similarityService from '@/services/similarityService'
 
 /**
  * Vuex module for handling chemical structure extraction and processing
@@ -356,6 +357,99 @@ export default {
       commit('SET_CONVERTED_STRUCTURES', [])
       commit('SET_SEGMENT_INFO', null)
       commit('CLEAR_ERROR')
+    },
+    
+    /**
+     * Compare SMILES across multiple OCSR engines
+     * @param {Object} context - Vuex action context
+     * @param {Object} options - Comparison options
+     * @param {string} options.segmentId - Segment ID to compare (optional, uses first segment if not provided)
+     * @returns {Promise<Object|null>} - The comparison result or null on error
+     */
+    async compareSmiles({ state, dispatch }, options = {}) {
+      // If no structures, we can't do a comparison
+      if (!state.convertedStructures || state.convertedStructures.length === 0) {
+        dispatch('showNotification', {
+          type: 'error',
+          message: 'No structures available for comparison'
+        }, { root: true });
+        return null;
+      }
+      
+      // Get current PDF ID to filter correctly
+      const pdfId = state.currentPdfId;
+      
+      // Set default segmentId if not provided (use first segment)
+      let segmentId = options.segmentId;
+      if (!segmentId && state.segments.length > 0) {
+        segmentId = state.segments[0].id;
+      }
+      
+      if (!segmentId) {
+        dispatch('showNotification', {
+          type: 'error',
+          message: 'No segments available for comparison'
+        }, { root: true });
+        return null;
+      }
+      
+      // Get engines to compare
+      const engines = ['decimer', 'molnextr', 'molscribe'];
+      const smilesList = [];
+      const engineNames = [];
+      
+      for (const engine of engines) {
+        // Find structure for this segment processed by this engine
+        const structure = state.convertedStructures.find(s => 
+          s.segmentId === segmentId && 
+          s.engine === engine && 
+          (!pdfId || s.pdfId === pdfId)
+        );
+        
+        if (structure && structure.smiles) {
+          smilesList.push(structure.smiles);
+          engineNames.push(engine);
+        }
+      }
+      
+      // Make sure we have at least 2 engines with SMILES
+      if (smilesList.length < 2) {
+        dispatch('showNotification', {
+          type: 'warning',
+          message: 'Need at least 2 engines with valid SMILES for comparison'
+        }, { root: true });
+        return null;
+      }
+      
+      try {
+        // Call the comparison API
+        const result = await similarityService.compareSmiles(smilesList, engineNames);
+        
+        // Show notification based on result
+        if (result.identical) {
+          dispatch('showNotification', {
+            type: 'success',
+            message: 'All OCSR engines generated identical SMILES'
+          }, { root: true });
+        } else {
+          const agreement = result.agreement_summary.agreement_percentage.toFixed(1);
+          dispatch('showNotification', {
+            type: 'info',
+            message: `OCSR engines have ${agreement}% agreement on structure`
+          }, { root: true });
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('Error comparing SMILES:', error);
+        
+        dispatch('showNotification', {
+          type: 'error',
+          message: error.message || 'Error comparing SMILES'
+        }, { root: true });
+        
+        return null;
+      }
     }
   },
   
@@ -433,6 +527,19 @@ export default {
       if (!state.currentPdfId) return state.convertedStructures
       
       return state.convertedStructures.filter(s => s.pdfId === state.currentPdfId)
+    },
+    
+    /**
+     * Get structure by segment ID and engine name
+     */
+    getStructureByEngine: state => (segmentId, engine) => {
+      if (!state.convertedStructures || !segmentId || !engine) return null;
+      
+      return state.convertedStructures.find(s => 
+        s.segmentId === segmentId && 
+        s.engine === engine && 
+        (!state.currentPdfId || s.pdfId === state.currentPdfId)
+      );
     }
   }
 }

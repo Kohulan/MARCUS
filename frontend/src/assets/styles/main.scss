@@ -1,6 +1,8 @@
 /* Import variables first */
-@use 'variables' as *;
-@import 'transitions';
+// Use the modern '@use' rule for variables
+@use 'variables' as *; 
+// Use the modern '@use' rule instead of the deprecated '@import'
+@use 'transitions'; 
 
 /* Global Reset */
 *,
@@ -208,4 +210,3 @@ a {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-

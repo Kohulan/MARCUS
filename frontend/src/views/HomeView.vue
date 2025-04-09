@@ -21,28 +21,29 @@
             :isLoading="isLoadingPdf" 
           />
           
+          <!-- MOVED: Prominent Action Buttons - Now placed before the PDF viewer -->
+          <div class="action-buttons prominent" v-if="pdfUrl">
+            <button 
+              class="btn btn-primary btn-large" 
+              @click="extractText"
+              :disabled="isExtractingText"
+            >
+              <vue-feather type="align-left" class="icon"></vue-feather>
+              {{ isExtractingText ? 'Extracting Text...' : 'Extract Text' }}
+            </button>
+            
+            <button 
+              class="btn btn-primary btn-large" 
+              @click="extractStructures"
+              :disabled="isExtractingStructures"
+            >
+              <vue-feather type="image" class="icon"></vue-feather>
+              {{ isExtractingStructures ? 'Extracting Structures...' : 'Extract Structures' }}
+            </button>
+          </div>
+          
           <div class="pdf-viewer-container" v-if="pdfUrl">
             <PdfViewerObject :pdfUrl="pdfUrl" />
-            
-            <div class="action-buttons">
-              <button 
-                class="btn btn-primary" 
-                @click="extractText"
-                :disabled="isExtractingText"
-              >
-                <vue-feather type="align-left" class="icon"></vue-feather>
-                {{ isExtractingText ? 'Extracting...' : 'Extract Text' }}
-              </button>
-              
-              <button 
-                class="btn btn-primary" 
-                @click="extractStructures"
-                :disabled="isExtractingStructures"
-              >
-                <vue-feather type="image" class="icon"></vue-feather>
-                {{ isExtractingStructures ? 'Extracting...' : 'Extract Structures' }}
-              </button>
-            </div>
           </div>
         </div>
         
@@ -651,6 +652,7 @@ export default {
   overflow: hidden;
 }
 
+/* UPDATED: Action buttons styling to make them more prominent */
 .action-buttons {
   display: flex;
   gap: 0.5rem;
@@ -662,6 +664,50 @@ export default {
     padding: 0.5rem;
     font-size: 0.9rem;
     white-space: nowrap;
+  }
+  
+  /* New styles for more prominent buttons */
+  &.prominent {
+    margin: 1rem 0;
+    padding: 0.5rem;
+    background-color: rgba(var(--color-primary-rgb), 0.08);
+    border-radius: 8px;
+    border: 1px dashed rgba(var(--color-primary-rgb), 0.3);
+    
+    .btn-large {
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      min-height: 48px;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      overflow: hidden;
+      
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 15px rgba(var(--color-primary-rgb), 0.25);
+      }
+      
+      .icon {
+        width: 18px;
+        height: 18px;
+      }
+      
+      &:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          45deg,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.1) 100%
+        );
+        z-index: 1;
+      }
+    }
   }
 }
 
@@ -711,6 +757,15 @@ export default {
     margin-right: 0;
     margin-bottom: 1rem;
     overflow: visible;
+  }
+  
+  /* Make buttons stack on mobile */
+  .action-buttons.prominent {
+    flex-direction: column;
+    
+    .btn-large {
+      width: 100%;
+    }
   }
 }
 </style>
