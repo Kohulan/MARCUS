@@ -1295,76 +1295,74 @@ export default {
           await this.runComparisonManual();
         }
 
-        // Collect valid results with molfiles
-        const molfiles = [];
-        const engineNames = [];
+        // Collect all valid results with SMILES
         const validResults = [];
         
         if (this.decimerResult?.smiles && !this.decimerResult.error) {
-          // For DECIMER, we don't have molfiles, so we'll use the result object
-          validResults.push(this.decimerResult);
-          if (this.decimerResult.molfile) {
-            molfiles.push(this.decimerResult.molfile);
-            engineNames.push('decimer');
-          }
+          validResults.push({
+            engine: 'decimer',
+            smiles: this.decimerResult.smiles,
+            molfile: this.decimerResult.molfile
+          });
         }
         
         if (this.molnextrResult?.smiles && !this.molnextrResult.error) {
-          validResults.push(this.molnextrResult);
-          if (this.molnextrResult.molfile) {
-            molfiles.push(this.molnextrResult.molfile);
-            engineNames.push('molnextr');
-          }
+          validResults.push({
+            engine: 'molnextr', 
+            smiles: this.molnextrResult.smiles,
+            molfile: this.molnextrResult.molfile
+          });
         }
         
         if (this.molscribeResult?.smiles && !this.molscribeResult.error) {
-          validResults.push(this.molscribeResult);
-          if (this.molscribeResult.molfile) {
-            molfiles.push(this.molscribeResult.molfile);
-            engineNames.push('molscribe');
-          }
-        }
-
-        // If we don't have enough molfiles, try to convert SMILES to molfiles
-        if (molfiles.length < 2) {
-          // Use the API to convert SMILES to molfiles for any engines that don't have molfiles
-          const smilesList = [];
-          const smilesEngines = [];
-
-          validResults.forEach(result => {
-            if (!result.molfile && result.smiles) {
-              smilesList.push(result.smiles);
-              smilesEngines.push(result.engine || 'unknown');
-            }
+          validResults.push({
+            engine: 'molscribe',
+            smiles: this.molscribeResult.smiles,
+            molfile: this.molscribeResult.molfile
           });
+        }
 
-          if (smilesList.length > 0) {
-            try {
-              // Convert SMILES to molfiles using depiction service
-              for (let i = 0; i < smilesList.length; i++) {
-                const depictionResponse = await depictionService.generateDepiction({
-                  smiles: smilesList[i],
-                  engine: 'cdk',
-                  format: 'molfile'
-                });
-
-                if (depictionResponse) {
-                  molfiles.push(depictionResponse);
-                  engineNames.push(smilesEngines[i]);
-                }
+        // Need at least 2 valid structures
+        if (validResults.length < 2) {
+          throw new Error('Need at least 2 valid structures to find common substructure');
+        }
+        
+        // Initialize arrays for molfiles and engine names
+        const molfiles = [];
+        const engineNames = [];
+        
+        // Convert ALL results to molfiles if needed (including DECIMER)
+        for (const result of validResults) {
+          try {
+            if (result.molfile) {
+              // If molfile exists, use it
+              molfiles.push(result.molfile);
+              engineNames.push(result.engine);
+            } else if (result.smiles) {
+              // If only SMILES exists, convert to molfile
+              console.log(`Converting SMILES to molfile for ${result.engine}`);
+              const depictionResponse = await depictionService.generateMolfileFromSmiles(result.smiles);
+              
+              if (depictionResponse && depictionResponse.molfile) {
+                molfiles.push(depictionResponse.molfile);
+                engineNames.push(result.engine);
+                console.log(`Successfully converted SMILES to molfile for ${result.engine}`);
+              } else {
+                console.warn(`Failed to convert SMILES to molfile for ${result.engine}`);
               }
-            } catch (error) {
-              console.error('Error converting SMILES to molfiles:', error);
             }
+          } catch (error) {
+            console.error(`Error processing molfile for ${result.engine}:`, error);
           }
         }
 
-        // Make sure we have at least 2 molfiles
+        // Make sure we have at least 2 molfiles after conversion
         if (molfiles.length < 2) {
           throw new Error('Need at least 2 valid structures to find common substructure');
         }
 
-        // Call the MCS API with both molfiles and engineNames
+        // Call the MCS API with molfiles and engineNames
+        console.log(`Finding MCS with ${molfiles.length} valid structures`);
         const mcsResult = await similarityService.findMCS(molfiles, engineNames);
         console.log('MCS Result:', mcsResult);
         
@@ -1387,25 +1385,37 @@ export default {
               highlight: mcsSmarts
             };
             
-            const svg = await depictionService.generateDepiction(depictionOptions);
-            result.svg = svg;
-            result.highlightedMCS = true;
+            // Generate the new SVG with MCS highlight
+            const svgResult = await depictionService.generateDepiction(depictionOptions);
+            
+            // Update the appropriate result based on engine
+            if (result.engine === 'decimer' && this.decimerResult) {
+              this.decimerResult.svg = svgResult;
+            } else if (result.engine === 'molnextr' && this.molnextrResult) {
+              this.molnextrResult.svg = svgResult;
+            } else if (result.engine === 'molscribe' && this.molscribeResult) {
+              this.molscribeResult.svg = svgResult;
+            }
           } catch (error) {
-            console.error(`Error highlighting MCS for ${result.engine}:`, error);
+            console.error(`Error updating depiction for ${result.engine}:`, error);
           }
         });
         
-        // Wait for all depictions to update
+        // Wait for all depiction updates to complete
         await Promise.all(updatePromises);
         
-        // Notify user
+        // Show success notification
         this.$emit('notification', {
           type: 'success',
-          message: 'Common structure highlighted across all engines'
+          message: 'Common substructure highlighted across all engines'
         });
+        
       } catch (error) {
         console.error('Error finding MCS:', error);
-        this.$emit('error', error.message || 'Error finding common structure');
+        // Show error notification
+        this.$emit('error', error.message || 'Error finding common substructure');
+        this.comparisonError = error.message;
+        this.$emit('error', this.comparisonError);
       } finally {
         this.findingMCS = false;
       }
