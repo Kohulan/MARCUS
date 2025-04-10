@@ -8,7 +8,19 @@
     <div v-else class="segment-content">
       <div v-if="!comparisonMode" class="normal-view">
         <div class="segment-header">
-          <h3 class="segment-title">Segment #{{ segmentNumber }}</h3>
+          <div class="segment-title-section">
+            <h3 class="segment-title">Segment #{{ segmentNumber }}</h3>
+
+            <!-- Add segment selection checkbox -->
+            <div class="segment-selection-control">
+              <label class="selection-checkbox">
+                <input type="checkbox" :checked="isSelected" @change="toggleSelection">
+                <span class="checkbox-label" v-if="isSelected">Marked as correct</span>
+                <span class="checkbox-label" v-else>Mark as correct</span>
+              </label>
+            </div>
+          </div>
+
           <div class="segment-actions">
             <button class="btn-action btn-context" @click="showInContext" title="View in PDF context">
               <vue-feather type="file-text" size="16"></vue-feather>
@@ -42,14 +54,8 @@
               <div v-if="isLoading" class="loading-overlay">
                 <div class="loader-pulse"></div>
               </div>
-              <img
-                v-if="segmentUrl"
-                :src="segmentUrl"
-                alt="Chemical structure segment"
-                class="segment-image"
-                @load="handleImageLoaded"
-                @error="handleImageError"
-              />
+              <img v-if="segmentUrl" :src="segmentUrl" alt="Chemical structure segment" class="segment-image"
+                @load="handleImageLoaded" @error="handleImageError" />
             </div>
 
             <div class="metadata-container">
@@ -93,17 +99,11 @@
 
             <div class="structure-visualization">
               <div class="structure-container">
-                <ImprovedChemicalStructureViewer
-                  :smiles="processedStructure.smiles"
-                  :molfile="processedStructure.molfile"
-                  :name="processedStructure.name || `Compound ${segmentNumber}`"
-                  :source-engine="processedStructure.engine"
-                  :use-coordinates="shouldUseCoordinates"
-                  @copied="handleCopied"
-                  @error="handleStructureError"
-                  @download-complete="handleDownloadComplete"
-                  hide-controls
-                />
+                <ImprovedChemicalStructureViewer :smiles="processedStructure.smiles"
+                  :molfile="processedStructure.molfile" :name="processedStructure.name || `Compound ${segmentNumber}`"
+                  :source-engine="processedStructure.engine" :use-coordinates="shouldUseCoordinates"
+                  @copied="handleCopied" @error="handleStructureError" @download-complete="handleDownloadComplete"
+                  hide-controls />
               </div>
             </div>
 
@@ -128,6 +128,11 @@
               <div class="tag tool-tag">
                 <vue-feather type="tool" size="14" class="tag-icon"></vue-feather>
                 <span>CDK engine</span>
+              </div>
+              <!-- Add selection status tag -->
+              <div v-if="isSelected" class="tag selection-tag">
+                <vue-feather type="check-square" size="14" class="tag-icon"></vue-feather>
+                <span>Marked as correct</span>
               </div>
             </div>
           </div>
@@ -157,10 +162,17 @@
             </h3>
             <p class="comparison-description">Compare structure recognition results across all available engines</p>
           </div>
-          <button class="back-btn" @click="comparisonMode = false">
-            <vue-feather type="arrow-left" size="14"></vue-feather>
-            <span>Back to Details</span>
-          </button>
+          <div class="header-actions">
+            <!-- Added coordinate display option here -->
+            <label class="coordinate-display-option">
+              <input type="checkbox" v-model="useCoordinatesForDisplay" :disabled="isComparing">
+              <span class="option-label">Use coordinates when available</span>
+            </label>
+            <button class="back-btn" @click="comparisonMode = false">
+              <vue-feather type="arrow-left" size="14"></vue-feather>
+              <span>Back to Details</span>
+            </button>
+          </div>
         </div>
 
         <div class="comparison-content">
@@ -173,12 +185,8 @@
                 Original Segment
               </h4>
               <div class="segment-preview">
-                <img
-                  v-if="segmentUrl"
-                  :src="segmentUrl"
-                  alt="Original chemical structure segment"
-                  class="original-img"
-                />
+                <img v-if="segmentUrl" :src="segmentUrl" alt="Original chemical structure segment"
+                  class="original-img" />
                 <div class="segment-file-info">
                   <div class="file-info-row">
                     <span class="info-key">Filename:</span>
@@ -212,7 +220,7 @@
               <!-- Engines results grid -->
               <div v-else class="engine-results-grid">
                 <!-- DECIMER Result Card -->
-                <div class="engine-result-card">
+                <div class="engine-result-card" :class="{ 'result-selected': selectedEngine === 'decimer' }">
                   <div class="engine-header decimer">
                     <div class="engine-icon-container">
                       <vue-feather type="cpu" class="engine-icon"></vue-feather>
@@ -222,12 +230,9 @@
                   <div class="engine-content">
                     <!-- Structure visualization -->
                     <div class="structure-preview">
-                      <img
-                        v-if="decimerResult && decimerResult.svg"
-                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(decimerResult.svg)"
-                        class="result-image"
-                        alt="DECIMER result"
-                      />
+                      <img v-if="decimerResult && decimerResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(decimerResult.svg)" class="result-image"
+                        alt="DECIMER result" />
                       <div v-else-if="decimerResult && decimerResult.error" class="error-result">
                         <vue-feather type="alert-circle" class="error-icon"></vue-feather>
                         <p>{{ decimerResult.error }}</p>
@@ -236,7 +241,7 @@
                         <vue-feather type="loader" class="loading-icon spin"></vue-feather>
                       </div>
                     </div>
-                    
+
                     <!-- SMILES data -->
                     <div v-if="decimerResult && decimerResult.smiles" class="smiles-data">
                       <div class="smiles-label">SMILES:</div>
@@ -253,26 +258,38 @@
                         <span class="stat-value">{{ decimerResult.processingTime }}</span>
                       </div>
                     </div>
+
+                    <!-- Selection button -->
+                    <div v-if="decimerResult && decimerResult.smiles && !decimerResult.error" class="selection-actions">
+                      <button class="select-prediction-btn" :class="{ 'active': selectedEngine === 'decimer' }"
+                        @click="selectPrediction('decimer')">
+                        <template v-if="selectedEngine === 'decimer'">
+                          <vue-feather type="check-circle" size="16" class="btn-icon"></vue-feather>
+                          <span>Selected</span>
+                        </template>
+                        <template v-else>
+                          <vue-feather type="check" size="16" class="btn-icon"></vue-feather>
+                          <span>Select This Result</span>
+                        </template>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <!-- MolNexTR Result Card -->
-                <div class="engine-result-card">
+                <div class="engine-result-card" :class="{ 'result-selected': selectedEngine === 'molnextr' }">
                   <div class="engine-header molnextr">
                     <div class="engine-icon-container">
-                      <vue-feather type="grid" class="engine-icon"></vue-feather>
+                      <vue-feather type="cpu" class="engine-icon"></vue-feather>
                     </div>
                     <h4 class="engine-name">MolNexTR</h4>
                   </div>
                   <div class="engine-content">
                     <!-- Structure visualization -->
                     <div class="structure-preview">
-                      <img
-                        v-if="molnextrResult && molnextrResult.svg"
-                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molnextrResult.svg)"
-                        class="result-image"
-                        alt="MolNexTR result"
-                      />
+                      <img v-if="molnextrResult && molnextrResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molnextrResult.svg)" class="result-image"
+                        alt="MolNexTR result" />
                       <div v-else-if="molnextrResult && molnextrResult.error" class="error-result">
                         <vue-feather type="alert-circle" class="error-icon"></vue-feather>
                         <p>{{ molnextrResult.error }}</p>
@@ -281,7 +298,7 @@
                         <vue-feather type="loader" class="loading-icon spin"></vue-feather>
                       </div>
                     </div>
-                    
+
                     <!-- SMILES data -->
                     <div v-if="molnextrResult && molnextrResult.smiles" class="smiles-data">
                       <div class="smiles-label">SMILES:</div>
@@ -304,26 +321,39 @@
                         </span>
                       </div>
                     </div>
+
+                    <!-- Selection button -->
+                    <div v-if="molnextrResult && molnextrResult.smiles && !molnextrResult.error"
+                      class="selection-actions">
+                      <button class="select-prediction-btn" :class="{ 'active': selectedEngine === 'molnextr' }"
+                        @click="selectPrediction('molnextr')">
+                        <template v-if="selectedEngine === 'molnextr'">
+                          <vue-feather type="check-circle" size="16" class="btn-icon"></vue-feather>
+                          <span>Selected</span>
+                        </template>
+                        <template v-else>
+                          <vue-feather type="check" size="16" class="btn-icon"></vue-feather>
+                          <span>Select This Result</span>
+                        </template>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <!-- MolScribe Result Card -->
-                <div class="engine-result-card">
+                <div class="engine-result-card" :class="{ 'result-selected': selectedEngine === 'molscribe' }">
                   <div class="engine-header molscribe">
                     <div class="engine-icon-container">
-                      <vue-feather type="edit-3" class="engine-icon"></vue-feather>
+                      <vue-feather type="cpu" class="engine-icon"></vue-feather>
                     </div>
                     <h4 class="engine-name">MolScribe</h4>
                   </div>
                   <div class="engine-content">
                     <!-- Structure visualization -->
                     <div class="structure-preview">
-                      <img
-                        v-if="molscribeResult && molscribeResult.svg"
-                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molscribeResult.svg)"
-                        class="result-image"
-                        alt="MolScribe result"
-                      />
+                      <img v-if="molscribeResult && molscribeResult.svg"
+                        :src="'data:image/svg+xml;utf8,' + encodeURIComponent(molscribeResult.svg)" class="result-image"
+                        alt="MolScribe result" />
                       <div v-else-if="molscribeResult && molscribeResult.error" class="error-result">
                         <vue-feather type="alert-circle" class="error-icon"></vue-feather>
                         <p>{{ molscribeResult.error }}</p>
@@ -332,7 +362,7 @@
                         <vue-feather type="loader" class="loading-icon spin"></vue-feather>
                       </div>
                     </div>
-                    
+
                     <!-- SMILES data -->
                     <div v-if="molscribeResult && molscribeResult.smiles" class="smiles-data">
                       <div class="smiles-label">SMILES:</div>
@@ -355,102 +385,118 @@
                         </span>
                       </div>
                     </div>
+
+                    <!-- Selection button -->
+                    <div v-if="molscribeResult && molscribeResult.smiles && !molscribeResult.error"
+                      class="selection-actions">
+                      <button class="select-prediction-btn" :class="{ 'active': selectedEngine === 'molscribe' }"
+                        @click="selectPrediction('molscribe')">
+                        <template v-if="selectedEngine === 'molscribe'">
+                          <vue-feather type="check-circle" size="16" class="btn-icon"></vue-feather>
+                          <span>Selected</span>
+                        </template>
+                        <template v-else>
+                          <vue-feather type="check" size="16" class="btn-icon"></vue-feather>
+                          <span>Select This Result</span>
+                        </template>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Similarity Summary Section -->
-          <div class="similarity-summary" v-if="allEnginesLoaded">
-            <div class="summary-header">
-              <h4 class="summary-title">
-                <vue-feather type="bar-chart-2" class="summary-icon"></vue-feather>
-                Similarity Analysis
-              </h4>
-              <div class="summary-toggle" @click="toggleSimilarityDetails">
-                <span>{{ showSimilarityDetails ? 'Hide Details' : 'Show Details' }}</span>
-                <vue-feather 
-                  :type="showSimilarityDetails ? 'chevron-up' : 'chevron-down'"
-                  size="16" 
-                  class="toggle-icon"
-                ></vue-feather>
-              </div>
+          <!-- Apply Selection button -->
+          <div class="apply-selection-bar" v-if="selectedEngine && !isComparing">
+            <div class="selection-message">
+              <vue-feather type="info" size="16" class="message-icon"></vue-feather>
+              <span>You've selected the prediction from <strong>{{ getEngineDisplayName(selectedEngine) }}</strong>.
+                Click apply
+                to update the structure.</span>
             </div>
+            <button class="apply-selection-btn" @click="applySelectedPrediction">
+              <vue-feather type="check-square" size="16" class="btn-icon"></vue-feather>
+              <span>Apply Selection</span>
+            </button>
+          </div>
+        </div>
 
-            <!-- Quick Summary Stats -->
-            <div class="quick-summary">
-              <div class="summary-stats">
-                <div class="stat-card" :class="getAgreementClass(similarityScore)">
-                  <div class="stat-value">{{ formatPercentage(similarityScore) }}</div>
-                  <div class="stat-label">Overall Agreement</div>
-                </div>
-                
-                <div class="stat-card">
-                  <div class="stat-value">{{ validEngineCount }}/3</div>
-                  <div class="stat-label">Valid Results</div>
-                </div>
-                
-                <div class="stat-card" v-if="hasIdenticalResults">
-                  <div class="stat-value identical">
-                    <vue-feather type="check-circle" size="20" class="identical-icon"></vue-feather>
-                  </div>
-                  <div class="stat-label">Identical Structures</div>
-                </div>
-                <div class="stat-card" v-else>
-                  <div class="stat-value">{{ matchingPairs }}/{{ totalPairs }}</div>
-                  <div class="stat-label">Matching Pairs</div>
-                </div>
-              </div>
+        <!-- Similarity Summary Section -->
+        <div class="similarity-summary" v-if="allEnginesLoaded">
+          <div class="summary-header">
+            <h4 class="summary-title">
+              <vue-feather type="bar-chart-2" class="summary-icon"></vue-feather>
+              Similarity Analysis
+            </h4>
+            <div class="summary-toggle" @click="toggleSimilarityDetails">
+              <span>{{ showSimilarityDetails ? 'Hide Details' : 'Show Details' }}</span>
+              <vue-feather :type="showSimilarityDetails ? 'chevron-up' : 'chevron-down'" size="16"
+                class="toggle-icon"></vue-feather>
             </div>
-            
-            <!-- Enhanced Action Button Area -->
-            <div class="analysis-action-buttons">
-              <button class="highlight-btn" @click="findMCS" :disabled="!canFindMCS || findingMCS">
-                <vue-feather type="target" size="16" class="btn-icon"></vue-feather>
-                <span>{{ findingMCS ? 'Finding MCS...' : 'Highlight Common Structure' }}</span>
-              </button>
-              
-              <button class="analyze-btn" @click="compareAcrossEngines" :disabled="!canCompare">
-                <vue-feather type="activity" size="16" class="btn-icon"></vue-feather>
-                <span>Run Full Analysis</span>
-              </button>
-            </div>
+          </div>
 
-            <!-- Detailed Similarity Section (Collapsible) -->
-            <div v-if="showSimilarityDetails" class="similarity-details">
-              <div class="details-content" v-if="comparisonResult">
-                <SimilarityComparison
-                  :comparison-result="comparisonResult"
-                  :is-loading="isComparing"
-                  :error="comparisonError"
-                  :original-smiles-list="smilesListForComparison"
-                />
+          <!-- Quick Summary Stats -->
+          <div class="quick-summary">
+            <div class="summary-stats">
+              <div class="stat-card" :class="getAgreementClass(similarityScore)">
+                <div class="stat-value">{{ formatPercentage(similarityScore) }}</div>
+                <div class="stat-label">Overall Agreement</div>
               </div>
-              <div v-else-if="!hasRunFullAnalysis" class="run-analysis-prompt">
-                <p>Click "Run Full Analysis" above to see detailed similarity metrics between engines</p>
+
+              <div class="stat-card">
+                <div class="stat-value">{{ validEngineCount }}/3</div>
+                <div class="stat-label">Valid Results</div>
               </div>
-              <div v-else-if="comparisonError" class="analysis-error">
-                <vue-feather type="alert-circle" size="20" class="error-icon"></vue-feather>
-                <p>{{ comparisonError }}</p>
+
+              <div class="stat-card" v-if="hasIdenticalResults">
+                <div class="stat-value identical">
+                  <vue-feather type="check-circle" size="20" class="identical-icon"></vue-feather>
+                </div>
+                <div class="stat-label">Identical Structures</div>
+              </div>
+              <div class="stat-card" v-else>
+                <div class="stat-value">{{ matchingPairs }}/{{ totalPairs }}</div>
+                <div class="stat-label">Matching Pairs</div>
               </div>
             </div>
           </div>
 
-          <!-- Footer Actions -->
-          <div class="comparison-footer">
-            <button class="refresh-btn" @click="runComparisonAgain" :disabled="isComparing">
-              <vue-feather type="refresh-cw" class="refresh-icon"></vue-feather>
-              <span>Process All Engines Again</span>
+          <!-- Enhanced Action Button Area -->
+          <div class="analysis-action-buttons">
+            <button class="highlight-common-btn" @click="findMCS" :disabled="!canFindMCS || findingMCS">
+              <vue-feather type="target" size="16" class="btn-icon"></vue-feather>
+              <span>{{ findingMCS ? 'Finding MCS...' : 'Highlight Common Structure' }}</span>
             </button>
 
-            <div class="view-options">
-              <label class="option-checkbox">
-                <input type="checkbox" v-model="useCoordinatesForDisplay" :disabled="isComparing">
-                <span class="checkbox-label">Use coordinates for display when available</span>
-              </label>
+            <button class="analyze-btn" @click="compareAcrossEngines" :disabled="!canCompare">
+              <vue-feather type="activity" size="16" class="btn-icon"></vue-feather>
+              <span>Run Full Analysis</span>
+            </button>
+          </div>
+
+          <!-- Detailed Similarity Section (Collapsible) -->
+          <div v-if="showSimilarityDetails" class="similarity-details">
+            <div class="details-content" v-if="comparisonResult">
+              <SimilarityComparison :comparison-result="comparisonResult" :is-loading="isComparing"
+                :error="comparisonError" :original-smiles-list="smilesListForComparison" />
+            </div>
+            <div v-else-if="!hasRunFullAnalysis" class="run-analysis-prompt">
+              <p>Click "Run Full Analysis" above to see detailed similarity metrics between engines</p>
+            </div>
+            <div v-else-if="comparisonError" class="analysis-error">
+              <vue-feather type="alert-circle" size="20" class="error-icon"></vue-feather>
+              <p>{{ comparisonError }}</p>
             </div>
           </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="comparison-footer">
+          <button class="refresh-btn" @click="runComparisonAgain" :disabled="isComparing">
+            <vue-feather type="refresh-cw" class="refresh-icon"></vue-feather>
+            <span>Process All Engines Again</span>
+          </button>
         </div>
       </div>
     </div>
@@ -468,14 +514,8 @@
         <div v-if="isLoadingContext" class="loading-context">
           <div class="loader-pulse"></div>
         </div>
-        <img
-          v-else-if="contextImageUrl"
-          :src="contextImageUrl"
-          alt="Segment in context"
-          class="context-image"
-          @load="contextImageLoaded"
-          @error="handleContextImageError"
-        />
+        <img v-else-if="contextImageUrl" :src="contextImageUrl" alt="Segment in context" class="context-image"
+          @load="contextImageLoaded" @error="handleContextImageError" />
         <div v-else class="context-error">
           <vue-feather type="alert-triangle" size="24"></vue-feather>
           <p>Failed to load page context</p>
@@ -484,14 +524,8 @@
     </div>
 
     <!-- Comparison Modal (Full Analysis) -->
-    <ComparisonModal
-      v-if="showComparisonModal"
-      :comparison-result="comparisonResult"
-      :is-loading="isComparing"
-      :error="comparisonError"
-      :smiles-list="smilesListForComparison"
-      @close="closeComparisonModal"
-    />
+    <ComparisonModal v-if="showComparisonModal" :comparison-result="comparisonResult" :is-loading="isComparing"
+      :error="comparisonError" :smiles-list="smilesListForComparison" @close="closeComparisonModal" />
   </div>
 </template>
 
@@ -520,6 +554,11 @@ export default {
       default: null
     },
     isProcessing: {
+      type: Boolean,
+      default: false
+    },
+    // Add prop for segment selection state
+    isSelected: {
       type: Boolean,
       default: false
     }
@@ -553,7 +592,9 @@ export default {
       matchingPairs: 0,
       totalPairs: 0,
       hasIdenticalResults: false,
-      findingMCS: false // Property for MCS finding
+      findingMCS: false, // Property for MCS finding
+      // New properties for engine selection
+      selectedEngine: null // Will store 'decimer', 'molnextr', or 'molscribe'
     }
   },
   computed: {
@@ -661,7 +702,8 @@ export default {
       this.totalPairs = 0;
       this.hasIdenticalResults = false;
       this.findingMCS = false;
-      
+      this.selectedEngine = null; // Reset selected engine
+
       if (this.segmentUrl) {
         URL.revokeObjectURL(this.segmentUrl);
         this.segmentUrl = null;
@@ -671,7 +713,7 @@ export default {
         this.contextImageUrl = null;
       }
     },
-    
+
     // Calculate quick similarity stats for the dashboard
     calculateQuickSimilarity() {
       // Default values
@@ -679,30 +721,30 @@ export default {
       this.matchingPairs = 0;
       this.totalPairs = 0;
       this.hasIdenticalResults = false;
-      
+
       // Get valid SMILES strings
       const validSmiles = [];
-      if (this.decimerResult?.smiles) validSmiles.push({engine: 'decimer', smiles: this.decimerResult.smiles});
-      if (this.molnextrResult?.smiles) validSmiles.push({engine: 'molnextr', smiles: this.molnextrResult.smiles});
-      if (this.molscribeResult?.smiles) validSmiles.push({engine: 'molscribe', smiles: this.molscribeResult.smiles});
-      
+      if (this.decimerResult?.smiles) validSmiles.push({ engine: 'decimer', smiles: this.decimerResult.smiles });
+      if (this.molnextrResult?.smiles) validSmiles.push({ engine: 'molnextr', smiles: this.molnextrResult.smiles });
+      if (this.molscribeResult?.smiles) validSmiles.push({ engine: 'molscribe', smiles: this.molscribeResult.smiles });
+
       // Need at least 2 engines with SMILES to compare
       if (validSmiles.length < 2) return;
-      
+
       // Check if all SMILES are identical
       const allIdentical = validSmiles.every(item => item.smiles === validSmiles[0].smiles);
       this.hasIdenticalResults = allIdentical;
-      
+
       if (allIdentical) {
         this.similarityScore = 100;
         this.matchingPairs = validSmiles.length * (validSmiles.length - 1) / 2; // All pairs match
         this.totalPairs = this.matchingPairs;
         return;
       }
-      
+
       // Calculate number of pairs
       this.totalPairs = validSmiles.length * (validSmiles.length - 1) / 2;
-      
+
       // Calculate matching pairs (simplified - just check exact matches)
       let matches = 0;
       for (let i = 0; i < validSmiles.length; i++) {
@@ -712,18 +754,18 @@ export default {
           }
         }
       }
-      
+
       this.matchingPairs = matches;
-      
+
       // Calculate similarity score (percentage of matches)
       this.similarityScore = (matches / this.totalPairs) * 100;
     },
-    
+
     // Update depictions when useCoordinatesForDisplay changes
     async updateEnginePicturesWithCoordinates() {
       // Only update if all engines have loaded
       if (!this.allEnginesLoaded || this.isComparing) return;
-      
+
       try {
         // Update MolNexTR result
         if (this.molnextrResult?.smiles && this.molnextrResult?.molfile) {
@@ -735,11 +777,11 @@ export default {
             useMolfileDirectly: useCoords,
             format: 'svg'
           };
-          
+
           const svg = await depictionService.generateDepiction(depictionOptions);
           this.molnextrResult.svg = svg;
         }
-        
+
         // Update MolScribe result
         if (this.molscribeResult?.smiles && this.molscribeResult?.molfile) {
           const useCoords = this.useCoordinatesForDisplay;
@@ -750,7 +792,7 @@ export default {
             useMolfileDirectly: useCoords,
             format: 'svg'
           };
-          
+
           const svg = await depictionService.generateDepiction(depictionOptions);
           this.molscribeResult.svg = svg;
         }
@@ -758,28 +800,28 @@ export default {
         console.error('Error updating depictions:', error);
       }
     },
-    
+
     // Toggle showing detailed similarity information
     toggleSimilarityDetails() {
       this.showSimilarityDetails = !this.showSimilarityDetails;
     },
-    
+
     // Get CSS class for agreement level
     getAgreementClass(score) {
       if (score >= 90) return 'high-agreement';
       if (score >= 60) return 'medium-agreement';
       return 'low-agreement';
     },
-    
+
     // Format percentage value
     formatPercentage(value) {
       return value.toFixed(0) + '%';
     },
-    
+
     // Copy SMILES from engine result
     copyEngineSmiles(smiles) {
       if (!smiles) return;
-      
+
       try {
         navigator.clipboard.writeText(smiles)
           .then(() => {
@@ -794,12 +836,12 @@ export default {
         this.$emit('error', 'Failed to copy to clipboard');
       }
     },
-    
+
     showInContext() {
       this.showContextView = true;
       this.loadContextImage();
     },
-    
+
     closeContextView() {
       this.showContextView = false;
       if (this.contextImageUrl) {
@@ -807,7 +849,7 @@ export default {
         this.contextImageUrl = null;
       }
     },
-    
+
     async loadContextImage() {
       if (!this.segment) return;
 
@@ -903,41 +945,41 @@ export default {
         this.isLoadingContext = false;
       }
     },
-    
+
     contextImageLoaded() {
       this.isLoadingContext = false;
     },
-    
+
     handleContextImageError() {
       this.isLoadingContext = false;
       this.hasContextError = true;
       this.$emit('error', 'Failed to load page context image');
     },
-    
+
     runComparisonAgain() {
       this.runComparisonManual();
     },
-    
+
     truncateText(text, maxLength) {
       if (!text) return '';
       return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
     },
-    
+
     runComparison() {
       // Switch to comparison mode
       this.comparisonMode = true;
-      
+
       // Reset analysis state
       this.hasRunFullAnalysis = false;
       this.comparisonResult = null;
-      
+
       // Run the comparison with all engines
       this.runComparisonManual();
-      
+
       // Emit an event to notify parent component
       this.$emit('run-comparison', this.segment);
     },
-    
+
     async runComparisonManual() {
       if (!this.segment || this.isComparing) return;
 
@@ -967,7 +1009,7 @@ export default {
           this.processEngine('molnextr', imagePath),
           this.processEngine('molscribe', imagePath)
         ]);
-        
+
         // Calculate quick similarity metrics once all engines have processed
         if (this.allEnginesLoaded) {
           this.calculateQuickSimilarity();
@@ -978,10 +1020,10 @@ export default {
         this.isComparing = false;
       }
     },
-    
+
     async processEngine(engine, imagePath) {
       const startTime = performance.now();
-      
+
       try {
         console.log(`Processing with ${engine}...`);
 
@@ -999,10 +1041,10 @@ export default {
         // Create a depiction
         let svg = null;
         try {
-          const useCoords = this.useCoordinatesForDisplay && 
-                          engine !== 'decimer' && 
-                          response.molfile;
-                          
+          const useCoords = this.useCoordinatesForDisplay &&
+            engine !== 'decimer' &&
+            response.molfile;
+
           const depictionOptions = {
             engine: 'cdk',
             smiles: response.smiles,
@@ -1020,7 +1062,7 @@ export default {
         // Calculate processing time
         const endTime = performance.now();
         const processingTime = ((endTime - startTime) / 1000).toFixed(2) + 's';
-        
+
         // Store the results based on the engine
         const result = {
           smiles: response.smiles,
@@ -1043,7 +1085,7 @@ export default {
         // Calculate processing time even for errors
         const endTime = performance.now();
         const processingTime = ((endTime - startTime) / 1000).toFixed(2) + 's';
-        
+
         // Store error in the appropriate result
         const errorResult = {
           smiles: null,
@@ -1062,7 +1104,7 @@ export default {
         }
       }
     },
-    
+
     async loadSegmentImage() {
       if (!this.segment) return;
 
@@ -1093,12 +1135,12 @@ export default {
         this.$emit('error', this.errorMessage);
       }
     },
-    
+
     handleImageLoaded() {
       this.isLoading = false;
       this.hasError = false;
     },
-    
+
     handleImageError() {
       this.isLoading = false;
       this.hasError = true;
@@ -1107,7 +1149,7 @@ export default {
       // Notify parent component
       this.$emit('error', this.errorMessage);
     },
-    
+
     copySmilesToClipboard() {
       if (!this.processedStructure || !this.processedStructure.smiles) return;
 
@@ -1126,7 +1168,7 @@ export default {
         this.$emit('error', 'Failed to copy to clipboard');
       }
     },
-    
+
     async downloadSegmentImage() {
       if (!this.segmentUrl) return;
 
@@ -1154,7 +1196,7 @@ export default {
         this.$emit('error', 'Failed to download image');
       }
     },
-    
+
     async downloadStructureImage() {
       if (!this.processedStructure) return;
 
@@ -1195,17 +1237,17 @@ export default {
         this.$emit('error', 'Failed to download structure image');
       }
     },
-    
+
     handleCopied(message) {
       // Forward the copied event to parent
       this.$emit('copy-complete', message);
     },
-    
+
     handleStructureError(message) {
       // Forward the error event to parent
       this.$emit('error', message);
     },
-    
+
     handleDownloadComplete(message) {
       // Forward the download-complete event to parent
       this.$emit('download-complete', message);
@@ -1259,7 +1301,7 @@ export default {
 
         // Show detailed analysis
         this.showSimilarityDetails = true;
-        
+
         // Update quick stats with the actual data from the comparison
         if (result.agreement_summary) {
           this.similarityScore = result.agreement_summary.agreement_percentage;
@@ -1267,7 +1309,7 @@ export default {
           this.totalPairs = result.agreement_summary.total_comparisons;
           this.hasIdenticalResults = result.identical;
         }
-        
+
         // Notify the user with a success message
         this.$emit('notification', {
           type: 'success',
@@ -1297,7 +1339,7 @@ export default {
 
         // Collect all valid results with SMILES
         const validResults = [];
-        
+
         if (this.decimerResult?.smiles && !this.decimerResult.error) {
           validResults.push({
             engine: 'decimer',
@@ -1305,15 +1347,15 @@ export default {
             molfile: this.decimerResult.molfile
           });
         }
-        
+
         if (this.molnextrResult?.smiles && !this.molnextrResult.error) {
           validResults.push({
-            engine: 'molnextr', 
+            engine: 'molnextr',
             smiles: this.molnextrResult.smiles,
             molfile: this.molnextrResult.molfile
           });
         }
-        
+
         if (this.molscribeResult?.smiles && !this.molscribeResult.error) {
           validResults.push({
             engine: 'molscribe',
@@ -1326,11 +1368,11 @@ export default {
         if (validResults.length < 2) {
           throw new Error('Need at least 2 valid structures to find common substructure');
         }
-        
+
         // Initialize arrays for molfiles and engine names
         const molfiles = [];
         const engineNames = [];
-        
+
         // Convert ALL results to molfiles if needed (including DECIMER)
         for (const result of validResults) {
           try {
@@ -1342,7 +1384,7 @@ export default {
               // If only SMILES exists, convert to molfile
               console.log(`Converting SMILES to molfile for ${result.engine}`);
               const depictionResponse = await depictionService.generateMolfileFromSmiles(result.smiles);
-              
+
               if (depictionResponse && depictionResponse.molfile) {
                 molfiles.push(depictionResponse.molfile);
                 engineNames.push(result.engine);
@@ -1365,14 +1407,14 @@ export default {
         console.log(`Finding MCS with ${molfiles.length} valid structures`);
         const mcsResult = await similarityService.findMCS(molfiles, engineNames);
         console.log('MCS Result:', mcsResult);
-        
+
         if (!mcsResult.mcs_smarts) {
           throw new Error('No common structure found');
         }
-        
+
         // Generate new depictions with highlighted MCS for each valid result
         const mcsSmarts = mcsResult.mcs_smarts;
-        
+
         // Update each result with a new depiction that highlights the MCS
         const updatePromises = validResults.map(async (result) => {
           try {
@@ -1384,10 +1426,10 @@ export default {
               format: 'svg',
               highlight: mcsSmarts
             };
-            
+
             // Generate the new SVG with MCS highlight
             const svgResult = await depictionService.generateDepiction(depictionOptions);
-            
+
             // Update the appropriate result based on engine
             if (result.engine === 'decimer' && this.decimerResult) {
               this.decimerResult.svg = svgResult;
@@ -1400,16 +1442,16 @@ export default {
             console.error(`Error updating depiction for ${result.engine}:`, error);
           }
         });
-        
+
         // Wait for all depiction updates to complete
         await Promise.all(updatePromises);
-        
+
         // Show success notification
         this.$emit('notification', {
           type: 'success',
           message: 'Common substructure highlighted across all engines'
         });
-        
+
       } catch (error) {
         console.error('Error finding MCS:', error);
         // Show error notification
@@ -1424,7 +1466,7 @@ export default {
     closeComparisonModal() {
       this.showComparisonModal = false;
     },
-    
+
     formatTimestamp(timestamp) {
       if (!timestamp) return 'Unknown';
 
@@ -1434,7 +1476,81 @@ export default {
       } catch (e) {
         return timestamp;
       }
-    }
+    },
+    // Add method for toggling segment selection
+    toggleSelection() {
+      this.$emit('toggle-selection')
+    },
+    // New methods for engine selection
+    selectPrediction(engine) {
+      // Toggle selection if clicking the same engine
+      if (this.selectedEngine === engine) {
+        this.selectedEngine = null;
+      } else {
+        this.selectedEngine = engine;
+      }
+    },
+
+    getEngineDisplayName(engine) {
+      const displayNames = {
+        'decimer': 'DECIMER',
+        'molnextr': 'MolNexTR',
+        'molscribe': 'MolScribe'
+      };
+      return displayNames[engine] || engine;
+    },
+
+    applySelectedPrediction() {
+      if (!this.selectedEngine || !this.segment) return;
+
+      let selectedResult = null;
+
+      // Get the selected result object
+      if (this.selectedEngine === 'decimer' && this.decimerResult) {
+        selectedResult = this.decimerResult;
+      } else if (this.selectedEngine === 'molnextr' && this.molnextrResult) {
+        selectedResult = this.molnextrResult;
+      } else if (this.selectedEngine === 'molscribe' && this.molscribeResult) {
+        selectedResult = this.molscribeResult;
+      }
+
+      if (!selectedResult || !selectedResult.smiles) {
+        this.$emit('error', 'No valid structure in the selected prediction');
+        return;
+      }
+
+      // Create structure object with the correct metadata
+      const updatedStructure = {
+        segmentId: this.segment.id,
+        imageUrl: this.segment.imageUrl || this.segment.path,
+        filename: this.segment.filename,
+        smiles: selectedResult.smiles,
+        molfile: selectedResult.molfile || null,
+        engine: this.selectedEngine,
+        name: this.segment.filename,
+        pdfId: this.segment.pdfId,
+        useCoordinates: this.shouldUseCoordinates,
+        selectedFromComparison: true, // Mark that this was chosen from comparison
+        timestamp: new Date().toISOString()
+      };
+
+      // Emit event with the selected structure
+      this.$emit('prediction-selected', updatedStructure);
+
+      // Automatically mark this segment as correct since the user selected the best prediction
+      if (!this.isSelected) {
+        this.$emit('toggle-selection');
+      }
+
+      // Show success notification
+      this.$emit('notification', {
+        type: 'success',
+        message: `Updated structure with ${this.getEngineDisplayName(this.selectedEngine)} prediction`
+      });
+
+      // Exit comparison mode and go back to normal view
+      this.comparisonMode = false;
+    },
   }
 }
 </script>
@@ -1447,11 +1563,13 @@ export default {
   flex-direction: column;
   overflow: hidden;
   background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
-  border-radius: 16px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), 0 6px 12px rgba(0, 0, 0, 0.04);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
 
   /* Empty state styling */
   .empty-state {
@@ -1463,15 +1581,17 @@ export default {
     padding: 2rem;
     color: #64748b;
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 20px;
 
     .empty-icon {
-      margin-bottom: 1rem;
+      margin-bottom: 1.5rem;
       color: #94a3b8;
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+      animation: float 3s ease-in-out infinite;
     }
 
     p {
-      font-size: 1.125rem;
+      font-size: 1.25rem;
       font-weight: 500;
     }
   }
@@ -1487,48 +1607,120 @@ export default {
       display: flex;
       flex-direction: column;
       height: 100%;
-      padding: 1.5rem;
+      padding: 1.75rem;
 
       /* Header styling */
       .segment-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
+        align-items: flex-start;
+        margin-bottom: 1.75rem;
 
-        .segment-title {
-          font-size: 1.625rem;
-          font-weight: 700;
-          color: #0f172a;
-          margin: 0;
-          background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
+        .segment-title-section {
+          display: flex;
+          flex-direction: column;
+          gap: 0.625rem;
+
+          .segment-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.01em;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.7);
+          }
+
+          /* Selection checkbox styling */
+          .segment-selection-control {
+            display: flex;
+            align-items: center;
+
+            .selection-checkbox {
+              display: flex;
+              align-items: center;
+              gap: 0.625rem;
+              font-size: 0.9375rem;
+              color: #334155;
+              cursor: pointer;
+              transition: all 0.2s ease;
+
+              input[type="checkbox"] {
+                cursor: pointer;
+                width: 20px;
+                height: 20px;
+                margin: 0;
+                appearance: none;
+                -webkit-appearance: none;
+                background-color: white;
+                border: 2px solid #cbd5e1;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                position: relative;
+
+                &:checked {
+                  background-color: #4f46e5;
+                  border-color: #4f46e5;
+                  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+
+                  &::after {
+                    content: '';
+                    position: absolute;
+                    top: 3px;
+                    left: 6px;
+                    width: 6px;
+                    height: 10px;
+                    border: solid white;
+                    border-width: 0 2px 2px 0;
+                    transform: rotate(45deg);
+                  }
+                }
+
+                &:hover {
+                  border-color: #4f46e5;
+                }
+              }
+
+              .checkbox-label {
+                font-weight: 500;
+                transition: color 0.2s ease;
+              }
+
+              &:hover .checkbox-label {
+                color: #4f46e5;
+              }
+            }
+          }
         }
 
         .segment-actions {
           display: flex;
-          gap: 0.5rem;
+          gap: 0.625rem;
 
           .btn-action {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border: none;
-            border-radius: 8px;
-            background-color: #f1f5f9;
+            border-radius: 12px;
+            background-color: rgba(241, 245, 249, 0.7);
             color: #64748b;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(226, 232, 240, 0.6);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 
             &:hover {
-              background-color: #e2e8f0;
+              background-color: white;
               color: #334155;
-              transform: translateY(-1px);
-              box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+              transform: translateY(-2px);
+              box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+              border-color: rgba(226, 232, 240, 0.8);
             }
 
             &:active {
@@ -1538,11 +1730,19 @@ export default {
             &.btn-close:hover {
               background-color: #fee2e2;
               color: #ef4444;
+              border-color: rgba(254, 202, 202, 0.8);
             }
 
             &.btn-context:hover {
               background-color: #e6f7ff;
-              color: #0081ff;
+              color: #0284c7;
+              border-color: rgba(186, 230, 253, 0.8);
+            }
+
+            &.btn-copy:hover {
+              background-color: #e0f2fe;
+              color: #0284c7;
+              border-color: rgba(186, 230, 253, 0.8);
             }
           }
         }
@@ -1552,13 +1752,13 @@ export default {
       .section-headers {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 1rem;
+        margin-bottom: 1.25rem;
         padding: 0 1rem;
 
         .header-item {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.625rem;
 
           &.processed {
             .success-icon {
@@ -1572,6 +1772,7 @@ export default {
             font-size: 1.125rem;
             font-weight: 600;
             color: #334155;
+            letter-spacing: -0.01em;
           }
         }
       }
@@ -1579,9 +1780,9 @@ export default {
       /* Content panels */
       .content-panels {
         display: flex;
-        gap: 1.5rem;
+        gap: 1.75rem;
         height: 100%;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.75rem;
 
         @media (max-width: 768px) {
           flex-direction: column;
@@ -1591,16 +1792,18 @@ export default {
           flex: 1;
           display: flex;
           flex-direction: column;
-          border-radius: 12px;
-          background-color: white;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          border-radius: 16px;
+          background-color: rgba(255, 255, 255, 0.9);
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
           overflow: hidden;
           height: fit-content;
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
+          transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          backdrop-filter: blur(10px);
 
           &:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
           }
 
           /* Original panel specific styling */
@@ -1608,17 +1811,55 @@ export default {
             .download-container {
               display: flex;
               justify-content: flex-end;
-              padding: 0.75rem 1rem;
-              border-bottom: 1px solid #e2e8f0;
+              padding: 0.875rem 1.125rem;
+              border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+
+              .download-btn {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                border: none;
+                background-color: rgba(241, 245, 249, 0.8);
+                color: #334155;
+                font-size: 0.875rem;
+                font-weight: 500;
+                padding: 0.5rem 0.75rem;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.25s ease;
+                border: 1px solid rgba(226, 232, 240, 0.8);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+                backdrop-filter: blur(4px);
+
+                .download-icon {
+                  color: #64748b;
+                  transition: color 0.2s ease;
+                }
+
+                &:hover {
+                  background-color: white;
+                  border-color: #cbd5e1;
+                  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+                  transform: translateY(-1px);
+
+                  .download-icon {
+                    color: #4f46e5;
+                  }
+                }
+
+                &:active {
+                  transform: translateY(0);
+                }
+              }
             }
 
             .image-container {
               display: flex;
               align-items: center;
               justify-content: center;
-              padding: 1.5rem;
+              padding: 1.75rem;
               background-color: white;
-              min-height: 280px;
+              min-height: 300px;
               position: relative;
 
               .loading-overlay {
@@ -1632,15 +1873,18 @@ export default {
                 justify-content: center;
                 background-color: rgba(255, 255, 255, 0.9);
                 z-index: 2;
+                backdrop-filter: blur(6px);
 
                 .loader-pulse {
                   width: 60px;
                   height: 60px;
                   border-radius: 50%;
                   background-color: rgba(79, 70, 229, 0.2);
+                  box-shadow: 0 0 20px rgba(79, 70, 229, 0.4);
                   animation: pulse 1.5s ease-in-out infinite;
 
-                  &:before, &:after {
+                  &:before,
+                  &:after {
                     content: '';
                     position: absolute;
                     height: 100%;
@@ -1665,20 +1909,27 @@ export default {
 
               .segment-image {
                 max-width: 100%;
-                max-height: 280px;
+                max-height: 300px;
                 object-fit: contain;
-                border-radius: 4px;
-                transition: all 0.2s ease;
+                border-radius: 8px;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+                &:hover {
+                  transform: scale(1.02);
+                  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+                }
               }
             }
 
             .metadata-container {
-              padding: 1rem;
-              border-top: 1px solid #e2e8f0;
-              background-color: #f8fafc;
+              padding: 1.25rem;
+              border-top: 1px solid rgba(226, 232, 240, 0.7);
+              background: linear-gradient(135deg, #f8fafc 0%, rgba(255, 255, 255, 0.9) 100%);
 
-              .metadata-section, .processing-info {
-                margin-bottom: 0.75rem;
+              .metadata-section,
+              .processing-info {
+                margin-bottom: 0.875rem;
 
                 &:last-child {
                   margin-bottom: 0;
@@ -1687,14 +1938,14 @@ export default {
 
               .processing-info {
                 border-top: 1px dashed #e2e8f0;
-                padding-top: 0.75rem;
-                margin-top: 0.75rem;
+                padding-top: 0.875rem;
+                margin-top: 0.875rem;
               }
 
               .info-row {
                 display: flex;
                 align-items: center;
-                margin-bottom: 0.5rem;
+                margin-bottom: 0.625rem;
 
                 &:last-child {
                   margin-bottom: 0;
@@ -1721,6 +1972,10 @@ export default {
                   &.engine-tag {
                     font-weight: 500;
                     color: #4f46e5;
+                    background-color: rgba(79, 70, 229, 0.1);
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 4px;
+                    font-size: 0.8125rem;
                   }
                 }
               }
@@ -1733,19 +1988,20 @@ export default {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              padding: 0.75rem 1rem;
-              border-bottom: 1px solid #e2e8f0;
+              padding: 0.875rem 1.125rem;
+              border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+              background: linear-gradient(to right, rgba(79, 70, 229, 0.02), rgba(79, 70, 229, 0.08));
 
               .structure-title {
                 font-weight: 600;
                 color: #0f172a;
-                font-size: 1rem;
+                font-size: 1.0625rem;
               }
 
               .structure-actions {
                 display: flex;
                 align-items: center;
-                gap: 0.5rem;
+                gap: 0.625rem;
 
                 .action-btn {
                   display: flex;
@@ -1753,16 +2009,59 @@ export default {
                   justify-content: center;
                   width: 32px;
                   height: 32px;
+                  border-radius: 8px;
                   border: none;
-                  border-radius: 6px;
-                  background-color: #f1f5f9;
+                  background-color: rgba(241, 245, 249, 0.8);
                   color: #64748b;
                   cursor: pointer;
                   transition: all 0.2s ease;
+                  border: 1px solid rgba(226, 232, 240, 0.8);
 
                   &:hover {
-                    background-color: #e2e8f0;
-                    color: #334155;
+                    background-color: white;
+                    color: #4f46e5;
+                    transform: translateY(-1px);
+                    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+                  }
+
+                  &:active {
+                    transform: translateY(0);
+                  }
+                }
+
+                .download-btn {
+                  display: flex;
+                  align-items: center;
+                  gap: 0.5rem;
+                  border: none;
+                  background-color: rgba(241, 245, 249, 0.8);
+                  color: #334155;
+                  font-size: 0.875rem;
+                  font-weight: 500;
+                  padding: 0.5rem 0.75rem;
+                  border-radius: 8px;
+                  cursor: pointer;
+                  transition: all 0.25s ease;
+                  border: 1px solid rgba(226, 232, 240, 0.8);
+
+                  .download-icon {
+                    color: #64748b;
+                    transition: color 0.2s ease;
+                  }
+
+                  &:hover {
+                    background-color: white;
+                    border-color: #cbd5e1;
+                    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+                    transform: translateY(-1px);
+
+                    .download-icon {
+                      color: #4f46e5;
+                    }
+                  }
+
+                  &:active {
+                    transform: translateY(0);
                   }
                 }
               }
@@ -1770,23 +2069,9 @@ export default {
 
             .structure-visualization {
               position: relative;
-              padding: 1.5rem;
+              padding: 1.75rem;
               background-color: white;
-              min-height: 280px;
-
-              .structure-title-overlay {
-                position: absolute;
-                top: 1rem;
-                left: 1rem;
-                font-size: 0.875rem;
-                font-weight: 600;
-                color: #64748b;
-                background-color: rgba(255, 255, 255, 0.9);
-                padding: 0.25rem 0.5rem;
-                border-radius: 4px;
-                z-index: 1;
-                display: none; /* Hidden by default */
-              }
+              min-height: 300px;
 
               .structure-container {
                 height: 100%;
@@ -1811,7 +2096,14 @@ export default {
 
                     svg {
                       max-width: 100%;
-                      max-height: 280px;
+                      max-height: 300px;
+                      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+                      transition: filter 0.3s ease, transform 0.3s ease;
+
+                      &:hover {
+                        filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.15));
+                        transform: scale(1.02);
+                      }
                     }
                   }
                 }
@@ -1819,12 +2111,12 @@ export default {
             }
 
             .smiles-container {
-              padding: 1.25rem;
-              border-top: 1px solid #e2e8f0;
+              padding: 1.5rem 1.25rem;
+              border-top: 1px solid rgba(226, 232, 240, 0.7);
               position: relative;
               background: linear-gradient(120deg, rgba(248, 250, 252, 0.7), rgba(255, 255, 255, 0.9));
               overflow: hidden;
-              
+
               &::before {
                 content: "";
                 position: absolute;
@@ -1848,7 +2140,7 @@ export default {
                   display: flex;
                   align-items: center;
                   gap: 0.5rem;
-                  
+
                   &::before {
                     content: "";
                     display: block;
@@ -1856,7 +2148,7 @@ export default {
                     height: 12px;
                     border-radius: 50%;
                     background-color: #4f46e5;
-                    box-shadow: 0 0 8px rgba(79, 70, 229, 0.5);
+                    box-shadow: 0 0 10px rgba(79, 70, 229, 0.6);
                   }
                 }
               }
@@ -1865,23 +2157,24 @@ export default {
                 .smiles-box {
                   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
                   background-color: white;
-                  padding: 1rem;
-                  border-radius: 8px;
+                  padding: 1.25rem;
+                  border-radius: 12px;
                   font-size: 0.9rem;
                   color: #334155;
                   overflow-x: auto;
                   white-space: pre-wrap;
                   word-break: break-all;
                   border: 1px solid rgba(226, 232, 240, 0.8);
-                  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+                  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
                   transition: all 0.3s ease;
                   position: relative;
-                  
+
                   &:hover {
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
                     border-color: rgba(79, 70, 229, 0.3);
+                    transform: translateY(-2px);
                   }
-                  
+
                   &::after {
                     content: "Copy";
                     position: absolute;
@@ -1898,7 +2191,7 @@ export default {
                     font-family: system-ui, sans-serif;
                     font-weight: 500;
                   }
-                  
+
                   &:hover::after {
                     opacity: 1;
                   }
@@ -1909,9 +2202,9 @@ export default {
             .tags-row {
               display: flex;
               flex-wrap: wrap;
-              gap: 0.5rem;
-              padding: 0.75rem 1rem;
-              border-top: 1px solid #e2e8f0;
+              gap: 0.625rem;
+              padding: 0.875rem 1.25rem;
+              border-top: 1px solid rgba(226, 232, 240, 0.7);
               background-color: #f8fafc;
 
               .tag {
@@ -1919,9 +2212,16 @@ export default {
                 align-items: center;
                 gap: 0.375rem;
                 font-size: 0.75rem;
-                padding: 0.25rem 0.5rem;
-                border-radius: 4px;
+                padding: 0.375rem 0.625rem;
+                border-radius: 6px;
                 font-weight: 500;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+
+                &:hover {
+                  transform: translateY(-1px);
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+                }
 
                 .tag-icon {
                   opacity: 0.8;
@@ -1962,40 +2262,14 @@ export default {
                   color: #64748b;
                   border: 1px solid rgba(100, 116, 139, 0.3);
                 }
+
+                &.selection-tag {
+                  background-color: rgba(16, 185, 129, 0.1);
+                  color: #10b981;
+                  border: 1px solid rgba(16, 185, 129, 0.3);
+                }
               }
             }
-          }
-        }
-      }
-
-      /* Download button styling */
-      .download-btn {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        border: none;
-        background-color: white;
-        color: #334155;
-        font-size: 0.875rem;
-        font-weight: 500;
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        border: 1px solid #e2e8f0;
-
-        .download-icon {
-          color: #64748b;
-        }
-
-        &:hover {
-          border-color: #cbd5e1;
-          background-color: #f8fafc;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-
-          .download-icon {
-            color: #4f46e5;
           }
         }
       }
@@ -2004,37 +2278,60 @@ export default {
       .compare-callout {
         display: flex;
         align-items: center;
-        padding: 1.25rem;
-        background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.1) 100%);
-        border-radius: 12px;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.12) 100%);
+        border-radius: 16px;
         border: 1px solid rgba(79, 70, 229, 0.2);
-        box-shadow: 0 4px 6px rgba(79, 70, 229, 0.05);
+        box-shadow: 0 6px 12px rgba(79, 70, 229, 0.06);
         margin-top: auto;
+        position: relative;
+        overflow: hidden;
+
+        &::before {
+          content: '';
+          position: absolute;
+          top: -10px;
+          right: -10px;
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(79, 70, 229, 0.3) 0%, transparent 70%);
+          opacity: 0.6;
+          z-index: 0;
+        }
 
         .callout-icon {
           flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 38px;
-          height: 38px;
-          background-color: rgba(79, 70, 229, 0.1);
-          border-radius: 50%;
-          margin-right: 1rem;
+          width: 44px;
+          height: 44px;
+          background-color: rgba(79, 70, 229, 0.12);
+          border-radius: 12px;
+          margin-right: 1.25rem;
+          position: relative;
+          z-index: 1;
+          border: 1px solid rgba(79, 70, 229, 0.2);
+          box-shadow: 0 4px 8px rgba(79, 70, 229, 0.1);
+          backdrop-filter: blur(4px);
 
           .info-icon {
             color: #4f46e5;
+            filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.3));
           }
         }
 
         .callout-text {
           flex: 1;
+          position: relative;
+          z-index: 1;
 
           p {
             margin: 0;
             color: #334155;
             font-weight: 500;
-            font-size: 0.9375rem;
+            font-size: 1rem;
           }
         }
 
@@ -2042,26 +2339,46 @@ export default {
           flex-shrink: 0;
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          background-color: #4f46e5;
+          gap: 0.625rem;
+          background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
           color: white;
           border: none;
-          padding: 0.625rem 1rem;
-          border-radius: 8px;
+          padding: 0.75rem 1.25rem;
+          border-radius: 12px;
           font-weight: 500;
           font-size: 0.9375rem;
           cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+          position: relative;
+          z-index: 1;
+          overflow: hidden;
+
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+          }
 
           .btn-icon {
             opacity: 0.9;
           }
 
           &:hover {
-            background-color: #4338ca;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+            background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(79, 70, 229, 0.4);
+
+            &::before {
+              opacity: 1;
+            }
           }
 
           &:active {
@@ -2077,59 +2394,159 @@ export default {
 
     /* IMPROVED Comparison mode styling */
     .comparison-mode {
-      padding: 1.5rem;
+      padding: 1.75rem;
       display: flex;
       flex-direction: column;
       height: 100%;
       overflow-y: auto;
 
+      &::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      &::-webkit-scrollbar-track {
+        background: rgba(241, 245, 249, 0.6);
+        border-radius: 8px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.5);
+        border-radius: 8px;
+
+        &:hover {
+          background: rgba(100, 116, 139, 0.6);
+        }
+      }
+
       .comparison-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1.5rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 1.75rem;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.7);
 
         .comparison-title-section {
           .comparison-title {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 1.5rem;
+            gap: 0.625rem;
+            font-size: 1.625rem;
             font-weight: 700;
             color: #0f172a;
-            margin: 0 0 0.3rem 0;
+            margin: 0 0 0.375rem 0;
+            letter-spacing: -0.01em;
 
             .title-icon {
               color: #4f46e5;
+              filter: drop-shadow(0 2px 4px rgba(79, 70, 229, 0.3));
             }
           }
-          
+
           .comparison-description {
             color: #64748b;
             margin: 0;
-            font-size: 0.9rem;
+            font-size: 0.9375rem;
           }
         }
 
-        .back-btn {
+        .header-actions {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          background-color: white;
-          border: 1px solid #e2e8f0;
-          color: #334155;
-          font-size: 0.875rem;
-          font-weight: 500;
-          padding: 0.5rem 1rem;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.2s ease;
+          gap: 1rem;
 
-          &:hover {
-            background-color: #f8fafc;
-            border-color: #cbd5e1;
+          .coordinate-display-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #475569;
+            cursor: pointer;
+            user-select: none;
+
+            input[type="checkbox"] {
+              appearance: none;
+              -webkit-appearance: none;
+              width: 20px;
+              height: 20px;
+              border: 2px solid #cbd5e1;
+              border-radius: 6px;
+              margin: 0;
+              position: relative;
+              cursor: pointer;
+              transition: all 0.2s ease;
+              background-color: white;
+
+              &:checked {
+                background-color: #4f46e5;
+                border-color: #4f46e5;
+                box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+
+                &:after {
+                  content: '';
+                  position: absolute;
+                  width: 5px;
+                  height: 10px;
+                  border: solid white;
+                  border-width: 0 2px 2px 0;
+                  top: 3px;
+                  left: 6px;
+                  transform: rotate(45deg);
+                }
+              }
+
+              &:hover:not(:disabled) {
+                border-color: #94a3b8;
+              }
+
+              &:focus {
+                outline: 2px solid rgba(79, 70, 229, 0.3);
+                outline-offset: 2px;
+              }
+
+              &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                background-color: #f1f5f9;
+              }
+            }
+
+            .option-label {
+              font-weight: 500;
+              cursor: pointer;
+              transition: color 0.2s ease;
+
+              &:hover {
+                color: #334155;
+              }
+            }
+          }
+
+          .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            background-color: white;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            color: #334155;
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 0.625rem 1.125rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+
+            &:hover {
+              background-color: #f8fafc;
+              border-color: #cbd5e1;
+              transform: translateY(-1px);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            }
+
+            &:active {
+              transform: translateY(0);
+            }
           }
         }
       }
@@ -2138,73 +2555,81 @@ export default {
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
-        
+        gap: 1.75rem;
+
         /* Comparison layout styling */
         .comparison-layout {
           display: grid;
           grid-template-columns: 250px 1fr;
-          gap: 1.5rem;
-          
+          gap: 1.75rem;
+
           @media (max-width: 768px) {
             grid-template-columns: 1fr;
           }
-          
+
           .column-title {
-            font-size: 1.1rem;
+            font-size: 1.125rem;
             font-weight: 600;
-            margin: 0 0 1rem 0;
+            margin: 0 0 1.125rem 0;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.625rem;
             color: #334155;
-            
+            letter-spacing: -0.01em;
+
             .column-icon {
               color: #4f46e5;
+              filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.2));
             }
           }
-          
+
           /* Original segment styling */
           .original-segment-column {
             .segment-preview {
               background: white;
-              border-radius: 12px;
+              border-radius: 16px;
               overflow: hidden;
-              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
               display: flex;
               flex-direction: column;
-              
+              border: 1px solid rgba(255, 255, 255, 0.6);
+
               .original-img {
                 max-width: 100%;
-                max-height: 200px;
+                max-height: 220px;
                 object-fit: contain;
-                padding: 1rem;
+                padding: 1.25rem;
                 background: white;
+                transition: transform 0.3s ease;
+
+                &:hover {
+                  transform: scale(1.05);
+                }
               }
-              
+
               .segment-file-info {
-                background: #f8fafc;
-                padding: 0.75rem;
-                border-top: 1px solid #e2e8f0;
-                
+                background: linear-gradient(to bottom, #f8fafc, rgba(241, 245, 249, 0.7));
+                padding: 1rem;
+                border-top: 1px solid rgba(226, 232, 240, 0.7);
+
                 .file-info-row {
-                  margin-bottom: 0.5rem;
+                  margin-bottom: 0.625rem;
                   display: flex;
-                  gap: 0.5rem;
+                  gap: 0.625rem;
                   font-size: 0.875rem;
-                  
+
                   &:last-child {
                     margin-bottom: 0;
                   }
-                  
+
                   .info-key {
                     font-weight: 600;
                     color: #334155;
                   }
-                  
+
                   .info-value {
                     color: #64748b;
-                    
+
                     &.truncate {
                       white-space: nowrap;
                       overflow: hidden;
@@ -2215,7 +2640,7 @@ export default {
               }
             }
           }
-          
+
           /* Engine results styling */
           .engines-results-column {
             .engine-loading {
@@ -2223,14 +2648,20 @@ export default {
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              min-height: 200px;
-              
+              min-height: 300px;
+              padding: 2rem;
+              background: rgba(255, 255, 255, 0.6);
+              border-radius: 16px;
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+              border: 1px solid rgba(226, 232, 240, 0.8);
+              backdrop-filter: blur(8px);
+
               .fancy-spinner {
                 position: relative;
                 width: 64px;
                 height: 64px;
-                margin-bottom: 1rem;
-                
+                margin-bottom: 1.5rem;
+
                 .ring {
                   position: absolute;
                   width: 100%;
@@ -2239,71 +2670,85 @@ export default {
                   border: 3px solid transparent;
                   border-top-color: #4f46e5;
                   animation: spin 1.5s linear infinite;
-                  
+
                   &:nth-child(2) {
                     border: 3px solid transparent;
                     border-bottom-color: #4f46e5;
                     animation: spin 2s linear infinite;
                   }
                 }
-                
+
                 .dot {
                   position: absolute;
                   top: 50%;
                   left: 50%;
                   transform: translate(-50%, -50%);
-                  width: 15px;
-                  height: 15px;
+                  width: 16px;
+                  height: 16px;
                   border-radius: 50%;
                   background-color: #4f46e5;
+                  box-shadow: 0 0 10px rgba(79, 70, 229, 0.6);
                   animation: pulse 1s ease infinite alternate;
                 }
               }
-              
+
               .loading-text {
                 font-weight: 500;
                 color: #334155;
-                font-size: 1rem;
+                font-size: 1.0625rem;
+                text-align: center;
+                max-width: 300px;
               }
             }
-            
+
             .engine-results-grid {
               display: grid;
               grid-template-columns: repeat(3, 1fr);
-              gap: 1.25rem;
-              
-              @media (max-width: 900px) {
-                grid-template-columns: repeat(3, 1fr);
+              gap: 1.5rem;
+
+              @media (max-width: 1200px) {
+                grid-template-columns: repeat(2, 1fr);
               }
-              
+
               @media (max-width: 767px) {
                 grid-template-columns: 1fr;
               }
-              
+
               .engine-result-card {
-                background: rgba(255, 255, 255, 0.95);
-                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.8);
+                border-radius: 20px;
                 overflow: hidden;
-                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
                 display: flex;
                 flex-direction: column;
-                backdrop-filter: blur(8px);
-                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                border: 1px solid rgba(255, 255, 255, 0.6);
-                
+                backdrop-filter: blur(10px);
+                transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+                border: 1px solid rgba(255, 255, 255, 0.7);
+                position: relative;
+
                 &:hover {
-                  transform: translateY(-5px);
-                  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+                  transform: translateY(-6px);
+                  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
                 }
-                
+
+                &.result-selected {
+                  border: 2px solid #10b981;
+                  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.2);
+                  transform: translateY(-6px) scale(1.02);
+
+                  .engine-content {
+                    background-color: rgba(16, 185, 129, 0.05);
+                  }
+                }
+
                 .engine-header {
                   display: flex;
                   align-items: center;
                   gap: 1rem;
-                  padding: 1rem;
+                  padding: 1.25rem;
                   position: relative;
                   overflow: hidden;
-                  
+
                   &:before {
                     content: '';
                     position: absolute;
@@ -2314,237 +2759,246 @@ export default {
                     opacity: 0.7;
                     z-index: 0;
                   }
-                  
+
                   &.decimer {
                     background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.25) 100%);
                     border-bottom: 2px solid rgba(249, 115, 22, 0.4);
-                    
+
                     &:before {
                       background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.3), transparent 70%);
                     }
-                    
+
                     .engine-icon {
                       color: #f97316;
                       filter: drop-shadow(0 2px 4px rgba(249, 115, 22, 0.3));
                     }
                   }
-                  
+
                   &.molnextr {
                     background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0.25) 100%);
                     border-bottom: 2px solid rgba(14, 165, 233, 0.4);
-                    
+
                     &:before {
                       background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.3), transparent 70%);
                     }
-                    
+
                     .engine-icon {
                       color: #0ea5e9;
                       filter: drop-shadow(0 2px 4px rgba(14, 165, 233, 0.3));
                     }
                   }
-                  
+
                   &.molscribe {
                     background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.25) 100%);
                     border-bottom: 2px solid rgba(168, 85, 247, 0.4);
-                    
+
                     &:before {
                       background: radial-gradient(circle at top right, rgba(168, 85, 247, 0.3), transparent 70%);
                     }
-                    
+
                     .engine-icon {
                       color: #a855f7;
                       filter: drop-shadow(0 2px 4px rgba(168, 85, 247, 0.3));
                     }
                   }
-                  
+
                   .engine-icon-container {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 40px;
-                    height: 40px;
+                    width: 44px;
+                    height: 44px;
                     border-radius: 12px;
                     background-color: rgba(255, 255, 255, 0.9);
-                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
                     position: relative;
                     z-index: 1;
+                    border: 1px solid rgba(255, 255, 255, 0.8);
                   }
-                  
+
                   .engine-name {
-                    font-size: 1.125rem;
+                    font-size: 1.25rem;
                     font-weight: 700;
                     margin: 0;
                     color: #0f172a;
                     position: relative;
                     z-index: 1;
                     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+                    letter-spacing: -0.01em;
                   }
                 }
-                
+
                 .engine-content {
-                  padding: 1rem;
+                  padding: 1.25rem;
                   display: flex;
                   flex-direction: column;
-                  gap: 0.75rem;
-                  
+                  gap: 1rem;
+
                   .structure-preview {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    min-height: 180px;
+                    min-height: 200px;
                     background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
                     border: 1px solid rgba(226, 232, 240, 0.8);
-                    border-radius: 12px;
-                    padding: 1rem;
+                    border-radius: 16px;
+                    padding: 1.25rem;
                     position: relative;
                     overflow: hidden;
                     transition: transform 0.3s ease, box-shadow 0.3s ease;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-                    
+                    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
                     &:hover {
-                      transform: translateY(-2px);
-                      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                      transform: translateY(-3px);
+                      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
                     }
-                    
+
                     .result-image {
                       max-width: 100%;
-                      max-height: 150px;
+                      max-height: 160px;
                       object-fit: contain;
-                      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
+                      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
                       transition: transform 0.3s ease, filter 0.3s ease;
-                      
+
                       &:hover {
-                        transform: scale(1.03);
-                        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18));
+                        transform: scale(1.05);
+                        filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
                       }
                     }
-                    
+
                     .error-result {
-                      padding: 1.25rem;
+                      padding: 1.5rem;
                       background: linear-gradient(145deg, #fee2e2 0%, #fecaca 100%);
                       border-radius: 12px;
                       color: #b91c1c;
-                      font-size: 0.875rem;
+                      font-size: 0.9375rem;
                       text-align: center;
                       display: flex;
                       flex-direction: column;
                       align-items: center;
-                      gap: 0.625rem;
-                      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.15);
+                      gap: 0.75rem;
+                      box-shadow: 0 6px 16px rgba(239, 68, 68, 0.15);
                       border: 1px solid rgba(239, 68, 68, 0.2);
-                      
+
                       .error-icon {
                         color: #ef4444;
                         filter: drop-shadow(0 1px 2px rgba(239, 68, 68, 0.3));
                       }
-                      
+
                       p {
                         margin: 0;
                         font-weight: 500;
                       }
                     }
-                    
+
                     .loading-structure {
                       display: flex;
                       align-items: center;
                       justify-content: center;
                       position: relative;
-                      
+
                       &:before {
                         content: '';
                         position: absolute;
-                        width: 48px;
-                        height: 48px;
+                        width: 60px;
+                        height: 60px;
                         border-radius: 50%;
                         background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, rgba(79, 70, 229, 0.01) 70%);
                         animation: pulse 1.5s ease-in-out infinite alternate;
                       }
-                      
+
                       .loading-icon {
                         color: #4f46e5;
                         filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.4));
                         position: relative;
                         z-index: 1;
-                        
+
                         &.spin {
                           animation: spin 1.2s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
                         }
                       }
                     }
                   }
-                  
+
                   .smiles-data {
                     display: flex;
                     align-items: center;
                     background: #f8fafc;
-                    border-radius: 6px;
-                    padding: 0.5rem 0.75rem;
+                    border-radius: 10px;
+                    padding: 0.75rem 1rem;
                     font-size: 0.875rem;
                     border: 1px solid #e2e8f0;
-                    
+
                     .smiles-label {
                       font-weight: 600;
-                      margin-right: 0.5rem;
+                      margin-right: 0.625rem;
                       color: #334155;
                       white-space: nowrap;
                     }
-                    
+
                     .smiles-value {
-                      font-family: monospace;
+                      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
                       color: #64748b;
                       overflow: hidden;
                       text-overflow: ellipsis;
                       white-space: nowrap;
                       flex: 1;
                     }
-                    
+
                     .copy-btn {
                       background: none;
                       border: none;
                       color: #64748b;
                       cursor: pointer;
-                      padding: 0.25rem;
-                      border-radius: 4px;
-                      
+                      padding: 0.375rem;
+                      border-radius: 6px;
+                      transition: all 0.2s ease;
+
                       &:hover {
                         background: rgba(0, 0, 0, 0.05);
-                        color: #334155;
+                        color: #4f46e5;
                       }
                     }
                   }
-                  
+
                   .engine-stats {
                     display: flex;
                     flex-wrap: wrap;
-                    gap: 0.75rem;
+                    gap: 0.875rem;
                     font-size: 0.8125rem;
-                    
+
                     .stat-item {
                       display: flex;
                       align-items: center;
                       gap: 0.5rem;
-                      
+
                       .stat-label {
                         color: #64748b;
                       }
-                      
+
                       .stat-value {
                         font-weight: 600;
                         color: #334155;
                       }
-                      
+
                       &.coordinates-badge {
                         .coordinate-label {
                           display: flex;
                           align-items: center;
-                          gap: 0.25rem;
+                          gap: 0.375rem;
                           color: #10b981;
                           background: rgba(16, 185, 129, 0.1);
                           border: 1px solid rgba(16, 185, 129, 0.3);
-                          padding: 0.25rem 0.5rem;
+                          padding: 0.375rem 0.75rem;
                           border-radius: 12px;
                           font-size: 0.75rem;
-                          
+                          transition: all 0.2s ease;
+
+                          &:hover {
+                            background: rgba(16, 185, 129, 0.15);
+                            box-shadow: 0 2px 5px rgba(16, 185, 129, 0.2);
+                          }
+
                           .coordinate-icon {
                             color: inherit;
                           }
@@ -2552,286 +3006,558 @@ export default {
                       }
                     }
                   }
-                }
-              }
-            }
-          }
-        }
-        
-        /* Similarity Summary styling */
-        .similarity-summary {
-          background: white;
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-          margin-top: 1rem;
-          
-          .summary-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.25rem;
-            border-bottom: 1px solid #e2e8f0;
-            cursor: pointer;
-            
-            &:hover {
-              background: #f8fafc;
-            }
-            
-            .summary-title {
-              display: flex;
-              align-items: center;
-              gap: 0.5rem;
-              margin: 0;
-              font-size: 1.1rem;
-              font-weight: 600;
-              color: #334155;
-              
-              .summary-icon {
-                color: #4f46e5;
-              }
-            }
-            
-            .summary-toggle {
-              display: flex;
-              align-items: center;
-              gap: 0.5rem;
-              color: #64748b;
-              font-size: 0.875rem;
-              
-              .toggle-icon {
-                color: inherit;
-              }
-            }
-          }
-          
-          .quick-summary {
-            padding: 1.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-            
-            .summary-stats {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 1rem;
-              justify-content: center;
-              
-              .stat-card {
-                background: #f8fafc;
-                border-radius: 8px;
-                padding: 1.25rem;
-                min-width: 120px;
-                text-align: center;
-                transition: all 0.3s ease;
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-                border: 1px solid #e2e8f0;
-                flex: 1;
-                
-                &:hover {
-                  transform: translateY(-3px);
-                  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
-                }
-                
-                .stat-value {
-                  font-size: 1.75rem;
-                  font-weight: 700;
-                  margin-bottom: 0.5rem;
-                  color: #334155;
-                  
-                  &.identical {
-                    color: #10b981;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    
-                    .identical-icon {
-                      color: inherit;
+
+                  // Selection button styles
+                  .selection-actions {
+                    margin-top: 1.25rem;
+
+                    .select-prediction-btn {
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 0.625rem;
+                      width: 100%;
+                      padding: 0.75rem;
+                      border-radius: 12px;
+                      border: none;
+                      background-color: #f1f5f9;
+                      color: #334155;
+                      font-weight: 500;
+                      font-size: 0.9375rem;
+                      cursor: pointer;
+                      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                      position: relative;
+                      overflow: hidden;
+                      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+
+                      &::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+                        opacity: 0;
+                        transition: opacity 0.3s ease;
+                        z-index: 1;
+                      }
+
+                      &:hover {
+                        background-color: #e2e8f0;
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+
+                        &::before {
+                          opacity: 1;
+                        }
+                      }
+
+                      &.active {
+                        background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+                        color: white;
+                        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+                      }
+
+                      .btn-icon {
+                        opacity: 0.9;
+                        position: relative;
+                        z-index: 2;
+                      }
+
+                      span {
+                        position: relative;
+                        z-index: 2;
+                      }
                     }
                   }
                 }
-                
-                .stat-label {
-                  font-size: 0.875rem;
-                  color: #64748b;
-                }
-                
-                &.high-agreement .stat-value {
-                  color: #10b981;
-                }
-                
-                &.medium-agreement .stat-value {
-                  color: #0ea5e9;
-                }
-                
-                &.low-agreement .stat-value {
-                  color: #f97316;
-                }
-              }
-            }
-          }
-          
-          /* IMPROVED: Enhanced Action Button area styling */
-          .analysis-action-buttons {
-            padding: 1.25rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            justify-content: center;
-            background: linear-gradient(135deg, rgba(243, 244, 246, 0.5) 0%, rgba(255, 255, 255, 0.5) 100%);
-            border-top: 1px solid #e2e8f0;
-
-            .highlight-btn,
-            .analyze-btn {
-              display: flex;
-              align-items: center;
-              gap: 0.5rem;
-              background-color: #4f46e5;
-              color: white;
-              border: none;
-              padding: 0.75rem 1.25rem;
-              border-radius: 8px;
-              font-weight: 500;
-              font-size: 0.9375rem;
-              cursor: pointer;
-              transition: all 0.3s ease;
-              flex: 1;
-              justify-content: center;
-              max-width: 280px;
-              box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
-
-              .btn-icon {
-                opacity: 0.9;
-              }
-
-              &:hover:not(:disabled) {
-                background-color: #4338ca;
-                transform: translateY(-1px);
-                box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
-              }
-
-              &:disabled {
-                background-color: #818cf8;
-                opacity: 0.7;
-                cursor: not-allowed;
-              }
-            }
-
-            .highlight-btn {
-              background-color: #0ea5e9;
-              box-shadow: 0 4px 6px rgba(14, 165, 233, 0.2);
-              
-              &:hover:not(:disabled) {
-                background-color: #0284c7;
-                box-shadow: 0 8px 16px rgba(14, 165, 233, 0.3);
-              }
-              
-              &:disabled {
-                background-color: #7dd3fc;
-              }
-            }
-          }
-          
-          .similarity-details {
-            border-top: 1px solid #e2e8f0;
-            padding: 1.25rem;
-            
-            .run-analysis-prompt {
-              text-align: center;
-              color: #64748b;
-              font-size: 0.9375rem;
-              padding: 2rem 0;
-              background: #f8fafc;
-              border-radius: 8px;
-              border: 1px dashed #cbd5e1;
-            }
-            
-            .analysis-error {
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-              color: #ef4444;
-              background: rgba(239, 68, 68, 0.1);
-              border: 1px solid rgba(239, 68, 68, 0.3);
-              padding: 1rem;
-              border-radius: 8px;
-              
-              .error-icon {
-                color: inherit;
-              }
-              
-              p {
-                margin: 0;
               }
             }
           }
         }
 
-        /* Footer actions */
-        .comparison-footer {
+        /* Apply selection bar styling */
+        .apply-selection-bar {
+          margin-top: 1.5rem;
+          padding: 1.25rem;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(16, 185, 129, 0.12) 100%);
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          box-shadow: 0 6px 12px rgba(16, 185, 129, 0.1);
+          position: relative;
+          overflow: hidden;
+
+          &::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, transparent 70%);
+            opacity: 0.4;
+            z-index: 0;
+          }
+
+          @media (max-width: 768px) {
+            flex-direction: column;
+          }
+
+          .selection-message {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            color: #065f46;
+            font-size: 1rem;
+            position: relative;
+            z-index: 1;
+
+            .message-icon {
+              color: #10b981;
+              flex-shrink: 0;
+              filter: drop-shadow(0 1px 2px rgba(16, 185, 129, 0.3));
+            }
+
+            strong {
+              font-weight: 600;
+              background: linear-gradient(90deg, #065f46, #059669);
+              -webkit-background-clip: text;
+              background-clip: text;
+              color: transparent;
+            }
+          }
+
+          .apply-selection-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+            color: white;
+            border: none;
+            padding: 0.875rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            white-space: nowrap;
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);
+
+            @media (max-width: 768px) {
+              width: 100%;
+              justify-content: center;
+            }
+
+            &::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+              opacity: 0;
+              transition: opacity 0.3s ease;
+              z-index: -1;
+            }
+
+            &:hover {
+              background: linear-gradient(135deg, #059669 0%, #0f766e 100%);
+              transform: translateY(-2px);
+              box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+
+              &::before {
+                opacity: 1;
+              }
+            }
+
+            &:active {
+              transform: translateY(0);
+            }
+
+            .btn-icon {
+              opacity: 0.9;
+            }
+          }
+        }
+      }
+
+      /* Similarity Summary styling */
+      .similarity-summary {
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        margin-top: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(8px);
+
+        .summary-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 1.5rem;
-          padding-top: 1.5rem;
-          border-top: 1px solid #e2e8f0;
-          
-          @media (max-width: 768px) {
-            flex-direction: column;
-            gap: 1rem;
-            align-items: stretch;
+          padding: 1.25rem 1.5rem;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+          background: linear-gradient(to right, rgba(79, 70, 229, 0.02), rgba(79, 70, 229, 0.08));
+
+          .summary-title {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #334155;
+            letter-spacing: -0.01em;
+
+            .summary-icon {
+              color: #4f46e5;
+              filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.3));
+            }
           }
-          
-          .refresh-btn {
+
+          .summary-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #64748b;
+            font-size: 0.875rem;
+            cursor: pointer;
+            padding: 0.375rem 0.75rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+
+            &:hover {
+              background-color: rgba(241, 245, 249, 0.8);
+              color: #334155;
+            }
+
+            .toggle-icon {
+              color: inherit;
+            }
+          }
+        }
+
+        .quick-summary {
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+
+          .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1.25rem;
+
+            .stat-card {
+              background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+              border-radius: 16px;
+              padding: 1.5rem;
+              text-align: center;
+              transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+              box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+              border: 1px solid rgba(226, 232, 240, 0.8);
+              position: relative;
+              overflow: hidden;
+
+              &::before {
+                content: '';
+                position: absolute;
+                top: -10px;
+                right: -10px;
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(0, 0, 0, 0.03) 0%, transparent 70%);
+                opacity: 0.6;
+                z-index: 0;
+              }
+
+              &:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+              }
+
+              .stat-value {
+                font-size: 2rem;
+                font-weight: 700;
+                margin-bottom: 0.75rem;
+                color: #334155;
+                position: relative;
+                z-index: 1;
+
+                &.identical {
+                  color: #10b981;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+
+                  .identical-icon {
+                    color: inherit;
+                    filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.3));
+                  }
+                }
+              }
+
+              .stat-label {
+                font-size: 0.9375rem;
+                color: #64748b;
+                font-weight: 500;
+                position: relative;
+                z-index: 1;
+              }
+
+              &.high-agreement {
+                .stat-value {
+                  color: #10b981;
+                  text-shadow: 0 1px 2px rgba(16, 185, 129, 0.2);
+                }
+
+                &::before {
+                  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+                }
+              }
+
+              &.medium-agreement {
+                .stat-value {
+                  color: #0ea5e9;
+                  text-shadow: 0 1px 2px rgba(14, 165, 233, 0.2);
+                }
+
+                &::before {
+                  background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, transparent 70%);
+                }
+              }
+
+              &.low-agreement {
+                .stat-value {
+                  color: #f97316;
+                  text-shadow: 0 1px 2px rgba(249, 115, 22, 0.2);
+                }
+
+                &::before {
+                  background: radial-gradient(circle, rgba(249, 115, 22, 0.1) 0%, transparent 70%);
+                }
+              }
+            }
+          }
+        }
+
+        /* Analysis Action Buttons */
+        .analysis-action-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+          padding: 0 1.5rem 1.5rem;
+
+          .highlight-common-btn,
+          .analyze-btn {
+            flex: 1;
+            min-width: 200px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
-            background-color: #4f46e5;
-            color: white;
+            gap: 0.625rem;
+            padding: 0.875rem 1.25rem;
+            border-radius: 12px;
             border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
             font-weight: 500;
             font-size: 0.9375rem;
             cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
-            
-            .refresh-icon {
-              opacity: 0.9;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden;
+
+            &::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+              opacity: 0;
+              transition: opacity 0.3s ease;
+              z-index: 1;
             }
-            
+
             &:hover:not(:disabled) {
-              background-color: #4338ca;
-              transform: translateY(-1px);
-              box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+              transform: translateY(-3px);
+
+              &::before {
+                opacity: 1;
+              }
             }
-            
+
+            &:active:not(:disabled) {
+              transform: translateY(0);
+            }
+
             &:disabled {
-              background-color: #818cf8;
-              opacity: 0.7;
+              opacity: 0.6;
               cursor: not-allowed;
             }
-          }
-          
-          .view-options {
-            .option-checkbox {
-              display: flex;
-              align-items: center;
+
+            .btn-icon {
+              opacity: 0.9;
               position: relative;
-              cursor: pointer;
-              user-select: none;
-              
-              input[type="checkbox"] {
-                margin-right: 0.5rem;
-              }
-              
-              .checkbox-label {
-                font-size: 0.875rem;
-                color: #334155;
-              }
+              z-index: 2;
             }
+
+            span {
+              position: relative;
+              z-index: 2;
+            }
+          }
+
+          .highlight-common-btn {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            color: white;
+
+            &:hover:not(:disabled) {
+              box-shadow: 0 8px 16px rgba(14, 165, 233, 0.3);
+            }
+
+            &:disabled {
+              background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+            }
+          }
+
+          .analyze-btn {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+            color: white;
+
+            &:hover:not(:disabled) {
+              box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
+            }
+
+            &:disabled {
+              background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%);
+            }
+          }
+        }
+
+        .similarity-details {
+          border-top: 1px solid rgba(226, 232, 240, 0.7);
+          padding: 1.5rem;
+
+          .run-analysis-prompt {
+            text-align: center;
+            color: #64748b;
+            font-size: 1rem;
+            padding: 2.5rem 0;
+            background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            border: 1px dashed #cbd5e1;
+            font-weight: 500;
+          }
+
+          .analysis-error {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 1.25rem;
+            border-radius: 12px;
+
+            .error-icon {
+              color: inherit;
+              flex-shrink: 0;
+              filter: drop-shadow(0 1px 2px rgba(239, 68, 68, 0.3));
+            }
+
+            p {
+              margin: 0;
+              font-weight: 500;
+            }
+          }
+        }
+      }
+
+      /* Footer actions */
+      .comparison-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1.75rem;
+        padding-top: 1.75rem;
+        border-top: 1px solid rgba(226, 232, 240, 0.7);
+
+        @media (max-width: 768px) {
+          flex-direction: column;
+          gap: 1.25rem;
+          align-items: stretch;
+        }
+
+        .refresh-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.625rem;
+          background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+          color: white;
+          border: none;
+          padding: 0.875rem 1.5rem;
+          border-radius: 12px;
+          font-weight: 500;
+          font-size: 0.9375rem;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+          position: relative;
+          overflow: hidden;
+
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+          }
+
+          &:hover:not(:disabled)::before {
+            opacity: 1;
+          }
+
+          .refresh-icon {
+            opacity: 0.9;
+          }
+
+          &:hover:not(:disabled) {
+            background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
+          }
+
+          &:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 0 4px 8px rgba(79, 70, 229, 0.2);
+          }
+
+          &:disabled {
+            background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%);
+            opacity: 0.7;
+            cursor: not-allowed;
+          }
+
+          @media (max-width: 768px) {
+            width: 100%;
           }
         }
       }
@@ -2846,26 +3572,29 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: rgba(0, 0, 0, 0.85);
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(5px);
-  
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+
   .context-view-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
-    background-color: white;
+    padding: 1.25rem 1.5rem;
+    background-color: rgba(255, 255, 255, 0.95);
     border-bottom: 1px solid #e2e8f0;
-    
+    backdrop-filter: blur(8px);
+
     h3 {
       margin: 0;
       font-size: 1.25rem;
-      color: #334155;
+      color: #0f172a;
+      font-weight: 600;
     }
-    
+
     .btn-close {
       background: none;
       border: none;
@@ -2876,56 +3605,71 @@ export default {
       display: flex;
       align-items: center;
       justify-content: center;
-      
+      transition: all 0.2s ease;
+
       &:hover {
-        background-color: #f1f5f9;
+        background-color: #fee2e2;
         color: #ef4444;
+        transform: rotate(90deg);
       }
     }
   }
-  
+
   .context-view-content {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: 1.5rem;
     overflow: auto;
-    
+
     .loading-context {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      
+
       .loader-pulse {
-        width: 60px;
-        height: 60px;
+        width: 70px;
+        height: 70px;
         border-radius: 50%;
         background-color: rgba(255, 255, 255, 0.2);
         animation: pulse 1.5s ease-in-out infinite;
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
       }
     }
-    
+
     .context-image {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
       background-color: white;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      transition: transform 0.3s ease;
+
+      &:hover {
+        transform: scale(1.02);
+      }
     }
-    
+
     .context-error {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1rem;
+      gap: 1.25rem;
       color: white;
-      
+
+      svg {
+        filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.2));
+      }
+
       p {
         margin: 0;
+        font-size: 1.125rem;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
       }
     }
   }
@@ -2933,19 +3677,66 @@ export default {
 
 /* Animations */
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.8); opacity: 0.7; }
-  100% { transform: scale(1.2); opacity: 1; }
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+
+  100% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
 }
 
 @keyframes subtle-pulse {
-  0% { transform: scale(1); box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2); }
-  50% { transform: scale(1.03); box-shadow: 0 4px 8px rgba(79, 70, 229, 0.4); }
-  100% { transform: scale(1); box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+  }
+
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 8px 16px rgba(79, 70, 229, 0.4);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+  }
 }
 
 /* Mobile specific styling */
@@ -2954,75 +3745,64 @@ export default {
     .compare-callout {
       flex-direction: column;
       text-align: center;
-      
+
       .callout-icon {
         margin-right: 0;
-        margin-bottom: 0.5rem;
-      }
-      
-      .callout-text {
         margin-bottom: 1rem;
       }
-      
+
+      .callout-text {
+        margin-bottom: 1.25rem;
+      }
+
       .compare-btn {
         width: 100%;
         justify-content: center;
       }
     }
-    
+
     .comparison-mode {
       .comparison-header {
         flex-direction: column;
         align-items: flex-start;
-        gap: 1rem;
-        
+        gap: 1.25rem;
+
         .back-btn {
           align-self: flex-start;
         }
       }
-      
+
       .quick-summary {
         flex-direction: column;
-        
+
         .summary-stats {
           justify-content: center;
         }
-        
-        .action-buttons {
-          width: 100%;
-          justify-content: center;
-          
-          .highlight-btn,
-          .analyze-btn {
-            flex: 1;
-          }
-        }
       }
     }
-    
+
     .content-panels {
       flex-direction: column;
-      
+
       .panel {
         width: 100%;
       }
     }
-    
+
     .section-headers {
       flex-direction: column;
-      gap: 0.5rem;
-      
+      gap: 0.75rem;
+
       .header-item {
         justify-content: center;
       }
     }
   }
-  
+
   .context-view-container {
     .context-view-content {
-      padding: 0.5rem;
+      padding: 0.75rem;
     }
   }
 }
-
 </style>
