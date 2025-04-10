@@ -762,19 +762,125 @@ export default {
       };
 
       return displayNames[engine.toLowerCase()] || engine;
-    },
+    }
   }
 }
 </script>
 
 <style lang="scss" scoped>
+:root {
+  // Light mode colors
+  --segments-bg-light: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  --segments-text-light: #334155;
+  --segments-text-secondary-light: #64748b;
+  --segments-border-light: rgba(255, 255, 255, 0.8);
+  --segments-card-bg-light: rgba(255, 255, 255, 0.85);
+  --segments-card-shadow-light: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --segments-empty-bg-light: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(243, 244, 246, 0.8) 100%);
+  --segments-empty-icon-light: #94a3b8;
+  --segments-filter-bg-light: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.12) 100%);
+  --segments-filter-border-light: rgba(79, 70, 229, 0.2);
+  --segments-btn-light-bg: #f1f5f9;
+  --segments-btn-light-color: #334155;
+  --segments-divider-light: rgba(226, 232, 240, 0.7);
+  --segments-image-bg-light: white;
+  --segments-btn-hover-light: #e2e8f0;
+  --segments-btn-border-light: #cbd5e1;
+  --segments-info-bg-light: linear-gradient(to bottom, #f8fafc, rgba(241, 245, 249, 0.7));
+  --segments-structure-bg-light: linear-gradient(145deg, rgba(79, 70, 229, 0.04) 0%, rgba(79, 70, 229, 0.08) 100%);
+  --segments-modal-bg-light: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  --segments-accent-color-light: #4f46e5;
+  --segments-scrollbar-track-light: rgba(241, 245, 249, 0.6);
+  --segments-scrollbar-thumb-light: rgba(148, 163, 184, 0.5);
+  --segments-scrollbar-thumb-hover-light: rgba(100, 116, 139, 0.6);
+
+  // Dark mode colors
+  --segments-bg-dark: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+  --segments-text-dark: #e2e8f0;
+  --segments-text-secondary-dark: #94a3b8;
+  --segments-border-dark: rgba(30, 41, 59, 0.8);
+  --segments-card-bg-dark: rgba(30, 41, 59, 0.85);
+  --segments-card-shadow-dark: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --segments-empty-bg-dark: linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%);
+  --segments-empty-icon-dark: #64748b;
+  --segments-filter-bg-dark: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(79, 70, 229, 0.18) 100%);
+  --segments-filter-border-dark: rgba(79, 70, 229, 0.4);
+  --segments-btn-dark-bg: #1e293b;
+  --segments-btn-dark-color: #e2e8f0;
+  --segments-divider-dark: rgba(51, 65, 85, 0.7);
+  --segments-image-bg-dark: #0f172a;
+  --segments-btn-hover-dark: #334155;
+  --segments-btn-border-dark: #475569;
+  --segments-info-bg-dark: linear-gradient(to bottom, #1e293b, rgba(30, 41, 59, 0.7));
+  --segments-structure-bg-dark: linear-gradient(145deg, rgba(79, 70, 229, 0.1) 0%, rgba(79, 70, 229, 0.15) 100%);
+  --segments-modal-bg-dark: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+  --segments-accent-color-dark: #818cf8;
+  --segments-scrollbar-track-dark: rgba(15, 23, 42, 0.6);
+  --segments-scrollbar-thumb-dark: rgba(71, 85, 105, 0.5);
+  --segments-scrollbar-thumb-hover-dark: rgba(100, 116, 139, 0.6);
+
+  // Default to light mode variables
+  --segments-bg: var(--segments-bg-light);
+  --segments-text: var(--segments-text-light);
+  --segments-text-secondary: var(--segments-text-secondary-light);
+  --segments-border: var(--segments-border-light);
+  --segments-card-bg: var(--segments-card-bg-light);
+  --segments-card-shadow: var(--segments-card-shadow-light);
+  --segments-empty-bg: var(--segments-empty-bg-light);
+  --segments-empty-icon: var(--segments-empty-icon-light);
+  --segments-filter-bg: var(--segments-filter-bg-light);
+  --segments-filter-border: var(--segments-filter-border-light);
+  --segments-btn-bg: var(--segments-btn-light-bg);
+  --segments-btn-color: var(--segments-btn-light-color);
+  --segments-divider: var(--segments-divider-light);
+  --segments-image-bg: var(--segments-image-bg-light);
+  --segments-btn-hover: var(--segments-btn-hover-light);
+  --segments-btn-border: var(--segments-btn-border-light);
+  --segments-info-bg: var(--segments-info-bg-light);
+  --segments-structure-bg: var(--segments-structure-bg-light);
+  --segments-modal-bg: var(--segments-modal-bg-light);
+  --segments-accent-color: var(--segments-accent-color-light);
+  --segments-scrollbar-track: var(--segments-scrollbar-track-light);
+  --segments-scrollbar-thumb: var(--segments-scrollbar-thumb-light);
+  --segments-scrollbar-thumb-hover: var(--segments-scrollbar-thumb-hover-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    // Apply dark mode variables
+    --segments-bg: var(--segments-bg-dark);
+    --segments-text: var(--segments-text-dark);
+    --segments-text-secondary: var(--segments-text-secondary-dark);
+    --segments-border: var(--segments-border-dark);
+    --segments-card-bg: var(--segments-card-bg-dark);
+    --segments-card-shadow: var(--segments-card-shadow-dark);
+    --segments-empty-bg: var(--segments-empty-bg-dark);
+    --segments-empty-icon: var(--segments-empty-icon-dark);
+    --segments-filter-bg: var(--segments-filter-bg-dark);
+    --segments-filter-border: var(--segments-filter-border-dark);
+    --segments-btn-bg: var(--segments-btn-dark-bg);
+    --segments-btn-color: var(--segments-btn-dark-color);
+    --segments-divider: var(--segments-divider-dark);
+    --segments-image-bg: var(--segments-image-bg-dark);
+    --segments-btn-hover: var(--segments-btn-hover-dark);
+    --segments-btn-border: var(--segments-btn-border-dark);
+    --segments-info-bg: var(--segments-info-bg-dark);
+    --segments-structure-bg: var(--segments-structure-bg-dark);
+    --segments-modal-bg: var(--segments-modal-bg-dark);
+    --segments-accent-color: var(--segments-accent-color-dark);
+    --segments-scrollbar-track: var(--segments-scrollbar-track-dark);
+    --segments-scrollbar-thumb: var(--segments-scrollbar-thumb-dark);
+    --segments-scrollbar-thumb-hover: var(--segments-scrollbar-thumb-hover-dark);
+  }
+}
+
 .segments-panel {
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  background: var(--segments-bg);
   border-radius: 20px;
   padding: 1.5rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
@@ -789,21 +895,21 @@ export default {
     height: 100%;
     min-height: 300px;
     padding: 2rem;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(243, 244, 246, 0.8) 100%);
+    background: var(--segments-empty-bg);
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    border: 1px solid var(--segments-border);
     backdrop-filter: blur(10px);
 
     .empty-icon {
-      color: #94a3b8;
+      color: var(--segments-empty-icon);
       margin-bottom: 1.5rem;
       filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
       animation: float 3s ease-in-out infinite;
     }
 
     .loading-icon {
-      color: #4f46e5;
+      color: var(--segments-accent-color);
       margin-bottom: 1.5rem;
       filter: drop-shadow(0 4px 8px rgba(79, 70, 229, 0.3));
 
@@ -816,12 +922,12 @@ export default {
       margin-bottom: 1rem;
       font-size: 1.5rem;
       font-weight: 700;
-      color: #334155;
+      color: var(--segments-text);
       letter-spacing: -0.01em;
     }
 
     p {
-      color: #64748b;
+      color: var(--segments-text-secondary);
       font-size: 1.125rem;
       max-width: 400px;
       line-height: 1.6;
@@ -926,11 +1032,11 @@ export default {
       align-items: center;
       margin-bottom: 1rem;
       padding: 1rem 1.25rem;
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.12) 100%);
+      background: var(--segments-filter-bg);
       border-radius: 16px;
       flex-wrap: wrap;
       gap: 0.875rem;
-      border: 1px solid rgba(79, 70, 229, 0.2);
+      border: 1px solid var(--segments-filter-border);
       box-shadow: 0 4px 12px rgba(79, 70, 229, 0.06);
       position: relative;
       overflow: hidden;
@@ -957,7 +1063,7 @@ export default {
 
         .filter-section-label {
           font-weight: 600;
-          color: #334155;
+          color: var(--segments-text);
           font-size: 0.9375rem;
         }
 
@@ -972,12 +1078,12 @@ export default {
             gap: 0.625rem;
             cursor: pointer;
             font-size: 0.9375rem;
-            color: #475569;
+            color: var(--segments-text-secondary);
             transition: color 0.2s ease;
             font-weight: 500;
 
             &:hover {
-              color: #4f46e5;
+              color: var(--segments-accent-color);
             }
 
             input[type="checkbox"] {
@@ -987,15 +1093,15 @@ export default {
               margin: 0;
               appearance: none;
               -webkit-appearance: none;
-              background-color: white;
-              border: 2px solid #cbd5e1;
+              background-color: var(--segments-image-bg);
+              border: 2px solid var(--segments-btn-border);
               border-radius: 6px;
               transition: all 0.2s ease;
               position: relative;
 
               &:checked {
-                background-color: #4f46e5;
-                border-color: #4f46e5;
+                background-color: var(--segments-accent-color);
+                border-color: var(--segments-accent-color);
                 box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
 
                 &::after {
@@ -1012,7 +1118,7 @@ export default {
               }
 
               &:hover {
-                border-color: #4f46e5;
+                border-color: var(--segments-accent-color);
               }
             }
           }
@@ -1028,16 +1134,22 @@ export default {
 
         .stats-item {
           font-size: 0.9375rem;
-          color: #334155;
+          color: var(--segments-text);
           font-weight: 500;
 
           .stats-value {
             font-weight: 700;
-            color: #4f46e5;
+            color: var(--segments-accent-color);
             background: linear-gradient(90deg, #4f46e5, #6366f1);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
+
+            @media (prefers-color-scheme: dark) {
+              background: linear-gradient(90deg, #818cf8, #a5b4fc);
+              -webkit-background-clip: text;
+              background-clip: text;
+            }
           }
         }
 
@@ -1048,7 +1160,7 @@ export default {
           font-size: 0.8125rem;
           padding: 0.5rem 0.75rem;
           border-radius: 10px;
-          border: 1px solid rgba(226, 232, 240, 0.8);
+          border: 1px solid var(--segments-btn-border);
           cursor: pointer;
           font-weight: 500;
           transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1097,23 +1209,23 @@ export default {
           }
 
           &.select-all-btn {
-            background-color: #f1f5f9;
-            color: #334155;
+            background-color: var(--segments-btn-bg);
+            color: var(--segments-btn-color);
 
             &:hover:not(:disabled) {
-              background-color: #e2e8f0;
-              border-color: #cbd5e1;
-              color: #1e293b;
+              background-color: var(--segments-btn-hover);
+              border-color: var(--segments-btn-border);
+              color: var(--segments-text);
             }
           }
 
           &.clear-selection-btn {
-            background-color: white;
-            color: #64748b;
+            background-color: var(--segments-image-bg);
+            color: var(--segments-text-secondary);
 
             &:hover:not(:disabled) {
-              background-color: #fef2f2;
-              border-color: #fecaca;
+              background-color: rgba(239, 68, 68, 0.1);
+              border-color: rgba(239, 68, 68, 0.3);
               color: #ef4444;
             }
           }
@@ -1150,16 +1262,16 @@ export default {
       }
 
       &::-webkit-scrollbar-track {
-        background: rgba(241, 245, 249, 0.6);
+        background: var(--segments-scrollbar-track);
         border-radius: 8px;
       }
 
       &::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.5);
+        background: var(--segments-scrollbar-thumb);
         border-radius: 8px;
 
         &:hover {
-          background: rgba(100, 116, 139, 0.6);
+          background: var(--segments-scrollbar-thumb-hover);
         }
       }
 
@@ -1194,7 +1306,7 @@ export default {
 
         /* Selection state styling */
         &.is-selected .segment-card {
-          box-shadow: 0 0 0 2px #4f46e5, 0 8px 20px rgba(79, 70, 229, 0.2);
+          box-shadow: 0 0 0 2px var(--segments-accent-color), 0 8px 20px rgba(79, 70, 229, 0.2);
 
           &::before {
             opacity: 1;
@@ -1202,8 +1314,8 @@ export default {
           }
 
           .segment-selection .selection-checkbox .checkmark {
-            background-color: #4f46e5;
-            border-color: #4f46e5;
+            background-color: var(--segments-accent-color);
+            border-color: var(--segments-accent-color);
             box-shadow: 0 0 8px rgba(79, 70, 229, 0.4);
 
             &:after {
@@ -1213,16 +1325,16 @@ export default {
         }
 
         .segment-card {
-          background-color: rgba(255, 255, 255, 0.85);
+          background-color: var(--segments-card-bg);
           border-radius: 16px;
           overflow: hidden;
           height: 100%;
           display: flex;
           flex-direction: column;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+          box-shadow: var(--segments-card-shadow);
           position: relative;
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.8);
+          border: 1px solid var(--segments-border);
           transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
           &::before {
@@ -1267,8 +1379,8 @@ export default {
               display: block;
               height: 24px;
               width: 24px;
-              background-color: rgba(255, 255, 255, 0.95);
-              border: 2px solid rgba(203, 213, 225, 0.8);
+              background-color: var(--segments-image-bg);
+              border: 2px solid var(--segments-btn-border);
               border-radius: 8px;
               box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
               transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1288,13 +1400,13 @@ export default {
             }
 
             &:hover .checkmark {
-              border-color: #4f46e5;
+              border-color: var(--segments-accent-color);
               transform: scale(1.05);
             }
 
             input:checked~.checkmark {
-              background-color: #4f46e5;
-              border-color: #4f46e5;
+              background-color: var(--segments-accent-color);
+              border-color: var(--segments-accent-color);
 
               &:after {
                 display: block;
@@ -1304,7 +1416,7 @@ export default {
         }
 
         &.has-structure .segment-card {
-          border: 1px solid rgba(79, 70, 229, 0.2);
+          border: 1px solid var(--segments-filter-border);
 
           &::before {
             background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.01) 100%);
@@ -1317,7 +1429,7 @@ export default {
           display: flex;
           justify-content: center;
           align-items: center;
-          background-color: white;
+          background-color: var(--segments-image-bg);
           padding: 0.875rem;
           min-height: 220px;
           position: relative;
@@ -1340,14 +1452,14 @@ export default {
 
         .segment-info {
           padding: 0.5rem 0.75rem;
-          border-top: 1px solid rgba(226, 232, 240, 0.7);
+          border-top: 1px solid var(--segments-divider);
           font-size: 0.75rem;
-          color: #64748b;
+          color: var(--segments-text-secondary);
           text-align: center;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          background: linear-gradient(to bottom, #f8fafc, rgba(241, 245, 249, 0.7));
+          background: var(--segments-info-bg);
           position: relative;
           z-index: 1;
 
@@ -1360,14 +1472,14 @@ export default {
           .debug-info {
             margin-top: 0.25rem;
             font-size: 0.6875rem;
-            color: #94a3b8;
+            color: var(--segments-text-secondary);
           }
         }
 
         .structure-result {
           padding: 0.875rem;
-          border-top: 1px solid rgba(226, 232, 240, 0.7);
-          background: linear-gradient(145deg, rgba(79, 70, 229, 0.04) 0%, rgba(79, 70, 229, 0.08) 100%);
+          border-top: 1px solid var(--segments-divider);
+          background: var(--segments-structure-bg);
           position: relative;
           z-index: 1;
 
@@ -1377,11 +1489,11 @@ export default {
             gap: 0.375rem;
             font-size: 0.875rem;
             margin-bottom: 0.75rem;
-            color: #4f46e5;
+            color: var(--segments-accent-color);
             font-weight: 600;
 
             .icon {
-              color: #4f46e5;
+              color: var(--segments-accent-color);
               filter: drop-shadow(0 1px 2px rgba(79, 70, 229, 0.3));
             }
           }
@@ -1389,11 +1501,11 @@ export default {
           /* Deep selectors for chemical structure viewer */
           :deep(.chemical-structure-viewer) {
             .structure-display {
-              background-color: white !important;
+              background-color: var(--segments-image-bg) !important;
               border-radius: 8px;
               overflow: hidden;
               box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-              border: 1px solid rgba(226, 232, 240, 0.8);
+              border: 1px solid var(--segments-divider);
               transition: all 0.3s ease;
 
               &:hover {
@@ -1436,7 +1548,7 @@ export default {
     animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
     .segment-modal {
-      background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+      background: var(--segments-modal-bg);
       border-radius: 24px;
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.06);
       width: 100%;
@@ -1444,7 +1556,7 @@ export default {
       max-height: 90vh;
       overflow-y: auto;
       padding: 1.75rem;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid var(--segments-border);
       animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
       /* Customize modal scrollbar */
@@ -1453,16 +1565,16 @@ export default {
       }
 
       &::-webkit-scrollbar-track {
-        background: rgba(241, 245, 249, 0.6);
+        background: var(--segments-scrollbar-track);
         border-radius: 8px;
       }
 
       &::-webkit-scrollbar-thumb {
-        background: rgba(148, 163, 184, 0.5);
+        background: var(--segments-scrollbar-thumb);
         border-radius: 8px;
 
         &:hover {
-          background: rgba(100, 116, 139, 0.6);
+          background: var(--segments-scrollbar-thumb-hover);
         }
       }
     }

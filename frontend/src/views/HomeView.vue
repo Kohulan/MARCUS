@@ -82,16 +82,37 @@
       <!-- Column 3: Chemical Structures -->
       <div class="column structures-column" :style="{ width: columnWidths[2] + 'px' }">
         <div class="panel">
-          <h2 class="panel-title">
-            <vue-feather type="hexagon" class="icon"></vue-feather>
-            Chemical Structures
-          </h2>
+          <div class="panel-header">
+            <h2 class="panel-title">
+              <vue-feather type="hexagon" class="icon"></vue-feather>
+              Chemical Structures
+            </h2>
+            
+            <!-- Enhanced visually stunning export button -->
+            <button 
+              class="export-button" 
+              @click="exportSelectedData" 
+              :disabled="!hasSelectedStructures"
+              :class="{ 'disabled': !hasSelectedStructures, 'pulse': selectedSegmentCount > 0 }"
+              title="Export Selected Structures, Text and Annotations as JSON"
+            >
+              <div class="button-content">
+                <vue-feather type="download-cloud" class="export-icon"></vue-feather>
+                <span class="label">Export Data</span>
+                <div class="badge-container" v-if="selectedSegmentCount > 0">
+                  <span class="badge">{{ selectedSegmentCount }}</span>
+                </div>
+              </div>
+              <div class="button-glow"></div>
+            </button>
+          </div>
           
           <SegmentsPanel 
             :segments="segments"
             :convertedStructures="convertedStructures"
             :isLoadingStructures="isLoadingStructures"
             @process-structures="processStructures"
+            ref="segmentsPanel"
           />
         </div>
       </div>
@@ -141,7 +162,16 @@ export default {
       annotations: state => state.annotations.items,
       segments: state => state.structures.segments,
       convertedStructures: state => state.structures.convertedStructures
-    })
+    }),
+    
+    // New computed properties for the export button
+    selectedSegmentCount() {
+      return this.$store.getters['structures/selectedSegmentCount'] || 0;
+    },
+    
+    hasSelectedStructures() {
+      return this.selectedSegmentCount > 0;
+    }
   },
   
   mounted() {
@@ -477,6 +507,110 @@ export default {
       } finally {
         this.isLoadingStructures = false;
       }
+    },
+    
+    /**
+     * Export selected structures, text, and annotations as a JSON file
+     */
+    exportSelectedData() {
+      // Get the SegmentsPanel component reference
+      const segmentsPanel = this.$refs.segmentsPanel;
+      if (!segmentsPanel) {
+        this.$store.dispatch('showNotification', {
+          type: 'error',
+          message: 'Could not access segments panel for export'
+        });
+        return;
+      }
+      
+      // Check if there are selected segments
+      if (this.selectedSegmentCount === 0) {
+        this.$store.dispatch('showNotification', {
+          type: 'warning',
+          message: 'No structures selected for export. Please select at least one structure.'
+        });
+        return;
+      }
+      
+      try {
+        // Get visible segments that are selected
+        const selectedSegments = this.$store.getters['structures/visibleSegments'].filter(segment => 
+          this.$store.getters['structures/isSegmentSelected'](segment.id)
+        );
+        
+        // Format selected structures with only the essential data
+        const selectedStructures = selectedSegments.map(segment => {
+          const structure = segmentsPanel.getStructureForSegment(segment);
+          if (!structure) {
+            return {
+              segmentId: segment.id,
+              filename: segment.filename,
+              imageUrl: segment.imageUrl || segment.path,
+              error: 'No structure data available'
+            };
+          }
+          
+          return {
+            segmentId: structure.segmentId,
+            name: structure.name,
+            filename: structure.filename,
+            smiles: structure.smiles,
+            molfile: structure.molfile,
+            engine: structure.engine
+          };
+        });
+        
+        // Format annotations for export
+        const formattedAnnotations = this.annotations.map(ann => ({
+          label: ann.label,
+          text: ann.text,
+          start_offset: ann.start_offset,
+          end_offset: ann.end_offset
+        }));
+        
+        // Create the export data object
+        const exportData = {
+          timestamp: new Date().toISOString(),
+          documentInfo: {
+            pdfId: this.$store.state.structures.currentPdfId,
+            pdfFilename: this.$store.state.text.metadata?.pdfFilename || 'Unknown',
+            extractedAt: this.$store.state.text.metadata?.extractedAt || new Date().toISOString()
+          },
+          extractedText: this.extractedText,
+          annotations: formattedAnnotations,
+          structures: selectedStructures
+        };
+        
+        // Convert to JSON and download
+        const jsonData = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Generate filename based on PDF name or default
+        const pdfName = exportData.documentInfo.pdfFilename.replace(/\.pdf$/i, '') || 'export';
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+        a.download = `${pdfName}_export_${timestamp}.json`;
+        
+        // Trigger download
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        // Show success notification
+        this.$store.dispatch('showNotification', {
+          type: 'success',
+          message: `Exported data with ${selectedStructures.length} structures and ${formattedAnnotations.length} annotations`
+        });
+      } catch (error) {
+        console.error('Error exporting data:', error);
+        
+        // Show error notification
+        this.$store.dispatch('showNotification', {
+          type: 'error',
+          message: `Failed to export data: ${error.message}`
+        });
+      }
     }
   }
 }
@@ -629,19 +763,192 @@ export default {
   overflow: auto; /* Changed from hidden to auto to allow scrolling */
   margin-right: 6px; /* Make space for the resizer */
   
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+  }
+  
   &-title {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
     font-size: 1.25rem;
     font-weight: 600;
     flex-shrink: 0;
+    margin-bottom: 0; /* Override previous margin as we now use panel-header */
     
     .icon {
       color: var(--color-primary);
     }
   }
+}
+
+/* Styling for the new export button */
+.export-button {
+  position: relative;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3), 0 0 0 2px rgba(59, 130, 246, 0.2);
+  isolation: isolate;
+  
+  /* Gradient background with animation */
+  background: linear-gradient(-45deg, #4338ca, #3b82f6, #2563eb, #1d4ed8);
+  background-size: 300% 300%;
+  animation: gradientShift 8s ease infinite;
+  
+  .button-content {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
+    z-index: 5;
+  }
+  
+  /* Subtle button glow effect */
+  .button-glow {
+    position: absolute;
+    top: -25%;
+    left: -25%;
+    width: 150%;
+    height: 150%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 2;
+    pointer-events: none;
+  }
+  
+  /* Interactive states */
+  &:hover:not(.disabled) {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.35), 0 0 0 2px rgba(96, 165, 250, 0.5);
+    
+    .button-glow {
+      opacity: 1;
+      animation: pulse 2s infinite;
+    }
+    
+    .export-icon {
+      animation: levitate 1.5s ease-in-out infinite;
+      filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+    }
+    
+    .badge-container {
+      transform: scale(1.1);
+    }
+  }
+  
+  &:active:not(.disabled) {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.25);
+    
+    .button-glow {
+      opacity: 0.7;
+    }
+  }
+  
+  /* Disabled state with improved contrast */
+  &.disabled {
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    cursor: not-allowed;
+    opacity: 0.8;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    filter: saturate(0.7);
+  }
+  
+  /* Pulsing effect when active */
+  &.pulse:not(.disabled)::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    border-radius: 16px;
+    background: rgba(59, 130, 246, 0.3);
+    z-index: 1;
+    animation: pulse 2s infinite;
+    pointer-events: none;
+  }
+  
+  /* Icon styling */
+  .export-icon {
+    width: 20px;
+    height: 20px;
+    color: white;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    transition: all 0.3s ease;
+  }
+  
+  /* Label styling */
+  .label {
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Badge container and styling */
+  .badge-container {
+    position: relative;
+    transition: transform 0.3s ease;
+  }
+  
+  .badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #3b82f6;
+    border-radius: 999px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(59, 130, 246, 0.3);
+    transition: all 0.3s ease;
+    
+    /* Ensure badge is readable in dark mode */
+    @media (prefers-color-scheme: dark) {
+      background: #ffffff;
+      color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2), 0 0 10px rgba(255, 255, 255, 0.4);
+    }
+  }
+}
+
+/* Define animations */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 0.1; transform: scale(1.1); }
+  100% { opacity: 0.6; transform: scale(0.9); }
+}
+
+@keyframes levitate {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 
 .pdf-viewer-container {
