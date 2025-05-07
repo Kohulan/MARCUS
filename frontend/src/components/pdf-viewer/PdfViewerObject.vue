@@ -44,7 +44,7 @@
           </div>
         </div>
         
-        <div class="pdf-wrapper" ref="pdfWrapper" v-if="isPdfVisible">
+        <div class="pdf-wrapper" ref="pdfWrapper" v-if="isPdfVisible && !showContextView">
           <!-- Using object tag as an alternative approach -->
           <object 
             v-if="pdfUrl"
@@ -62,18 +62,33 @@
             </div>
           </object>
         </div>
-        <div v-else class="pdf-hidden-message">
+        <div v-else-if="!showContextView" class="pdf-hidden-message">
           <p>PDF is currently hidden. Click "Show PDF" to display it again.</p>
         </div>
+        
+        <!-- PDF Context Viewer -->
+        <PDFContextViewer 
+          v-if="currentSegment" 
+          :segment="currentSegment"
+          :showContextView="showContextView"
+          @close="closeContextView"
+          @notification="handleNotification"
+          @error="handleError"
+        />
       </div>
     </div>
   </template>
   
   <script>
   import decimerService from '@/services/decimerService';
+  import PDFContextViewer from './PDFContextViewer.vue';
+  import eventBus from '@/utils/eventBus';
 
   export default {
     name: 'PdfViewerObject',
+    components: {
+      PDFContextViewer
+    },
     props: {
       pdfUrl: {
         type: String,
@@ -89,7 +104,9 @@
         isLoading: true,
         error: null,
         isPdfVisible: true, // Track if PDF is visible or hidden
-        doi: null // Store the DOI when extracted
+        doi: null, // Store the DOI when extracted
+        showContextView: false, // Track if showing segment in context
+        currentSegment: null // Current segment to show in context
       }
     },
     watch: {
@@ -123,6 +140,13 @@
       if (this.pdfFile) {
         this.extractDoi(this.pdfFile);
       }
+      
+      // Listen for segment-in-context events using our custom EventBus
+      eventBus.on('show-segment-in-context', this.showSegmentInContext);
+    },
+    beforeUnmount() {
+      // Clean up event listener when component is unmounted
+      eventBus.off('show-segment-in-context', this.showSegmentInContext);
     },
     methods: {
       onPdfLoaded() {
@@ -148,6 +172,35 @@
           console.error('Error extracting DOI:', error);
           // We don't set an error state here to avoid interrupting the PDF display
         }
+      },
+      // New methods for handling segment in context
+      showSegmentInContext(segment) {
+        console.log('Showing segment in context:', segment);
+        if (!segment) return;
+        
+        // Hide PDF and show context view
+        this.isPdfVisible = false;
+        this.currentSegment = segment;
+        this.showContextView = true;
+        
+        // Emit event to notify parent components
+        this.$emit('segment-context-shown', segment);
+      },
+      closeContextView() {
+        this.showContextView = false;
+        // Optional: Show PDF again when context view is closed
+        this.isPdfVisible = true;
+        
+        // Emit event to notify parent components
+        this.$emit('segment-context-closed');
+      },
+      handleNotification(notification) {
+        // Forward notification to parent components
+        this.$emit('notification', notification);
+      },
+      handleError(error) {
+        // Forward error to parent components
+        this.$emit('error', error);
       }
     }
   }
@@ -162,6 +215,7 @@
   box-shadow: var(--shadow-sm);
   height: 100%;
   overflow: hidden;
+  position: relative; /* Added for absolute positioning of context viewer */
   
   .loading-container, .error-container {
     display: flex;
@@ -203,6 +257,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative; /* Added for absolute positioning of context viewer */
   }
   
   .pdf-controls {

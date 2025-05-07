@@ -541,6 +541,7 @@ import ocsrService from '@/services/ocsrService'
 import depictionService from '@/services/depictionService'
 import similarityService from '@/services/similarityService'
 import { getApiImageUrl } from '@/services/api'
+import eventBus from '@/utils/eventBus';
 
 export default {
   name: 'SegmentViewer',
@@ -843,8 +844,15 @@ export default {
     },
 
     showInContext() {
-      this.showContextView = true;
-      this.loadContextImage();
+      // Instead of showing context directly in the SegmentViewer,
+      // emit an event that will be caught by the parent component and relayed to the PDF viewer
+      if (!this.segment) return;
+      
+      // Emit to the parent that we want to show this segment in context
+      this.$emit('show-in-context', this.segment);
+      
+      // Also emit a global event using our custom EventBus that the PDF viewer component can listen for
+      eventBus.emit('show-segment-in-context', this.segment);
     },
 
     closeContextView() {
@@ -2015,7 +2023,7 @@ export default {
               background: linear-gradient(to right, rgba(79, 70, 229, 0.02), rgba(79, 70, 229, 0.08));
 
               .structure-title {
-                font-weight: 600;
+                               font-weight: 600;
                 color: #0f172a;
                 font-size: 1.0625rem;
               }
