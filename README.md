@@ -115,13 +115,21 @@ Project MARCUS follows a modern microservices architecture:
 git clone https://github.com/username/Project_MARCUS.git
 cd Project_MARCUS
 
-# Build and start the containers
+# For x86/x64 systems (Intel/AMD processors):
 docker-compose up -d
+
+# For Apple Silicon (M1/M2/M3) Mac users:
+docker-compose -f docker-compose.mac.yml up -d
 
 # Access the application
 # Frontend: http://localhost:8080
 # API documentation: http://localhost:8000/v1/docs
 ```
+
+### System Architecture Considerations
+
+- **x86/x64 Systems**: Use the standard `docker-compose.yml` file which includes CUDA dependencies for optimal performance.
+- **Apple Silicon Macs**: Use the Mac-specific `docker-compose.mac.yml` file which resolves TensorFlow and CUDA compatibility issues on ARM architecture.
 
 ### Environment Variables
 

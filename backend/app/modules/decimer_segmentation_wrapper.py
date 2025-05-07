@@ -175,7 +175,7 @@ def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[st
             # If we don't have metadata stored, try to load from the metadata file first
             if not segments_metadata:
                 segments_metadata = load_segment_metadata(segment_directory)
-                
+
                 # If still no metadata, create basic entries
                 if not segments_metadata:
                     all_segments_dir = os.path.join(segment_directory, "all_segments")
@@ -210,7 +210,7 @@ def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[st
                                         segments_metadata.append(segment_metadata)
                                     except ValueError:
                                         continue
-                
+
                 # Store the loaded/created metadata in the in-memory cache
                 if segments_metadata:
                     stored_segment_info[pdf_filename] = segments_metadata
@@ -270,16 +270,17 @@ def get_highlighted_segment_image(segment_id: str, pdf_filename: str) -> str:
         # Try to find the segment directory based on the PDF filename
         pdf_stem = Path(pdf_filename).stem
         matching_dirs = [
-            d for d in os.listdir(SEGMENTS_DIR)
+            d
+            for d in os.listdir(SEGMENTS_DIR)
             if d.startswith(pdf_stem) and os.path.isdir(os.path.join(SEGMENTS_DIR, d))
         ]
-        
+
         if matching_dirs:
             # Use the most recent directory
             segment_dir = os.path.join(SEGMENTS_DIR, matching_dirs[-1])
             # Load metadata from file
             segments_metadata = load_segment_metadata(segment_dir)
-            
+
             # Look for the segment in the loaded metadata
             for info in segments_metadata:
                 if info["segment_id"] == segment_id:
@@ -434,10 +435,12 @@ def segments_exist(filepath: str) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
-def save_segment_metadata(directory: str, segments_metadata: List[Dict[str, Any]]) -> None:
+def save_segment_metadata(
+    directory: str, segments_metadata: List[Dict[str, Any]]
+) -> None:
     """
     Save segment metadata to a JSON file in the segments directory
-    
+
     Args:
         directory: Directory to save metadata to
         segments_metadata: List of segment metadata dictionaries
@@ -449,10 +452,10 @@ def save_segment_metadata(directory: str, segments_metadata: List[Dict[str, Any]
             print(f"Warning: Directory does not exist: {directory}")
             os.makedirs(directory, exist_ok=True)
             print(f"Created directory: {directory}")
-            
-        with open(metadata_file, 'w') as f:
+
+        with open(metadata_file, "w") as f:
             json.dump(segments_metadata, f, indent=2)
-            
+
         # Verify the file was created
         if os.path.exists(metadata_file):
             file_size = os.path.getsize(metadata_file)
@@ -470,19 +473,19 @@ def save_segment_metadata(directory: str, segments_metadata: List[Dict[str, Any]
 def load_segment_metadata(directory: str) -> List[Dict[str, Any]]:
     """
     Load segment metadata from JSON file in the segments directory
-    
+
     Args:
         directory: Directory to load metadata from
-        
+
     Returns:
         List of segment metadata dictionaries
     """
     metadata_file = os.path.join(directory, "segments_metadata.json")
     print(f"Attempting to load metadata from: {metadata_file}")
-    
+
     if os.path.exists(metadata_file):
         try:
-            with open(metadata_file, 'r') as f:
+            with open(metadata_file, "r") as f:
                 data = json.load(f)
                 print(f"Successfully loaded metadata ({len(data)} segments)")
                 return data
@@ -491,7 +494,7 @@ def load_segment_metadata(directory: str) -> List[Dict[str, Any]]:
             print(f"File size: {os.path.getsize(metadata_file)} bytes")
             # Try to read the raw content for debugging
             try:
-                with open(metadata_file, 'r') as f:
+                with open(metadata_file, "r") as f:
                     content = f.read(100)  # Read first 100 chars
                     print(f"File content starts with: {content}...")
             except Exception as read_err:
@@ -500,5 +503,5 @@ def load_segment_metadata(directory: str) -> List[Dict[str, Any]]:
             print(f"Warning: Failed to load segment metadata: {str(e)}")
     else:
         print(f"Metadata file not found: {metadata_file}")
-    
+
     return []

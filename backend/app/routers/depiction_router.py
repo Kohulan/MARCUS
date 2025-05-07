@@ -24,6 +24,7 @@ router = APIRouter(
     },
 )
 
+
 # Pydantic models for request validation
 class DepictionRequest(BaseModel):
     """Model for depiction request parameters."""
@@ -312,9 +313,9 @@ async def depict_from_ocsr(
             highlight="",
             transparent=False,
             format=format,
-            use_molfile_directly=True
-            if use_molfile
-            else False,  # Use molfile directly if available
+            use_molfile_directly=(
+                True if use_molfile else False
+            ),  # Use molfile directly if available
         )
 
         # Return response based on format

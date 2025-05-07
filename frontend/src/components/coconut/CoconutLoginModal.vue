@@ -20,7 +20,7 @@
             <img src="@/assets/coconut-logo.svg" alt="COCONUT Logo" class="logo" 
                  onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjMTBiOTgxIiBkPSJNNTAgOTBjMjIuMSAwIDQwLTE3LjkgNDAtNDBTNzIuMSAxMCA1MCAxMCAxMCAyNy45IDEwIDUwczE3LjkgNDAgNDAgNDB6bTE5LjctMzAuOUw1MCQ0OS4yNnYtMjVsMTkuNyAxOC4yNmExLjk5IDEuOTkgMCAwMDIuODIgMCAxLjk5IDEuOTkgMCAwMDAtMi44MWwtMjAuOC0yMC44YTEuOTkgMS45OSAwIDAwLTIuODIgMGwtMjAuOCAyMC44YTEuOTkgMS45OSAwIDAwMCAyLjgxIDEuOTkgMS45OSAwIDAwMi44MiAwTDUwIDQ5LjI2VjcwYTEuOTkgMS45OSAwIDAwMS45OSAxLjk5QTEuOTkgMS45OSAwIDAwNTQgNzBWNDkuMjZsMTkuNyAxOS44NGEyIDIgMCAwMDIuODIgMCAyIDIgMCAwMDAtMi44MXoiLz48L3N2Zz4='" />
           </div>
-          <h3>Natural Products Online Database</h3>
+          <h3>COCONUT 2.0 Database</h3>
           <p>Please log in with your COCONUT account to submit molecules</p>
         </div>
         

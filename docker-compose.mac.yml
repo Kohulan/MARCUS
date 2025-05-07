@@ -16,7 +16,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        - TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
+        - TARGETPLATFORM=linux/arm64
     container_name: marcus-backend
     restart: always
     depends_on:
@@ -38,11 +38,7 @@ services:
     deploy:
       resources:
         reservations:
-          devices:
-            - driver: nvidia
-              count: 1  # Number of GPUs to use, adjust as needed
-              capabilities: [gpu]  
-          memory: 4G  # Reserve memory for the service
+          memory: 4G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s

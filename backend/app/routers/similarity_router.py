@@ -15,6 +15,7 @@ try:
 except ImportError:
     RDKIT_AVAILABLE = False
 
+
 # Define request and response models
 class SmilesComparisonRequest(BaseModel):
     smiles_list: List[str]

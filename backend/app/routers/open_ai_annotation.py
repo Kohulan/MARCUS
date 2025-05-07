@@ -249,10 +249,11 @@ async def list_extractions():
                         data = json.load(f)
                         metadata = {
                             "timestamp": data.get("timestamp", ""),
-                            "input_text_preview": data.get("input_text", "")[:100]
-                            + "..."
-                            if len(data.get("input_text", "")) > 100
-                            else data.get("input_text", ""),
+                            "input_text_preview": (
+                                data.get("input_text", "")[:100] + "..."
+                                if len(data.get("input_text", "")) > 100
+                                else data.get("input_text", "")
+                            ),
                         }
                 except:
                     pass
