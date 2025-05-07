@@ -112,10 +112,11 @@ listSegmentFiles: async (directory) => {
       // Create a unique ID that includes the page number
       const uniqueId = `page-${pageNum}-segment-${segmentIndex}`;
       
+      // FIXED: Don't construct the URL manually - this is missing the /latest/ prefix in development
+      // Instead, just store the path and let getApiImageUrl handle the proper URL construction
       return {
         id: uniqueId, // Use unique ID that includes page number
-        // Use consistent URL construction for image paths
-        imageUrl: `${api.defaults.baseURL}/decimer/get_segment_image/${directory}/all_segments/${filename}`,
+        // Don't set imageUrl here - let the imageUrl helper handle this consistently
         path: `${directory}/all_segments/${filename}`,
         filename: filename,
         pageNumber: pageNum + 1, // 1-based page number for display

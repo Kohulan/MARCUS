@@ -19,6 +19,103 @@ const getApiBaseUrl = () => {
   // Development fallback
   return 'http://localhost:9000';
 };
+
+// Helper function to get correct image URL in any environment
+export const getApiImageUrl = (path) => {
+  const baseUrl = getApiBaseUrl();
+  
+  // Handle empty or invalid paths
+  if (!path) return '';
+  
+  // Debug logging
+  console.log(`getApiImageUrl input path:`, path);
+  
+  // If the path already has a full URL with baseUrl but missing /latest/, fix it
+  if (path.startsWith(baseUrl) && path.includes('/decimer/get_segment_image/')) {
+    // Extract the path after the baseUrl
+    const urlPath = path.substring(baseUrl.length);
+    // Ensure /latest/ is included in the URL
+    const correctedUrl = `${baseUrl}/latest${urlPath}`;
+    console.log(`Corrected URL with /latest/ prefix:`, correctedUrl);
+    return correctedUrl;
+  }
+  
+  // If the path already starts with the base URL (and isn't a segment image), return it as is
+  if (path.startsWith(baseUrl)) {
+    console.log(`Path already starts with baseUrl, returning as is:`, path);
+    return path;
+  }
+  
+  // Handle segment image paths to ensure proper versioning and format
+  if (path.includes('all_segments')) {
+    // Extract relevant parts from the path
+    let cleanPath = path;
+    
+    // Remove /api/ prefix if present
+    if (cleanPath.startsWith('/api/')) {
+      cleanPath = cleanPath.replace('/api/', '');
+      console.log(`Removed /api/ prefix:`, cleanPath);
+    }
+    
+    // If path starts with decimer/get_segment_image, remove it to get clean path
+    if (cleanPath.startsWith('decimer/get_segment_image/')) {
+      cleanPath = cleanPath.replace('decimer/get_segment_image/', '');
+      console.log(`Removed decimer/get_segment_image/ prefix:`, cleanPath);
+    }
+    
+    // The backend expects a specific format for segment images:
+    // Instead of /Untitled-1/all_segments/page_0_0_segmented.png
+    // It needs /Untitled-1/page_0_0_segmented.png
+    
+    const pathParts = cleanPath.split('/');
+    console.log(`Path parts:`, pathParts);
+    
+    const pdfName = pathParts[0]; // e.g., Untitled-1
+    const filename = pathParts[pathParts.length - 1]; // e.g., page_0_0_segmented.png
+    
+    // This format matches exactly what the backend expects
+    const result = `${baseUrl}/latest/decimer/get_segment_image/${pdfName}/${filename}`;
+    console.log(`Created segment image URL:`, result);
+    return result;
+  }
+  
+  // If the path starts with /api/ but we're in development
+  if (path.startsWith('/api/')) {
+    // Extract the part after /api/
+    const pathWithoutApi = path.replace('/api/', '');
+    console.log(`Removed /api/ prefix:`, pathWithoutApi);
+    
+    // For development, construct with baseUrl
+    if (baseUrl !== '/api') {
+      const result = `${baseUrl}/${pathWithoutApi}`;
+      console.log(`Development URL constructed:`, result);
+      return result;
+    }
+    
+    // For production, keep as is
+    console.log(`Production URL kept as is:`, path);
+    return path;
+  }
+  
+  // For all other paths, ensure they have the /latest/ prefix
+  let result;
+  if (!path.startsWith('/')) {
+    result = `${baseUrl}/latest/${path}`;
+    console.log(`Added /latest/ prefix to path without leading slash:`, result);
+  } else {
+    // If path starts with / but not with /latest/
+    if (!path.startsWith('/latest/')) {
+      result = `${baseUrl}/latest${path}`;
+      console.log(`Added /latest/ prefix to path with leading slash:`, result);
+    } else {
+      result = `${baseUrl}${path}`;
+      console.log(`Path already has /latest/ prefix, just added baseUrl:`, result);
+    }
+  }
+  
+  return result;
+}
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: getApiBaseUrl(),

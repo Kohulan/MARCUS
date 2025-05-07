@@ -11,7 +11,9 @@ export default {
     rawData: null,        // Raw annotation data from API
     isLoading: false,     // Loading state
     error: null,          // Error information
-    savedFilename: null   // Filename of saved annotation result on server
+    savedFilename: null,  // Filename of saved annotation result on server
+    doi: null,            // Dedicated property for storing DOI
+    doiMetadata: null     // Metadata fetched from DOI
   },
   
   mutations: {
@@ -32,6 +34,13 @@ export default {
     },
     SET_SAVED_FILENAME(state, filename) {
       state.savedFilename = filename
+    },
+    // Add new mutations for storing DOI
+    SET_DOI(state, doi) {
+      state.doi = doi
+    },
+    SET_DOI_METADATA(state, metadata) {
+      state.doiMetadata = metadata
     }
   },
   
@@ -162,6 +171,30 @@ export default {
       commit('SET_RAW_DATA', null)
       commit('SET_SAVED_FILENAME', null)
       commit('CLEAR_ERROR')
+      
+      // We intentionally don't clear DOI to preserve it between operations
+      // This ensures the DOI persists even when switching between structures
+    },
+    
+    /**
+     * Set the DOI and optionally its metadata
+     * @param {Object} context - Vuex action context
+     * @param {Object} payload - DOI information
+     * @param {string} payload.doi - The DOI string
+     * @param {Object} payload.metadata - Optional DOI metadata
+     */
+    setDoi({ commit }, { doi, metadata = null }) {
+      if (doi) {
+        commit('SET_DOI', doi)
+        
+        // Also store in rawData for backward compatibility
+        const rawData = { ...(this.state.annotations.rawData || {}), doi }
+        commit('SET_RAW_DATA', rawData)
+      }
+      
+      if (metadata) {
+        commit('SET_DOI_METADATA', metadata)
+      }
     }
   },
   
@@ -190,6 +223,27 @@ export default {
       // Get unique annotation types/labels
       return [...new Set(state.items.map(item => item.label))]
     },
-    annotationCount: state => state.items ? state.items.length : 0
+    annotationCount: state => state.items ? state.items.length : 0,
+    // Add getters for DOI
+    doi: state => state.doi,
+    doiMetadata: state => state.doiMetadata,
+    // Helper getter to extract DOI from any available source
+    extractedDoi: state => {
+      // First check direct DOI property
+      if (state.doi) return state.doi;
+      
+      // Then check in rawData
+      if (state.rawData && state.rawData.doi) return state.rawData.doi;
+      
+      // Look in annotations for DOI
+      if (state.items && state.items.length > 0) {
+        const doiAnnotation = state.items.find(item => 
+          item.label === 'doi' || item.label === 'reference_id'
+        );
+        if (doiAnnotation) return doiAnnotation.text;
+      }
+      
+      return null;
+    }
   }
 }

@@ -26,7 +26,7 @@ export default {
     processedStructuresCache: new Map(), // Cache map for structure lookup by filename
     selectedSegments: new Map(), // Map to track selected segments (id -> boolean)
     hideIncorrectSegments: false, // Flag to hide/show incorrect segments
-    onlyProcessSelected: false, // Flag to only process selected segments
+    onlyProcessSelected: true, // Flag to only process selected segments - DEFAULT ON
   },
 
   mutations: {
@@ -671,9 +671,9 @@ export default {
       if (!state.hideIncorrectSegments || state.selectedSegments.size === 0)
         return state.segments;
 
-      // If hide incorrect segments is enabled, filter out unselected segments
+      // If hide incorrect segments is enabled, only show selected segments
       return state.segments.filter(
-        (segment) => state.selectedSegments.get(segment.id) !== false
+        (segment) => state.selectedSegments.get(segment.id) === true
       );
     },
 

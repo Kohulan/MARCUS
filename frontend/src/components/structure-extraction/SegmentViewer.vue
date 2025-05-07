@@ -22,8 +22,11 @@
           </div>
 
           <div class="segment-actions">
-            <button class="btn-action btn-context" @click="showInContext" title="View in PDF context">
-              <vue-feather type="file-text" size="16"></vue-feather>
+            <button class="view-context-btn" @click="showInContext">
+              <div class="btn-content">
+                <vue-feather type="file-text" size="16" class="context-icon"></vue-feather>
+                <span>View in PDF Context</span>
+              </div>
             </button>
             <button class="btn-action btn-close" @click="$emit('close')" title="Close">
               <vue-feather type="x" size="16"></vue-feather>
@@ -44,6 +47,7 @@
         <div class="content-panels">
           <div class="panel original-panel">
             <div class="download-container">
+
               <button class="download-btn" @click="downloadSegmentImage">
                 <vue-feather type="download" size="16" class="download-icon"></vue-feather>
                 <span>Download Image</span>
@@ -536,6 +540,7 @@ import SimilarityComparison from './SimilarityComparison.vue'
 import ocsrService from '@/services/ocsrService'
 import depictionService from '@/services/depictionService'
 import similarityService from '@/services/similarityService'
+import { getApiImageUrl } from '@/services/api'
 
 export default {
   name: 'SegmentViewer',
@@ -898,8 +903,10 @@ export default {
           }
         }
 
-        // Construct the URL for the highlighted page endpoint using relative API path
-        const url = `/api/decimer/get_highlighted_page/${encodeURIComponent(segmentFilename)}?pdf_filename=${encodeURIComponent(pdfFilename)}`;
+        // FIXED: Construct the URL with the proper format for both development and production
+        // Instead of using /api path directly, construct the path correctly with getApiImageUrl
+        const apiPath = `/decimer/get_highlighted_page/${encodeURIComponent(segmentFilename)}?pdf_filename=${encodeURIComponent(pdfFilename)}`;
+        const url = getApiImageUrl(apiPath);
 
         console.log('Requesting highlighted page:', url);
 
@@ -1113,15 +1120,17 @@ export default {
       // If the segment already has a URL, use it
       if (this.segment.imageUrl) {
         console.log('Using existing segment image URL:', this.segment.imageUrl);
-        this.segmentUrl = this.segment.imageUrl;
+        // Apply the URL conversion to ensure it works in both development and production
+        this.segmentUrl = getApiImageUrl(this.segment.imageUrl);
         this.isLoading = false;
         return;
       }
 
       try {
         if (this.segment.path) {
-          // Use relative URL path through the API proxy
-          this.segmentUrl = `/api/decimer/get_segment_image/${this.segment.path}`;
+          // Pass just the segment path to getApiImageUrl - it will construct the right URL
+          // The helper will detect the "all_segments" path pattern and add the necessary prefix
+          this.segmentUrl = getApiImageUrl(this.segment.path);
           console.log('Created segment URL from path:', this.segmentUrl);
         } else {
           throw new Error('No image URL or path provided');
@@ -1664,18 +1673,6 @@ export default {
                   background-color: #4f46e5;
                   border-color: #4f46e5;
                   box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
-
-                  &::after {
-                    content: '';
-                    position: absolute;
-                    top: 3px;
-                    left: 6px;
-                    width: 6px;
-                    height: 10px;
-                    border: solid white;
-                    border-width: 0 2px 2px 0;
-                    transform: rotate(45deg);
-                  }
                 }
 
                 &:hover {
@@ -1699,18 +1696,56 @@ export default {
           display: flex;
           gap: 0.625rem;
 
+          .view-context-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            border: none;
+            cursor: pointer;
+            background: linear-gradient(135deg, #ffdd43 0%, #ffb70f 100%);
+            box-shadow: 0 2px 5px rgba(100, 116, 139, 0.3);
+            transition: all 0.3s ease;
+            color: white;
+
+            .btn-content {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+            }
+
+            .context-icon {
+              opacity: 0.9;
+            }
+
+            &:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 4px 8px rgba(100, 116, 139, 0.4);
+              background: linear-gradient(135deg, #fff4d0 0%, #c9af44 100%);
+              color: #1e293b;
+            }
+
+            &:active {
+              transform: translateY(0);
+              box-shadow: 0 2px 4px rgba(100, 116, 139, 0.3);
+            }
+          }
+
           .btn-action {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             border: none;
-            border-radius: 12px;
+            border-radius: 10px;
             background-color: rgba(241, 245, 249, 0.7);
             color: #64748b;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.3s ease;
             backdrop-filter: blur(4px);
             border: 1px solid rgba(226, 232, 240, 0.6);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
@@ -1719,7 +1754,7 @@ export default {
               background-color: white;
               color: #334155;
               transform: translateY(-2px);
-              box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
               border-color: rgba(226, 232, 240, 0.8);
             }
 
@@ -1731,18 +1766,6 @@ export default {
               background-color: #fee2e2;
               color: #ef4444;
               border-color: rgba(254, 202, 202, 0.8);
-            }
-
-            &.btn-context:hover {
-              background-color: #e6f7ff;
-              color: #0284c7;
-              border-color: rgba(186, 230, 253, 0.8);
-            }
-
-            &.btn-copy:hover {
-              background-color: #e0f2fe;
-              color: #0284c7;
-              border-color: rgba(186, 230, 253, 0.8);
             }
           }
         }
@@ -1799,8 +1822,7 @@ export default {
           height: fit-content;
           transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
           border: 1px solid rgba(255, 255, 255, 0.4);
-          backdrop-filter: blur(10px);
-
+         
           &:hover {
             transform: translateY(-4px);
             box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
@@ -1824,7 +1846,7 @@ export default {
                 font-size: 0.875rem;
                 font-weight: 500;
                 padding: 0.5rem 0.75rem;
-                border-radius: 8px;
+                               border-radius: 8px;
                 cursor: pointer;
                 transition: all 0.25s ease;
                 border: 1px solid rgba(226, 232, 240, 0.8);
@@ -2374,15 +2396,11 @@ export default {
           &:hover {
             background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(79, 70, 229, 0.4);
-
-            &::before {
-              opacity: 1;
-            }
+            box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
           }
 
           &:active {
-            transform: translateY(0px);
+            transform: translateY(0);
           }
 
           &.pulse-effect {
@@ -2481,33 +2499,10 @@ export default {
                 background-color: #4f46e5;
                 border-color: #4f46e5;
                 box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
-
-                &:after {
-                  content: '';
-                  position: absolute;
-                  width: 5px;
-                  height: 10px;
-                  border: solid white;
-                  border-width: 0 2px 2px 0;
-                  top: 3px;
-                  left: 6px;
-                  transform: rotate(45deg);
-                }
               }
 
-              &:hover:not(:disabled) {
-                border-color: #94a3b8;
-              }
-
-              &:focus {
-                outline: 2px solid rgba(79, 70, 229, 0.3);
-                outline-offset: 2px;
-              }
-
-              &:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-                background-color: #f1f5f9;
+              &:hover {
+                border-color: #4f46e5;
               }
             }
 
@@ -2904,7 +2899,7 @@ export default {
                         height: 60px;
                         border-radius: 50%;
                         background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, rgba(79, 70, 229, 0.01) 70%);
-                        animation: pulse 1.5s ease-in-out infinite alternate;
+                        animation: pulse 1.5s ease-in-out infinite;
                       }
 
                       .loading-icon {
@@ -3671,137 +3666,6 @@ export default {
         font-size: 1.125rem;
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
       }
-    }
-  }
-}
-
-/* Animations */
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(0.85);
-    opacity: 0.7;
-  }
-
-  100% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes float {
-  0% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
-
-  100% {
-    transform: translateY(0px);
-  }
-}
-
-@keyframes subtle-pulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
-  }
-
-  50% {
-    transform: scale(1.03);
-    box-shadow: 0 8px 16px rgba(79, 70, 229, 0.4);
-  }
-
-  100% {
-    transform: scale(1);
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
-  }
-}
-
-/* Mobile specific styling */
-@media (max-width: 768px) {
-  .segment-viewer {
-    .compare-callout {
-      flex-direction: column;
-      text-align: center;
-
-      .callout-icon {
-        margin-right: 0;
-        margin-bottom: 1rem;
-      }
-
-      .callout-text {
-        margin-bottom: 1.25rem;
-      }
-
-      .compare-btn {
-        width: 100%;
-        justify-content: center;
-      }
-    }
-
-    .comparison-mode {
-      .comparison-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1.25rem;
-
-        .back-btn {
-          align-self: flex-start;
-        }
-      }
-
-      .quick-summary {
-        flex-direction: column;
-
-        .summary-stats {
-          justify-content: center;
-        }
-      }
-    }
-
-    .content-panels {
-      flex-direction: column;
-
-      .panel {
-        width: 100%;
-      }
-    }
-
-    .section-headers {
-      flex-direction: column;
-      gap: 0.75rem;
-
-      .header-item {
-        justify-content: center;
-      }
-    }
-  }
-
-  .context-view-container {
-    .context-view-content {
-      padding: 0.75rem;
     }
   }
 }
