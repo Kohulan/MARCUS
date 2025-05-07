@@ -1,12 +1,11 @@
 <div align="center">
 
-# 🧪 Project MARCUS 🧬
+# 🧪 MARCUS 🧬
 
 ### **M**olecular **A**nnotation and **R**ecognition for **C**urating **U**nravelled **S**tructures
 
 <p align="center">
-  <!-- You can add a logo image here once available -->
-  <!-- <img src="path/to/logo/image.png" alt="MARCUS Logo" width="600"> -->
+  <!-- <img src="https://github.com/Kohulan/MARCUS/blob/main/frontend/public/logo.png" alt="MARCUS Logo" width="600"> -->
 </p>
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
@@ -112,7 +111,7 @@ Project MARCUS follows a modern microservices architecture:
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/Project_MARCUS.git
+git clone https://github.com/Kohulan/MARCUS.git
 cd Project_MARCUS
 
 # For x86/x64 systems (Intel/AMD processors):
