@@ -73,8 +73,7 @@ else \
 fi
 
 # Install specialized packages
-RUN pip install docling && \
-    pip install decimer --no-deps && \
+RUN pip install decimer --no-deps && \
     pip install git+https://github.com/Kohulan/MolNexTR.git --no-deps && \
     pip install git+https://github.com/CrystalEye42/MolScribe.git@250f683f52f5050eb624870ccfd04bccbcaa27e1 --no-deps && \
     pip install git+https://github.com/Kohulan/DECIMER-Image-Segmentation.git@bbox --no-deps
@@ -88,8 +87,8 @@ RUN mkdir -p /app/uploads/pdfs \
     /app/uploads/openai_results \
     /app/models/docling
 
-# Copy prefetched models if they exist
-COPY ./models/docling /app/models/docling
+# Models are mounted at runtime via docker-compose volume mounts
+# No need to copy models during build time
 
 COPY .env* /app/
 
