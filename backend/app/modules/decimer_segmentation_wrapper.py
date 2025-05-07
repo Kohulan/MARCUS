@@ -4,6 +4,7 @@ import uuid
 import re
 import cv2
 import numpy as np
+import json
 from typing import List, Optional, Tuple, Dict, Any
 from PIL import Image
 from pathlib import Path
@@ -141,6 +142,9 @@ def get_segments_with_bbox(
                 detail=f"Error segmenting page {page_num}: {str(e)}",
             )
 
+    # Save segment metadata to a file for later use
+    save_segment_metadata(base_directory, segments_metadata)
+
     return base_directory, segments_metadata
 
 
@@ -168,40 +172,48 @@ def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[st
             pdf_filename = os.path.basename(path_to_pdf)
             segments_metadata = stored_segment_info.get(pdf_filename, [])
 
-            # If we don't have metadata stored, create basic entries
+            # If we don't have metadata stored, try to load from the metadata file first
             if not segments_metadata:
-                all_segments_dir = os.path.join(segment_directory, "all_segments")
-                if os.path.exists(all_segments_dir):
-                    # Create minimal metadata from filenames
-                    for segment_file in os.listdir(all_segments_dir):
-                        if segment_file.endswith("_segmented.png"):
-                            parts = segment_file.split("_")
-                            if len(parts) >= 3 and parts[0] == "page":
-                                try:
-                                    page_num = int(parts[1])
-                                    idx = int(parts[2])
-                                    segment_id = f"segment-{page_num}-{idx}"
+                segments_metadata = load_segment_metadata(segment_directory)
+                
+                # If still no metadata, create basic entries
+                if not segments_metadata:
+                    all_segments_dir = os.path.join(segment_directory, "all_segments")
+                    if os.path.exists(all_segments_dir):
+                        # Create minimal metadata from filenames
+                        for segment_file in os.listdir(all_segments_dir):
+                            if segment_file.endswith("_segmented.png"):
+                                parts = segment_file.split("_")
+                                if len(parts) >= 3 and parts[0] == "page":
+                                    try:
+                                        page_num = int(parts[1])
+                                        idx = int(parts[2])
+                                        segment_id = f"segment-{page_num}-{idx}"
 
-                                    segment_metadata = {
-                                        "segment_id": segment_id,
-                                        "filename": segment_file,
-                                        "path": os.path.join(
-                                            "all_segments", segment_file
-                                        ),
-                                        "full_path": os.path.join(
-                                            all_segments_dir, segment_file
-                                        ),
-                                        "pageNumber": page_num,
-                                        "segmentNumber": idx + 1,
-                                        "pdfFilename": pdf_filename,
-                                        # We don't have bbox info for existing segments without
-                                        # reprocessing, so use a default that encompasses the whole page
-                                        "bbox": [0, 0, 1000, 1000],
-                                    }
+                                        segment_metadata = {
+                                            "segment_id": segment_id,
+                                            "filename": segment_file,
+                                            "path": os.path.join(
+                                                "all_segments", segment_file
+                                            ),
+                                            "full_path": os.path.join(
+                                                all_segments_dir, segment_file
+                                            ),
+                                            "pageNumber": page_num,
+                                            "segmentNumber": idx + 1,
+                                            "pdfFilename": pdf_filename,
+                                            # We don't have bbox info for existing segments without
+                                            # reprocessing, so use a default that encompasses the whole page
+                                            "bbox": [0, 0, 1000, 1000],
+                                        }
 
-                                    segments_metadata.append(segment_metadata)
-                                except ValueError:
-                                    continue
+                                        segments_metadata.append(segment_metadata)
+                                    except ValueError:
+                                        continue
+                
+                # Store the loaded/created metadata in the in-memory cache
+                if segments_metadata:
+                    stored_segment_info[pdf_filename] = segments_metadata
         else:
             # Run the segmentation with bounding box collection
             segment_directory, segments_metadata = get_segments_with_bbox(
@@ -253,7 +265,32 @@ def get_highlighted_segment_image(segment_id: str, pdf_filename: str) -> str:
                 segment_info = info
                 break
 
-    # If not found in stored info, try to extract details from segment_id
+    # If not found in stored info, try to load from metadata file
+    if not segment_info:
+        # Try to find the segment directory based on the PDF filename
+        pdf_stem = Path(pdf_filename).stem
+        matching_dirs = [
+            d for d in os.listdir(SEGMENTS_DIR)
+            if d.startswith(pdf_stem) and os.path.isdir(os.path.join(SEGMENTS_DIR, d))
+        ]
+        
+        if matching_dirs:
+            # Use the most recent directory
+            segment_dir = os.path.join(SEGMENTS_DIR, matching_dirs[-1])
+            # Load metadata from file
+            segments_metadata = load_segment_metadata(segment_dir)
+            
+            # Look for the segment in the loaded metadata
+            for info in segments_metadata:
+                if info["segment_id"] == segment_id:
+                    segment_info = info
+                    # Update in-memory cache
+                    if not pdf_filename in stored_segment_info:
+                        stored_segment_info[pdf_filename] = []
+                    stored_segment_info[pdf_filename].append(info)
+                    break
+
+    # If still not found, try to extract details from segment_id
     if not segment_info:
         try:
             # Extract page and segment numbers from segment_id (format: segment-{page}-{number})
@@ -395,3 +432,73 @@ def segments_exist(filepath: str) -> Tuple[bool, Optional[str]]:
             return True, str(base_directory)
 
     return False, None
+
+
+def save_segment_metadata(directory: str, segments_metadata: List[Dict[str, Any]]) -> None:
+    """
+    Save segment metadata to a JSON file in the segments directory
+    
+    Args:
+        directory: Directory to save metadata to
+        segments_metadata: List of segment metadata dictionaries
+    """
+    try:
+        metadata_file = os.path.join(directory, "segments_metadata.json")
+        print(f"Saving metadata to: {metadata_file}")
+        if not os.path.exists(directory):
+            print(f"Warning: Directory does not exist: {directory}")
+            os.makedirs(directory, exist_ok=True)
+            print(f"Created directory: {directory}")
+            
+        with open(metadata_file, 'w') as f:
+            json.dump(segments_metadata, f, indent=2)
+            
+        # Verify the file was created
+        if os.path.exists(metadata_file):
+            file_size = os.path.getsize(metadata_file)
+            print(f"Successfully saved metadata file ({file_size} bytes)")
+        else:
+            print(f"Error: Metadata file not found after saving: {metadata_file}")
+    except Exception as e:
+        print(f"Error saving segment metadata: {str(e)}")
+        # Print more debugging information
+        print(f"Directory exists: {os.path.exists(directory)}")
+        print(f"Directory is writable: {os.access(directory, os.W_OK)}")
+        print(f"Segments metadata count: {len(segments_metadata)}")
+
+
+def load_segment_metadata(directory: str) -> List[Dict[str, Any]]:
+    """
+    Load segment metadata from JSON file in the segments directory
+    
+    Args:
+        directory: Directory to load metadata from
+        
+    Returns:
+        List of segment metadata dictionaries
+    """
+    metadata_file = os.path.join(directory, "segments_metadata.json")
+    print(f"Attempting to load metadata from: {metadata_file}")
+    
+    if os.path.exists(metadata_file):
+        try:
+            with open(metadata_file, 'r') as f:
+                data = json.load(f)
+                print(f"Successfully loaded metadata ({len(data)} segments)")
+                return data
+        except json.JSONDecodeError as e:
+            print(f"Warning: JSON decode error loading segment metadata: {str(e)}")
+            print(f"File size: {os.path.getsize(metadata_file)} bytes")
+            # Try to read the raw content for debugging
+            try:
+                with open(metadata_file, 'r') as f:
+                    content = f.read(100)  # Read first 100 chars
+                    print(f"File content starts with: {content}...")
+            except Exception as read_err:
+                print(f"Could not read file content: {str(read_err)}")
+        except Exception as e:
+            print(f"Warning: Failed to load segment metadata: {str(e)}")
+    else:
+        print(f"Metadata file not found: {metadata_file}")
+    
+    return []

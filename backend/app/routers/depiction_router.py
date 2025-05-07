@@ -120,7 +120,6 @@ async def create_depiction(request: DepictionRequest):
     Returns:
         Response with the generated depiction in the requested format
     """
-    print(f"Received request: {request.json()}")
     try:
         # Validate input - require either SMILES or molfile
         if not request.smiles and not request.molfile:
