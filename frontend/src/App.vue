@@ -198,4 +198,36 @@ export default {
   opacity: 0;
   transform: translateX(30px);
 }
+
+// Add styles for the info icon and tooltip
+.info-icon-blue {
+  color: #3b82f6 !important;
+  cursor: help;
+  transition: transform 0.2s ease;
+  
+  &:hover {
+    transform: scale(1.1);
+  }
+}
+
+// Enhanced tooltip styling
+.custom-tooltip-theme {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  padding: 10px 14px !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  max-width: 300px !important;
+  z-index: 1500 !important;
+  
+  // Dark mode styling
+  @media (prefers-color-scheme: dark) {
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #475569 !important;
+  }
+}
 </style>

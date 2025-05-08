@@ -99,7 +99,7 @@
               >
                 <div class="button-content">
                   <vue-feather type="download-cloud" class="export-icon"></vue-feather>
-                  <span class="label">Export Data</span>
+                  <span class="label">Download Data</span>
                   <div class="badge-container" v-if="selectedSegmentCount > 0">
                     <span class="badge">{{ selectedSegmentCount }}</span>
                   </div>
@@ -117,7 +117,7 @@
               >
                 <div class="button-content">
                   <vue-feather type="database" class="coconut-icon"></vue-feather>
-                  <span class="label">Submit to COCONUT</span>
+                  <span class="label">Prepare for COCONUT</span>
                 </div>
                 <div class="button-glow"></div>
               </button>
@@ -188,7 +188,12 @@
               <h3 class="section-title">Molecule Information</h3>
               
               <div class="form-group">
-                <label for="molecule-title">Title</label>
+                <label for="molecule-title">
+                  Submission Identifier
+                  <span class="info-icon" title="This identifier is used only for tracking COCONUT submissions. It will not be included in the public database once the molecule is published.">
+                    <vue-feather type="info" size="16" class="info-icon-blue"></vue-feather>
+                  </span>
+                </label>
                 <input 
                   type="text" 
                   id="molecule-title" 
@@ -271,7 +276,7 @@
               <div v-for="(organism, index) in coconutForm.organisms" :key="index" class="organism-section">
                 <div class="organism-header">
                   <h4 class="organism-title">Organism {{ index + 1 }}</h4>
-                  <button v-if="index > 0" type="button" class="btn-remove" @click="removeOrganism(index)">
+                  <button v-if="coconutForm.organisms.length > 1" type="button" class="btn-remove" @click="removeOrganism(index)">
                     <vue-feather type="trash-2" size="16"></vue-feather>
                   </button>
                 </div>
@@ -446,9 +451,17 @@ export default {
       return this.selectedSegmentCount === 1;
     },
     
+    // Check if at least one valid organism exists (with a name)
+    hasValidOrganism() {
+      return this.coconutForm.organisms.some(organism => organism.name.trim() !== '');
+    },
+    
     // New computed property to validate the form
     isFormValid() {
-      return this.coconutForm.title && this.coconutForm.name && this.coconutForm.evidence;
+      return this.coconutForm.title && 
+             this.coconutForm.name && 
+             this.coconutForm.evidence &&
+             this.hasValidOrganism;
     }
   },
   
@@ -1209,10 +1222,8 @@ async populateFormFromAnnotations() {
     let doiData = null;
     if (doi) {
       try {
-        console.log("Fetching DOI metadata for:", doi);
         doiData = await publicationService.fetchFromDOI(doi);
         this.coconutForm.doiData = doiData;
-        console.log("DOI data received:", doiData);
         
         // Set title per requirements - MARCUS_Submission with firstauthor name and year
         if (doiData.firstAuthor && doiData.year) {
@@ -1776,19 +1787,16 @@ getStoredDOI() {
   if (annotationData) {
     // Check direct DOI field
     if (annotationData.doi) {
-      console.log("Found DOI in annotationData.doi:", annotationData.doi);
       return annotationData.doi;
     }
     
     // Check DOI in extracted_json if available
     if (annotationData.extracted_json && annotationData.extracted_json.doi) {
-      console.log("Found DOI in annotationData.extracted_json.doi:", annotationData.extracted_json.doi);
       return annotationData.extracted_json.doi;
     }
     
     // Check if we've stored coconut_title separately
     if (annotationData.coconut_title) {
-      console.log("Found pre-generated title:", annotationData.coconut_title);
       // Even if we don't have the DOI, we can still use the pre-generated title
       this.coconutForm.title = annotationData.coconut_title;
     }
@@ -1833,7 +1841,6 @@ getStoredDOI() {
         // Use array destructuring but skip the first match (the full matched string)
         const [, year, author] = filenameMatch;
         const defaultTitle = `MARCUS_Submission ${author} ${year}`;
-        console.log("Generated title from filename:", defaultTitle);
         this.coconutForm.title = defaultTitle;
       }
     }
@@ -2093,7 +2100,7 @@ getStoredDOI() {
     background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
     cursor: not-allowed;
     opacity: 0.8;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), 0 0 0 0 0 1px rgba(255, 255, 255, 0.1);
     filter: saturate(0.7);
   }
   
@@ -2466,6 +2473,12 @@ getStoredDOI() {
   padding: 0.5rem;
   border: 1px solid #e5e7eb;
   border-radius: 4px;
+}
+
+/* Add custom placeholder styling */
+.form-control::placeholder {
+  color: rgba(153, 157, 163, 0.6);
+  font-style: italic;
 }
 
 .organism-section {

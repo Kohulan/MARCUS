@@ -47,7 +47,6 @@
         <div class="content-panels">
           <div class="panel original-panel">
             <div class="download-container">
-
               <button class="download-btn" @click="downloadSegmentImage">
                 <vue-feather type="download" size="16" class="download-icon"></vue-feather>
                 <span>Download Image</span>
@@ -473,10 +472,12 @@
               <span>{{ findingMCS ? 'Finding MCS...' : 'Highlight Common Structure' }}</span>
             </button>
 
-            <button class="analyze-btn" @click="compareAcrossEngines" :disabled="!canCompare">
-              <vue-feather type="activity" size="16" class="btn-icon"></vue-feather>
-              <span>Run Full Analysis</span>
-            </button>
+            <button class="analyze-btn" @click="compareAcrossEngines" 
+        :disabled="!canCompare || isComparing">
+  <vue-feather :type="isComparing ? 'loader' : 'activity'" 
+               :class="{'spin': isComparing}" size="16" class="btn-icon"></vue-feather>
+  <span>{{ isComparing ? 'Running Analysis...' : 'Run Analysis' }}</span>
+</button>
           </div>
 
           <!-- Detailed Similarity Section (Collapsible) -->
@@ -485,8 +486,13 @@
               <SimilarityComparison :comparison-result="comparisonResult" :is-loading="isComparing"
                 :error="comparisonError" :original-smiles-list="smilesListForComparison" />
             </div>
-            <div v-else-if="!hasRunFullAnalysis" class="run-analysis-prompt">
-              <p>Click "Run Full Analysis" above to see detailed similarity metrics between engines</p>
+            <div v-else-if="!hasRunFullAnalysis && !isComparing" class="run-analysis-prompt">
+              <vue-feather type="loader" class="loading-icon spin" size="24"></vue-feather>
+              <p>Analysis will run automatically when all engines have loaded...</p>
+            </div>
+            <div v-else-if="isComparing" class="run-analysis-prompt">
+              <vue-feather type="loader" class="loading-icon spin" size="24"></vue-feather>
+              <p>Running detailed similarity analysis...</p>
             </div>
             <div v-else-if="comparisonError" class="analysis-error">
               <vue-feather type="alert-circle" size="20" class="error-icon"></vue-feather>
@@ -600,7 +606,9 @@ export default {
       hasIdenticalResults: false,
       findingMCS: false, // Property for MCS finding
       // New properties for engine selection
-      selectedEngine: null // Will store 'decimer', 'molnextr', or 'molscribe'
+      selectedEngine: null, // Will store 'decimer', 'molnextr', or 'molscribe'
+      // New property to enable/disable auto analysis
+      autoAnalysisEnabled: true
     }
   },
   computed: {
@@ -665,11 +673,30 @@ export default {
         }
       }
     },
-    // Watch for engine results to calculate similarity stats
+    // Watch for engine results to calculate similarity stats and auto-run full analysis
     allEnginesLoaded: {
       handler(allLoaded) {
         if (allLoaded && !this.hasRunFullAnalysis) {
           this.calculateQuickSimilarity();
+          
+          // Automatically run the full analysis when in comparison mode and engines are loaded
+          if (this.comparisonMode && this.canCompare && this.autoAnalysisEnabled) {
+            // Add a small delay to ensure UI is responsive
+            setTimeout(() => {
+              this.compareAcrossEngines();
+            }, 300);
+          }
+        }
+      }
+    },
+    // Watch for when user enters comparison mode to automatically run analysis
+    comparisonMode: {
+      handler(newValue) {
+        if (newValue && this.allEnginesLoaded && !this.hasRunFullAnalysis && this.canCompare && this.autoAnalysisEnabled) {
+          // If user just entered comparison mode and engines are already loaded, run analysis
+          setTimeout(() => {
+            this.compareAcrossEngines();
+          }, 300);
         }
       }
     },
@@ -991,6 +1018,9 @@ export default {
       // Run the comparison with all engines
       this.runComparisonManual();
 
+      // No need to explicitly call compareAcrossEngines() here as it will be triggered 
+      // automatically by the watcher when engines are loaded
+
       // Emit an event to notify parent component
       this.$emit('run-comparison', this.segment);
     },
@@ -1275,7 +1305,7 @@ export default {
 
       this.isComparing = true;
       this.comparisonError = '';
-      this.hasRunFullAnalysis = true;
+      this.hasRunFullAnalysis = true; // Set this to true to prevent duplicate runs
 
       try {
         // Make sure all engines have completed processing
@@ -1330,7 +1360,7 @@ export default {
         // Notify the user with a success message
         this.$emit('notification', {
           type: 'success',
-          message: 'Full analysis completed successfully'
+          message: 'Full analysis completed automatically'
         });
       } catch (error) {
         console.error('Error comparing SMILES:', error);
