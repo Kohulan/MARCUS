@@ -396,18 +396,6 @@ export default {
       border: none;
     }
 
-    .pdf-link-blocker {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 10;
-      background: transparent;
-      pointer-events: all;
-      cursor: not-allowed;
-    }
-
     .fallback-message {
       display: flex;
       flex-direction: column;
