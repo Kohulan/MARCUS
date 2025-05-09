@@ -109,16 +109,15 @@ Project MARCUS follows a modern microservices architecture:
 
 ### Installation
 
+**For x86/x64 systems (Intel/AMD processors):**
 ```bash
-# Clone the repository
-git clone https://github.com/Kohulan/MARCUS.git
-cd Project_MARCUS
-
-# For x86/x64 systems (Intel/AMD processors):
 docker-compose up -d
+```
 
-# For Apple Silicon (M1/M2/M3) Mac users:
+**For Apple Silicon (M1/M2/M3) Mac users:**
+```bash
 docker-compose -f docker-compose.mac.yml up -d
+```
 
 # Access the application
 # Frontend: http://localhost:8080
@@ -129,17 +128,6 @@ docker-compose -f docker-compose.mac.yml up -d
 
 - **x86/x64 Systems**: Use the standard `docker-compose.yml` file which includes CUDA dependencies for optimal performance.
 - **Apple Silicon Macs**: Use the Mac-specific `docker-compose.mac.yml` file which resolves TensorFlow and CUDA compatibility issues on ARM architecture.
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL_ID=your_fine_tuned_model_id
-HOMEPAGE_URL=/v1/docs
-RELEASE_VERSION=1.0
-```
 
 ---
 
