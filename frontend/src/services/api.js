@@ -207,9 +207,18 @@ api.interceptors.response.use(
 export const checkBackendHealth = async () => {
   try {
     console.log('Checking backend health...');
-    // Use axios directly to bypass the interceptors since health endpoint doesn't use /latest
-    const baseUrl = getApiBaseUrl();
-    const url = `${baseUrl}/health`;
+    
+    // Special case for production environment
+    let url;
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      // Use the direct API domain for health check in production
+      url = 'https://api.marcus.decimer.ai/health';
+    } else {
+      // For all other environments, use the base URL
+      const baseUrl = getApiBaseUrl();
+      url = `${baseUrl}/health`;
+    }
+    
     console.log('Health check URL:', url);
     
     const response = await axios.get(url);
