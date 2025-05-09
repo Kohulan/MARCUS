@@ -203,4 +203,25 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+// Health check function to check if backend is ready
+export const checkBackendHealth = async () => {
+  try {
+    console.log('Checking backend health...');
+    // Use axios directly instead of the api instance to bypass interceptors
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/health`;
+    console.log('Health check URL:', url);
+    
+    const response = await axios.get(url);
+    console.log('Health check response:', response.data);
+    
+    const isReady = response.data.status === 'OK';
+    console.log('Backend ready:', isReady);
+    return isReady;
+  } catch (error) {
+    console.error('Backend health check failed:', error);
+    return false;
+  }
+};
+
 export default api;
