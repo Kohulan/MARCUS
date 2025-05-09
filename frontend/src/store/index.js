@@ -17,57 +17,70 @@ export default createStore({
   state: {
     notifications: [],
     isDisclaimerVisible: false,
-    isFeaturesVisible: false
+    isFeaturesVisible: false,
+    isAboutVisible: false
   },
   mutations: {
     ADD_NOTIFICATION(state, notification) {
       const id = Date.now().toString()
       state.notifications.push({
         id,
-        type: notification.type || 'info',
-        message: notification.message,
-        duration: notification.duration || 5000
+        ...notification,
       })
       
-      // Auto-remove notification after duration
-      if (notification.duration !== 0) {
-        setTimeout(() => {
-          this.commit('REMOVE_NOTIFICATION', id)
-        }, notification.duration || 5000)
-      }
+      // Auto-remove notification after 5 seconds
+      setTimeout(() => {
+        this.commit('REMOVE_NOTIFICATION', id)
+      }, 5000)
     },
     REMOVE_NOTIFICATION(state, id) {
       state.notifications = state.notifications.filter(notification => notification.id !== id)
     },
     SHOW_DISCLAIMER(state) {
-      state.isDisclaimerVisible = true;
-      // Hide features when showing disclaimer
-      state.isFeaturesVisible = false;
+      state.isDisclaimerVisible = true
+      state.isFeaturesVisible = false
+      state.isAboutVisible = false
     },
     HIDE_DISCLAIMER(state) {
-      state.isDisclaimerVisible = false;
+      state.isDisclaimerVisible = false
     },
     TOGGLE_DISCLAIMER(state) {
-      state.isDisclaimerVisible = !state.isDisclaimerVisible;
-      // Hide features if showing disclaimer
+      state.isDisclaimerVisible = !state.isDisclaimerVisible
       if (state.isDisclaimerVisible) {
-        state.isFeaturesVisible = false;
+        state.isFeaturesVisible = false
+        state.isAboutVisible = false
       }
     },
     // Features-related mutations
     SHOW_FEATURES(state) {
-      state.isFeaturesVisible = true;
-      // Hide disclaimer when showing features
-      state.isDisclaimerVisible = false;
+      state.isFeaturesVisible = true
+      state.isDisclaimerVisible = false
+      state.isAboutVisible = false
     },
     HIDE_FEATURES(state) {
-      state.isFeaturesVisible = false;
+      state.isFeaturesVisible = false
     },
     TOGGLE_FEATURES(state) {
-      state.isFeaturesVisible = !state.isFeaturesVisible;
-      // Hide disclaimer if showing features
+      state.isFeaturesVisible = !state.isFeaturesVisible
       if (state.isFeaturesVisible) {
-        state.isDisclaimerVisible = false;
+        state.isDisclaimerVisible = false
+        state.isAboutVisible = false
+      }
+    },
+    // About-related mutations
+    SHOW_ABOUT(state) {
+      state.isAboutVisible = true
+      state.isDisclaimerVisible = false
+      state.isFeaturesVisible = false
+    },
+    HIDE_ABOUT(state) {
+      state.isAboutVisible = false
+    },
+    TOGGLE_ABOUT(state) {
+      state.isAboutVisible = !state.isAboutVisible
+      if (state.isAboutVisible) {
+        state.isDisclaimerVisible = false
+        state.isFeaturesVisible = false
       }
     }
   },
@@ -79,42 +92,33 @@ export default createStore({
       commit('REMOVE_NOTIFICATION', id)
     },
     showDisclaimer({ commit }) {
-      commit('SHOW_DISCLAIMER');
+      commit('SHOW_DISCLAIMER')
     },
     hideDisclaimer({ commit }) {
-      commit('HIDE_DISCLAIMER');
+      commit('HIDE_DISCLAIMER')
     },
     toggleDisclaimer({ commit }) {
-      commit('TOGGLE_DISCLAIMER');
+      commit('TOGGLE_DISCLAIMER')
     },
     // Features-related actions
     showFeatures({ commit }) {
-      commit('SHOW_FEATURES');
+      commit('SHOW_FEATURES')
     },
     hideFeatures({ commit }) {
-      commit('HIDE_FEATURES');
+      commit('HIDE_FEATURES')
     },
     toggleFeatures({ commit }) {
-      commit('TOGGLE_FEATURES');
+      commit('TOGGLE_FEATURES')
     },
-    // Special actions for the OCSR module and other features - fixed to avoid unused parameter error
-    showOcsrInfo({ dispatch }) {
-      dispatch('showNotification', {
-        type: 'info',
-        message: 'OCSR (Optical Chemical Structure Recognition) extracts chemical structures from images using deep learning',
-        duration: 8000
-      });
+    // About-related actions
+    showAbout({ commit }) {
+      commit('SHOW_ABOUT')
     },
-    showBatchInfo({ dispatch }) {
-      dispatch('showNotification', {
-        type: 'info',
-        message: 'Batch processing allows you to process multiple documents and structures simultaneously',
-        duration: 8000
-      });
+    hideAbout({ commit }) {
+      commit('HIDE_ABOUT')
+    },
+    toggleAbout({ commit }) {
+      commit('TOGGLE_ABOUT')
     }
-  },
-  getters: {
-    isDisclaimerVisible: state => state.isDisclaimerVisible,
-    isFeaturesVisible: state => state.isFeaturesVisible
   }
 })

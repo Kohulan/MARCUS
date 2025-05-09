@@ -1,13 +1,13 @@
 <template>
     <div class="pdfjs-viewer">
         <div class="pdfjs-toolbar">
-            <button class="pdfjs-btn" @click="prevPage" :disabled="pageNum <= 1" title="Previous Page">
+            <button class="pdfjs-btn" @click="scrollToPage(pageNum - 1)" :disabled="pageNum <= 1" title="Previous Page">
                 <vue-feather type="chevron-left" size="18" />
             </button>
             <span class="pdfjs-page-info">
                 Page <strong>{{ pageNum }}</strong> / {{ numPages }}
             </span>
-            <button class="pdfjs-btn" @click="nextPage" :disabled="pageNum >= numPages" title="Next Page">
+            <button class="pdfjs-btn" @click="scrollToPage(pageNum + 1)" :disabled="pageNum >= numPages" title="Next Page">
                 <vue-feather type="chevron-right" size="18" />
             </button>
             <div class="pdfjs-toolbar-divider"></div>
@@ -39,7 +39,9 @@
             </div>
         </div>
         <div v-if="isLoading" class="loading">Loading PDF...</div>
-        <div ref="pdfContainer" class="pdfjs-container"></div>
+        <div ref="pdfContainer" class="pdfjs-container" @scroll="handleContainerScroll">
+            <!-- Pages will be rendered here -->
+        </div>
         <div v-if="error" class="error">{{ error }}</div>
     </div>
 </template>
@@ -69,12 +71,13 @@ export default {
         const error = ref(null);
         const pageNum = ref(1);
         const numPages = ref(1);
-        const scale = ref(1.5); // Default zoom 150%
+        const scale = ref(1.0); // Default zoom 100%
         const minScale = 0.5;
         const maxScale = 3.0;
         const showMenu = ref(false);
         const docTitle = ref('');
         const fileSize = ref(null);
+        const pagePositions = ref([]);
         let pdfDocument = null;
 
         const fileSizeDisplay = computed(() => {
@@ -107,32 +110,135 @@ export default {
             return 'Unknown';
         });
 
-        const renderPage = async () => {
+        // Render all pages in continuous mode
+        const renderAllPages = async () => {
             isLoading.value = true;
             error.value = null;
             if (!pdfDocument) return;
+            
             try {
                 if (pdfContainer.value) pdfContainer.value.innerHTML = '';
-                const page = await pdfDocument.getPage(pageNum.value);
-                const viewport = page.getViewport({ scale: scale.value });
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                await page.render({ canvasContext: context, viewport }).promise;
-                pdfContainer.value.appendChild(canvas);
-                // Render annotations except links
-                const annotations = await page.getAnnotations();
-                annotations.forEach(annotation => {
-                    if (annotation.subtype === 'Link') return;
-                });
+                pagePositions.value = [];
+                let currentPosition = 0;
+                
+                // Loop through all pages and render them
+                for (let i = 1; i <= numPages.value; i++) {
+                    const page = await pdfDocument.getPage(i);
+                    const viewport = page.getViewport({ scale: scale.value });
+                    
+                    // Create a wrapper div for each page with page number
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'pdfjs-page-wrapper';
+                    pageDiv.setAttribute('data-page-number', i);
+                    
+                    // Page number indicator
+                    const pageNumberDiv = document.createElement('div');
+                    pageNumberDiv.className = 'pdfjs-page-number';
+                    pageNumberDiv.textContent = i;
+                    pageDiv.appendChild(pageNumberDiv);
+
+                    // Create canvas for the page
+                    const canvas = document.createElement('canvas');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    const context = canvas.getContext('2d');
+                    
+                    // Add to page wrapper
+                    pageDiv.appendChild(canvas);
+                    
+                    // Add page separator (except for the first page)
+                    if (i > 1) {
+                        const separator = document.createElement('div');
+                        separator.className = 'pdfjs-page-separator';
+                        pdfContainer.value.appendChild(separator);
+                        
+                        // Add separator height to current position
+                        currentPosition += 40; // Height of separator
+                    }
+                    
+                    // Add page div to container
+                    pdfContainer.value.appendChild(pageDiv);
+                    
+                    // Store position info for this page
+                    pagePositions.value.push({
+                        pageNumber: i,
+                        top: currentPosition,
+                        bottom: currentPosition + viewport.height
+                    });
+                    
+                    // Update current position for next page
+                    currentPosition += viewport.height;
+                    
+                    // Render the page content
+                    await page.render({ canvasContext: context, viewport }).promise;
+                    
+                    // Render annotations (except links)
+                    const annotations = await page.getAnnotations();
+                    annotations.forEach(annotation => {
+                        if (annotation.subtype === 'Link') return;
+                        // Additional annotation rendering code could go here
+                    });
+                }
+                
                 isLoading.value = false;
             } catch (e) {
-                error.value = 'Failed to render page.';
+                console.error('Render error:', e);
+                error.value = 'Failed to render pages.';
                 isLoading.value = false;
             }
         };
 
+        // Handle container scrolling to update current page
+        const handleContainerScroll = () => {
+            if (!pdfContainer.value || pagePositions.value.length === 0) return;
+            
+            const containerTop = pdfContainer.value.scrollTop;
+            const containerHeight = pdfContainer.value.clientHeight;
+            const containerCenter = containerTop + (containerHeight / 2);
+            
+            // Find which page is most visible
+            let mostVisiblePage = 1;
+            let maxVisibleArea = 0;
+            
+            pagePositions.value.forEach(position => {
+                const pageTop = position.top;
+                const pageBottom = position.bottom;
+                
+                // Calculate visible area of this page
+                const visibleTop = Math.max(pageTop, containerTop);
+                const visibleBottom = Math.min(pageBottom, containerTop + containerHeight);
+                
+                if (visibleBottom > visibleTop) {
+                    const visibleArea = visibleBottom - visibleTop;
+                    if (visibleArea > maxVisibleArea) {
+                        maxVisibleArea = visibleArea;
+                        mostVisiblePage = position.pageNumber;
+                    }
+                }
+                
+                // Alternative approach: which page contains the center of the viewport
+                if (containerCenter >= pageTop && containerCenter <= pageBottom) {
+                    mostVisiblePage = position.pageNumber;
+                }
+            });
+            
+            pageNum.value = mostVisiblePage;
+        };
+
+        // Scroll to specific page
+        const scrollToPage = (page) => {
+            if (page < 1 || page > numPages.value || !pdfContainer.value) return;
+            
+            const targetPosition = pagePositions.value[page - 1]?.top || 0;
+            pdfContainer.value.scrollTo({
+                top: targetPosition,
+                behavior: 'smooth'
+            });
+            
+            pageNum.value = page;
+        };
+
+        // Load document and render all pages
         const loadDocument = async () => {
             isLoading.value = true;
             error.value = null;
@@ -142,9 +248,11 @@ export default {
                 pdfDocument = await pdfjsLib.getDocument(props.pdfUrl).promise;
                 numPages.value = pdfDocument.numPages;
                 pageNum.value = 1;
+                
                 // Get document metadata
                 const meta = await pdfDocument.getMetadata();
                 docTitle.value = meta.info?.Title || '';
+                
                 // Try to get file size from HEAD request
                 fetch(props.pdfUrl, { method: 'HEAD' })
                     .then(r => {
@@ -152,40 +260,34 @@ export default {
                         if (!isNaN(size)) fileSize.value = size;
                     })
                     .catch(() => fileSize.value = null);
-                await renderPage();
+                
+                // Render all pages in continuous mode
+                await renderAllPages();
             } catch (e) {
+                console.error('Load error:', e);
                 error.value = 'Failed to load PDF.';
                 isLoading.value = false;
             }
         };
 
-        const nextPage = async () => {
-            if (pageNum.value < numPages.value) {
-                pageNum.value++;
-                await renderPage();
-            }
-        };
-        const prevPage = async () => {
-            if (pageNum.value > 1) {
-                pageNum.value--;
-                await renderPage();
-            }
-        };
         const zoomIn = async () => {
             if (scale.value < maxScale) {
                 scale.value += 0.1;
-                await renderPage();
+                await renderAllPages();
             }
         };
+        
         const zoomOut = async () => {
             if (scale.value > minScale) {
                 scale.value -= 0.1;
-                await renderPage();
+                await renderAllPages();
             }
         };
+        
         const printPdf = () => {
             window.open(props.pdfUrl, '_blank').print();
         };
+        
         const downloadPdf = () => {
             const link = document.createElement('a');
             link.href = props.pdfUrl;
@@ -194,55 +296,15 @@ export default {
             link.click();
             document.body.removeChild(link);
         };
+        
         const toggleMenu = () => {
             showMenu.value = !showMenu.value;
         };
 
         onMounted(() => {
             loadDocument();
-            // Enable scroll-to-change-page
-            const handleScroll = (e) => {
-                if (isLoading.value) return;
-                const el = e.target;
-                // Only trigger if scrolled to top or bottom and cannot scroll further
-                const atTop = el.scrollTop === 0;
-                const atBottom = Math.abs(el.scrollTop + el.clientHeight - el.scrollHeight) < 2;
-                if (atTop && pageNum.value > 1) {
-                    // Only go to previous page if user tries to scroll up but can't scroll further
-                    // (let wheel handler handle this for better UX)
-                } else if (atBottom && pageNum.value < numPages.value) {
-                    // Only go to next page if user tries to scroll down but can't scroll further
-                    // (let wheel handler handle this for better UX)
-                }
-            };
-            // Enable scroll-to-change-page (scroll wheel)
-            const handleWheel = (e) => {
-                if (isLoading.value) return;
-                const el = pdfContainer.value;
-                if (!el) return;
-                const atTop = el.scrollTop === 0;
-                const atBottom = Math.abs(el.scrollTop + el.clientHeight - el.scrollHeight) < 2;
-                if (e.deltaY > 0 && atBottom && pageNum.value < numPages.value) {
-                    // Only go to next page if at bottom and trying to scroll down
-                    e.preventDefault();
-                    nextPage();
-                    // After page change, scroll to top
-                    nextTick(() => { el.scrollTop = 0; });
-                } else if (e.deltaY < 0 && atTop && pageNum.value > 1) {
-                    // Only go to previous page if at top and trying to scroll up
-                    e.preventDefault();
-                    prevPage();
-                    // After page change, scroll to bottom
-                    nextTick(() => { el.scrollTop = el.scrollHeight; });
-                }
-            };
-            nextTick(() => {
-                if (pdfContainer.value) {
-                    pdfContainer.value.addEventListener('scroll', handleScroll);
-                    pdfContainer.value.addEventListener('wheel', handleWheel, { passive: false });
-                }
-            });
         });
+        
         watch(() => props.pdfUrl, async () => {
             await nextTick();
             await loadDocument();
@@ -257,8 +319,7 @@ export default {
             scale,
             minScale,
             maxScale,
-            nextPage,
-            prevPage,
+            scrollToPage,
             zoomIn,
             zoomOut,
             printPdf,
@@ -266,7 +327,8 @@ export default {
             showMenu,
             toggleMenu,
             docTitle,
-            fileSizeDisplay
+            fileSizeDisplay,
+            handleContainerScroll
         };
     }
 };
@@ -408,6 +470,7 @@ export default {
     align-items: center;
     justify-content: flex-start;
     transition: background 0.2s;
+    padding: 1rem 0;
 }
 
 .loading {
@@ -424,8 +487,56 @@ export default {
 
 canvas {
     display: block;
-    margin: 1rem auto 1rem auto;
+    margin: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Page wrapper styles */
+.pdfjs-page-wrapper {
+    position: relative;
+    margin: 0 auto;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+}
+
+/* Page separator styles */
+.pdfjs-page-separator {
+    width: 100%;
+    height: 40px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.03), rgba(0,0,0,0.07), rgba(0,0,0,0.03));
+    position: relative;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px dashed rgba(0,0,0,0.1);
+    border-bottom: 1px dashed rgba(0,0,0,0.1);
+}
+
+.pdfjs-page-separator::after {
+    content: '';
+    position: absolute;
+    height: 1px;
+    width: 80%;
+    background: rgba(0,0,0,0.1);
+    top: 50%;
+    left: 10%;
+}
+
+/* Page number styles */
+.pdfjs-page-number {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    border-radius: 12px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: bold;
+    opacity: 0.7;
+    z-index: 1;
 }
 
 /* Dark mode support */
@@ -474,6 +585,16 @@ canvas {
 
     .error {
         color: var(--color-error, #ff6b6b);
+    }
+
+    .pdfjs-page-separator {
+        background: linear-gradient(to bottom, rgba(255,255,255,0.03), rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+        border-top: 1px dashed rgba(255,255,255,0.1);
+        border-bottom: 1px dashed rgba(255,255,255,0.1);
+    }
+
+    .pdfjs-page-separator::after {
+        background: rgba(255,255,255,0.1);
     }
 }
 </style>

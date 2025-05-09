@@ -20,7 +20,7 @@
           </div>
           <span>Features</span>
         </a>
-        <a href="#about" class="nav-link">
+        <a href="#about" class="nav-link" @click.prevent="showAbout">
           <div class="nav-icon-wrapper">
             <vue-feather type="info" class="nav-icon"></vue-feather>
           </div>
@@ -102,7 +102,7 @@
             <vue-feather type="layers" class="mobile-nav-icon"></vue-feather>
             <span>Features</span>
           </a>
-          <a href="#about" class="mobile-nav-link" @click="closeMobileMenu">
+          <a href="#about" class="mobile-nav-link" @click="showAboutAndCloseMenu">
             <vue-feather type="info" class="mobile-nav-icon"></vue-feather>
             <span>About</span>
           </a>
@@ -159,7 +159,8 @@ export default {
     ...mapState({
       isDarkMode: state => state.theme.isDarkMode,
       isFeaturesVisible: state => state.isFeaturesVisible,
-      isDisclaimerVisible: state => state.isDisclaimerVisible
+      isDisclaimerVisible: state => state.isDisclaimerVisible,
+      isAboutVisible: state => state.isAboutVisible
     })
   },
 
@@ -170,14 +171,17 @@ export default {
       showDisclaimer: 'showDisclaimer',
       hideDisclaimer: 'hideDisclaimer',
       showFeatures: 'showFeatures',
-      hideFeatures: 'hideFeatures'
+      hideFeatures: 'hideFeatures',
+      showAbout: 'showAbout',
+      hideAbout: 'hideAbout'
     }),
 
     // New method to handle logo navigation
     homeNavigation() {
-      // Hide both disclaimer and features when navigating home
+      // Hide all modals when navigating home
       this.hideDisclaimer();
       this.hideFeatures();
+      this.hideAbout();
     },
 
     toggleTheme() {
@@ -199,9 +203,15 @@ export default {
       this.closeMobileMenu();
     },
 
+    showAboutAndCloseMenu() {
+      this.showAbout();
+      this.closeMobileMenu();
+    },
+
     homeAndCloseMenu() {
       this.hideDisclaimer();
       this.hideFeatures();
+      this.hideAbout();
       this.closeMobileMenu();
     },
 
@@ -211,6 +221,7 @@ export default {
       if (featuresSection) {
         // Hide disclaimer if it's showing
         this.hideDisclaimer();
+        this.hideAbout();
         // Scroll to features section with smooth animation
         featuresSection.scrollIntoView({ behavior: 'smooth' })
       } else {
