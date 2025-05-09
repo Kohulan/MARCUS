@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header" :class="{'scrolled': isScrolled}">
+  <header class="app-header" :class="{ 'scrolled': isScrolled }">
     <div class="header-bg-glow"></div>
     <div class="container">
       <!-- Updated logo click to hide both disclaimer and features -->
@@ -12,7 +12,7 @@
           <h1>MARCUS<span class="badge">Beta Release</span></h1>
         </div>
       </router-link>
-      
+
       <nav class="header-nav">
         <a href="#features" class="nav-link" @click.prevent="scrollToFeatures">
           <div class="nav-icon-wrapper">
@@ -20,17 +20,11 @@
           </div>
           <span>Features</span>
         </a>
-        <a href="#about" class="nav-link">
+        <a href="#about" class="nav-link" @click.prevent="showAbout">
           <div class="nav-icon-wrapper">
             <vue-feather type="info" class="nav-icon"></vue-feather>
           </div>
           <span>About</span>
-        </a>
-        <a href="#help" class="nav-link">
-          <div class="nav-icon-wrapper">
-            <vue-feather type="help-circle" class="nav-icon"></vue-feather>
-          </div>
-          <span>Documentation</span>
         </a>
         <a href="#" class="nav-link" @click.prevent="toggleDisclaimer">
           <div class="nav-icon-wrapper">
@@ -39,35 +33,42 @@
           <span>Disclaimer</span>
         </a>
       </nav>
-      
+
       <div class="header-actions">
-        <button 
-          class="theme-toggle" 
-          @click="toggleTheme" 
-          :title="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-          aria-label="Toggle dark mode"
-        >
+        <!-- Backend status indicator with animation and transition -->
+        <transition name="fade-slide">
+          <div v-if="!backendReady || showReadyMessage" class="backend-status-indicator" :class="{
+            ready: backendReady,
+            notready: !backendReady,
+            'pulse-animation': !backendReady
+          }" title="Backend status">
+            <span class="status-dot"></span>
+            <span class="status-text">{{ backendReady ? 'Backend ready' : 'Backend initializing' }}</span>
+          </div>
+        </transition>
+        <button class="theme-toggle" @click="toggleTheme"
+          :title="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'" aria-label="Toggle dark mode">
           <div class="toggle-track">
             <div class="toggle-icons">
-              <vue-feather type="sun" class="sun-icon" :class="{'active': !isDarkMode}"></vue-feather>
-              <vue-feather type="moon" class="moon-icon" :class="{'active': isDarkMode}"></vue-feather>
+              <vue-feather type="sun" class="sun-icon" :class="{ 'active': !isDarkMode }"></vue-feather>
+              <vue-feather type="moon" class="moon-icon" :class="{ 'active': isDarkMode }"></vue-feather>
             </div>
-            <div class="toggle-thumb" :class="{'is-dark': isDarkMode}"></div>
+            <div class="toggle-thumb" :class="{ 'is-dark': isDarkMode }"></div>
           </div>
           <span class="toggle-label">{{ isDarkMode ? 'Dark' : 'Light' }}</span>
         </button>
-        
+
         <a href="https://coconut.naturalproducts.net/" target="_blank" class="btn btn-primary">
           <div class="btn-bg"></div>
           <img src="@/assets/coconut-logo.svg" alt="COCONUT" class="btn-icon" />
           <span>Visit COCONUT</span>
         </a>
       </div>
-      
+
       <!-- Improved mobile menu toggle button -->
       <button class="mobile-menu-toggle" aria-label="Toggle mobile menu" @click="toggleMobileMenu">
         <div class="hamburger-container">
-          <div class="hamburger" :class="{'is-active': isMobileMenuOpen}">
+          <div class="hamburger" :class="{ 'is-active': isMobileMenuOpen }">
             <span></span>
             <span></span>
             <span></span>
@@ -77,15 +78,15 @@
         </div>
       </button>
     </div>
-    
+
     <!-- Mobile menu backdrop overlay -->
     <transition name="fade">
       <div class="mobile-menu-backdrop" v-if="isMobileMenuOpen" @click="closeMobileMenu"></div>
     </transition>
-    
+
     <!-- Improved mobile menu with slide animation -->
     <transition name="slide">
-      <div class="mobile-menu" :class="{'is-open': isMobileMenuOpen}" v-if="isMobileMenuOpen">
+      <div class="mobile-menu" :class="{ 'is-open': isMobileMenuOpen }" v-if="isMobileMenuOpen">
         <div class="mobile-menu-header">
           <div class="logo-mini">
             <img src="@/assets/logo.png" alt="MARKUS" />
@@ -95,13 +96,13 @@
             <vue-feather type="x" size="24"></vue-feather>
           </button>
         </div>
-        
+
         <nav class="mobile-nav">
           <a href="#features" class="mobile-nav-link" @click="featuresAndCloseMenu">
             <vue-feather type="layers" class="mobile-nav-icon"></vue-feather>
             <span>Features</span>
           </a>
-          <a href="#about" class="mobile-nav-link" @click="closeMobileMenu">
+          <a href="#about" class="mobile-nav-link" @click="showAboutAndCloseMenu">
             <vue-feather type="info" class="mobile-nav-icon"></vue-feather>
             <span>About</span>
           </a>
@@ -118,13 +119,13 @@
             <span>Home</span>
           </router-link>
         </nav>
-        
+
         <div class="mobile-menu-footer">
           <button class="theme-toggle-mobile" @click="toggleTheme">
             <vue-feather :type="isDarkMode ? 'moon' : 'sun'" class="theme-icon"></vue-feather>
             <span>{{ isDarkMode ? 'Dark Mode' : 'Light Mode' }}</span>
           </button>
-          
+
           <a href="https://coconut.naturalproducts.net/" target="_blank" class="btn btn-primary btn-full">
             <div class="btn-bg"></div>
             <img src="@/assets/coconut-logo.svg" alt="COCONUT" class="btn-icon" />
@@ -138,25 +139,31 @@
 
 <script>
 import { mapState, mapActions } from 'vuex'
+import { checkBackendHealth } from '@/services/api.js'
 
 export default {
   name: 'AppHeader',
-  
+
   data() {
     return {
       isScrolled: false,
-      isMobileMenuOpen: false
+      isMobileMenuOpen: false,
+      backendReady: false,
+      backendCheckInterval: null,
+      showReadyMessage: false,
+      readyMessageTimeout: null
     }
   },
-  
+
   computed: {
     ...mapState({
       isDarkMode: state => state.theme.isDarkMode,
       isFeaturesVisible: state => state.isFeaturesVisible,
-      isDisclaimerVisible: state => state.isDisclaimerVisible
+      isDisclaimerVisible: state => state.isDisclaimerVisible,
+      isAboutVisible: state => state.isAboutVisible
     })
   },
-  
+
   methods: {
     ...mapActions({
       toggleDarkMode: 'theme/toggleDarkMode',
@@ -164,47 +171,57 @@ export default {
       showDisclaimer: 'showDisclaimer',
       hideDisclaimer: 'hideDisclaimer',
       showFeatures: 'showFeatures',
-      hideFeatures: 'hideFeatures'
+      hideFeatures: 'hideFeatures',
+      showAbout: 'showAbout',
+      hideAbout: 'hideAbout'
     }),
-    
+
     // New method to handle logo navigation
     homeNavigation() {
-      // Hide both disclaimer and features when navigating home
+      // Hide all modals when navigating home
       this.hideDisclaimer();
       this.hideFeatures();
+      this.hideAbout();
     },
-    
+
     toggleTheme() {
       this.toggleDarkMode()
     },
-    
+
     toggleMobileMenu() {
       this.isMobileMenuOpen = !this.isMobileMenuOpen
       document.body.style.overflow = this.isMobileMenuOpen ? 'hidden' : ''
     },
-    
+
     closeMobileMenu() {
       this.isMobileMenuOpen = false
       document.body.style.overflow = ''
     },
-    
+
     showDisclaimerAndCloseMenu() {
       this.showDisclaimer();
       this.closeMobileMenu();
     },
-    
+
+    showAboutAndCloseMenu() {
+      this.showAbout();
+      this.closeMobileMenu();
+    },
+
     homeAndCloseMenu() {
       this.hideDisclaimer();
       this.hideFeatures();
+      this.hideAbout();
       this.closeMobileMenu();
     },
-    
+
     // Methods for features section
     scrollToFeatures() {
       const featuresSection = document.getElementById('features')
       if (featuresSection) {
         // Hide disclaimer if it's showing
         this.hideDisclaimer();
+        this.hideAbout();
         // Scroll to features section with smooth animation
         featuresSection.scrollIntoView({ behavior: 'smooth' })
       } else {
@@ -212,7 +229,7 @@ export default {
         this.showFeatures();
       }
     },
-    
+
     featuresAndCloseMenu() {
       this.closeMobileMenu();
       // Small timeout to ensure menu is closed before scrolling
@@ -220,23 +237,54 @@ export default {
         this.scrollToFeatures();
       }, 300);
     },
-    
+
     handleScroll() {
       this.isScrolled = window.scrollY > 20
-    }
+    },
+
+    async pollBackendHealth() {
+      const wasReady = this.backendReady;
+      this.backendReady = await checkBackendHealth();
+
+      // If backend just became ready, show the ready message for 5 seconds then hide it
+      if (!wasReady && this.backendReady) {
+        this.showReadyMessage = true;
+
+        // Clear any existing timeout
+        if (this.readyMessageTimeout) {
+          clearTimeout(this.readyMessageTimeout);
+        }
+
+        // Set timeout to hide the message after 5 seconds
+        this.readyMessageTimeout = setTimeout(() => {
+          this.showReadyMessage = false;
+        }, 5000);
+
+        // Once backend is ready, we can check less frequently
+        if (this.backendCheckInterval) {
+          clearInterval(this.backendCheckInterval);
+          this.backendCheckInterval = setInterval(this.pollBackendHealth, 30000); // Check every 30 seconds
+        }
+      }
+    },
   },
-  
+
   created() {
     // Initialize theme when component is created
     this.$store.dispatch('theme/initTheme')
   },
-  
+
   mounted() {
     window.addEventListener('scroll', this.handleScroll)
+    // Poll backend health every 3 seconds initially
+    this.pollBackendHealth();
+    this.backendCheckInterval = setInterval(this.pollBackendHealth, 3000);
   },
-  
+
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll)
+    if (this.backendCheckInterval) clearInterval(this.backendCheckInterval);
+    if (this.readyMessageTimeout) clearTimeout(this.readyMessageTimeout);
   }
 }
 </script>
@@ -251,7 +299,7 @@ export default {
   z-index: var(--z-sticky);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: visible;
-  
+
   &:before {
     content: '';
     position: absolute;
@@ -259,32 +307,31 @@ export default {
     left: 0;
     width: 100%;
     height: 1px;
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      rgba(var(--color-primary-rgb), 0.1) 15%, 
-      rgba(var(--color-primary-rgb), 0.3) 50%, 
-      rgba(var(--color-primary-rgb), 0.1) 85%, 
-      transparent 100%
-    );
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(var(--color-primary-rgb), 0.1) 15%,
+        rgba(var(--color-primary-rgb), 0.3) 50%,
+        rgba(var(--color-primary-rgb), 0.1) 85%,
+        transparent 100%);
   }
-  
+
   &.scrolled {
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
-    
+
     .container {
       padding-top: 0.5rem;
       padding-bottom: 0.5rem;
     }
-    
+
     .logo-img {
       transform: scale(0.9);
     }
-    
+
     .logo h1 {
       font-size: 1.35rem;
     }
   }
-  
+
   .header-bg-glow {
     position: absolute;
     top: -100px;
@@ -292,19 +339,17 @@ export default {
     transform: translateX(-50%);
     width: 80%;
     height: 150px;
-    background: radial-gradient(
-      circle at center,
-      rgba(var(--color-primary-rgb), 0.15) 0%, 
-      rgba(var(--color-primary-rgb), 0.05) 40%, 
-      rgba(var(--color-primary-rgb), 0) 70%
-    );
+    background: radial-gradient(circle at center,
+        rgba(var(--color-primary-rgb), 0.15) 0%,
+        rgba(var(--color-primary-rgb), 0.05) 40%,
+        rgba(var(--color-primary-rgb), 0) 70%);
     z-index: -1;
     opacity: 0.8;
     filter: blur(40px);
     border-radius: 50%;
     pointer-events: none;
   }
-  
+
   .container {
     display: flex;
     align-items: center;
@@ -314,15 +359,16 @@ export default {
     margin: 0 auto;
     transition: padding 0.3s ease;
   }
-  
+
   .logo {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     position: relative;
     z-index: 2;
-    text-decoration: none; /* Added for router-link */
-    
+    text-decoration: none;
+    /* Added for router-link */
+
     .logo-img {
       position: relative;
       height: 48px;
@@ -332,12 +378,12 @@ export default {
       justify-content: center;
       border-radius: 12px;
       background: rgba(var(--color-primary-rgb), 0.08);
-      box-shadow: 
+      box-shadow:
         0 4px 10px -2px rgba(var(--color-primary-rgb), 0.15),
         inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.2);
       overflow: hidden;
       transition: all 0.3s ease;
-      
+
       &:before {
         content: '';
         position: absolute;
@@ -352,42 +398,40 @@ export default {
         transition: transform 0.5s ease;
         z-index: 0;
       }
-      
+
       &:hover {
         transform: translateY(-2px) scale(1.05);
-        
+
         &:before {
           transform: rotate(0) scale(1);
         }
-        
+
         .logo-shine {
           transform: translateX(100%) rotate(25deg);
           opacity: 0.8;
         }
-        
+
         img {
           transform: scale(1.1);
         }
       }
-      
+
       .logo-shine {
         position: absolute;
         top: -50%;
         left: -100%;
         width: 60%;
         height: 200%;
-        background: linear-gradient(
-          90deg, 
-          rgba(255, 255, 255, 0) 0%, 
-          rgba(255, 255, 255, 0.5) 50%, 
-          rgba(255, 255, 255, 0) 100%
-        );
+        background: linear-gradient(90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.5) 50%,
+            rgba(255, 255, 255, 0) 100%);
         transform: translateX(-100%) rotate(25deg);
         opacity: 0;
         transition: transform 0.6s cubic-bezier(0.11, 0, 0.5, 0), opacity 0.3s ease;
         z-index: 1;
       }
-      
+
       img {
         height: 36px;
         width: auto;
@@ -397,11 +441,11 @@ export default {
         transition: transform 0.3s ease;
       }
     }
-    
+
     .logo-text {
       display: flex;
       flex-direction: column;
-      
+
       h1 {
         font-size: 1.5rem;
         font-weight: 800;
@@ -416,7 +460,7 @@ export default {
         align-items: center;
         transition: font-size 0.3s ease;
         text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
-        
+
         .badge {
           font-size: 0.55rem;
           background: var(--gradient-primary);
@@ -431,7 +475,7 @@ export default {
           letter-spacing: 0;
         }
       }
-      
+
       .tagline {
         font-size: 0.7rem;
         color: var(--color-text-light);
@@ -442,17 +486,17 @@ export default {
       }
     }
   }
-  
+
   .header-nav {
     display: none;
-    
+
     @media (min-width: 768px) {
       display: flex;
       align-items: center;
       gap: 1.25rem;
       margin-left: 2rem;
     }
-    
+
     .nav-link {
       display: flex;
       align-items: center;
@@ -465,7 +509,7 @@ export default {
       position: relative;
       transition: all 0.2s ease;
       border-radius: 6px;
-      
+
       &:after {
         content: '';
         position: absolute;
@@ -477,25 +521,25 @@ export default {
         transition: width 0.3s cubic-bezier(0.19, 1, 0.22, 1);
         border-radius: 2px;
       }
-      
+
       &:hover {
         color: var(--color-primary);
         background: rgba(var(--color-primary-rgb), 0.05);
-        
+
         &:after {
           width: 100%;
         }
-        
+
         .nav-icon-wrapper {
           background: rgba(var(--color-primary-rgb), 0.15);
           transform: translateY(-2px);
-          
+
           .nav-icon {
             transform: scale(1.1);
           }
         }
       }
-      
+
       .nav-icon-wrapper {
         width: 26px;
         height: 26px;
@@ -506,7 +550,7 @@ export default {
         justify-content: center;
         transition: all 0.3s ease;
       }
-      
+
       .nav-icon {
         width: 14px;
         height: 14px;
@@ -515,24 +559,79 @@ export default {
       }
     }
   }
-  
+
   .header-actions {
     display: flex;
     align-items: center;
     gap: 1rem;
-    
+
     @media (max-width: 767px) {
       .btn span {
         display: none;
       }
-      
+
       .btn {
         width: 42px;
         padding: 0;
       }
     }
+
+    .backend-status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-right: 0.5rem;
+      border-radius: 20px;
+      padding: 5px 12px;
+      background: rgba(var(--color-panel-bg-rgb), 0.8);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid rgba(var(--color-primary-rgb), 0.1);
+      transition: all 0.5s ease;
+
+      &.pulse-animation .status-dot {
+        animation: pulse 2s infinite;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #f59e0b; // default yellow
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.12);
+        transition: background 0.3s;
+      }
+
+      &.ready {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.2);
+        transform: translateY(0);
+      }
+
+      &.ready .status-dot {
+        background: #10b981; // green
+      }
+
+      &.notready .status-dot {
+        background: #f59e0b; // yellow
+      }
+
+      .status-text {
+        color: #8392ab;
+        transition: color 0.3s;
+      }
+
+      &.ready .status-text {
+        color: #10b981;
+      }
+
+      &.notready .status-text {
+        color: #f59e0b;
+      }
+    }
   }
-  
+
   .theme-toggle {
     display: flex;
     align-items: center;
@@ -542,27 +641,27 @@ export default {
     padding: 6px 10px;
     border-radius: 8px;
     transition: all 0.2s ease;
-    
+
     &:hover {
       background: rgba(var(--color-primary-rgb), 0.08);
-      
+
       .toggle-track {
         box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.25);
       }
     }
-    
+
     .toggle-label {
       font-size: 0.8rem;
       font-weight: 600;
       margin-left: 8px;
       color: var(--color-text);
       transition: color 0.2s ease;
-      
+
       @media (max-width: 767px) {
         display: none;
       }
     }
-    
+
     .toggle-track {
       position: relative;
       width: 48px;
@@ -571,11 +670,11 @@ export default {
       border-radius: 12px;
       transition: all 0.3s ease;
       padding: 2px;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
       border: 1px solid rgba(var(--color-primary-rgb), 0.2);
       overflow: hidden;
     }
-    
+
     .toggle-icons {
       position: absolute;
       top: 0;
@@ -588,29 +687,30 @@ export default {
       padding: 0 4px;
       pointer-events: none;
       z-index: 1;
-      
-      .sun-icon, .moon-icon {
+
+      .sun-icon,
+      .moon-icon {
         width: 14px;
         height: 14px;
         opacity: 0.4;
         transition: all 0.3s ease;
-        
+
         &.active {
           opacity: 1;
         }
       }
-      
+
       .sun-icon {
         color: #f59e0b;
         margin-left: 1px;
       }
-      
+
       .moon-icon {
         color: #60a5fa;
         margin-right: 1px;
       }
     }
-    
+
     .toggle-thumb {
       width: 18px;
       height: 18px;
@@ -623,14 +723,14 @@ export default {
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
       z-index: 2;
       border: 1px solid rgba(0, 0, 0, 0.05);
-      
+
       &.is-dark {
         transform: translateX(24px);
         background: #2d3748;
       }
     }
   }
-  
+
   .btn {
     display: flex;
     align-items: center;
@@ -648,7 +748,7 @@ export default {
     border: none;
     background: none;
     cursor: pointer;
-    
+
     .btn-bg {
       position: absolute;
       top: 0;
@@ -659,49 +759,49 @@ export default {
       transition: all 0.3s ease;
       z-index: -1;
     }
-    
+
     &.btn-primary {
       color: white;
-      
+
       .btn-bg {
         background: var(--gradient-primary);
-        box-shadow: 
+        box-shadow:
           0 4px 10px rgba(var(--color-primary-rgb), 0.2),
           inset 0 0 0 1px rgba(255, 255, 255, 0.1);
       }
-      
+
       &:hover {
         transform: translateY(-3px);
-        
+
         .btn-bg {
-          box-shadow: 
+          box-shadow:
             0 6px 15px rgba(var(--color-primary-rgb), 0.3),
             inset 0 0 0 1px rgba(255, 255, 255, 0.2);
         }
       }
-      
+
       &:active {
         transform: scale(0.98);
       }
     }
-    
+
     &.btn-full {
       width: 100%;
       justify-content: center;
     }
-    
+
     .btn-icon {
       width: 16px;
       height: 16px;
       filter: brightness(0) invert(1);
       transition: transform 0.3s ease;
-      
+
       @media (max-width: 767px) {
         margin-right: 0;
       }
     }
   }
-  
+
   /* Improved Mobile Menu Toggle */
   .mobile-menu-toggle {
     display: flex;
@@ -713,27 +813,27 @@ export default {
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.3s ease;
-    
+
     @media (min-width: 768px) {
       display: none;
     }
-    
+
     &:hover {
       background: rgba(var(--color-primary-rgb), 0.2);
     }
-    
+
     .hamburger-container {
       display: flex;
       align-items: center;
       gap: 6px;
     }
-    
+
     .menu-label {
       font-size: 0.85rem;
       font-weight: 600;
       color: var(--color-primary);
     }
-    
+
     .hamburger {
       width: 24px;
       height: 20px;
@@ -741,7 +841,7 @@ export default {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      
+
       span {
         display: block;
         width: 100%;
@@ -750,23 +850,23 @@ export default {
         border-radius: 2px;
         transition: all 0.3s cubic-bezier(0.68, -0.6, 0.32, 1.6);
       }
-      
+
       &.is-active {
         span:nth-child(1) {
           transform: rotate(45deg) translate(6px, 6px);
         }
-        
+
         span:nth-child(2) {
           opacity: 0;
         }
-        
+
         span:nth-child(3) {
           transform: rotate(-45deg) translate(6px, -6px);
         }
       }
     }
   }
-  
+
   /* Mobile Menu Backdrop */
   .mobile-menu-backdrop {
     position: fixed;
@@ -777,7 +877,7 @@ export default {
     background: rgba(0, 0, 0, 0.5);
     z-index: 999;
   }
-  
+
   /* Improved Mobile Menu */
   .mobile-menu {
     position: fixed;
@@ -795,24 +895,24 @@ export default {
     overflow-y: auto;
     transform: translateX(0);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    
+
     .mobile-menu-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 1.25rem;
       border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.1);
-      
+
       .logo-mini {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        
+
         img {
           height: 28px;
           width: auto;
         }
-        
+
         h2 {
           font-size: 1.25rem;
           font-weight: 700;
@@ -823,7 +923,7 @@ export default {
           color: transparent;
           display: flex;
           align-items: center;
-          
+
           .badge {
             font-size: 0.5rem;
             background: var(--gradient-primary);
@@ -836,7 +936,7 @@ export default {
           }
         }
       }
-      
+
       .close-menu-btn {
         width: 40px;
         height: 40px;
@@ -849,21 +949,21 @@ export default {
         cursor: pointer;
         color: var(--color-primary);
         transition: all 0.3s ease;
-        
+
         &:hover {
           background: rgba(var(--color-primary-rgb), 0.2);
           transform: rotate(90deg);
         }
       }
     }
-    
+
     .mobile-nav {
       flex: 1;
       padding: 1.5rem;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
-      
+
       .mobile-nav-link {
         display: flex;
         align-items: center;
@@ -875,16 +975,16 @@ export default {
         font-weight: 500;
         text-decoration: none;
         transition: all 0.3s ease;
-        
+
         &:hover {
           background: rgba(var(--color-primary-rgb), 0.1);
           transform: translateX(5px);
-          
+
           .mobile-nav-icon {
             transform: scale(1.1);
           }
         }
-        
+
         .mobile-nav-icon {
           width: 20px;
           height: 20px;
@@ -893,14 +993,14 @@ export default {
         }
       }
     }
-    
+
     .mobile-menu-footer {
       padding: 1.5rem;
       border-top: 1px solid rgba(var(--color-primary-rgb), 0.1);
       display: flex;
       flex-direction: column;
       gap: 1rem;
-      
+
       .theme-toggle-mobile {
         display: flex;
         align-items: center;
@@ -913,11 +1013,11 @@ export default {
         color: var(--color-text);
         font-weight: 500;
         transition: all 0.3s ease;
-        
+
         &:hover {
           background: rgba(var(--color-primary-rgb), 0.1);
         }
-        
+
         .theme-icon {
           width: 20px;
           height: 20px;
@@ -928,25 +1028,38 @@ export default {
   }
 }
 
-/* Add transition classes for the slide and fade effects */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+/* Pulse animation for the status dot */
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  }
+
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
 }
 
-.fade-enter-from,
-.fade-leave-to {
+/* Added transition for smooth appearance/disappearance */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.8s ease;
+}
+
+.fade-slide-enter-from {
   opacity: 0;
+  transform: translateY(-10px);
 }
 
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(100%);
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 /* Add these CSS variables to your app's global styles */

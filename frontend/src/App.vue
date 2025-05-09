@@ -10,7 +10,7 @@
     <template v-if="appLoaded">
       <AppHeader />
       
-      <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible">
+      <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible && !isAboutVisible">
         <HomeView />
       </main>
       
@@ -25,6 +25,13 @@
         v-if="isFeaturesVisible" 
         :showCloseButton="true"
         @close="hideFeatures" 
+      />
+      
+      <!-- About page - shown when isAboutVisible is true -->
+      <about-page 
+        v-if="isAboutVisible" 
+        :showCloseButton="true"
+        @close="hideAbout" 
       />
       
       <AppFooter />
@@ -58,6 +65,7 @@ import AppFooter from './components/common/AppFooter.vue'
 import HomeView from './views/HomeView.vue'
 import DisclaimerPage from './views/DisclaimerPage.vue'
 import FeaturesSection from './views/FeaturesSection.vue'
+import AboutPage from './views/AboutPage.vue'
 import LoadingScreen from './components/common/LoadingScreen.vue'
 
 export default {
@@ -68,6 +76,7 @@ export default {
     HomeView,
     DisclaimerPage,
     FeaturesSection,
+    AboutPage,
     LoadingScreen
   },
   
@@ -82,7 +91,8 @@ export default {
       isDarkMode: state => state.theme.isDarkMode,
       notifications: state => state.notifications,
       isDisclaimerVisible: state => state.isDisclaimerVisible,
-      isFeaturesVisible: state => state.isFeaturesVisible
+      isFeaturesVisible: state => state.isFeaturesVisible,
+      isAboutVisible: state => state.isAboutVisible
     })
   },
   
@@ -90,7 +100,8 @@ export default {
     ...mapActions({
       removeNotification: 'removeNotification',
       hideDisclaimer: 'hideDisclaimer',
-      hideFeatures: 'hideFeatures'
+      hideFeatures: 'hideFeatures',
+      hideAbout: 'hideAbout'
     }),
     
     finishLoading() {
