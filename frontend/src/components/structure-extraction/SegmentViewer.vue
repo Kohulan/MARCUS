@@ -38,7 +38,7 @@
           <div class="header-item">
             <h4 class="section-title">Original Image</h4>
           </div>
-          <div class="header-item processed" v-if="processedStructure">
+          <div class="header-item processed" v-if="displayedStructure">
             <vue-feather type="check-circle" size="16" class="success-icon"></vue-feather>
             <h4 class="section-title">Processed Structure</h4>
           </div>
@@ -73,20 +73,20 @@
                 </div>
               </div>
 
-              <div v-if="processedStructure" class="processing-info">
+              <div v-if="displayedStructure" class="processing-info">
                 <div class="info-row">
                   <span class="info-label">Engine:</span>
-                  <span class="info-value engine-tag">{{ processedStructure.engine || 'Unknown' }}</span>
+                  <span class="info-value engine-tag">{{ displayedStructure.engine || 'Unknown' }}</span>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Processed:</span>
-                  <span class="info-value">{{ formatTimestamp(processedStructure.timestamp) }}</span>
+                  <span class="info-value">{{ formatTimestamp(displayedStructure.timestamp) }}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div v-if="processedStructure" class="panel structure-panel">
+          <div v-if="displayedStructure" class="panel structure-panel">
             <div class="structure-header-container">
               <div class="structure-title">Compound {{ segmentNumber }}</div>
               <div class="structure-actions">
@@ -102,9 +102,10 @@
 
             <div class="structure-visualization">
               <div class="structure-container">
-                <ImprovedChemicalStructureViewer :smiles="processedStructure.smiles"
-                  :molfile="processedStructure.molfile" :name="processedStructure.name || `Compound ${segmentNumber}`"
-                  :source-engine="processedStructure.engine" :use-coordinates="shouldUseCoordinates"
+                <ImprovedChemicalStructureViewer v-if="hasStructure" :key="forceUpdateKey"
+                  :smiles="displayedStructure.smiles" :molfile="displayedStructure.molfile"
+                  :name="displayedStructure.name || `Compound ${segmentNumber}`"
+                  :source-engine="displayedStructure.engine" :use-coordinates="shouldUseCoordinates"
                   @copied="handleCopied" @error="handleStructureError" @download-complete="handleDownloadComplete"
                   hide-controls />
               </div>
@@ -115,7 +116,7 @@
                 <span class="smiles-label">SMILES:</span>
               </div>
               <div class="smiles-content">
-                <div class="smiles-box">{{ processedStructure.smiles }}</div>
+                <div class="smiles-box">{{ displayedStructure.smiles }}</div>
               </div>
             </div>
 
@@ -126,7 +127,7 @@
               </div>
               <div class="tag engine-tag" :class="engineTagClass">
                 <vue-feather type="cpu" size="14" class="tag-icon"></vue-feather>
-                <span>{{ processedStructure.engine || 'Unknown' }}</span>
+                <span>{{ displayedStructure.engine || 'Unknown' }}</span>
               </div>
               <div class="tag tool-tag">
                 <vue-feather type="tool" size="14" class="tag-icon"></vue-feather>
@@ -140,6 +141,7 @@
             </div>
           </div>
         </div>
+
 
         <div class="compare-callout">
           <div class="callout-icon">
@@ -472,12 +474,11 @@
               <span>{{ findingMCS ? 'Finding MCS...' : 'Highlight Common Structure' }}</span>
             </button>
 
-            <button class="analyze-btn" @click="compareAcrossEngines" 
-        :disabled="!canCompare || isComparing">
-  <vue-feather :type="isComparing ? 'loader' : 'activity'" 
-               :class="{'spin': isComparing}" size="16" class="btn-icon"></vue-feather>
-  <span>{{ isComparing ? 'Running Analysis...' : 'Run Analysis' }}</span>
-</button>
+            <button class="analyze-btn" @click="compareAcrossEngines" :disabled="!canCompare || isComparing">
+              <vue-feather :type="isComparing ? 'loader' : 'activity'" :class="{ 'spin': isComparing }" size="16"
+                class="btn-icon"></vue-feather>
+              <span>{{ isComparing ? 'Running Analysis...' : 'Run Analysis' }}</span>
+            </button>
           </div>
 
           <!-- Detailed Similarity Section (Collapsible) -->
@@ -536,6 +537,11 @@
     <!-- Comparison Modal (Full Analysis) -->
     <ComparisonModal v-if="showComparisonModal" :comparison-result="comparisonResult" :is-loading="isComparing"
       :error="comparisonError" :smiles-list="smilesListForComparison" @close="closeComparisonModal" />
+
+    <!-- Structure Editor Modal -->
+    <KetcherEditorModal :visible="showStructureEditor" :initialSmiles="displayedStructure?.smiles"
+      :initialMolfile="displayedStructure?.molfile" @close="showStructureEditor = false"
+      @apply="onStructureEditApply" />
   </div>
 </template>
 
@@ -543,6 +549,7 @@
 import ImprovedChemicalStructureViewer from './ImprovedChemicalStructureViewer.vue'
 import ComparisonModal from './ComparisonModal.vue'
 import SimilarityComparison from './SimilarityComparison.vue'
+import KetcherEditorModal from './KetcherEditorModal.vue'
 import ocsrService from '@/services/ocsrService'
 import depictionService from '@/services/depictionService'
 import similarityService from '@/services/similarityService'
@@ -554,7 +561,8 @@ export default {
   components: {
     ImprovedChemicalStructureViewer,
     ComparisonModal,
-    SimilarityComparison
+    SimilarityComparison,
+    KetcherEditorModal
   },
   props: {
     segment: {
@@ -608,7 +616,12 @@ export default {
       // New properties for engine selection
       selectedEngine: null, // Will store 'decimer', 'molnextr', or 'molscribe'
       // New property to enable/disable auto analysis
-      autoAnalysisEnabled: true
+      autoAnalysisEnabled: true,
+      // Structure editor modal state
+      showStructureEditor: false,
+      // New properties for structure updating fix
+      currentStructure: null,
+      forceUpdateKey: Date.now(),
     }
   },
   computed: {
@@ -617,29 +630,36 @@ export default {
       return this.segment.segmentNumber || this.segment.id?.split('-')[1] || '?'
     },
     engineTagClass() {
-      if (!this.processedStructure || !this.processedStructure.engine) return ''
+      if (!this.displayedStructure || !this.displayedStructure.engine) return ''
 
-      const engine = this.processedStructure.engine.toLowerCase()
+      const engine = this.displayedStructure.engine.toLowerCase()
       if (engine.includes('decimer')) return 'decimer-tag'
       if (engine.includes('molnextr')) return 'molnextr-tag'
       if (engine.includes('molscribe')) return 'molscribe-tag'
 
       return ''
     },
+    displayedStructure() {
+      // Use the local edited structure if available, otherwise use the prop
+      return this.currentStructure || this.processedStructure || null;
+    },
+    hasStructure() {
+      return !!this.displayedStructure;
+    },
     shouldUseCoordinates() {
-      if (!this.processedStructure) return false;
+      if (!this.displayedStructure) return false;
 
       // Check if useCoordinates flag is explicitly set
-      if (this.processedStructure.useCoordinates === true) {
+      if (this.displayedStructure.useCoordinates === true) {
         return true;
       }
 
       // Otherwise, use coordinates if:
       // 1. We have a molfile
       // 2. The engine is MolNexTR or MolScribe
-      return !!this.processedStructure.molfile &&
-        (this.processedStructure.engine === 'molnextr' ||
-          this.processedStructure.engine === 'molscribe');
+      return !!this.displayedStructure.molfile &&
+        (this.displayedStructure.engine === 'molnextr' ||
+          this.displayedStructure.engine === 'molscribe');
     },
     // Check if all engines have loaded (either with success or error)
     allEnginesLoaded() {
@@ -673,12 +693,24 @@ export default {
         }
       }
     },
+    // Watch processedStructure prop to update local state
+    processedStructure: {
+      immediate: true,
+      handler(newValue) {
+        if (newValue) {
+          // Make a deep copy to avoid reference issues
+          this.currentStructure = JSON.parse(JSON.stringify(newValue));
+        } else {
+          this.currentStructure = null;
+        }
+      }
+    },
     // Watch for engine results to calculate similarity stats and auto-run full analysis
     allEnginesLoaded: {
       handler(allLoaded) {
         if (allLoaded && !this.hasRunFullAnalysis) {
           this.calculateQuickSimilarity();
-          
+
           // Automatically run the full analysis when in comparison mode and engines are loaded
           if (this.comparisonMode && this.canCompare && this.autoAnalysisEnabled) {
             // Add a small delay to ensure UI is responsive
@@ -736,6 +768,7 @@ export default {
       this.hasIdenticalResults = false;
       this.findingMCS = false;
       this.selectedEngine = null; // Reset selected engine
+      this.currentStructure = null;
 
       if (this.segmentUrl) {
         URL.revokeObjectURL(this.segmentUrl);
@@ -874,10 +907,10 @@ export default {
       // Instead of showing context directly in the SegmentViewer,
       // emit an event that will be caught by the parent component and relayed to the PDF viewer
       if (!this.segment) return;
-      
+
       // Emit to the parent that we want to show this segment in context
       this.$emit('show-in-context', this.segment);
-      
+
       // Also emit a global event using our custom EventBus that the PDF viewer component can listen for
       eventBus.emit('show-segment-in-context', this.segment);
     },
@@ -1198,10 +1231,10 @@ export default {
     },
 
     copySmilesToClipboard() {
-      if (!this.processedStructure || !this.processedStructure.smiles) return;
+      if (!this.displayedStructure || !this.displayedStructure.smiles) return;
 
       try {
-        navigator.clipboard.writeText(this.processedStructure.smiles)
+        navigator.clipboard.writeText(this.displayedStructure.smiles)
           .then(() => {
             // Show success message
             this.$emit('copy-complete', 'SMILES copied to clipboard');
@@ -1245,7 +1278,7 @@ export default {
     },
 
     async downloadStructureImage() {
-      if (!this.processedStructure) return;
+      if (!this.displayedStructure) return;
 
       try {
         // Use the structure viewer's download method or implement your own
@@ -1581,6 +1614,12 @@ export default {
         timestamp: new Date().toISOString()
       };
 
+      // Update local state immediately
+      this.currentStructure = updatedStructure;
+
+      // Update force key to trigger re-render
+      this.forceUpdateKey = Date.now();
+
       // Emit event with the selected structure
       this.$emit('prediction-selected', updatedStructure);
 
@@ -1598,6 +1637,59 @@ export default {
       // Exit comparison mode and go back to normal view
       this.comparisonMode = false;
     },
+
+    // FIXED: Improved onStructureEditApply method to properly update UI and ensure changes persist
+    onStructureEditApply(payload) {
+      // payload: { smiles: '...', molfile?: '...' }
+      if (!payload || !payload.smiles) {
+        this.$emit('error', 'No structure returned from editor');
+        this.showStructureEditor = false;
+        return;
+      }
+
+      // Create updated structure object
+      if (!this.processedStructure) {
+        this.$emit('error', 'Cannot update: no base structure available');
+        this.showStructureEditor = false;
+        return;
+      }
+
+      // Update local state immediately to reflect changes in the UI
+      const updatedStructure = {
+        ...this.processedStructure,
+        smiles: payload.smiles,
+        molfile: payload.molfile || this.processedStructure.molfile,
+        engine: 'manual-edit',
+        timestamp: new Date().toISOString(),
+        name: this.processedStructure.name || `Edited Compound ${this.segmentNumber}`,
+        editedFromOriginal: true
+      };
+
+      // Update local state
+      this.currentStructure = updatedStructure;
+
+      // Force component to re-render by updating the key
+      this.forceUpdateKey = Date.now();
+
+      console.log('Updated structure:', this.currentStructure);
+
+      // Emit structure-edited event for parent component to update its stored structure
+      this.$emit('structure-edited', updatedStructure);
+
+      // Also emit prediction-selected event which is more consistently handled by parent components
+      this.$emit('prediction-selected', updatedStructure);
+
+      // Automatically mark this segment as correct since the user edited the structure
+      if (!this.isSelected) {
+        this.$emit('toggle-selection');
+      }
+
+      this.showStructureEditor = false;
+      this.$emit('notification', {
+        type: 'success',
+        message: 'Structure updated from editor'
+      });
+    }
   }
 }
 </script>
@@ -1860,7 +1952,7 @@ export default {
           height: fit-content;
           transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
           border: 1px solid rgba(255, 255, 255, 0.4);
-         
+
           &:hover {
             transform: translateY(-4px);
             box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
@@ -1884,7 +1976,7 @@ export default {
                 font-size: 0.875rem;
                 font-weight: 500;
                 padding: 0.5rem 0.75rem;
-                               border-radius: 8px;
+                border-radius: 8px;
                 cursor: pointer;
                 transition: all 0.25s ease;
                 border: 1px solid rgba(226, 232, 240, 0.8);
@@ -1942,6 +2034,7 @@ export default {
                   background-color: rgba(79, 70, 229, 0.2);
                   box-shadow: 0 0 20px rgba(79, 70, 229, 0.4);
                   animation: pulse 1.5s ease-in-out infinite;
+
 
                   &:before,
                   &:after {
@@ -2040,6 +2133,27 @@ export default {
                 }
               }
             }
+
+            /* Add Edit Structure button styles */
+            .edit-structure-btn {
+              background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+              color: #fff;
+              border: none;
+              border-radius: 8px;
+              padding: 0.5rem 1.25rem;
+              font-weight: 600;
+              font-size: 1rem;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              box-shadow: 0 2px 8px rgba(79, 70, 229, 0.12);
+              transition: background 0.2s, transform 0.2s;
+
+              &:hover {
+                background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+                transform: translateY(-2px);
+              }
+            }
           }
 
           /* Structure panel specific styling */
@@ -2053,7 +2167,7 @@ export default {
               background: linear-gradient(to right, rgba(79, 70, 229, 0.02), rgba(79, 70, 229, 0.08));
 
               .structure-title {
-                               font-weight: 600;
+                font-weight: 600;
                 color: #0f172a;
                 font-size: 1.0625rem;
               }
@@ -3076,7 +3190,7 @@ export default {
                         z-index: 1;
                       }
 
-                      &:hover {
+                      &:hover:not(:disabled) {
                         background-color: #e2e8f0;
                         transform: translateY(-2px);
                         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
@@ -3110,7 +3224,7 @@ export default {
           }
         }
 
-        /* Apply selection bar styling */
+        /* Apply Selection button styling */
         .apply-selection-bar {
           margin-top: 1.5rem;
           padding: 1.25rem;
@@ -3425,7 +3539,9 @@ export default {
             }
 
             &:hover:not(:disabled) {
-              transform: translateY(-3px);
+              background-color: #e2e8f0;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
 
               &::before {
                 opacity: 1;
