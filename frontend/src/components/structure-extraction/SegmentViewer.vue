@@ -84,6 +84,14 @@
                 </div>
               </div>
             </div>
+
+            <!-- Add Edit Structure button below the image if displayedStructure exists -->
+            <div v-if="displayedStructure" style="display: flex; justify-content: center; margin-top: 1rem;">
+              <button class="edit-structure-btn" @click="showStructureEditor = true">
+                <vue-feather type="edit-3" size="16" style="margin-right: 0.5rem;" />
+                Edit Structure
+              </button>
+            </div>
           </div>
 
           <div v-if="displayedStructure" class="panel structure-panel">
@@ -141,7 +149,6 @@
             </div>
           </div>
         </div>
-
 
         <div class="compare-callout">
           <div class="callout-icon">

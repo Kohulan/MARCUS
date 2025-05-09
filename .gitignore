@@ -214,3 +214,4 @@ Thumbs.db
 *.mp4
 *.mov
 *.wav
+node_modules
