@@ -207,7 +207,7 @@ api.interceptors.response.use(
 export const checkBackendHealth = async () => {
   try {
     console.log('Checking backend health...');
-    // Use axios directly instead of the api instance to bypass interceptors
+    // Use axios directly to bypass the interceptors since health endpoint doesn't use /latest
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}/health`;
     console.log('Health check URL:', url);
