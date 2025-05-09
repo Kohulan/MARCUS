@@ -109,8 +109,10 @@ Project MARCUS follows a modern microservices architecture:
 
 ### Installation
 
-**For x86/x64 systems (Intel/AMD processors):**
+**Step 1: Clone the repository**
 ```bash
+git clone https://github.com/username/Project_MARCUS.git
+cd Project_MARCUS
 docker-compose up -d
 ```
 
