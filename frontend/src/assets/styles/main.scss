@@ -4,6 +4,21 @@
 // Use the modern '@use' rule instead of the deprecated '@import'
 @use 'transitions'; 
 
+/* Custom Font for MARCUS text */
+@font-face {
+  font-family: 'GmarketSansLight';
+  src: url('~@/assets/GmarketSansLight.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Special class for MARCUS text */
+.marcus-text {
+  font-family: 'GmarketSansLight', var(--font-family);
+  /* Optional: add additional styling specific to MARCUS text if needed */
+}
+
 /* Global Reset */
 *,
 *::before,

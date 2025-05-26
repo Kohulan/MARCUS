@@ -1,16 +1,16 @@
 /* Light Theme Variables (Default) */
 :root {
   /* Main colors */
-  --color-primary: #4a4de7;
-  --color-primary-dark: #3538d2;
-  --color-primary-light: #6b6feb;
-  --color-secondary: #8a2be2;
-  --color-secondary-dark: #7823c7;
-  --color-secondary-light: #9c4ee7;
+  --color-primary: #1e3a8a;
+  --color-primary-dark: #1e40af;
+  --color-primary-light: #3b82f6;
+  --color-secondary: #2563eb;
+  --color-secondary-dark: #1d4ed8;
+  --color-secondary-light: #60a5fa;
   
   /* Gradients */
-  --gradient-primary: linear-gradient(45deg, #4a4de7, #8a2be2);
-  --gradient-secondary: linear-gradient(45deg, #4a4de7, #6b6feb);
+  --gradient-primary: linear-gradient(45deg, #1e3a8a, #2563eb);
+  --gradient-secondary: linear-gradient(45deg, #1e3a8a, #3b82f6);
   
   /* UI Colors */
   --color-success: #00c853;
@@ -21,6 +21,7 @@
   /* Text Colors */
   --color-text: #2a2c42;
   --color-text-light: #5a5c7a;
+  --color-text-secondary: #6b7280;
   --color-text-dark: #1a1c32;
   --color-heading: #1a1c32;
   
@@ -28,6 +29,7 @@
   --color-bg: #f5f7fa;
   --color-panel-bg: rgba(255, 255, 255, 0.9);
   --color-card-bg: #ffffff;
+  --color-card-bg-hover: rgba(255, 255, 255, 0.95);
   --color-hover-bg: #f0f2f5;
   --color-input-bg: #ffffff;
   --color-hover: rgba(0, 0, 0, 0.05);
@@ -86,6 +88,7 @@
   /* Text Colors */
   --color-text: #e4e6f1;
   --color-text-light: #a5a8c0;
+  --color-text-secondary: #9ca3af;
   --color-text-dark: #ffffff;
   --color-heading: #ffffff;
   
@@ -93,6 +96,7 @@
   --color-bg: #15172a;
   --color-panel-bg: rgba(30, 32, 55, 0.9);
   --color-card-bg: #1e2037;
+  --color-card-bg-hover: #252740;
   --color-hover-bg: #2a2c42;
   --color-input-bg: #2a2c42;
   --color-hover: rgba(255, 255, 255, 0.1);
@@ -107,11 +111,11 @@
   --color-scrollbar-thumb-hover: #5a5d85;
   
   /* Main Colors Adjustments for Dark Theme */
-  --color-primary: #6166ff;
-  --color-primary-dark: #4a4de7;
-  --color-primary-light: #8084ff;
-  --color-secondary: #a64dff;
-  --color-secondary-dark: #8a2be2;
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-primary-light: #60a5fa;
+  --color-secondary: #1d4ed8;
+  --color-secondary-dark: #1e40af;
   
   /* Shadows are softer in dark mode */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
