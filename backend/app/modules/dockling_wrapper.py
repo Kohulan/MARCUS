@@ -1,12 +1,16 @@
 import os
-import json
 import re
 
 from fastapi import HTTPException, status, File, Form, UploadFile
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import (
+    DocumentConverter,
+    PdfFormatOption,
+    ConversionResult,
+)
 from PyPDF2 import PdfReader, PdfWriter
+from app.config import PDF_DIR
 
 artifacts_path = "/Users/kohulanrajan/.cache/docling/models"
 
@@ -17,6 +21,29 @@ doc_converter = DocumentConverter(
 
 
 def extract_first_three_pages(input_pdf_path, number_of_pages=3):
+    """
+    Extract a specified number of pages from the beginning of a PDF file.
+
+    Creates a new PDF file containing only the first N pages from the input PDF,
+    useful for processing large documents where only the initial pages are needed.
+
+    Args:
+        input_pdf_path (str): Path to the source PDF file to extract pages from.
+        number_of_pages (int, optional): Number of pages to extract from the beginning. Defaults to 3.
+
+    Returns:
+        str: Path to the newly created PDF file containing the extracted pages.
+             The output file has "_out" appended before the file extension.
+
+    Raises:
+        FileNotFoundError: If the input PDF file does not exist.
+        Exception: If PDF reading/writing operations fail.
+
+    Example:
+        >>> output_path = extract_first_three_pages("document.pdf", 2)
+        >>> print(output_path)
+        "document_out.pdf"
+    """
     # Open the original PDF
     with open(input_pdf_path, "rb") as input_pdf_file:
         pdf_reader = PdfReader(input_pdf_file)
@@ -42,6 +69,28 @@ def extract_first_three_pages(input_pdf_path, number_of_pages=3):
 
 
 def get_converted_document(path, number_of_pages=3):
+    """
+    Convert a PDF document to structured JSON format using Docling.
+
+    Extracts the first N pages from a PDF and converts them to a structured
+    document format that can be processed for content extraction.
+
+    Args:
+        path (str): Path to the PDF file to be converted.
+        number_of_pages (int, optional): Number of pages to process. Defaults to 3.
+
+    Returns:
+        dict: Document structure in JSON format containing text elements,
+              layout information, and metadata from the converted PDF.
+
+    Raises:
+        Exception: If document conversion fails or file cannot be processed.
+
+    Example:
+        >>> doc_dict = get_converted_document("paper.pdf", 2)
+        >>> print(doc_dict.keys())
+        dict_keys(['texts', 'schema_name', 'name', ...])
+    """
     output_pdf_file_path = extract_first_three_pages(path, number_of_pages)
     converter = DocumentConverter()
     conv_result: ConversionResult = converter.convert(output_pdf_file_path)
@@ -119,13 +168,25 @@ def extract_paper_content(doc_json):
 
 def extract_from_docling_document(data):
     """
-    Extract paper content from a Docling document format
+    Extract paper content from a Docling document format.
+
+    Processes a structured Docling document to extract key academic paper components
+    including title, abstract, and main text content.
 
     Args:
-        data (dict): The Docling document JSON
+        data (dict): The Docling document JSON containing structured document data.
 
     Returns:
-        dict: A dictionary containing the title, abstract, and main text
+        dict: Dictionary containing extracted content with keys:
+              - title: Paper title text
+              - abstract: Abstract content
+              - main_text: Main body text
+              Or error message if format is invalid.
+
+    Example:
+        >>> content = extract_from_docling_document(docling_json)
+        >>> print(content['title'])
+        "A Novel Approach to Chemical Structure Recognition"
     """
     # For Docling format, we need to extract the main document structure
     if "schema_name" in data and data["schema_name"] == "DoclingDocument":
@@ -167,13 +228,23 @@ def extract_from_docling_document(data):
 
 def combine_to_paragraph(result_dict):
     """
-    Combine the title, abstract, and main text from extraction results into a single paragraph.
+    Combine extracted paper components into a single formatted paragraph.
+
+    Merges title, abstract, and main text from paper extraction results into
+    a clean, properly formatted single paragraph with normalized spacing.
 
     Args:
-        result_dict (dict): The dictionary containing 'title', 'abstract', and 'main_text'
+        result_dict (dict): Dictionary containing 'title', 'abstract', and 'main_text' keys.
 
     Returns:
-        str: A single paragraph containing all the paper content
+        str: Single paragraph containing all paper content with cleaned formatting.
+             Returns error message if input is invalid.
+
+    Example:
+        >>> content = {"title": "Paper Title", "abstract": "Abstract text", "main_text": "Body text"}
+        >>> paragraph = combine_to_paragraph(content)
+        >>> print(len(paragraph.split()))
+        150
     """
     # Check for valid input
     if not isinstance(result_dict, dict):
@@ -199,9 +270,6 @@ def combine_to_paragraph(result_dict):
     # Join with spaces and clean up any double spaces
     combined_paragraph = " ".join(combined_text)
 
-    # Clean up the text - remove multiple spaces, normalize punctuation
-    import re
-
     combined_paragraph = re.sub(r"\s+", " ", combined_paragraph)
     combined_paragraph = re.sub(r"\s+([.,;:?!])", r"\1", combined_paragraph)
 
@@ -213,14 +281,29 @@ async def extract_pdf_text(
     pages: int = Form(1, description="Number of pages to process"),
 ):
     """
-    Upload a PDF file and extract its content as a combined text paragraph.
+    Extract and process text content from an uploaded PDF file.
+
+    Handles PDF upload, converts to structured format, extracts paper content,
+    and returns combined text. Falls back to full page extraction if content is insufficient.
 
     Args:
-        pdf_file: The PDF file to process
-        pages: Number of pages to process (default: 1)
+        pdf_file (UploadFile): The PDF file to process (required).
+        pages (int): Number of pages to process from the beginning. Defaults to 1.
 
     Returns:
-        JSON: Object containing the combined text
+        dict: JSON object containing:
+              - text: Combined extracted text content
+              - pdf_filename: Sanitized filename of the processed PDF
+
+    Raises:
+        HTTPException:
+            - 400: If uploaded file is not a PDF
+            - 500: If PDF processing fails
+
+    Example:
+        >>> result = await extract_pdf_text(pdf_file, pages=2)
+        >>> print(result['text'][:100])
+        "Title: Novel Chemical Analysis Abstract: This paper presents..."
     """
     if not pdf_file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -269,13 +352,22 @@ async def extract_pdf_text(
 
 def extract_full_page_text(doc_json):
     """
-    Extract text from the entire first page of a document.
+    Extract all text content from the first page of a document.
+
+    Retrieves and concatenates all text elements from the first page,
+    excluding headers and footers, with cleaned formatting.
 
     Args:
-        doc_json (dict): The JSON representation of the document
+        doc_json (dict): The JSON representation of the document structure.
 
     Returns:
-        str: The concatenated text from the first page
+        str: Concatenated and cleaned text from the first page.
+             Falls back to all pages if page numbers are unavailable.
+
+    Example:
+        >>> text = extract_full_page_text(document_json)
+        >>> print(len(text.split()))
+        245
     """
     # Get all text elements
     texts = doc_json.get("texts", [])

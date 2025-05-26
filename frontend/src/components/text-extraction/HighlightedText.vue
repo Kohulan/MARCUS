@@ -89,8 +89,8 @@ export default {
     getLabelColor(label) {
       // Generate a consistent color based on the label string
       const colors = [
-        '#4a4de7', // Primary (blue)
-        '#8a2be2', // Secondary (purple)
+        '#1e3a8a', // Primary (navy blue)
+        '#2563eb', // Secondary (blue)
         '#00c853', // Success (green)
         '#ff3d71', // Error (red)
         '#ffab00', // Warning (orange)

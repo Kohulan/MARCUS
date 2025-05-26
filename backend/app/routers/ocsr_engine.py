@@ -1,21 +1,21 @@
 import os
-from typing import Optional, Union, Literal, Dict, Any
+import base64
+from typing import Optional, Literal
 from fastapi import (
     APIRouter,
-    Body,
     File,
     Form,
     HTTPException,
-    Query,
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from app.schemas.healthcheck import HealthCheck
 from app.schemas.error import BadRequestModel, ErrorResponse, NotFoundModel
 from app.modules.ocsr_wrapper import process_chemical_structure, save_uploaded_image
-from app.config import UPLOAD_DIR, SEGMENTS_DIR, IMAGES_DIR
+from app.modules.depiction import generate_depiction
+from app.config import SEGMENTS_DIR, IMAGES_DIR
 
 # Create a router for the OCSR endpoints
 router = APIRouter(
@@ -558,7 +558,6 @@ async def generate_with_depiction(
         molfile = ocsr_result.get("molfile", "")
 
         # Use the depiction module to generate a depiction
-        from app.modules.depiction import generate_depiction
 
         depiction_result = generate_depiction(
             smiles=smiles,
@@ -584,7 +583,6 @@ async def generate_with_depiction(
         if depict_format == "svg":
             result["depiction"]["svg"] = depiction_result["depiction"]
         elif depict_format == "png":
-            import base64
 
             # Convert binary PNG to base64 for JSON response
             result["depiction"]["base64"] = base64.b64encode(

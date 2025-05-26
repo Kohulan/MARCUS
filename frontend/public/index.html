@@ -64,6 +64,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- Custom font for MARCUS text -->
+    <style>
+      @font-face {
+        font-family: 'GmarketSansLight';
+        src: url('/GmarketSansLight.otf') format('opentype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+      .marcus-text {
+        font-family: 'GmarketSansLight', 'Inter', sans-serif;
+      }
+    </style>
+    
     <!-- Preload logo for faster rendering -->
     <link rel="preload" href="<%= BASE_URL %>logo.png" as="image">
     
@@ -143,7 +157,7 @@
           >
           <div class="logo-fallback">MARCUS</div>
         </div>
-        <h1>MARCUS</h1>
+        <h1><span class="marcus-text">MARCUS</span></h1>
         <p>Molecular Annotation and Recognition for Curating Unravelled Structures</p>
         <p>Loading application...</p>
       </div>

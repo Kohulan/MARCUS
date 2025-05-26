@@ -1,12 +1,9 @@
 from __future__ import annotations
 import os
-import shutil
 import uuid
 import re
-from typing import List, Dict, Any, Optional
 from fastapi import (
     APIRouter,
-    Body,
     HTTPException,
     Query,
     status,
@@ -14,7 +11,7 @@ from fastapi import (
     File,
     Form,
 )
-from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.responses import FileResponse
 from app.schemas.healthcheck import HealthCheck
 from app.schemas.error import BadRequestModel, ErrorResponse, NotFoundModel
 from app.config import PDF_DIR, SEGMENTS_DIR
@@ -49,13 +46,19 @@ router = APIRouter(
     response_model=HealthCheck,
 )
 def get_health() -> HealthCheck:
-    """Perform a Health Check.
-    Endpoint to perform a health check on. This endpoint can primarily be used by Docker
-    to ensure a robust container orchestration and management are in place. Other
-    services that rely on the proper functioning of the API service will not deploy if this
-    endpoint returns any other HTTP status code except 200 (OK).
+    """
+    Perform a health check on the DECIMER segmentation module.
+
+    This endpoint verifies that the DECIMER segmentation service is operational
+    and ready to process requests. Used for container orchestration and monitoring.
+
     Returns:
-        HealthCheck: Returns a JSON response with the health status
+        HealthCheck: JSON response with service health status.
+
+    Example:
+        >>> response = get_health()
+        >>> print(response.status)
+        "OK"
     """
     return HealthCheck(status="OK")
 
@@ -70,13 +73,26 @@ async def extract_doi(
     pdf_file: UploadFile = File(...),
 ):
     """
-    Upload a PDF file and extract its DOI.
+    Extract DOI (Digital Object Identifier) from an uploaded PDF file.
+
+    Processes the uploaded PDF to extract its DOI using the pdf2doi library.
+    Falls back to using the filename if no DOI is found in the document.
 
     Args:
-        pdf_file: The PDF file to process
+        pdf_file (UploadFile): The PDF file to process for DOI extraction.
 
     Returns:
-        JSON: The extracted DOI or filename
+        dict: JSON response containing the extracted DOI or fallback filename.
+
+    Raises:
+        HTTPException:
+            - 400: If uploaded file is not a PDF
+            - 500: If DOI extraction fails
+
+    Example:
+        >>> result = await extract_doi(pdf_file)
+        >>> print(result['doi'])
+        "10.1021/acs.jcim.2c00934"
     """
     if not pdf_file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -127,14 +143,32 @@ async def extract_segments(
     ),
 ):
     """
-    Upload a PDF file and extract chemical structure segments.
+    Extract chemical structure segments from an uploaded PDF file using DECIMER.
+
+    Processes the PDF to identify and extract chemical structure images with
+    bounding box information. Organizes segments in structured directories.
 
     Args:
-        pdf_file: The PDF file to process
-        collect_all: Whether to collect all segments in a common directory
+        pdf_file (UploadFile): The PDF file containing chemical structures.
+        collect_all (bool): Whether to collect all segments in a common directory. Defaults to True.
 
     Returns:
-        JSON: Information about the extracted segments, including directory paths
+        dict: JSON response containing:
+              - segments_extracted: Success status
+              - segments_already_existed: Whether segments existed before processing
+              - segments_count: Number of extracted segments
+              - segments_directory: Relative path to segments directory
+              - pdf_filename: Sanitized filename
+
+    Raises:
+        HTTPException:
+            - 400: If uploaded file is not a PDF
+            - 500: If segmentation processing fails
+
+    Example:
+        >>> result = await extract_segments(pdf_file, collect_all=True)
+        >>> print(f"Found {result['segments_count']} segments")
+        Found 8 segments
     """
     if not pdf_file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -231,10 +265,25 @@ async def extract_segments(
 )
 async def list_segments():
     """
-    List all available segment directories.
+    List all available chemical structure segment directories.
+
+    Scans the segments directory to find all processed PDF directories,
+    counting the number of segments in each and checking for organized structure.
 
     Returns:
-        JSON: A list of available segment directories
+        dict: JSON response containing:
+              - segment_directories: List of directory information including:
+                - directory: Directory name
+                - segments_count: Number of segments found
+                - has_all_segments: Whether organized structure exists
+
+    Raises:
+        HTTPException: 500 if directory listing fails
+
+    Example:
+        >>> result = await list_segments()
+        >>> print(len(result['segment_directories']))
+        5
     """
     try:
         # Get all directories in the segments directory
@@ -290,14 +339,28 @@ async def get_segment_image(
     image_name: str,
 ):
     """
-    Get a specific segment image.
+    Retrieve a specific chemical structure segment image file.
+
+    Serves individual segment images from the organized directory structure,
+    handling both direct paths and all_segments subdirectory organization.
 
     Args:
-        directory: The segment directory name
-        image_name: The image filename or path
+        directory (str): The segment directory name (PDF-based directory).
+        image_name (str): The segment image filename or relative path.
 
     Returns:
-        FileResponse: The requested image file
+        FileResponse: The requested segment image as PNG file response.
+
+    Raises:
+        HTTPException:
+            - 400: Invalid directory or image name (prevents directory traversal)
+            - 404: Image file not found
+            - 500: File retrieval error
+
+    Example:
+        >>> response = await get_segment_image("chemistry_paper", "page_0_1_segmented.png")
+        >>> print(response.media_type)
+        "image/png"
     """
     try:
         # Validate the directory and image name to prevent directory traversal
@@ -342,7 +405,24 @@ async def get_segment_image(
 
 
 def _count_segments(directory_path: str) -> int:
-    """Helper function to count the number of segmented images in a directory"""
+    """
+    Count the number of segmented images in a directory structure.
+
+    Helper function that handles different directory organizations including
+    all_segments subdirectories and individual segment directories.
+
+    Args:
+        directory_path (str): Path to the directory to count segments in.
+
+    Returns:
+        int: Number of segmented PNG images found. Returns 0 if directory
+             doesn't exist or counting fails.
+
+    Example:
+        >>> count = _count_segments("/segments/chemistry_paper")
+        >>> print(count)
+        12
+    """
     if not directory_path:
         return 0
 
@@ -393,14 +473,29 @@ def _count_segments(directory_path: str) -> int:
 )
 async def list_directory(directory: str, subdirectory: str = None):
     """
-    List all files in the specified directory.
+    List all segmented image files in a specific directory or subdirectory.
+
+    Provides directory browsing functionality for segment files with
+    security validation to prevent directory traversal attacks.
 
     Args:
-        directory: The base directory name
-        subdirectory: Optional subdirectory
+        directory (str): The base segment directory name.
+        subdirectory (str, optional): Optional subdirectory within the base directory.
 
     Returns:
-        JSON: A list of files in the directory
+        dict: JSON response containing:
+              - files: List of segmented PNG filenames in the directory
+
+    Raises:
+        HTTPException:
+            - 400: Invalid directory names (prevents directory traversal)
+            - 404: Directory not found
+            - 500: Directory listing error
+
+    Example:
+        >>> result = await list_directory("chemistry_paper", "all_segments")
+        >>> print(len(result['files']))
+        8
     """
     try:
         # Validate to prevent directory traversal
@@ -453,14 +548,28 @@ async def get_highlighted_page(
     segment_filename: str, pdf_filename: str = Query(..., description="PDF filename")
 ):
     """
-    Get a PDF page with a specific segment highlighted.
+    Generate a PDF page image with a specific chemical segment highlighted.
+
+    Creates a visual representation showing the original PDF page with the
+    specified chemical structure segment highlighted using a green overlay.
 
     Args:
-        segment_filename: The segment filename (e.g. page_1_10_segmented.png)
-        pdf_filename: The PDF file name
+        segment_filename (str): The segment filename in format "page_{page_num}_{segment_num}_segmented.png".
+        pdf_filename (str): The original PDF filename containing the segment.
 
     Returns:
-        FileResponse: The page image with highlighted segment
+        FileResponse: PNG image of the PDF page with highlighted segment area.
+
+    Raises:
+        HTTPException:
+            - 400: Invalid segment filename format
+            - 404: PDF or segment not found
+            - 500: Image generation error
+
+    Example:
+        >>> response = await get_highlighted_page("page_0_1_segmented.png", "chemistry_paper.pdf")
+        >>> print(response.filename)
+        "highlighted_segment-0-1_a1b2c3d4.png"
     """
     try:
         # Extract segment information from filename

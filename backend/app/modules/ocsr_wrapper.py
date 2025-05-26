@@ -1,39 +1,18 @@
 import os
 import uuid
 import torch
-from typing import Tuple, Dict, Union, Literal, Optional, Any
+from typing import Tuple, Dict, Union, Literal, Any
 from pathlib import Path
 from fastapi import HTTPException, status
-
-# Import DECIMER
-try:
-    from DECIMER import predict_SMILES
-except ImportError:
-
-    def predict_SMILES(*args, **kwargs):
-        raise ImportError("DECIMER module is not installed or cannot be imported")
-
-
-# Import MolNexTR
-try:
-    from MolNexTR import get_predictions as molnextr_get_predictions
-except ImportError:
-
-    def molnextr_get_predictions(*args, **kwargs):
-        raise ImportError("MolNexTR module is not installed or cannot be imported")
-
-
-# Import MolScribe
-try:
-    from molscribe import MolScribe
-    from huggingface_hub import hf_hub_download
-except ImportError:
-    MolScribe = None
-    hf_hub_download = None
+from DECIMER import predict_SMILES
+from MolNexTR import MolNexTRSingleton
+from MolNexTR import get_predictions as molnextr_get_predictions
+from molscribe import MolScribe
+from huggingface_hub import hf_hub_download
+from app.config import UPLOAD_DIR
 
 _molscribe_model = None
 
-from app.config import UPLOAD_DIR
 
 # Create a directory for chemical structure images
 IMAGES_DIR = os.path.join(UPLOAD_DIR, "chem_images")
@@ -299,7 +278,6 @@ def process_chemical_structure(
     try:
         # Import device info if available
         try:
-            from MolNexTR import MolNexTRSingleton
 
             device, device_name = MolNexTRSingleton.get_device()
             hardware_info = device_name

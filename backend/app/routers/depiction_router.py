@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import os
-import io
-from typing import Optional, Union, Literal, Dict, Any, List, Tuple
-from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Response, status
-from fastapi.responses import JSONResponse, Response
+from typing import Optional, Literal, List
+from fastapi import APIRouter, Body, Form, HTTPException, Response, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-
+from app.modules.cdk_wrapper import get_CDK_IAtomContainer, get_CDK_SDG_mol
 from app.schemas.healthcheck import HealthCheck
 from app.schemas.error import BadRequestModel, ErrorResponse, NotFoundModel
 from app.modules.depiction import generate_depiction
@@ -451,9 +449,6 @@ async def convert_smiles_to_molfile(request: SmilesToMolfileRequest = Body(...))
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="SMILES string must be provided",
             )
-
-        # Import necessary functions
-        from app.modules.cdk_wrapper import get_CDK_IAtomContainer, get_CDK_SDG_mol
 
         # Convert SMILES to molfile using CDK
         try:

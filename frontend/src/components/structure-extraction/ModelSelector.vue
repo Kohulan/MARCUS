@@ -278,7 +278,7 @@ export default {
       }
       
       &.molscribe-icon {
-        background-color: #af52de; /* Purple */
+        background-color: #2563eb; /* Blue */
       }
     }
     

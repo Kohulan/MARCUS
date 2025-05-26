@@ -18,7 +18,8 @@ export default createStore({
     notifications: [],
     isDisclaimerVisible: false,
     isFeaturesVisible: false,
-    isAboutVisible: false
+    isAboutVisible: false,
+    isPrivacyPolicyVisible: false
   },
   mutations: {
     ADD_NOTIFICATION(state, notification) {
@@ -40,6 +41,7 @@ export default createStore({
       state.isDisclaimerVisible = true
       state.isFeaturesVisible = false
       state.isAboutVisible = false
+      state.isPrivacyPolicyVisible = false
     },
     HIDE_DISCLAIMER(state) {
       state.isDisclaimerVisible = false
@@ -49,6 +51,7 @@ export default createStore({
       if (state.isDisclaimerVisible) {
         state.isFeaturesVisible = false
         state.isAboutVisible = false
+        state.isPrivacyPolicyVisible = false
       }
     },
     // Features-related mutations
@@ -56,6 +59,7 @@ export default createStore({
       state.isFeaturesVisible = true
       state.isDisclaimerVisible = false
       state.isAboutVisible = false
+      state.isPrivacyPolicyVisible = false
     },
     HIDE_FEATURES(state) {
       state.isFeaturesVisible = false
@@ -65,6 +69,7 @@ export default createStore({
       if (state.isFeaturesVisible) {
         state.isDisclaimerVisible = false
         state.isAboutVisible = false
+        state.isPrivacyPolicyVisible = false
       }
     },
     // About-related mutations
@@ -72,6 +77,7 @@ export default createStore({
       state.isAboutVisible = true
       state.isDisclaimerVisible = false
       state.isFeaturesVisible = false
+      state.isPrivacyPolicyVisible = false
     },
     HIDE_ABOUT(state) {
       state.isAboutVisible = false
@@ -81,6 +87,25 @@ export default createStore({
       if (state.isAboutVisible) {
         state.isDisclaimerVisible = false
         state.isFeaturesVisible = false
+        state.isPrivacyPolicyVisible = false
+      }
+    },
+    // Privacy Policy-related mutations
+    SHOW_PRIVACY_POLICY(state) {
+      state.isPrivacyPolicyVisible = true
+      state.isDisclaimerVisible = false
+      state.isFeaturesVisible = false
+      state.isAboutVisible = false
+    },
+    HIDE_PRIVACY_POLICY(state) {
+      state.isPrivacyPolicyVisible = false
+    },
+    TOGGLE_PRIVACY_POLICY(state) {
+      state.isPrivacyPolicyVisible = !state.isPrivacyPolicyVisible
+      if (state.isPrivacyPolicyVisible) {
+        state.isDisclaimerVisible = false
+        state.isFeaturesVisible = false
+        state.isAboutVisible = false
       }
     }
   },
@@ -119,6 +144,16 @@ export default createStore({
     },
     toggleAbout({ commit }) {
       commit('TOGGLE_ABOUT')
+    },
+    // Privacy Policy-related actions
+    showPrivacyPolicy({ commit }) {
+      commit('SHOW_PRIVACY_POLICY')
+    },
+    hidePrivacyPolicy({ commit }) {
+      commit('HIDE_PRIVACY_POLICY')
+    },
+    togglePrivacyPolicy({ commit }) {
+      commit('TOGGLE_PRIVACY_POLICY')
     }
   }
 })

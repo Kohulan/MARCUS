@@ -1,9 +1,9 @@
 from __future__ import annotations
 import json
 import os
-import uuid
 import datetime
-from typing import List, Dict, Any, Optional
+import hashlib
+from typing import List, Dict, Any
 from fastapi import APIRouter, Body, HTTPException, status
 from app.schemas.healthcheck import HealthCheck
 from app.modules.openai_wrapper import (
@@ -62,9 +62,6 @@ def save_extraction_result(
     Returns:
         str: The filename of the saved result
     """
-    # Create a hash of the input text to ensure same text gets same filename
-    import hashlib
-
     text_hash = hashlib.md5(input_text.encode()).hexdigest()[:8]
 
     # Create a filename based on content hash rather than timestamp

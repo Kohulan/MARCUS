@@ -1,44 +1,16 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Body, HTTPException, status
-from pydantic import BaseModel
-import numpy as np
 
-# Import RDKit for ECFP fingerprints and Tanimoto similarity
-try:
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-    from rdkit import DataStructs
-    from rdkit.Chem import rdFMCS
-
-    RDKIT_AVAILABLE = True
-except ImportError:
-    RDKIT_AVAILABLE = False
-
-
-# Define request and response models
-class SmilesComparisonRequest(BaseModel):
-    smiles_list: List[str]
-    engine_names: List[str]
-
-
-class MolfilesMCSRequest(BaseModel):
-    molfiles: List[str]
-    engine_names: List[str]
-
-
-class MCSResponse(BaseModel):
-    mcs_smarts: str
-    atom_count: int
-    bond_count: int
-    original_molecules: List[Dict[str, Any]]
-
-
-class SimilarityMatrix(BaseModel):
-    matrix: List[List[float]]
-    engine_names: List[str]
-    identical: bool
-    agreement_summary: Dict[str, Any]
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit import DataStructs
+from rdkit.Chem import rdFMCS
+from app.schemas.rdkit_schema import (
+    SmilesComparisonRequest,
+    MolfilesMCSRequest,
+    MCSResponse,
+    SimilarityMatrix,
+)
 
 
 # Create the router
@@ -46,6 +18,11 @@ router = APIRouter(
     prefix="/similarity",
     tags=["similarity"],
     dependencies=[],
+    responses={
+        200: {"description": "OK"},
+        400: {"description": "Bad Request"},
+        500: {"description": "Internal Server Error"},
+    },
 )
 
 
