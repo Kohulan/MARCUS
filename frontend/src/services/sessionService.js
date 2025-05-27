@@ -15,9 +15,9 @@ class SessionService {
     this.pageUnloadHandlerAdded = false;
     this.sessionKey = 'marcus_session_id';
     
-    // Get backend URL from environment or default
-    this.backendUrl = process.env.VUE_APP_BACKEND_URL || 'http://localhost:9000';
-    this.wsUrl = this.backendUrl.replace('http', 'ws');
+    // Get backend URL using the same logic as other services
+    this.backendUrl = this.getApiBaseUrl();
+    this.wsUrl = this.getWebSocketUrl();
     
     // Try to recover existing session
     this.recoverSession();
@@ -440,6 +440,45 @@ class SessionService {
     } catch (error) {
       console.error('HTTP heartbeat failed:', error);
     }
+  }
+
+  /**
+   * Get the API base URL with proper fallbacks - matches api.js logic but for session endpoints
+   */
+  getApiBaseUrl() {
+    // In production on the marcus.decimer.ai server
+    // Session endpoints are not versioned and need direct API domain access
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      return 'https://api.marcus.decimer.ai';
+    }
+
+    // Check for environment variables
+    if (process.env && process.env.VUE_APP_API_URL) {
+      return process.env.VUE_APP_API_URL;
+    }
+
+    // Docker compose environment - frontend can reach backend directly
+    if (process.env.NODE_ENV === 'production') {
+      return 'http://backend:9000';
+    }
+
+    // Development fallback
+    return 'http://localhost:9000';
+  }
+
+  /**
+   * Get WebSocket URL based on the HTTP API URL
+   */
+  getWebSocketUrl() {
+    const baseUrl = this.backendUrl;
+    
+    // In production with marcus.decimer.ai, use secure WebSocket
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      return 'wss://api.marcus.decimer.ai';
+    }
+    
+    // For other environments, convert http to ws
+    return baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
   }
 }
 
