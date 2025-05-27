@@ -16,7 +16,7 @@
               <img src="@/assets/logo.png" alt="MARKUS" />
             </div>
             <div class="logo-text">
-              <h1><span class="marcus-text">MARCUS</span><span class="badge">Public-Beta Release</span></h1>
+              <h1><span class="marcus-text">MARCUS</span><span class="badge">Beta</span></h1>
             </div>
           </router-link>
 
@@ -66,24 +66,7 @@
             <span class="toggle-label">{{ isDarkMode ? 'Dark' : 'Light' }}</span>
           </button>
 
-          <!-- External Link Buttons -->
-          <div class="external-links">
-            <a href="https://coconut.naturalproducts.net/" target="_blank" class="btn btn-coconut">
-              <div class="btn-bg"></div>
-              <div class="btn-shine"></div>
-              <img src="@/assets/coconut-logo.svg" alt="COCONUT" class="btn-icon" />
-              <span>Visit COCONUT</span>
-              <vue-feather type="external-link" class="external-icon"></vue-feather>
-            </a>
 
-            <a href="https://decimer.ai/" target="_blank" class="btn btn-decimer">
-              <div class="btn-bg"></div>
-              <div class="btn-shine"></div>
-              <img src="@/assets/decimer-logo.png" alt="DECIMER" class="btn-icon" />
-              <span>Visit DECIMER</span>
-              <vue-feather type="external-link" class="external-icon"></vue-feather>
-            </a>
-          </div>
         </div>
       </div>
     </div>
@@ -112,7 +95,7 @@
         <div class="mobile-menu-header">
           <div class="logo-mini">
             <img src="@/assets/logo.png" alt="MARKUS" />
-            <h2><span class="marcus-text">MARCUS</span><span class="badge">Public-Beta</span></h2>
+            <h2><span class="marcus-text">MARCUS</span><span class="badge">Beta</span></h2>
           </div>
           <button class="close-menu-btn" @click="closeMobileMenu">
             <vue-feather type="x" size="24"></vue-feather>
@@ -148,21 +131,7 @@
             <span>{{ isDarkMode ? 'Dark Mode' : 'Light Mode' }}</span>
           </button>
 
-          <a href="https://coconut.naturalproducts.net/" target="_blank" class="btn btn-coconut btn-full">
-            <div class="btn-bg"></div>
-            <div class="btn-shine"></div>
-            <img src="@/assets/coconut-logo.svg" alt="COCONUT" class="btn-icon" />
-            <span>Visit COCONUT</span>
-            <vue-feather type="external-link" class="external-icon"></vue-feather>
-          </a>
 
-          <a href="https://kohulanr.com/decimer-image-segmentation/" target="_blank" class="btn btn-decimer btn-full">
-            <div class="btn-bg"></div>
-            <div class="btn-shine"></div>
-            <img src="@/assets/decimer-logo.png" alt="DECIMER" class="btn-icon" />
-            <span>Visit DECIMER</span>
-            <vue-feather type="external-link" class="external-icon"></vue-feather>
-          </a>
         </div>
       </div>
     </transition>
