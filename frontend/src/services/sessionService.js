@@ -64,7 +64,13 @@ class SessionService {
         const status = await this.getSessionStatus();
         if (status.success) {
           console.log('Using existing session:', this.sessionId);
-          await this.connectWebSocket();
+          // Try to connect WebSocket, but don't fail session recovery if WebSocket fails
+          try {
+            await this.connectWebSocket();
+          } catch (wsError) {
+            console.warn('WebSocket connection failed, but session is valid:', wsError.message);
+            // Session is still valid even if WebSocket fails
+          }
           return status;
         }
       } catch (error) {
@@ -95,7 +101,13 @@ class SessionService {
       
       if (data.success) {
         this.storeSession(data.session.session_id);
-        await this.connectWebSocket();
+        // Try to connect WebSocket, but don't fail session creation if WebSocket fails
+        try {
+          await this.connectWebSocket();
+        } catch (wsError) {
+          console.warn('WebSocket connection failed, but session created successfully:', wsError.message);
+          // Session is still valid even if WebSocket fails
+        }
         return data;
       } else {
         throw new Error('Failed to create session');
@@ -115,7 +127,9 @@ class SessionService {
     }
 
     try {
-      this.websocket = new WebSocket(`${this.wsUrl}/session/ws/${this.sessionId}`);
+      const wsUrl = `${this.wsUrl}/session/ws/${this.sessionId}`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      this.websocket = new WebSocket(wsUrl);
       
       this.websocket.onopen = () => {
         console.log('WebSocket connected');
@@ -206,6 +220,13 @@ class SessionService {
    * Attempt to reconnect WebSocket
    */
   attemptReconnect() {
+    // Don't attempt to reconnect if we don't have a session ID
+    if (!this.sessionId) {
+      console.log('No session ID available for reconnection, skipping reconnect attempt');
+      this.emit('reconnectFailed');
+      return;
+    }
+
     this.reconnectAttempts++;
     console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
     
@@ -389,21 +410,50 @@ class SessionService {
     
     const handlePageUnload = () => {
       if (this.sessionId) {
-        navigator.sendBeacon(
-          `${this.backendUrl}/session/cleanup/${this.sessionId}`
-        );
+        // Explicit synchronous disconnection - more reliable for tab close
+        // Try both methods to ensure session cleanup
+        try {
+          // 1. Synchronous XHR request (works during unload)
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${this.backendUrl}/session/remove/${this.sessionId}`, false); // false = synchronous
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.send(JSON.stringify({}));
+          
+          // 2. Also try WebSocket if available
+          if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.websocket.send(JSON.stringify({ type: 'disconnect' }));
+          }
+          
+          // 3. Beacon as last resort fallback
+          navigator.sendBeacon(
+            `${this.backendUrl}/session/remove/${this.sessionId}`,
+            JSON.stringify({})
+          );
+          
+          console.log('Session cleanup triggered on page unload');
+        } catch (error) {
+          console.warn('Failed session cleanup on unload:', error);
+        }
+        
+        // Clear local session references
+        this.sessionId = null;
+        sessionStorage.removeItem(this.sessionKey);
       }
     };
     
+    // Add multiple event listeners to ensure cleanup happens
     window.addEventListener('beforeunload', handlePageUnload);
     window.addEventListener('unload', handlePageUnload);
     window.addEventListener('pagehide', handlePageUnload);
     
+    // Handle tab visibility changes
     document.addEventListener('visibilitychange', () => {
+      // Only on hiding the tab - don't cleanup on just switching tabs
       if (document.visibilityState === 'hidden' && this.sessionId) {
-        navigator.sendBeacon(
-          `${this.backendUrl}/session/cleanup/${this.sessionId}`
-        );
+        // Just send websocket signal, don't remove session on tab switch
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+          this.websocket.send(JSON.stringify({ type: 'heartbeat' }));
+        }
       }
     });
     
@@ -446,23 +496,7 @@ class SessionService {
    * Get the API base URL with proper fallbacks - matches api.js logic but for session endpoints
    */
   getApiBaseUrl() {
-    // In production on the marcus.decimer.ai server
-    // Session endpoints are not versioned and need direct API domain access
-    if (window.location.hostname === 'marcus.decimer.ai') {
-      return 'https://api.marcus.decimer.ai';
-    }
-
-    // Check for environment variables
-    if (process.env && process.env.VUE_APP_API_URL) {
-      return process.env.VUE_APP_API_URL;
-    }
-
-    // Docker compose environment - frontend can reach backend directly
-    if (process.env.NODE_ENV === 'production') {
-      return 'http://backend:9000';
-    }
-
-    // Development fallback
+    // Force localhost for local development
     return 'http://localhost:9000';
   }
 
@@ -470,15 +504,8 @@ class SessionService {
    * Get WebSocket URL based on the HTTP API URL
    */
   getWebSocketUrl() {
-    const baseUrl = this.backendUrl;
-    
-    // In production with marcus.decimer.ai, use secure WebSocket
-    if (window.location.hostname === 'marcus.decimer.ai') {
-      return 'wss://api.marcus.decimer.ai';
-    }
-    
-    // For other environments, convert http to ws
-    return baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+    // Force localhost for local development
+    return 'ws://localhost:9000';
   }
 }
 

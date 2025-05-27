@@ -55,7 +55,7 @@
             <span v-if="isRefreshing">Refreshing...</span>
             <span v-else>Refresh Status</span>
           </button>
-          
+
           <button @click="leaveQueue" class="btn btn-outline">
             Leave Queue
           </button>
@@ -95,11 +95,13 @@ export default {
   name: 'SessionManager',
   data() {
     return {
+      // UI states
       isInitializing: true,
-      isWaiting: false,
       isActive: false,
+      isWaiting: false,
       hasConnectionError: false,
       isRefreshing: false,
+
       
       // Session data
       sessionStatus: null,
@@ -200,6 +202,12 @@ export default {
       
       try {
         this.isRefreshing = true;
+        // Only try to refresh if we have an active session
+        if (!sessionService.isActive()) {
+          console.log('No active session for status refresh, skipping');
+          return;
+        }
+        
         const result = await sessionService.getSessionStatus();
         
         if (result.success) {
@@ -207,7 +215,10 @@ export default {
         }
       } catch (error) {
         console.error('Failed to refresh status:', error);
-        this.$emit('error', 'Failed to refresh status');
+        // Don't emit error for "No active session" as this is expected during reinitialization
+        if (!error.message.includes('No active session')) {
+          this.$emit('error', 'Failed to refresh status');
+        }
       } finally {
         this.isRefreshing = false;
       }
@@ -271,6 +282,7 @@ export default {
       }
     },
     
+
     async retryConnection() {
       if (this.connectionRetries >= this.maxRetries) {
         this.$emit('max-retries-reached');
@@ -294,13 +306,13 @@ export default {
     
     // Event handlers
     onConnected() {
-      console.log('Session WebSocket connected');
+      console.log('Session WebSocket connected - SessionId:', sessionService.getSessionId());
       this.hasConnectionError = false;
       this.connectionRetries = 0;
     },
     
     onDisconnected() {
-      console.log('Session WebSocket disconnected');
+      console.log('Session WebSocket disconnected - SessionId:', sessionService.getSessionId());
     },
     
     onStatusUpdate(data) {
@@ -344,9 +356,9 @@ export default {
       const isPageReload = performance.getEntriesByType('navigation')[0]?.type === 'reload';
       
       if (isPageReload) {
-        console.log('Page reload detected, clearing stale session data');
-        // Force a fresh session creation
-        sessionService.cleanup();
+        console.log('Page reload detected, will reinitialize session');
+        // Don't cleanup immediately - let the session recovery process handle it
+        // If the stored session is invalid, it will be cleared during createSession()
       }
     },
     

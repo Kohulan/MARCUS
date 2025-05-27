@@ -93,7 +93,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 await websocket.send_text(json.dumps(response))
 
             elif message.get("type") == "disconnect":
-                # User wants to disconnect
+                # User wants to disconnect - remove session immediately
+                logger.info(f"User requested disconnect for session {session_id}")
+                await session_manager.remove_session(session_id)
                 break
 
     except WebSocketDisconnect:
@@ -102,9 +104,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.error(f"WebSocket error for session {session_id}: {e}")
     finally:
         ws_manager.disconnect(session_id)
+        # Remove session immediately when WebSocket disconnects
+        # This ensures queue advances quickly when users close tabs
         await session_manager.remove_session(session_id)
         # Broadcast update to remaining users
-        await ws_manager.broadcast_queue_update()
+        if ws_manager.connections:
+            await ws_manager.broadcast_queue_update()
 
 
 @router.post("/create")
@@ -114,8 +119,9 @@ async def create_session(user_id: str = Query(None)):
         session_info = await session_manager.create_session(user_id)
         queue_status = await session_manager.get_queue_status()
 
-        # Broadcast queue update to all connected users
-        await ws_manager.broadcast_queue_update()
+        # Broadcast queue update to all connected users (only if there are connections)
+        if ws_manager.connections:
+            await ws_manager.broadcast_queue_update()
 
         return {"success": True, "session": session_info, "queue_status": queue_status}
     except Exception as e:
@@ -161,7 +167,8 @@ async def remove_session(session_id: str):
         removed = await session_manager.remove_session(session_id)
 
         # Always broadcast queue update regardless of whether session was found
-        await ws_manager.broadcast_queue_update()
+        if ws_manager.connections:
+            await ws_manager.broadcast_queue_update()
 
         if removed:
             return {"success": True, "message": "Session removed successfully"}
@@ -219,14 +226,27 @@ async def session_heartbeat(session_id: str):
 async def reset_all_sessions():
     """Reset all sessions - clear active sessions and waiting queue."""
     try:
+        # Close any WebSocket connections first
+        disconnected_count = 0
+        for session_id in list(ws_manager.connections.keys()):
+            try:
+                connection = ws_manager.connections[session_id]
+                await connection.close(code=1000, reason="Session reset")
+                ws_manager.disconnect(session_id)
+                disconnected_count += 1
+            except Exception as e:
+                logger.error(f"Error closing WebSocket for session {session_id}: {e}")
+
+        # Then reset all sessions
         queue_status = await session_manager.reset_all_sessions()
 
-        # Broadcast queue update to all connected users
-        await ws_manager.broadcast_queue_update()
+        logger.info(
+            f"Reset complete. Closed {disconnected_count} WebSocket connections."
+        )
 
         return {
             "success": True,
-            "message": "All sessions have been reset",
+            "message": f"All sessions have been reset. Closed {disconnected_count} WebSocket connections.",
             "queue_status": queue_status,
         }
     except Exception as e:
