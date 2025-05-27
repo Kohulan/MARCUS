@@ -20,7 +20,7 @@ class SessionManager:
         self.max_concurrent_users = max_concurrent_users
         self.active_sessions: Dict[str, dict] = {}  # session_id -> session_info
         self.waiting_queue: List[dict] = []  # List of waiting users
-        self.session_timeout = 300  # 5 minutes timeout for inactive sessions
+        self.session_timeout = 60  # 1 minute timeout for inactive sessions
         self._lock = asyncio.Lock()
 
     async def create_session(self, user_id: Optional[str] = None) -> dict:
