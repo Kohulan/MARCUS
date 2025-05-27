@@ -20,8 +20,10 @@ from .routers import decimer_segmentation
 from .routers import ocsr_engine
 from .routers import depiction_router
 from .routers import similarity_router
+from .routers import session_router
 from app.exception_handlers import input_exception_handler
 from app.exception_handlers import InvalidInputException
+from app.middleware.session_middleware import SessionMiddleware
 from app.schemas.healthcheck import HealthCheck
 
 app = FastAPI(
@@ -64,8 +66,14 @@ app = VersionedFastAPI(
     version=os.getenv("RELEASE_VERSION", "1.0"),
 )
 
+# Add session router AFTER versioning to avoid WebSocket versioning issues
+app.include_router(session_router.router)
+
 
 origins = ["*"]
+
+# Add session management middleware
+app.add_middleware(SessionMiddleware)
 
 
 @app.middleware("http")

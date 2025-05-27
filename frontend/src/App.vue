@@ -1,51 +1,62 @@
 <template>
   <div class="app-container">
-    <!-- Cinematic Loading Masterpiece -->
-    <loading-screen 
-      v-if="!appLoaded" 
-      @loading-complete="finishLoading" 
-    />
-    
-    <!-- App Content - only visible after loading -->
-    <template v-if="appLoaded">
-      <AppHeader />
-      
-      <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible && !isAboutVisible && !isPrivacyPolicyVisible">
-        <HomeView />
-      </main>
-      
-      <!-- Disclaimer page - shown when isDisclaimerVisible is true -->
-      <div class="disclaimer-wrapper" v-if="isDisclaimerVisible">
-        <disclaimer-page 
-          @close="hideDisclaimer" 
+    <!-- Session Manager - handles user queue and concurrency -->
+    <session-manager
+      @session-activated="onSessionActivated"
+      @session-ended="onSessionEnded"
+      @connection-failed="onConnectionFailed"
+      @max-retries-reached="onMaxRetriesReached"
+    >
+      <template #main-content>
+        <!-- Original App Content -->
+        <!-- Cinematic Loading Masterpiece -->
+        <loading-screen 
+          v-if="!appLoaded" 
+          @loading-complete="finishLoading" 
         />
-      </div>
-      
-      <!-- Features section - shown when isFeaturesVisible is true -->
-      <div class="features-wrapper" v-if="isFeaturesVisible">
-        <features-section 
-          :showCloseButton="true"
-          @close="hideFeatures" 
-        />
-      </div>
-      
-      <!-- About page - shown when isAboutVisible is true -->
-      <div class="about-wrapper" v-if="isAboutVisible">
-        <about-page 
-          :showCloseButton="true"
-          @close="hideAbout" 
-        />
-      </div>
-      
-      <!-- Privacy Policy page - shown when isPrivacyPolicyVisible is true -->
-      <div class="privacy-policy-wrapper" v-if="isPrivacyPolicyVisible">
-        <privacy-policy-page 
-          @close="hidePrivacyPolicy" 
-        />
-      </div>
-      
-      <AppFooter />
-    </template>
+        
+        <!-- App Content - only visible after loading -->
+        <template v-if="appLoaded">
+          <AppHeader />
+          
+          <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible && !isAboutVisible && !isPrivacyPolicyVisible">
+            <HomeView />
+          </main>
+          
+          <!-- Disclaimer page - shown when isDisclaimerVisible is true -->
+          <div class="disclaimer-wrapper" v-if="isDisclaimerVisible">
+            <disclaimer-page 
+              @close="hideDisclaimer" 
+            />
+          </div>
+          
+          <!-- Features section - shown when isFeaturesVisible is true -->
+          <div class="features-wrapper" v-if="isFeaturesVisible">
+            <features-section 
+              :showCloseButton="true"
+              @close="hideFeatures" 
+            />
+          </div>
+          
+          <!-- About page - shown when isAboutVisible is true -->
+          <div class="about-wrapper" v-if="isAboutVisible">
+            <about-page 
+              :showCloseButton="true"
+              @close="hideAbout" 
+            />
+          </div>
+          
+          <!-- Privacy Policy page - shown when isPrivacyPolicyVisible is true -->
+          <div class="privacy-policy-wrapper" v-if="isPrivacyPolicyVisible">
+            <privacy-policy-page 
+              @close="hidePrivacyPolicy" 
+            />
+          </div>
+          
+          <AppFooter />
+        </template>
+      </template>
+    </session-manager>
     
     <!-- Notifications -->
     <div class="notifications-container">
@@ -78,6 +89,7 @@ import FeaturesSection from './views/FeaturesSection.vue'
 import AboutPage from './views/AboutPage.vue'
 import PrivacyPolicyPage from './views/PrivacyPolicyPage.vue'
 import LoadingScreen from './components/common/LoadingScreen.vue'
+import SessionManager from './components/SessionManager.vue'
 
 export default {
   name: 'App',
@@ -89,7 +101,8 @@ export default {
     FeaturesSection,
     AboutPage,
     PrivacyPolicyPage,
-    LoadingScreen
+    LoadingScreen,
+    SessionManager
   },
   
   data() {
@@ -120,6 +133,27 @@ export default {
     
     finishLoading() {
       this.appLoaded = true;
+    },
+    
+    // Session Manager Event Handlers
+    onSessionActivated() {
+      console.log('Session activated - user can now use MARCUS');
+      // You can add notifications or analytics here
+    },
+    
+    onSessionEnded() {
+      console.log('Session ended');
+      // Handle session cleanup if needed
+    },
+    
+    onConnectionFailed() {
+      console.error('Connection to session service failed');
+      // You could show a fallback interface or error message
+    },
+    
+    onMaxRetriesReached() {
+      console.error('Maximum connection retries reached');
+      // Handle complete failure to connect
     }
   }
 }

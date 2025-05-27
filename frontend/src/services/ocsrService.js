@@ -1,9 +1,23 @@
 import api from './api'
+import { api as sessionAwareApi } from './apiClient'
+import sessionService from './sessionService'
 
 /**
  * Service for interacting with the OCSR (Optical Chemical Structure Recognition) endpoints
+ * Enhanced with session management and concurrency control
  */
 const ocsrService = {
+  /**
+   * Check if user has an active session before making requests
+   * @returns {boolean} - True if session is active
+   */
+  _validateSession() {
+    if (!sessionService.isActive()) {
+      throw new Error('No active session. Please wait for your turn or create a new session.');
+    }
+    return true;
+  },
+
   /**
    * Generate SMILES from a chemical structure image
    * @param {File|null} imageFile - The chemical structure image file (optional)
@@ -14,6 +28,9 @@ const ocsrService = {
    * @returns {Promise} - Promise with the generated SMILES data
    */
   generateSmiles: async (imageFile = null, imagePath = null, options = {}) => {
+    // Validate session before making request
+    ocsrService._validateSession();
+    
     const formData = new FormData()
     
     if (imageFile) {
@@ -29,18 +46,22 @@ const ocsrService = {
     formData.append('engine', options.engine || 'decimer')
     formData.append('hand_drawn', options.handDrawn || false)
     
-    // Use multipart/form-data for file uploads
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    }
-    
+    // Use session-aware API client for file uploads
     try {
-      const response = await api.post('/ocsr/generate_smiles', formData, config)
+      const response = await sessionAwareApi.uploadFile('/latest/ocsr/generate_smiles', imageFile || formData)
+      
+      // Log usage for session tracking
+      console.log(`OCSR SMILES generation completed for session ${sessionService.getSessionId()}`);
+      
       return response.data
     } catch (error) {
       console.error('Error generating SMILES:', error)
+      
+      // Handle session-specific errors
+      if (error.response?.data?.error_code === 'SESSION_NOT_ACTIVE') {
+        throw new Error('Your session is not active. Please wait in the queue.');
+      }
+      
       throw error
     }
   },

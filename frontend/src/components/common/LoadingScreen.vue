@@ -34,7 +34,7 @@
         <div class="title-container">
           <h1 class="title"><span class="marcus-text">MARCUS</span></h1>
           <div class="badge-wrapper">
-            <span class="badge">Public-Beta</span>
+            <span class="badge">Beta</span>
             <span class="badge-shine"></span>
           </div>
         </div>

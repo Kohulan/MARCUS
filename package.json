@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "ketcher-core": "^3.2.0",
-    "ketcher-react": "^3.2.0"
+    "ketcher-react": "^3.2.0",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.18.2"
   }
 }
