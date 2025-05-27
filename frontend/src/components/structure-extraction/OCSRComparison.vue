@@ -565,10 +565,10 @@ export default {
         }
         
         &.molscribe-engine {
-          background-color: rgba(175, 82, 222, 0.1);
+          background-color: rgba(37, 99, 235, 0.1);
           
           .engine-icon {
-            color: #af52de;
+            color: #2563eb;
           }
         }
         

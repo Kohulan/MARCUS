@@ -517,9 +517,9 @@ export default {
         }
 
         .molscribe-tag {
-          background-color: rgba(175, 82, 222, 0.1);
-          color: #af52de;
-          border: 1px solid rgba(175, 82, 222, 0.2);
+          background-color: rgba(37, 99, 235, 0.1);
+          color: #2563eb;
+          border: 1px solid rgba(37, 99, 235, 0.2);
         }
       }
     }

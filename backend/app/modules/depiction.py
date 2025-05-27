@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-import io
 import base64
-from typing import Dict, Any, Union, Tuple, Optional, Literal
-
+from typing import Dict, Any, Tuple, Literal
+from jpype import JClass
 from fastapi import HTTPException, status
 
 # Import CDK wrapper functions
@@ -56,9 +55,6 @@ def get_cdk_depiction(
         ValueError: If molecule cannot be processed
     """
     try:
-        # Import necessary Java classes
-        from jpype import JClass
-
         cdk_base = "org.openscience.cdk"
         StandardGenerator = JClass(
             cdk_base + ".renderer.generators.standard.StandardGenerator"

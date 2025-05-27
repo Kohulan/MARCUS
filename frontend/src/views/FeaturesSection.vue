@@ -32,7 +32,7 @@
     <div class="container">
       <div class="section-header">
         <div class="section-tag">Key Capabilities</div>
-        <h2 class="section-title">MARCUS Features</h2>
+        <h2 class="section-title"><span class="marcus-text">MARCUS</span> Features</h2>
         <p class="section-description">
           Powerful tools for extracting, analyzing, and curating chemical structures from scientific literature
         </p>
@@ -227,7 +227,7 @@
       <div class="features-cta">
         <div class="cta-content">
           <h3>Ready to Streamline Your Chemical Structure Curation?</h3>
-          <p>Upload your first document and explore the power of MARCUS</p>
+          <p>Upload your first document and explore the power of <span class="marcus-text">MARCUS</span></p>
         </div>
         <button class="btn btn-primary btn-large" @click="scrollToUpload">
           <div class="btn-bg"></div>
@@ -331,7 +331,8 @@ export default {
   padding: 2rem 0 5rem;
   background: var(--color-bg, #f8fafc);
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  height: 100vh;
   
   &:before {
     content: '';
@@ -424,7 +425,7 @@ export default {
       font-weight: 800;
       line-height: 1.2;
       margin: 0 0 1.5rem;
-      background: var(--gradient-primary, linear-gradient(135deg, #4a6cf7 0%, #2254e2 100%));
+      background: var(--gradient-primary, linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -515,7 +516,7 @@ export default {
   .section-tag {
     display: inline-block;
     background: rgba(var(--color-primary-rgb, 52, 97, 255), 0.1);
-    color: var(--color-primary, #3461ff);
+    color: var(--color-primary, #1e3a8a);
     font-size: 0.875rem;
     font-weight: 600;
     padding: 0.5rem 1rem;
@@ -527,7 +528,7 @@ export default {
     font-size: 2.5rem;
     font-weight: 800;
     margin: 0 0 1rem;
-    background: var(--gradient-primary, linear-gradient(135deg, #4a6cf7 0%, #2254e2 100%));
+    background: var(--gradient-primary, linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -610,7 +611,7 @@ export default {
       left: 0;
       width: 100%;
       height: 100%;
-      background: var(--gradient-primary, linear-gradient(135deg, #4a6cf7 0%, #2254e2 100%));
+      background: var(--gradient-primary, linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%));
       opacity: 0.2;
       border-radius: 16px;
       transition: opacity 0.3s ease;
@@ -620,7 +621,7 @@ export default {
   .feature-icon {
     width: 28px;
     height: 28px;
-    color: var(--color-primary, #3461ff);
+    color: var(--color-primary, #1e3a8a);
     position: relative;
     z-index: 1;
     transition: transform 0.3s ease;
@@ -651,7 +652,7 @@ export default {
     gap: 0.5rem;
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--color-primary, #3461ff);
+    color: var(--color-primary, #1e3a8a);
     background: none;
     border: none;
     padding: 0.5rem 0;
@@ -771,7 +772,7 @@ export default {
         }
         
         .tech-name {
-          color: var(--color-primary, #3461ff);
+          color: var(--color-primary, #1e3a8a);
         }
       }
     }
@@ -827,7 +828,7 @@ export default {
         background: rgba(var(--color-primary-rgb, 52, 97, 255), 0.08);
         
         .workflow-step-icon {
-          background: var(--color-primary, #3461ff);
+          background: var(--color-primary, #1e3a8a);
           color: white;
         }
       }
@@ -837,7 +838,7 @@ export default {
         height: 60px;
         border-radius: 50%;
         background: rgba(var(--color-primary-rgb, 52, 97, 255), 0.1);
-        color: var(--color-primary, #3461ff);
+        color: var(--color-primary, #1e3a8a);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -865,7 +866,7 @@ export default {
     }
     
     .workflow-arrow {
-      color: var(--color-primary, #3461ff);
+      color: var(--color-primary, #1e3a8a);
       opacity: 0.7;
       
       @media (max-width: 768px) {
@@ -879,7 +880,7 @@ export default {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--gradient-primary, linear-gradient(135deg, #4a6cf7 0%, #2254e2 100%));
+    background: var(--gradient-primary, linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%));
     border-radius: 20px;
     padding: 2.5rem;
     overflow: hidden;
@@ -935,7 +936,7 @@ export default {
       font-size: 1rem;
       font-weight: 600;
       background: white;
-      color: var(--color-primary, #3461ff);
+      color: var(--color-primary, #1e3a8a);
       border: none;
       border-radius: 10px;
       cursor: pointer;
@@ -953,7 +954,7 @@ export default {
       }
       
       .btn-icon {
-        color: var(--color-primary, #3461ff);
+        color: var(--color-primary, #1e3a8a);
       }
       
       .btn-bg {
@@ -988,13 +989,11 @@ export default {
       border-radius: 10px;
       transition: all 0.3s ease;
       z-index: -1;
-    }
-    
-    &.btn-primary {
+    }      &.btn-primary {
       color: white;
       
       .btn-bg {
-        background: var(--gradient-primary, linear-gradient(135deg, #4a6cf7 0%, #2254e2 100%));
+        background: var(--gradient-primary, linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%));
         box-shadow: 
           0 4px 10px rgba(var(--color-primary-rgb, 52, 97, 255), 0.2),
           inset 0 0 0 1px rgba(255, 255, 255, 0.1);
@@ -1016,7 +1015,7 @@ export default {
     }
     
     &.btn-secondary {
-      color: var(--color-primary, #3461ff);
+      color: var(--color-primary, #1e3a8a);
       border: 1px solid rgba(var(--color-primary-rgb, 52, 97, 255), 0.3);
       background: rgba(var(--color-primary-rgb, 52, 97, 255), 0.05);
       
@@ -1042,7 +1041,7 @@ export default {
     top: 1rem;
     right: 1rem;
     background: rgba(var(--color-primary-rgb, 52, 97, 255), 0.1);
-    color: var(--color-primary, #3461ff);
+    color: var(--color-primary, #1e3a8a);
     border: none;
     border-radius: 50%;
     width: 48px;

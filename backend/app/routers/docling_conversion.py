@@ -1,18 +1,15 @@
 from __future__ import annotations
 import os
 import uuid
-from typing import Literal, Union, Optional
+from PyPDF2 import PdfReader
 from fastapi import (
     APIRouter,
-    Body,
     HTTPException,
-    Query,
     status,
     UploadFile,
     File,
     Form,
 )
-from fastapi.responses import JSONResponse, Response
 from app.schemas.healthcheck import HealthCheck
 from app.schemas.error import BadRequestModel, ErrorResponse, NotFoundModel
 from app.config import PDF_DIR
@@ -21,6 +18,7 @@ from app.modules.dockling_wrapper import (
     extract_from_docling_document,
     combine_to_paragraph,
 )
+
 
 router = APIRouter(
     prefix="/docling_conversion",
@@ -165,10 +163,6 @@ async def extract_pdf_text(
         # Check if the extracted text has more than 10 words
         word_count = len(combined_text.split())
         if word_count <= 10:
-            # Extract the whole first page instead
-            # You can either use PyPDF2 directly or modify your extraction function
-            from PyPDF2 import PdfReader
-
             reader = PdfReader(file_path)
             if len(reader.pages) > 0:
                 first_page_text = reader.pages[0].extract_text()

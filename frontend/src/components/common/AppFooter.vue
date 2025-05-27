@@ -1,122 +1,67 @@
 <template>
   <footer class="app-footer">
+    <div class="floating-element"></div>
     <div class="footer-content">
-      <!-- Main content area -->
-      <div class="main-section">
-        <!-- Logo and branding -->
-        <div class="branding">
-          <div class="logo">MARCUS <span class="badge">NP</span></div>
-          <div class="tagline">Molecular Annotation and Recognition for Curating Unravelled Structures</div>
+      <!-- Single streamlined footer layout -->
+      <div class="footer-main">
+        <!-- Left side: Copyright -->
+        <div class="copyright-section">
+          <div class="copyright-text">&copy; 2025 <span class="marcus-text">MARCUS</span>. All rights reserved.</div>
+        </div>
 
-          <!-- Social links below tagline -->
-          <div class="social-links">
-            <a href="https://github.com/Kohulan/MARCUS" target="_blank" aria-label="GitHub" class="social-link">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+        <!-- Center: Credits with tagline -->
+        <div class="center-section">
+          <div class="credits">
+            Crafted with
+            <svg class="coffee-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="#a0522d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+              <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+              <line x1="6" y1="1" x2="6" y2="4"></line>
+              <line x1="10" y1="1" x2="10" y2="4"></line>
+              <line x1="14" y1="1" x2="14" y2="4"></line>
+            </svg>
+            by <a href="https://kohulanr.com" target="_blank">Kohulan Rajan</a> @ <a
+              href="https://github.com/Steinbeck-Lab" target="_blank">Steinbeck Lab</a>
+          </div>
+        </div>
+
+        <!-- Right side: Links with icons -->
+        <div class="links-section">
+          <div class="footer-link-wrapper">
+            <a href="https://github.com/Kohulan/MARCUS" target="_blank" class="footer-link">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path
                   d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
                 </path>
               </svg>
+              GitHub
             </a>
-            <a href="mailto:kohulan.rajan@uni-jena.de" aria-label="Email" class="social-link">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                <polyline points="22,6 12,13 2,6"></polyline>
-              </svg>
-            </a>
-            <a href="https://cheminf.uni-jena.de/" target="_blank" aria-label="Website" class="social-link">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
-                </path>
-              </svg>
-            </a>
-          </div>
-        </div>
-
-        <!-- Resources section -->
-        <div class="resources-section">
-          <div class="resources-container">
-            <!-- Resources heading directly above DECIMER -->
-            <h3 class="resources-heading">Resources</h3>
-
-            <div class="resources-items">
-              <a href="https://decimer.ai" target="_blank" class="resource-link">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="16 18 22 12 16 6"></polyline>
-                  <polyline points="8 6 2 12 8 18"></polyline>
-                </svg>
-                <span>DECIMER</span>
-              </a>
-              <a href="https://coconut.naturalproducts.net/" target="_blank" class="resource-link">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-                </svg>
-                <span>COCONUT</span>
-              </a>
-              <div class="resource-group">
-                <a href="https://naturalprducts.net/" target="_blank" class="resource-link">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                    <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                    <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                  </svg>
-                  <span>Natural Products Services</span>
-                </a>
-
-                <!-- Coming Soon banner next to Natural Products Services -->
-                <div class="coming-soon-banner">
-                  <a href="https://github.com/Kohulan/MARCUS" target="_blank" class="coming-soon-link">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path
-                        d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
-                      </path>
-                    </svg>
-                    <span>Source Code</span>
-                    <span class="coming-soon-text">Coming Soon</span>
-                  </a>
-                </div>
-              </div>
+            <div class="tooltip">
+              <span class="tooltip-text">Almost there! Kohulan is still cooking up.. </span>
+              <div class="tooltip-sparkle">✨</div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Bottom credits area -->
-      <div class="bottom-section">
-        <div class="copyright">&copy; {{ currentYear }} MARCUS</div>
-
-        <div class="credits">
-          Crafted with
-          <svg class="coffee-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-            <line x1="6" y1="1" x2="6" y2="4"></line>
-            <line x1="10" y1="1" x2="10" y2="4"></line>
-            <line x1="14" y1="1" x2="14" y2="4"></line>
-          </svg>
-          by <a href="https://kohulanr.com" target="_blank">Kohulan Rajan</a> @ <a
-            href="https://github.com/Steinbeck-Lab" target="_blank">Steinbeck Lab</a>
-        </div>
-
-        <div class="license">
-          <svg class="license-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="8" r="7"></circle>
-            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-          </svg>
-          <a href="https://opensource.org/license/MIT" target="_blank">MIT License</a>
+          <a href="https://opensource.org/license/MIT" target="_blank" class="footer-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="7"></circle>
+              <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+            MIT License
+          </a>
+          <a href="#" class="footer-link" @click.prevent="showPrivacyPolicy">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14,2 14,8 20,8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10,9 9,9 8,9"></polyline>
+            </svg>
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>
@@ -124,12 +69,17 @@
 </template>
 
 <script>
+import { mapActions } from 'vuex'
+
 export default {
   name: 'AppFooter',
   computed: {
     currentYear() {
       return new Date().getFullYear()
     }
+  },
+  methods: {
+    ...mapActions(['showPrivacyPolicy'])
   }
 }
 </script>
@@ -137,418 +87,721 @@ export default {
 <style lang="scss" scoped>
 :root {
   /* Base theme colors - light mode defaults */
-  --footer-bg: linear-gradient(to right, rgba(99, 102, 241, 0.03), rgba(99, 102, 241, 0.08));
+  --footer-bg: linear-gradient(135deg,
+      rgba(99, 102, 241, 0.05) 0%,
+      rgba(139, 69, 19, 0.03) 25%,
+      rgba(99, 102, 241, 0.08) 50%,
+      rgba(168, 85, 247, 0.06) 75%,
+      rgba(99, 102, 241, 0.04) 100%);
   --primary: #6366f1;
+  --secondary: #8b4513;
+  --accent: #a855f7;
   --primary-light: rgba(99, 102, 241, 0.1);
   --primary-border: rgba(99, 102, 241, 0.2);
 
   /* Text colors */
   --text-heading: #0f172a;
-  /* Very dark - high contrast for headings */
   --text-body: #334155;
-  /* Dark gray for body text */
   --text-muted: #64748b;
-  /* Medium gray for less important text */
   --text-light: #94a3b8;
-  /* Lighter gray for subtle text */
 
-
-  /* Gradients and effects */
-  --primary-gradient: linear-gradient(90deg, #4338ca, #6366f1);
-  /* Darker gradient for better visibility */
+  /* Enhanced gradients and effects */
+  --primary-gradient: linear-gradient(135deg, #4338ca 0%, #6366f1 50%, #8b5cf6 100%);
+  --coffee-gradient: linear-gradient(45deg, #8b4513 0%, #a0522d 50%, #8b4513 100%);
   --primary-shadow: rgba(99, 102, 241, 0.3);
+  --glow-effect: 0 0 20px rgba(99, 102, 241, 0.2);
   --card-bg: white;
   --card-border: #e2e8f0;
-
-  /* Fixed logo color - won't change in dark mode */
-  --logo-color: #6366f1;
-  --logo-badge-bg: #6366f1;
 }
 
 /* Dark mode colors */
 @media (prefers-color-scheme: dark) {
   :root {
-    --footer-bg: linear-gradient(to right, rgba(99, 102, 241, 0.05), rgba(99, 102, 241, 0.1));
+    --footer-bg: linear-gradient(135deg,
+        rgba(99, 102, 241, 0.08) 0%,
+        rgba(139, 69, 19, 0.05) 25%,
+        rgba(99, 102, 241, 0.12) 50%,
+        rgba(168, 85, 247, 0.08) 75%,
+        rgba(99, 102, 241, 0.06) 100%);
     --primary: #818cf8;
-    /* Lighter indigo in dark mode */
+    --secondary: #d2691e;
+    --accent: #c084fc;
     --primary-light: rgba(129, 140, 248, 0.15);
     --primary-border: rgba(129, 140, 248, 0.2);
 
     /* Text colors - inverted for dark mode */
     --text-heading: #f1f5f9;
-    /* Very light for headings */
     --text-body: #e2e8f0;
-    /* Light gray for body text */
     --text-muted: #cbd5e1;
-    /* Medium light gray */
     --text-light: #94a3b8;
-    /* Dim gray for subtle text */
 
     /* Dark mode specific backgrounds */
     --card-bg: #1e293b;
-    /* Dark blue gray */
     --card-border: #334155;
-    /* Darker border color */
 
-    /* Primary gradient for dark mode */
-    --primary-gradient: linear-gradient(90deg, #4338ca, #6366f1);
+    /* Enhanced dark mode gradients */
+    --primary-gradient: linear-gradient(135deg, #4338ca 0%, #6366f1 50%, #8b5cf6 100%);
+    --coffee-gradient: linear-gradient(45deg, #a0522d 0%, #cd853f 50%, #a0522d 100%);
+    --glow-effect: 0 0 25px rgba(129, 140, 248, 0.3);
   }
 }
 
-/* Component Styles - Now using CSS variables */
+/* Component Styles */
 .app-footer {
   background: var(--footer-bg);
   position: relative;
   overflow: hidden;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  height: auto;
+  /* Changed from fixed height to auto */
+  min-height: 50px;
+  /* Minimum height to ensure content fits */
+  padding: 5px 0;
+  /* Add a small padding for vertical spacing */
+  border-top: 2px solid transparent;
+  border-image: var(--primary-gradient) 1;
+  backdrop-filter: blur(15px) saturate(180%);
+  box-shadow:
+    0 -8px 32px rgba(99, 102, 241, 0.12),
+    0 -4px 16px rgba(168, 85, 247, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
 
-  // Decorative elements
   &::before {
     content: '';
     position: absolute;
-    top: -100px;
-    right: -100px;
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
-    opacity: 0.3;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(99, 102, 241, 0.05) 25%,
+        rgba(168, 85, 247, 0.05) 50%,
+        rgba(99, 102, 241, 0.05) 75%,
+        transparent 100%);
+    animation: shimmer 8s linear infinite;
     z-index: 0;
   }
 
+  // Enhanced floating orbs
   &::after {
     content: '';
     position: absolute;
-    bottom: -50px;
-    left: -50px;
-    width: 200px;
-    height: 200px;
+    top: -40px;
+    right: -40px;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-    opacity: 0.3;
+    background: radial-gradient(circle,
+        rgba(99, 102, 241, 0.15) 0%,
+        rgba(168, 85, 247, 0.1) 50%,
+        transparent 70%);
+    opacity: 0.8;
     z-index: 0;
+    animation: float 6s ease-in-out infinite;
+  }
+
+  // Additional floating elements
+  .floating-element {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(139, 69, 19, 0.12) 0%,
+        transparent 70%);
+    top: -20px;
+    left: -20px;
+    animation: float-reverse 8s ease-in-out infinite;
+    z-index: 0;
+    opacity: 0.6;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(255, 215, 0, 0.1);
+      animation: pulse-glow 4s ease-in-out infinite;
+    }
   }
 
   .footer-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 1.25rem;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 2rem;
     position: relative;
     z-index: 1;
+    height: 100%;
+
+    @media (max-width: 768px) {
+      padding: 0 1rem;
+    }
   }
 
-  // Main section with logo and resources
-  .main-section {
+  // Streamlined single-row footer layout
+  .footer-main {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 0.75rem;
+    align-items: center;
+    height: 100%;
+    gap: 2rem;
+    width: 100%;
 
-    @media (max-width: 1024px) {
+    @media (max-width: 968px) {
+      gap: 1rem;
+    }
+
+    @media (max-width: 768px) {
       flex-direction: column;
-      gap: 1.5rem;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      justify-content: center;
     }
   }
 
-  // Logo and branding
-  .branding {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    max-width: 600px;
+  // Left: Copyright section
+  .copyright-section {
+    flex-shrink: 0;
+    min-width: fit-content;
 
-    .logo {
-      font-size: 1.75rem;
-      font-weight: 800;
+    .copyright-text {
+      font-size: 0.9rem;
+      font-weight: 700;
       letter-spacing: 1px;
-      margin: 0;
-      background: var(--gradient-primary);
-      /* Fixed color that doesn't change in dark mode */
-      letter-spacing: 0.5px;
+      color: var(--primary);
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      position: relative;
+      transition: all 0.3s ease;
+
+      .marcus-text {
+        font-family: 'GmarketSansLight', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: var(--primary);
+      }
+
+      &:hover {
+        transform: translateY(-1px);
+        text-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+      }
+
+      @media (max-width: 768px) {
+        font-size: 0.85rem;
+      }
+    }
+  }
+
+  // Center: Credits with tagline
+  .center-section {
+    flex: 1;
+    text-align: center;
+    max-width: 700px;
+    margin: 0 auto;
+
+    @media (max-width: 968px) {
+      max-width: 500px;
+    }
+
+    .credits {
+      font-size: 0.85rem;
+      color: var(--text-muted);
       display: flex;
       align-items: center;
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      transform: translateZ(0);
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-
-      .badge {
-        font-size: 0.7rem;
-        margin-left: 0.5rem;
-        padding: 0.1rem 0.4rem;
-        background-color: var(--logo-badge-bg);
-        /* Fixed color that doesn't change in dark mode */
-        color: white;
-        border-radius: 4px;
-        font-weight: 600;
-        transform: translateY(-1px);
-      }
-    }
-
-    .tagline {
-      font-size: 0.95rem;
-      color: var(--text-body);
+      justify-content: center;
+      gap: 0.25rem;
+      flex-wrap: nowrap;
+      line-height: 1.4;
       white-space: nowrap;
+      overflow: hidden;
 
-      @media (max-width: 1200px) {
-        white-space: normal;
+      @media (max-width: 968px) {
+        font-size: 0.8rem;
+        gap: 0.2rem;
       }
-    }
 
-    // Social links below tagline
-    .social-links {
-      display: flex;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
+      @media (max-width: 768px) {
+        font-size: 0.7rem;
+        gap: 0.15rem;
+      }
 
-      .social-link {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background-color: var(--primary-light);
+      @media (max-width: 580px) {
+        font-size: 0.65rem;
+        gap: 0.1rem;
+      }
+
+      a {
         color: var(--primary);
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        position: relative;
 
         &:hover {
-          background-color: var(--primary);
-          color: white;
-          transform: translateY(-3px);
-          box-shadow: 0 8px 16px var(--primary-shadow);
+          text-decoration: underline;
+          transform: translateY(-1px);
+          text-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+        }
+      }
+
+      .coffee-icon {
+        width: 14px;
+        height: 14px;
+        background: var(--coffee-gradient);
+        border-radius: 2px;
+        margin: 0 0.2rem;
+        animation: steam-dance 4s infinite ease-in-out;
+        filter: drop-shadow(0 2px 4px rgba(201, 101, 29, 0.3)) drop-shadow(0 0 8px rgba(139, 69, 19, 0.2));
+        transition: all 0.3s ease;
+        flex-shrink: 0;
+        position: relative;
+        overflow: visible;
+
+        // Enhanced steam effect
+        &::before {
+          content: '☕';
+          position: absolute;
+          top: -2px;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 12px;
+          opacity: 0;
+          animation: steam-rise 3s infinite ease-in-out;
+        }
+
+        &::after {
+          content: '';
+          position: absolute;
+          top: -1px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 2px;
+          height: 6px;
+          background: linear-gradient(to top, transparent, rgba(255, 255, 255, 0.6));
+          border-radius: 1px;
+          animation: steam-wisp 2s infinite ease-in-out;
+        }
+
+        @media (max-width: 768px) {
+          width: 12px;
+          height: 12px;
+          margin: 0 0.15rem;
+        }
+
+        @media (max-width: 580px) {
+          width: 10px;
+          height: 10px;
+          margin: 0 0.1rem;
+        }
+
+        &:hover {
+          transform: scale(1.2) rotate(10deg);
+          filter: drop-shadow(0 4px 8px rgba(139, 69, 19, 0.4)) drop-shadow(0 0 12px rgba(139, 69, 19, 0.3)) drop-shadow(0 0 20px rgba(160, 82, 45, 0.2));
         }
       }
     }
   }
 
-  // Resources section - redesigned
-  .resources-section {
+  // Right: Links with icons
+  .links-section {
     display: flex;
-    flex-direction: column;
+    gap: 1.5rem;
+    flex-shrink: 0;
+    min-width: fit-content;
 
-    @media (max-width: 1024px) {
-      width: 100%;
+    @media (max-width: 968px) {
+      gap: 1rem;
     }
 
-    .resources-container {
+    @media (max-width: 768px) {
+      gap: 1rem;
+      justify-content: center;
+    }
+
+    .footer-link {
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-
-      @media (max-width: 1024px) {
-        align-items: flex-start;
-      }
-    }
-
-    // Resources heading with improved visibility
-    .resources-heading {
-      font-weight: 700;
-      font-size: 1.15rem;
-      color: var(--text-heading);
-      margin: 0 0 0.75rem 0;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      white-space: nowrap;
+      padding: 0.4rem 0.8rem;
+      border-radius: 12px;
       position: relative;
-      display: inline-block;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      align-self: flex-start;
+      background: linear-gradient(135deg,
+          rgba(99, 102, 241, 0.03) 0%,
+          rgba(168, 85, 247, 0.02) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.1);
+      overflow: hidden;
+
+      // Animated background gradient
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(99, 102, 241, 0.1) 50%,
+            transparent 100%);
+        transition: left 0.5s ease;
+        z-index: 0;
+      }
 
       &::after {
         content: '';
         position: absolute;
-        bottom: -4px;
-        left: 0;
-        width: 100%;
-        height: 3px;
-        /* Increased from 2px to make line more visible */
-        background-color: var(--primary);
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 2px;
+        background: var(--primary-gradient);
         border-radius: 1px;
-      }
-    }
-
-    .resources-items {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      align-items: flex-start;
-
-      .resource-link {
-        display: flex;
-        align-items: center;
-        text-decoration: none;
-        color: var(--text-body);
-        font-size: 0.95rem;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        gap: 0.5rem;
-        white-space: nowrap;
-
-        svg {
-          color: var(--primary);
-          transition: transform 0.2s ease;
-        }
-
-        &:hover {
-          color: var(--primary);
-          transform: translateY(-2px);
-
-          svg {
-            transform: scale(1.1);
-          }
-        }
+        transition: width 0.3s ease;
+        z-index: 1;
       }
 
-      // Resource group for Natural Products + Coming Soon
-      .resource-group {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-
-        @media (max-width: 768px) {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 0.5rem;
-        }
+      svg {
+        color: var(--primary);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
+        z-index: 2;
+        position: relative;
       }
 
-      // Coming Soon banner with improved visibility
-      .coming-soon-banner {
-        .coming-soon-link {
-          display: flex;
-          align-items: center;
-          text-decoration: none;
-          color: var(--text-body);
-          font-size: 0.95rem;
-          font-weight: 500;
-          gap: 0.5rem;
-          position: relative;
-
-          svg {
-            color: var(--primary);
-            transition: transform 0.3s ease;
-          }
-
-          /* Improved Coming Soon text with better contrast */
-          .coming-soon-text {
-            font-size: 0.7rem;
-            font-weight: 700;
-            /* Increased from 600 */
-            background: #4338ca;
-            /* Fixed dark color that works in both modes */
-            color: white;
-            padding: 0.15rem 0.5rem;
-            border-radius: 4px;
-            box-shadow: 0 2px 8px rgba(67, 56, 202, 0.4);
-            /* Darker shadow for better visibility */
-            position: relative;
-            overflow: hidden;
-
-            // Shine animation effect
-            &::after {
-              content: '';
-              position: absolute;
-              top: -50%;
-              left: -50%;
-              width: 200%;
-              height: 200%;
-              background: linear-gradient(90deg,
-                  rgba(255, 255, 255, 0) 0%,
-                  rgba(255, 255, 255, 0.5) 50%,
-                  rgba(255, 255, 255, 0) 100%);
-              transform: rotate(25deg) translateY(60%);
-              animation: shine 3s infinite;
-            }
-          }
-
-          &:hover {
-            color: var(--primary);
-            transform: translateY(-2px);
-
-            svg {
-              transform: scale(1.1) rotate(10deg);
-            }
-
-            .coming-soon-text {
-              box-shadow: 0 4px 12px rgba(67, 56, 202, 0.5);
-              /* Darker shadow on hover */
-            }
-          }
-        }
+      span {
+        z-index: 2;
+        position: relative;
       }
-    }
-  }
-
-  // Bottom credits section
-  .bottom-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--primary-border);
-    font-size: 0.85rem;
-    color: var(--text-muted);
-
-    @media (max-width: 768px) {
-      flex-direction: column;
-      gap: 0.75rem;
-      align-items: center;
-      text-align: center;
-    }
-
-    a {
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 500;
-      transition: all 0.2s ease;
 
       &:hover {
-        text-decoration: underline;
+        color: var(--primary);
+        transform: translateY(-3px) scale(1.05);
+        background: linear-gradient(135deg,
+            rgba(99, 102, 241, 0.1) 0%,
+            rgba(168, 85, 247, 0.08) 100%);
+        border-color: rgba(99, 102, 241, 0.3);
+        box-shadow:
+          0 8px 25px rgba(99, 102, 241, 0.2),
+          0 4px 12px rgba(168, 85, 247, 0.1),
+          var(--glow-effect);
+
+        &::before {
+          left: 0;
+        }
+
+        &::after {
+          width: 80%;
+        }
+
+        svg {
+          transform: scale(1.2) rotate(8deg);
+          filter: drop-shadow(0 4px 8px rgba(99, 102, 241, 0.3)) drop-shadow(0 0 12px rgba(99, 102, 241, 0.2));
+          color: var(--accent);
+        }
       }
-    }
 
-    .credits,
-    .license {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
+      &:active {
+        transform: translateY(-1px) scale(1.02);
+      }
 
-    /* Fixed coffee cup color */
-    .coffee-icon {
-      width: 12px;
-      height: 12px;
-      color: #6f4e37;
-      margin: 0 0.2rem;
-      animation: steam 3s infinite ease-in-out;
-      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1));
-    }
+      @media (max-width: 968px) {
+        font-size: 0.85rem;
+        gap: 0.4rem;
+        padding: 0.3rem 0.6rem;
+      }
 
-    .license-icon {
-      color: var(--primary);
+      @media (max-width: 768px) {
+        font-size: 0.8rem;
+        gap: 0.3rem;
+        padding: 0.25rem 0.5rem;
+      }
     }
   }
 }
 
-// Animation for Coming Soon badge
-@keyframes shine {
+// Enhanced animations
+@keyframes steam-dance {
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+
+  25% {
+    transform: translateY(-1px) rotate(3deg);
+    opacity: 0.9;
+  }
+
+  50% {
+    transform: translateY(-2px) rotate(-2deg);
+    opacity: 0.95;
+  }
+
+  75% {
+    transform: translateY(-1px) rotate(4deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes steam-rise {
   0% {
-    transform: rotate(25deg) translateY(60%);
+    opacity: 0;
+    transform: translateX(-50%) translateY(0) scale(0.5);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: translateX(-50%) translateY(-8px) scale(1);
   }
 
   100% {
-    transform: rotate(25deg) translateY(-100%);
+    opacity: 0;
+    transform: translateX(-50%) translateY(-15px) scale(1.2);
   }
 }
 
+@keyframes steam-wisp {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scaleY(0);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: translateX(-50%) scaleY(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.8;
+  }
+
+  33% {
+    transform: translateY(-10px) rotate(120deg);
+    opacity: 0.6;
+  }
+
+  66% {
+    transform: translateY(-5px) rotate(240deg);
+    opacity: 0.9;
+  }
+}
+
+@keyframes float-reverse {
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: translateY(-8px) rotate(180deg) scale(1.1);
+    opacity: 0.4;
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0.6;
+  }
+}
+
+@keyframes gradient-shift {
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+// Legacy steam animation (keeping for compatibility)
 @keyframes steam {
 
   0%,
   100% {
     transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+
+  25% {
+    transform: translateY(-1px) rotate(2deg);
+    opacity: 0.8;
   }
 
   50% {
-    transform: translateY(-3px) rotate(5deg);
+    transform: translateY(-2px) rotate(3deg);
+    opacity: 0.9;
+  }
+
+  75% {
+    transform: translateY(-1px) rotate(-1deg);
+    opacity: 0.7;
+  }
+}
+
+// Enhanced pulse animation
+@keyframes pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+}
+
+// Tooltip Styles
+.footer-link-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%) translateX(-8px);
+  background: linear-gradient(135deg,
+      rgba(99, 102, 241, 0.95) 0%,
+      rgba(168, 85, 247, 0.95) 100%);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 8px 25px rgba(99, 102, 241, 0.3),
+    0 4px 12px rgba(168, 85, 247, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: rgba(99, 102, 241, 0.95);
+    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
+  }
+
+  .tooltip-text {
+    display: inline-block;
+    animation: none;
+    transition: all 0.3s ease;
+  }
+
+  .tooltip-sparkle {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 12px;
+    opacity: 0;
+    transform: scale(0.5) rotate(0deg);
+    transition: all 0.3s ease;
+    animation: sparkle 2s ease-in-out infinite;
+  }
+}
+
+.footer-link-wrapper:hover .tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(-12px) scale(1.02);
+
+  .tooltip-text {
+    animation: glow 1.5s ease-in-out infinite alternate;
+  }
+
+  .tooltip-sparkle {
+    opacity: 1;
+    transform: scale(1) rotate(180deg);
+  }
+}
+
+// Tooltip animations
+@keyframes glow {
+  0% {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  }
+
+  100% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 15px rgba(255, 255, 255, 0.4);
+  }
+}
+
+@keyframes sparkle {
+
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.7;
+  }
+
+  25% {
+    transform: scale(1.2) rotate(90deg);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(0.8) rotate(180deg);
+    opacity: 0.8;
+  }
+
+  75% {
+    transform: scale(1.1) rotate(270deg);
+    opacity: 0.9;
   }
 }
 </style>

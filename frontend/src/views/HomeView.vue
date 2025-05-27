@@ -1856,18 +1856,18 @@ getStoredDOI() {
 .home-container {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem; /* Reduced from 1rem to save vertical space */
   max-width: 100%;
   padding: 0 0.5rem;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
 .page-title {
   text-align: center;
-  font-size: 2rem;
-  margin: 0.5rem 0;
-  background: linear-gradient(to right, #4a4de7, #8a2be2);
+  font-size: 1.8rem; /* Reduced from 2rem */
+  margin: 0.3rem 0; /* Reduced from 0.5rem */
+  background: linear-gradient(to right, #1e3a8a, #2563eb);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1879,13 +1879,13 @@ getStoredDOI() {
 .warning-banner {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   background-color: rgba(255, 193, 7, 0.2);
   border-left: 4px solid #ffc107;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem; /* Reduced from 0.75rem 1rem */
   border-radius: 4px;
-  margin-bottom: 1rem;
-  font-size: 0.95rem;
+  margin-bottom: 0.5rem; /* Reduced from 1rem */
+  font-size: 0.9rem; /* Reduced from 0.95rem */
 }
 
 .warning-icon {
@@ -1895,7 +1895,7 @@ getStoredDOI() {
 .columns-container {
   display: flex;
   gap: 0;
-  height: calc(100vh - 120px);
+  height: calc(100vh - 220px); /* Further reduced to ensure footer visibility */
   width: 100%;
   position: relative;
   overflow: hidden; /* Keep this as hidden to prevent horizontal scrolling */

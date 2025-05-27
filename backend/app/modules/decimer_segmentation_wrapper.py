@@ -1,32 +1,37 @@
 import os
-import shutil
 import uuid
-import re
 import cv2
 import numpy as np
 import json
 from typing import List, Optional, Tuple, Dict, Any
-from PIL import Image
 from pathlib import Path
 from pdf2doi import pdf2doi
 from pdf2image import convert_from_path
 from fastapi import HTTPException, status
-
+from decimer_segmentation import segment_chemical_structures_from_file
+from decimer_segmentation import segment_chemical_structures
 from app.config import PDF_DIR, SEGMENTS_DIR
 
 # Dictionary to store segment metadata from recently processed PDFs
 stored_segment_info = {}
 
-try:
-    from decimer_segmentation import segment_chemical_structures_from_file
-except ImportError:
-    # Mock function for environments without decimer_segmentation
-    def segment_chemical_structures_from_file(*args, **kwargs):
-        raise ImportError("decimer_segmentation package not installed")
-
 
 def get_doi_from_file(filepath: str) -> Dict[str, str]:
-    """Extract DOI or filename from the given file path."""
+    """
+    Extract the DOI (Digital Object Identifier) from a given PDF file.
+
+    This function attempts to extract the DOI from the provided PDF file using the `pdf2doi` function.
+
+    Args:
+        filepath (str): Path to the PDF file from which to extract the DOI.
+
+    Returns:
+        Dict[str, str]: A dictionary with the key "doi" and the extracted DOI or fallback filename as the value.
+
+    Raises:
+        HTTPException: If an error occurs during DOI extraction, an HTTP 500 error is raised
+                       with a description of the failure.
+    """
     try:
         doi_dict = pdf2doi(filepath)
         doi = doi_dict["identifier"]
@@ -41,7 +46,26 @@ def get_doi_from_file(filepath: str) -> Dict[str, str]:
 
 
 def create_output_directory(filepath: str) -> str:
-    """Create an output directory based on the given PDF file path."""
+    """
+    Create an output directory for storing segmented chemical structures from a PDF file.
+
+    This function generates a directory name based on the PDF filename and creates it within
+    the configured segments directory. The directory is used to store all segmented chemical
+    structures extracted from the PDF.
+
+    Args:
+        filepath (str): Path to the PDF file for which to create an output directory.
+
+    Returns:
+        str: Absolute path to the created or existing output directory.
+
+    Raises:
+        ValueError: If the input file is not a PDF file (doesn't end with .pdf extension).
+
+    Example:
+        >>> create_output_directory("/path/to/paper.pdf")
+        "/segments/paper"
+    """
     # Validate input file is a PDF
     if not filepath.lower().endswith(".pdf"):
         raise ValueError(f"Expected a PDF file, got: {filepath}")
@@ -68,14 +92,39 @@ def get_segments_with_bbox(
     file_path: str, poppler_path=None
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Run DECIMER segmentation with enhanced metadata including bounding boxes.
+    Run DECIMER segmentation on a PDF file and extract chemical structure segments with bounding boxes.
+
+    This function processes a PDF file by converting it to images, then uses DECIMER segmentation
+    to identify and extract chemical structures along with their bounding box coordinates. Each
+    segment is saved as a separate image file with comprehensive metadata.
 
     Args:
-        file_path: Path to the PDF file
-        poppler_path: Path to Poppler binaries if needed
+        file_path (str): Path to the PDF file to be processed for segmentation.
+        poppler_path (Optional[str]): Path to Poppler binaries if needed for PDF conversion.
+                                    Defaults to None, using system default.
 
     Returns:
-        Tuple[str, List[Dict]]: Base directory path and list of segment metadata
+        Tuple[str, List[Dict[str, Any]]]: A tuple containing:
+            - str: Base directory path where segments are stored
+            - List[Dict[str, Any]]: List of segment metadata dictionaries, each containing:
+                - segment_id: Unique identifier for the segment
+                - filename: Name of the saved segment image file
+                - path: Relative path to the segment file
+                - full_path: Absolute path to the segment file
+                - pageNumber: Page number where segment was found
+                - bbox: Bounding box coordinates [x0, y0, x1, y1]
+                - segmentNumber: Sequential number of segment on the page
+                - pdfFilename: Original PDF filename
+
+    Raises:
+        HTTPException: If an error occurs during:
+            - PDF to image conversion (status 500)
+            - Chemical structure segmentation (status 500)
+
+    Example:
+        >>> base_dir, segments = get_segments_with_bbox("/path/to/paper.pdf")
+        >>> print(f"Found {len(segments)} chemical structures in {base_dir}")
+        Found 5 chemical structures in /segments/paper
     """
     # First get the PDF images
     if file_path.lower().endswith(".pdf"):
@@ -99,8 +148,6 @@ def get_segments_with_bbox(
     segments_metadata = []
     for page_num, page_img in enumerate(images):
         try:
-            # Use the segment_chemical_structures function to get segments and bboxes
-            from decimer_segmentation import segment_chemical_structures
 
             segments, bboxes = segment_chemical_structures(
                 page_img, expand=True, return_bboxes=True
@@ -150,15 +197,44 @@ def get_segments_with_bbox(
 
 def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[str, Any]:
     """
-    Complete pipeline for PDF processing: create directory, extract pages, segment images,
-    and optionally collect all segments in a common directory.
+    Complete pipeline for PDF processing including segmentation, metadata extraction, and organization.
+
+    This function provides a comprehensive workflow for processing PDF files containing chemical
+    structures. It handles both new segmentation and retrieval of existing segments, maintains
+    metadata consistency, and organizes all segments in a structured directory format.
 
     Args:
-        path_to_pdf (str): Absolute or relative path to a PDF file.
-        collect_all (bool, optional): Whether to copy all segments to a common directory. Defaults to True.
+        path_to_pdf (str): Absolute or relative path to a PDF file to be processed.
+        collect_all (bool, optional): Whether to copy all segments to a common directory for
+                                     easy access. Defaults to True.
 
     Returns:
-        Dict[str, Any]: Dictionary containing paths and segment metadata
+        Dict[str, Any]: A comprehensive dictionary containing:
+            - segment_directory (str): Path to the main directory containing all segments
+            - segments_existed (bool): Whether segments already existed before this call
+            - all_segments_directory (Optional[str]): Path to the common segments directory
+            - segments_info (List[Dict[str, Any]]): Detailed metadata for each segment including:
+                - segment_id: Unique identifier
+                - filename: Segment image filename
+                - path: Relative path to segment
+                - full_path: Absolute path to segment
+                - pageNumber: Source page number
+                - bbox: Bounding box coordinates
+                - segmentNumber: Sequential segment number
+                - pdfFilename: Original PDF name
+
+    Raises:
+        HTTPException: If an error occurs during:
+            - PDF validation or reading (status 500)
+            - Segmentation processing (status 500)
+            - Directory creation or file operations (status 500)
+
+    Example:
+        >>> result = get_complete_segments("/path/to/chemistry_paper.pdf")
+        >>> print(f"Found {len(result['segments_info'])} segments")
+        >>> print(f"Segments directory: {result['segment_directory']}")
+        Found 8 segments
+        Segments directory: /segments/chemistry_paper
     """
     try:
         # Check if segments already exist
@@ -246,14 +322,38 @@ def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[st
 
 def get_highlighted_segment_image(segment_id: str, pdf_filename: str) -> str:
     """
-    Creates an image of the original PDF page with the segment highlighted
+    Create a highlighted image showing the location of a specific chemical segment within its original PDF page.
+
+    This function generates a visual representation of where a chemical structure segment was
+    found by overlaying a highlighted bounding box on the original PDF page. The resulting
+    image helps users understand the context and location of extracted chemical structures.
 
     Args:
-        segment_id: ID of the segment to highlight (format: segment-{page}-{number})
-        pdf_filename: Name of the PDF file
+        segment_id (str): Unique identifier of the segment to highlight. Expected format:
+                         "segment-{page_number}-{segment_index}" (e.g., "segment-0-1").
+        pdf_filename (str): Name of the original PDF file containing the segment.
 
     Returns:
-        str: Path to the created highlighted image
+        str: Absolute path to the generated highlighted image file. The image shows the
+             original PDF page with a green rectangle and semi-transparent overlay
+             highlighting the segment location.
+
+    Raises:
+        HTTPException: With appropriate status codes for various error conditions:
+            - 400: Invalid segment_id format that cannot be parsed
+            - 404: Segment metadata not found, PDF file not found, or page not found
+            - 500: Error during image processing, PDF conversion, or file operations
+
+    Example:
+        >>> image_path = get_highlighted_segment_image("segment-0-1", "chemistry_paper.pdf")
+        >>> print(f"Highlighted image saved to: {image_path}")
+        Highlighted image saved to: /segments/highlighted_segment-0-1_a1b2c3d4.png
+
+    Note:
+        - The function uses a green rectangle with 10px thickness for the border
+        - A semi-transparent green overlay (30% opacity) fills the segment area
+        - Generated images are saved in the SEGMENTS_DIR with unique filenames
+        - If bounding box information is missing, a default bbox covering most of the page is used
     """
     # Get the segment metadata
     segment_info = None
@@ -388,7 +488,36 @@ def get_highlighted_segment_image(segment_id: str, pdf_filename: str) -> str:
 # Keep other necessary functions intact
 def segments_exist(filepath: str) -> Tuple[bool, Optional[str]]:
     """
-    Check if segmented images already exist for the given PDF file.
+    Check if segmented chemical structure images already exist for a given PDF file.
+
+    This function determines whether chemical structure segmentation has already been
+    performed on the specified PDF file by looking for existing segment directories
+    and segment image files in the configured segments directory.
+
+    Args:
+        filepath (str): Path to the PDF file to check for existing segments.
+
+    Returns:
+        Tuple[bool, Optional[str]]: A tuple containing:
+            - bool: True if segments exist, False otherwise
+            - Optional[str]: Path to the existing segments directory if found, None otherwise
+
+    Raises:
+        ValueError: If the input file is not a PDF file (doesn't end with .pdf extension).
+
+    Example:
+        >>> exists, path = segments_exist("/path/to/chemistry_paper.pdf")
+        >>> if exists:
+        ...     print(f"Segments found in: {path}")
+        ... else:
+        ...     print("No existing segments found")
+        Segments found in: /segments/chemistry_paper
+
+    Note:
+        - The function looks for directories that start with the PDF filename stem
+        - It checks for both individual segment directories and an "all_segments" directory
+        - If multiple matching directories exist, it returns the most recent one
+        - Segment files must follow the naming pattern "*_segmented.png"
     """
     # Validate input file
     if not filepath.lower().endswith(".pdf"):
@@ -439,11 +568,43 @@ def save_segment_metadata(
     directory: str, segments_metadata: List[Dict[str, Any]]
 ) -> None:
     """
-    Save segment metadata to a JSON file in the segments directory
+    Save chemical structure segment metadata to a JSON file for persistent storage.
+
+    This function serializes segment metadata to a JSON file within the specified directory,
+    enabling persistent storage and retrieval of segment information across application
+    sessions. The metadata includes details about segment locations, bounding boxes, and
+    file paths.
 
     Args:
-        directory: Directory to save metadata to
-        segments_metadata: List of segment metadata dictionaries
+        directory (str): Target directory where the metadata JSON file will be saved.
+                        The file will be named "segments_metadata.json".
+        segments_metadata (List[Dict[str, Any]]): List of segment metadata dictionaries
+                                                 containing information such as:
+                                                 - segment_id: Unique identifier
+                                                 - filename: Segment image filename
+                                                 - bbox: Bounding box coordinates
+                                                 - pageNumber: Source page number
+                                                 - And other segment properties
+
+    Returns:
+        None
+
+    Raises:
+        Exception: Various file system errors may occur during directory creation or
+                  file writing operations. Error details are printed to console for
+                  debugging purposes.
+
+    Example:
+        >>> metadata = [{"segment_id": "segment-0-1", "filename": "page_0_1_segmented.png", ...}]
+        >>> save_segment_metadata("/segments/chemistry_paper", metadata)
+        Saving metadata to: /segments/chemistry_paper/segments_metadata.json
+        Successfully saved metadata file (1245 bytes)
+
+    Note:
+        - Creates the target directory if it doesn't exist
+        - Overwrites existing metadata files
+        - JSON is formatted with 2-space indentation for readability
+        - Includes debugging output for troubleshooting file operations
     """
     try:
         metadata_file = os.path.join(directory, "segments_metadata.json")
@@ -472,13 +633,45 @@ def save_segment_metadata(
 
 def load_segment_metadata(directory: str) -> List[Dict[str, Any]]:
     """
-    Load segment metadata from JSON file in the segments directory
+    Load chemical structure segment metadata from a JSON file in the segments directory.
+
+    This function retrieves previously saved segment metadata from a JSON file, enabling
+    the restoration of segment information across application sessions. It handles various
+    error conditions gracefully and provides detailed debugging information.
 
     Args:
-        directory: Directory to load metadata from
+        directory (str): Directory containing the metadata JSON file. The function looks
+                        for a file named "segments_metadata.json" in this directory.
 
     Returns:
-        List of segment metadata dictionaries
+        List[Dict[str, Any]]: List of segment metadata dictionaries. Each dictionary
+                             contains segment information such as:
+                             - segment_id: Unique identifier for the segment
+                             - filename: Name of the segment image file
+                             - bbox: Bounding box coordinates [x0, y0, x1, y1]
+                             - pageNumber: Source page number
+                             - segmentNumber: Sequential segment number
+                             - And other segment properties
+                             Returns an empty list if the file doesn't exist or cannot be read.
+
+    Returns:
+        List[Dict[str, Any]]: Empty list if metadata file is not found or cannot be parsed.
+
+    Example:
+        >>> metadata = load_segment_metadata("/segments/chemistry_paper")
+        >>> if metadata:
+        ...     print(f"Loaded {len(metadata)} segments")
+        ...     for segment in metadata:
+        ...         print(f"Segment: {segment['segment_id']}")
+        Attempting to load metadata from: /segments/chemistry_paper/segments_metadata.json
+        Successfully loaded metadata (5 segments)
+        Loaded 5 segments
+
+    Note:
+        - Returns empty list if metadata file doesn't exist (not an error condition)
+        - Handles JSON parsing errors gracefully with detailed error reporting
+        - Provides debugging output including file size and content preview on errors
+        - Does not raise exceptions - designed to be fault-tolerant
     """
     metadata_file = os.path.join(directory, "segments_metadata.json")
     print(f"Attempting to load metadata from: {metadata_file}")

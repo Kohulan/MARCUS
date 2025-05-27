@@ -10,29 +10,39 @@
     <template v-if="appLoaded">
       <AppHeader />
       
-      <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible && !isAboutVisible">
+      <main class="main-content" v-show="!isDisclaimerVisible && !isFeaturesVisible && !isAboutVisible && !isPrivacyPolicyVisible">
         <HomeView />
       </main>
       
       <!-- Disclaimer page - shown when isDisclaimerVisible is true -->
-      <disclaimer-page 
-        v-if="isDisclaimerVisible" 
-        @close="hideDisclaimer" 
-      />
+      <div class="disclaimer-wrapper" v-if="isDisclaimerVisible">
+        <disclaimer-page 
+          @close="hideDisclaimer" 
+        />
+      </div>
       
       <!-- Features section - shown when isFeaturesVisible is true -->
-      <features-section 
-        v-if="isFeaturesVisible" 
-        :showCloseButton="true"
-        @close="hideFeatures" 
-      />
+      <div class="features-wrapper" v-if="isFeaturesVisible">
+        <features-section 
+          :showCloseButton="true"
+          @close="hideFeatures" 
+        />
+      </div>
       
       <!-- About page - shown when isAboutVisible is true -->
-      <about-page 
-        v-if="isAboutVisible" 
-        :showCloseButton="true"
-        @close="hideAbout" 
-      />
+      <div class="about-wrapper" v-if="isAboutVisible">
+        <about-page 
+          :showCloseButton="true"
+          @close="hideAbout" 
+        />
+      </div>
+      
+      <!-- Privacy Policy page - shown when isPrivacyPolicyVisible is true -->
+      <div class="privacy-policy-wrapper" v-if="isPrivacyPolicyVisible">
+        <privacy-policy-page 
+          @close="hidePrivacyPolicy" 
+        />
+      </div>
       
       <AppFooter />
     </template>
@@ -66,6 +76,7 @@ import HomeView from './views/HomeView.vue'
 import DisclaimerPage from './views/DisclaimerPage.vue'
 import FeaturesSection from './views/FeaturesSection.vue'
 import AboutPage from './views/AboutPage.vue'
+import PrivacyPolicyPage from './views/PrivacyPolicyPage.vue'
 import LoadingScreen from './components/common/LoadingScreen.vue'
 
 export default {
@@ -77,6 +88,7 @@ export default {
     DisclaimerPage,
     FeaturesSection,
     AboutPage,
+    PrivacyPolicyPage,
     LoadingScreen
   },
   
@@ -92,7 +104,8 @@ export default {
       notifications: state => state.notifications,
       isDisclaimerVisible: state => state.isDisclaimerVisible,
       isFeaturesVisible: state => state.isFeaturesVisible,
-      isAboutVisible: state => state.isAboutVisible
+      isAboutVisible: state => state.isAboutVisible,
+      isPrivacyPolicyVisible: state => state.isPrivacyPolicyVisible
     })
   },
   
@@ -101,7 +114,8 @@ export default {
       removeNotification: 'removeNotification',
       hideDisclaimer: 'hideDisclaimer',
       hideFeatures: 'hideFeatures',
-      hideAbout: 'hideAbout'
+      hideAbout: 'hideAbout',
+      hidePrivacyPolicy: 'hidePrivacyPolicy'
     }),
     
     finishLoading() {
@@ -117,7 +131,7 @@ export default {
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh; /* Changed from min-height to exact height */
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -129,6 +143,7 @@ export default {
   max-width: 100%;
   margin: 0 auto;
   padding: 0.5rem;
+  overflow-y: auto; /* Allow scrolling within the content if needed */
 }
 
 @media (min-width: 1200px) {
@@ -240,5 +255,37 @@ export default {
     color: #f1f5f9 !important;
     border-color: #475569 !important;
   }
+}
+
+/* Features wrapper */
+.features-wrapper {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto; /* Enable vertical scrolling */
+  position: relative;
+}
+
+/* About wrapper */
+.about-wrapper {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto; /* Enable vertical scrolling */
+  position: relative;
+}
+
+/* Disclaimer wrapper */
+.disclaimer-wrapper {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto; /* Enable vertical scrolling */
+  position: relative;
+}
+
+/* Privacy Policy wrapper */
+.privacy-policy-wrapper {
+  height: 100vh;
+  width: 100%;
+  overflow-y: auto; /* Enable vertical scrolling */
+  position: relative;
 }
 </style>
