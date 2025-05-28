@@ -496,16 +496,51 @@ class SessionService {
    * Get the API base URL with proper fallbacks - matches api.js logic but for session endpoints
    */
   getApiBaseUrl() {
-    // Force localhost for local development
-    return 'http://localhost:9000';
+    // In production on the marcus.decimer.ai server
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      return '/api'; // This will be proxied by Nginx
+    }
+
+    // Check for environment variables
+    if (process.env && process.env.VUE_APP_API_URL) {
+      return process.env.VUE_APP_API_URL;
+    }
+
+    // Docker compose environment - frontend can reach backend directly
+    if (process.env.NODE_ENV === 'production') {
+      return 'http://backend:9000';
+    }
+
+    // Development fallback - use same host as current page but port 9000
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:9000`;
   }
 
   /**
    * Get WebSocket URL based on the HTTP API URL
    */
   getWebSocketUrl() {
-    // Force localhost for local development
-    return 'ws://localhost:9000';
+    // In production on the marcus.decimer.ai server
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      return '/ws'; // This will be proxied by Nginx
+    }
+
+    // Check for environment variables and convert to WebSocket URL
+    if (process.env && process.env.VUE_APP_API_URL) {
+      const apiUrl = process.env.VUE_APP_API_URL;
+      return apiUrl.replace(/^https?:/, 'ws:');
+    }
+
+    // Docker compose environment - frontend can reach backend directly
+    if (process.env.NODE_ENV === 'production') {
+      return 'ws://backend:9000';
+    }
+
+    // Development fallback - use same host as current page but port 9000
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:9000`;
   }
 }
 

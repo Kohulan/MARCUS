@@ -400,41 +400,54 @@ export default {
 @import '@/assets/styles/_variables.scss';
 
 .session-manager {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg);
-  font-family: var(--font-family);
+  background: var(--color-bg, #f8fafc);
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+  z-index: 9999;
 }
 
 /* Remove background when session is active */
 .session-manager.session-active {
+  position: relative;
   background: none;
   display: block;
   height: auto;
+  z-index: auto;
 }
 
 /* Screen Content Containers */
 .loading-screen,
 .waiting-screen,
 .error-screen {
-  text-align: center;
-  color: var(--color-text);
-  max-width: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  height: 100%;
+  text-align: center;
+  color: var(--color-text, #1f2937);
   padding: 2rem;
+  box-sizing: border-box;
 }
 
 .loading-content,
 .waiting-content,
 .error-content {
-  background: var(--color-card-bg);
+  background: var(--color-card-bg, #ffffff);
   border-radius: 16px;
   padding: 3rem 2rem;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg, 0 25px 50px -12px rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--color-border, #e5e7eb);
+  max-width: 500px;
+  width: 100%;
+  margin: auto;
 }
 
 /* Header Section */
@@ -447,23 +460,23 @@ export default {
 }
 
 .marcus-text {
-  font-family: 'GmarketSansLight', var(--font-family);
+  font-family: 'GmarketSansLight', var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
   font-size: 2rem;
   font-weight: 700;
-  color: var(--color-primary);
+  color: var(--color-primary, #3b82f6);
   letter-spacing: 1px;
 }
 
 .main-title {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--color-heading);
+  color: var(--color-heading, #1f2937);
   margin-bottom: 0.75rem;
 }
 
 .subtitle {
   font-size: 1rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-secondary, #6b7280);
   line-height: 1.6;
   margin: 0;
 }
@@ -687,11 +700,25 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .session-manager {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100vh !important;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+  }
+
   .waiting-content,
   .loading-content,
   .error-content {
     padding: 2rem 1.5rem;
     margin: 1rem;
+    max-width: calc(100vw - 2rem);
   }
 
   .main-title {
@@ -731,10 +758,21 @@ export default {
 }
 
 @media (max-width: 480px) {
+  .session-manager {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100vh !important;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+
   .waiting-content,
   .loading-content,
   .error-content {
     padding: 1.5rem 1rem;
+    margin: 0.5rem;
+    max-width: calc(100vw - 1rem);
   }
 
   .main-title {
