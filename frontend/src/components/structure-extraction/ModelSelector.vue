@@ -1,13 +1,24 @@
 <template>
   <div class="model-selector">
-    <label class="selector-label">Choose Model:</label>
+    <!-- Model Selection Header -->
+    <div class="model-header">
+      <h4 class="model-title">Choose a model:</h4>
+    </div>
     
+    <!-- Model Options -->
     <div class="model-options">
+      <!-- DECIMER Model -->
       <div 
-        class="model-option"
-        :class="{ active: modelValue === 'decimer' }"
+        class="model-button"
+        :class="{ 
+          active: modelValue === 'decimer',
+          disabled: disabled 
+        }"
         @click="selectModel('decimer')"
-        :disabled="disabled"
+        role="button"
+        tabindex="0"
+        @keydown.enter="selectModel('decimer')"
+        @keydown.space="selectModel('decimer')"
       >
         <input 
           type="radio" 
@@ -16,24 +27,31 @@
           value="decimer"
           :checked="modelValue === 'decimer'"
           :disabled="disabled"
-          @change="selectModel('decimer')"
+          class="model-radio"
         />
-        <label for="decimer" class="option-label">
-          <span class="option-icon decimer-icon">
-            <vue-feather type="cpu" class="icon"></vue-feather>
-          </span>
-          <span class="option-text">
-            <span class="option-title">DECIMER</span>
-            <span class="option-description">Deep learning based optical chemical structure recognition</span>
-          </span>
-        </label>
+        
+        <div class="model-icon decimer-icon">
+          <vue-feather type="cpu" class="icon"></vue-feather>
+        </div>
+        
+        <div class="model-content">
+          <div class="model-name">DECIMER</div>
+          <div class="model-subtitle">Deep learning based optical chemical structure recognition</div>
+        </div>
       </div>
       
+      <!-- MolNexTR Model -->
       <div 
-        class="model-option"
-        :class="{ active: modelValue === 'molnextr' }"
+        class="model-button"
+        :class="{ 
+          active: modelValue === 'molnextr',
+          disabled: disabled 
+        }"
         @click="selectModel('molnextr')"
-        :disabled="disabled"
+        role="button"
+        tabindex="0"
+        @keydown.enter="selectModel('molnextr')"
+        @keydown.space="selectModel('molnextr')"
       >
         <input 
           type="radio" 
@@ -42,25 +60,31 @@
           value="molnextr"
           :checked="modelValue === 'molnextr'"
           :disabled="disabled"
-          @change="selectModel('molnextr')"
+          class="model-radio"
         />
-        <label for="molnextr" class="option-label">
-          <span class="option-icon molnextr-icon">
-            <vue-feather type="grid" class="icon"></vue-feather>
-          </span>
-          <span class="option-text">
-            <span class="option-title">MolNexTR</span>
-            <span class="option-description">ConvNext based Image-to-graph model</span>
-          </span>
-        </label>
+        
+        <div class="model-icon molnextr-icon">
+          <vue-feather type="grid" class="icon"></vue-feather>
+        </div>
+        
+        <div class="model-content">
+          <div class="model-name">MolNexTR</div>
+          <div class="model-subtitle">ConvNext based Image-to-graph model with enhanced spatial understanding</div>
+        </div>
       </div>
       
-      <!-- New MolScribe option -->
+      <!-- MolScribe Model -->
       <div 
-        class="model-option"
-        :class="{ active: modelValue === 'molscribe' }"
+        class="model-button"
+        :class="{ 
+          active: modelValue === 'molscribe',
+          disabled: disabled 
+        }"
         @click="selectModel('molscribe')"
-        :disabled="disabled"
+        role="button"
+        tabindex="0"
+        @keydown.enter="selectModel('molscribe')"
+        @keydown.space="selectModel('molscribe')"
       >
         <input 
           type="radio" 
@@ -69,45 +93,53 @@
           value="molscribe"
           :checked="modelValue === 'molscribe'"
           :disabled="disabled"
-          @change="selectModel('molscribe')"
+          class="model-radio"
         />
-        <label for="molscribe" class="option-label">
-          <span class="option-icon molscribe-icon">
-            <vue-feather type="edit-3" class="icon"></vue-feather>
-          </span>
-          <span class="option-text">
-            <span class="option-title">MolScribe</span>
-            <span class="option-description">Swin Transformer based image to graph Generation</span>
-          </span>
-        </label>
+        
+        <div class="model-icon molscribe-icon">
+          <vue-feather type="edit-3" class="icon"></vue-feather>
+        </div>
+        
+        <div class="model-content">
+          <div class="model-name">MolScribe</div>
+          <div class="model-subtitle">Swin Transformer based image to graph generation with state-of-the-art performance</div>
+        </div>
       </div>
     </div>
     
-    <div class="model-details">
-      <div v-if="modelValue === 'decimer'" class="model-detail-item">
-        <label class="checkbox-container">
-          <input 
-            type="checkbox" 
-            v-model="handDrawn"
-            :disabled="disabled"
-          />
-          <span class="checkmark"></span>
-          <span class="checkbox-label">Use hand-drawn model</span>
-        </label>
-        <p class="detail-description">Optimized for hand-drawn chemical structures</p>
+    <!-- Configuration Section -->
+    <div class="model-configuration" v-if="modelValue">
+      <!-- DECIMER Options -->
+      <div v-if="modelValue === 'decimer'" class="config-group">
+        <div class="toggle-option">
+          <div class="toggle-switch" @click="toggleHandDrawn">
+            <div 
+              class="switch-track"
+              :class="{ active: handDrawn }"
+            >
+              <div class="switch-thumb"></div>
+            </div>
+            <div class="toggle-content">
+              <span class="toggle-label">Use Hand-drawn model</span>
+              <span class="toggle-subtitle">Optimized for hand-drawn chemical structures</span>
+            </div>
+          </div>
+        </div>
       </div>
       
-      <div v-if="modelValue === 'molnextr' || modelValue === 'molscribe'" class="model-detail-item">
-        <label class="checkbox-container">
-          <input 
-            type="checkbox" 
-            v-model="includeCoordinates"
-            :disabled="disabled"
-          />
-          <span class="checkmark"></span>
-          <span class="checkbox-label">Include coordinates (molfile)</span>
-        </label>
-        <p class="detail-description">Generate molfile with atom coordinates for better depiction</p>
+      <!-- MolNexTR & MolScribe Options -->
+      <div v-if="modelValue === 'molnextr' || modelValue === 'molscribe'" class="config-group">
+        <div class="toggle-option">
+          <div class="toggle-switch" @click="toggleCoordinates">
+            <div 
+              class="switch-track"
+              :class="{ active: includeCoordinates }"
+            >
+              <div class="switch-thumb"></div>
+            </div>
+            <span class="toggle-label">Include atom coordinates</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -176,6 +208,19 @@ export default {
       
       this.updateOptions()
     },
+
+    toggleHandDrawn() {
+      if (this.disabled) return
+      this.handDrawn = !this.handDrawn
+      this.updateOptions()
+    },
+
+    toggleCoordinates() {
+      if (this.disabled) return
+      this.includeCoordinates = !this.includeCoordinates
+      this.updateOptions()
+    },
+
     updateOptions() {
       const options = {
         handDrawn: this.handDrawn,
@@ -190,193 +235,308 @@ export default {
 <style lang="scss" scoped>
 .model-selector {
   width: 100%;
-  
-  .selector-label {
-    display: block;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
+  background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+
+  /* Model Header */
+  .model-header {
+    margin-bottom: 1rem;
+
+    .model-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
   }
-  
+
+  /* Model Options */
   .model-options {
     display: flex;
-    flex-direction: column;
     gap: 0.75rem;
-    margin-bottom: 1rem;
-    
-    @media (min-width: 768px) {
-      flex-direction: row;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+
+    @media (max-width: 768px) {
+      flex-direction: column;
     }
   }
-  
-  .model-option {
+
+  .model-button {
     flex: 1;
-    position: relative;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 0.75rem;
+    min-width: 120px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(226, 232, 240, 0.8);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
     overflow: hidden;
-    background-color: var(--color-card-bg);
-    
-    &:hover:not([disabled]) {
-      border-color: var(--color-primary-light);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 1;
     }
-    
-    &.active {
-      border-color: var(--color-primary);
-      background-color: rgba(74, 77, 231, 0.05);
-      
-      &:before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 4px;
-        height: 100%;
-        background-color: var(--color-primary);
-      }
-    }
-    
-    &[disabled] {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    
-    input[type="radio"] {
+
+    .model-radio {
       position: absolute;
       opacity: 0;
-      cursor: pointer;
+      pointer-events: none;
     }
-    
-    .option-label {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      cursor: pointer;
+
+    &:hover:not(.disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-color: rgba(99, 102, 241, 0.3);
+
+      &::before {
+        opacity: 1;
+      }
     }
-    
-    .option-icon {
-      flex-shrink: 0;
+
+    &.active {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.05);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 4px 12px rgba(99, 102, 241, 0.15);
+    }
+
+    &.disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .model-icon {
       width: 32px;
       height: 32px;
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      
+      flex-shrink: 0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      position: relative;
+      z-index: 2;
+
       .icon {
+        width: 16px;
+        height: 16px;
         color: white;
       }
-      
+
       &.decimer-icon {
-        background-color: #ff9500; /* Orange */
+        background: linear-gradient(135deg, #ff9500 0%, #ff7b00 100%);
       }
-      
+
       &.molnextr-icon {
-        background-color: #007aff; /* Blue */
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
       }
-      
+
       &.molscribe-icon {
-        background-color: #2563eb; /* Blue */
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
       }
     }
-    
-    .option-text {
+
+    .model-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1f2937;
+      letter-spacing: -0.01em;
+      position: relative;
+      z-index: 2;
+    }
+
+    .model-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
       flex: 1;
-      min-width: 0;
-      
-      .option-title {
-        display: block;
+      position: relative;
+      z-index: 2;
+
+      .model-name {
+        font-size: 0.875rem;
         font-weight: 600;
-        margin-bottom: 0.25rem;
+        color: #1f2937;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
       }
-      
-      .option-description {
-        display: block;
-        font-size: 0.8125rem;
-        color: var(--color-text-light);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+
+      .model-subtitle {
+        font-size: 0.75rem;
+        font-weight: 400;
+        color: #6b7280;
+        line-height: 1.3;
+        letter-spacing: -0.005em;
       }
     }
   }
-  
-  .model-details {
-    padding-top: 0.75rem;
-    
-    .model-detail-item {
-      margin-bottom: 0.5rem;
+
+  /* Configuration Section */
+  .model-configuration {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
+    padding: 1rem;
+    backdrop-filter: blur(8px);
+
+    .config-group {
+      margin: 0;
     }
-    
-    .checkbox-container {
-      display: flex;
-      align-items: center;
-      position: relative;
-      padding-left: 28px;
-      cursor: pointer;
-      user-select: none;
-      
-      input {
-        position: absolute;
-        opacity: 0;
+
+    .toggle-option {
+      .toggle-switch {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
         cursor: pointer;
-        height: 0;
-        width: 0;
-        
-        &:checked ~ .checkmark {
-          background-color: var(--color-primary);
-          border-color: var(--color-primary);
-          
-          &:after {
-            display: block;
+        padding: 0.5rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: rgba(248, 250, 252, 0.8);
+        }
+
+        .switch-track {
+          position: relative;
+          width: 2.5rem;
+          height: 1.375rem;
+          background: #e5e7eb;
+          border-radius: 0.6875rem;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          flex-shrink: 0;
+
+          .switch-thumb {
+            position: absolute;
+            top: 0.125rem;
+            left: 0.125rem;
+            width: 1.125rem;
+            height: 1.125rem;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          }
+
+          &.active {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+
+            .switch-thumb {
+              transform: translateX(1.125rem);
+              box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            }
           }
         }
-        
-        &:disabled ~ .checkmark,
-        &:disabled ~ .checkbox-label {
-          opacity: 0.6;
-          cursor: not-allowed;
+
+        .toggle-label {
+          font-weight: 500;
+          color: #374151;
+          font-size: 0.875rem;
+        }
+
+        .toggle-content {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+
+          .toggle-label {
+            font-weight: 500;
+            color: #374151;
+            font-size: 0.875rem;
+            line-height: 1.2;
+          }
+
+          .toggle-subtitle {
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: #6b7280;
+            line-height: 1.3;
+            letter-spacing: -0.005em;
+          }
         }
       }
-      
-      .checkmark {
-        position: absolute;
-        top: 0;
-        left: 0;
-        height: 18px;
-        width: 18px;
-        background-color: var(--color-card-bg);
-        border: 1px solid var(--color-border);
-        border-radius: 4px;
-        transition: all 0.2s ease;
-        
-        &:after {
-          content: "";
-          position: absolute;
-          display: none;
-          left: 5px;
-          top: 2px;
-          width: 5px;
-          height: 9px;
-          border: solid white;
-          border-width: 0 2px 2px 0;
-          transform: rotate(45deg);
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
+    padding: 1rem;
+
+    .model-header {
+      margin-bottom: 0.75rem;
+
+      .model-title {
+        font-size: 0.9rem;
+      }
+    }
+
+    .model-options {
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .model-button {
+      padding: 0.625rem 0.75rem;
+      min-width: auto;
+
+      .model-icon {
+        width: 28px;
+        height: 28px;
+
+        .icon {
+          width: 14px;
+          height: 14px;
         }
       }
-      
-      &:hover input:not(:disabled) ~ .checkmark {
-        border-color: var(--color-primary-light);
+
+      .model-content {
+        .model-name {
+          font-size: 0.8125rem;
+        }
+
+        .model-subtitle {
+          font-size: 0.6875rem;
+        }
       }
     }
-    
-    .detail-description {
-      margin-left: 28px;
-      font-size: 0.8125rem;
-      color: var(--color-text-light);
-      margin-top: 0.25rem;
+
+    .model-configuration {
+      padding: 0.75rem;
     }
+  }
+
+  /* Animation keyframes */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .model-configuration {
+    animation: slideIn 0.3s ease-out;
   }
 }
 </style>
