@@ -347,14 +347,17 @@ export default {
 @import '@/assets/styles/_variables.scss';
 
 .session-manager {
-  width: 100%;
-  min-height: calc(100vh - 90px); /* Updated to match actual header height (~85px) */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
   font-family: var(--font-family);
-  padding: 2rem 0;
+  z-index: 999;
 }
 
 /* Remove background when session is active */
@@ -370,11 +373,16 @@ export default {
 .loading-screen,
 .waiting-screen,
 .error-screen {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   text-align: center;
   color: var(--color-text);
   max-width: 500px;
   width: 100%;
   padding: 2rem;
+  z-index: 1000;
 }
 
 .loading-content,
