@@ -1856,7 +1856,7 @@ getStoredDOI() {
 .home-container {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem; /* Reduced from 1rem to save vertical space */
+  gap: 0.6rem; /* Further reduced from 0.8rem to save more vertical space */
   max-width: 100%;
   padding: 0 0.5rem;
   height: 100%;
@@ -1866,7 +1866,7 @@ getStoredDOI() {
 .page-title {
   text-align: center;
   font-size: 1.8rem; /* Reduced from 2rem */
-  margin: 0.3rem 0; /* Reduced from 0.5rem */
+  margin: 0.1rem 0; /* Further reduced from 0.3rem to move content up */
   background: linear-gradient(to right, #1e3a8a, #2563eb);
   -webkit-background-clip: text;
   background-clip: text;
@@ -1882,9 +1882,9 @@ getStoredDOI() {
   gap: 0.4rem;
   background-color: rgba(255, 193, 7, 0.2);
   border-left: 4px solid #ffc107;
-  padding: 0.5rem 0.75rem; /* Reduced from 0.75rem 1rem */
+  padding: 0.4rem 0.75rem; /* Further reduced from 0.5rem to 0.4rem */
   border-radius: 4px;
-  margin-bottom: 0.5rem; /* Reduced from 1rem */
+  margin-bottom: 0.3rem; /* Further reduced from 0.5rem to 0.3rem */
   font-size: 0.9rem; /* Reduced from 0.95rem */
 }
 
@@ -1895,7 +1895,7 @@ getStoredDOI() {
 .columns-container {
   display: flex;
   gap: 0;
-  height: calc(100vh - 220px); /* Further reduced to ensure footer visibility */
+  height: calc(100vh - 253px); /* Adjusted for reduced header height (was 260px, now 253px - saving 7px) */
   width: 100%;
   position: relative;
   overflow: hidden; /* Keep this as hidden to prevent horizontal scrolling */

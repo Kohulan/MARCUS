@@ -55,13 +55,17 @@ class SessionService {
   }
 
   /**
-   * Create a new session
+   * Create a new session with improved error handling and retry logic
    */
   async createSession(userId = null) {
+    console.log('createSession called, current sessionId:', this.sessionId);
+    
     // If we have a stored session, try to verify it first
     if (this.sessionId) {
+      console.log('Found existing sessionId, verifying with backend...');
       try {
         const status = await this.getSessionStatus();
+        console.log('Session status check result:', status);
         if (status.success) {
           console.log('Using existing session:', this.sessionId);
           // Try to connect WebSocket, but don't fail session recovery if WebSocket fails
@@ -69,104 +73,169 @@ class SessionService {
             await this.connectWebSocket();
           } catch (wsError) {
             console.warn('WebSocket connection failed, but session is valid:', wsError.message);
-            // Session is still valid even if WebSocket fails
           }
           return status;
         }
       } catch (error) {
-        console.log('Existing session invalid, creating new one');
+        console.log('Existing session invalid, creating new one. Error:', error);
         this.clearStoredSession();
         this.sessionId = null;
       }
     }
 
-    try {
-      const url = new URL(`${this.backendUrl}/session/create`);
-      if (userId) {
-        url.searchParams.append('user_id', userId);
-      }
-      
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    // Retry logic for session creation
+    const maxRetries = 3;
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Creating session attempt ${attempt}/${maxRetries}`);
+        
+        if (!this.backendUrl) {
+          this.backendUrl = this.getApiBaseUrl();
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create session: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        this.storeSession(data.session.session_id);
-        // Try to connect WebSocket, but don't fail session creation if WebSocket fails
+        
+        console.log('Creating session with backend URL:', this.backendUrl);
+        
+        // Add timeout to fetch request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        let requestUrl;
         try {
-          await this.connectWebSocket();
-        } catch (wsError) {
-          console.warn('WebSocket connection failed, but session created successfully:', wsError.message);
-          // Session is still valid even if WebSocket fails
+          const url = new URL(`${this.backendUrl}/session/create`);
+          if (userId) {
+            url.searchParams.append('user_id', userId);
+          }
+          requestUrl = url.toString();
+        } catch (urlError) {
+          console.warn('URL construction failed, falling back to string concatenation');
+          requestUrl = `${this.backendUrl}/session/create${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
         }
-        return data;
-      } else {
-        throw new Error('Failed to create session');
+        
+        console.log('Session creation URL:', requestUrl);
+        
+        const response = await fetch(requestUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+          this.storeSession(data.session.session_id);
+          // Try to connect WebSocket, but don't fail session creation if WebSocket fails
+          try {
+            await this.connectWebSocket();
+          } catch (wsError) {
+            console.warn('WebSocket connection failed, but session created successfully:', wsError.message);
+          }
+          return data;
+        } else {
+          throw new Error('Server returned unsuccessful response');
+        }
+        
+      } catch (error) {
+        lastError = error;
+        console.error(`Session creation attempt ${attempt} failed:`, error);
+        
+        // If this is the last attempt, throw the error
+        if (attempt === maxRetries) {
+          break;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-    } catch (error) {
-      console.error('Error creating session:', error);
-      throw error;
     }
+    
+    // If we get here, all retries failed
+    throw new Error(`Failed to create session after ${maxRetries} attempts. Last error: ${lastError.message}`);
   }
 
   /**
-   * Connect to WebSocket for real-time updates
+   * Connect to WebSocket for real-time updates with improved error handling
    */
   async connectWebSocket() {
     if (!this.sessionId) {
       throw new Error('No session ID available for WebSocket connection');
     }
 
-    try {
-      const wsUrl = `${this.wsUrl}/session/ws/${this.sessionId}`;
-      console.log('Connecting to WebSocket:', wsUrl);
-      this.websocket = new WebSocket(wsUrl);
-      
-      this.websocket.onopen = () => {
-        console.log('WebSocket connected');
-        this.reconnectAttempts = 0;
-        this.reconnectDelay = 2000;
-        this.startHeartbeat();
-        this.emit('connected');
-      };
-
-      this.websocket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          this.handleWebSocketMessage(message);
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+    return new Promise((resolve, reject) => {
+      try {
+        // Ensure the WebSocket URL is properly formatted
+        if (window.location.hostname === 'marcus.decimer.ai' && !this.wsUrl.startsWith('wss://')) {
+          console.log('Updating wsUrl for production environment');
+          this.wsUrl = 'wss://api.marcus.decimer.ai';
         }
-      };
-
-      this.websocket.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason);
-        this.stopHeartbeat();
-        this.emit('disconnected');
         
-        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.attemptReconnect();
-        }
-      };
+        const wsUrl = `${this.wsUrl}/session/ws/${this.sessionId}`;
+        console.log('Connecting to WebSocket:', wsUrl);
+        this.websocket = new WebSocket(wsUrl);
+        
+        // Add connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (this.websocket.readyState === WebSocket.CONNECTING) {
+            this.websocket.close();
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, 10000); // 10 second timeout
+        
+        this.websocket.onopen = () => {
+          clearTimeout(connectionTimeout);
+          console.log('WebSocket connected');
+          this.reconnectAttempts = 0;
+          this.reconnectDelay = 2000;
+          this.startHeartbeat();
+          this.emit('connected');
+          resolve();
+        };
 
-      this.websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.emit('error', error);
-      };
+        this.websocket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            this.handleWebSocketMessage(message);
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
 
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
-      throw error;
-    }
+        this.websocket.onclose = (event) => {
+          clearTimeout(connectionTimeout);
+          console.log('WebSocket closed:', event.code, event.reason);
+          this.stopHeartbeat();
+          this.emit('disconnected');
+          
+          // Only attempt reconnect for unexpected closures
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.attemptReconnect();
+          }
+        };
+
+        this.websocket.onerror = (error) => {
+          clearTimeout(connectionTimeout);
+          console.error('WebSocket error:', error);
+          this.emit('error', error);
+          reject(error);
+        };
+
+      } catch (error) {
+        console.error('Failed to create WebSocket:', error);
+        reject(error);
+      }
+    });
   }
 
   /**
@@ -187,6 +256,13 @@ class SessionService {
           queueStatus: message.queue_status
         });
         break;
+
+      case 'ping':
+        // Respond to server ping
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+          this.websocket.send(JSON.stringify({ type: 'pong' }));
+        }
+        break;
       
       default:
         console.log('Unknown message type:', message.type);
@@ -194,13 +270,20 @@ class SessionService {
   }
 
   /**
-   * Start sending heartbeat messages
+   * Start sending heartbeat messages with improved error handling
    */
   startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-        this.websocket.send(JSON.stringify({ type: 'heartbeat' }));
+        try {
+          this.websocket.send(JSON.stringify({ type: 'heartbeat' }));
+        } catch (error) {
+          console.error('Failed to send WebSocket heartbeat:', error);
+          // Fall back to HTTP heartbeat
+          this.sendHttpHeartbeat();
+        }
       } else if (this.sessionId) {
+        // WebSocket is not available, use HTTP heartbeat
         this.sendHttpHeartbeat();
       }
     }, 15000);
@@ -403,32 +486,32 @@ class SessionService {
   }
 
   /**
-   * Add page unload handler to ensure session cleanup
+   * Add page unload handler to ensure session cleanup with improved reliability
    */
   addPageUnloadHandler() {
     if (this.pageUnloadHandlerAdded) return;
     
     const handlePageUnload = () => {
       if (this.sessionId) {
-        // Explicit synchronous disconnection - more reliable for tab close
-        // Try both methods to ensure session cleanup
         try {
-          // 1. Synchronous XHR request (works during unload)
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', `${this.backendUrl}/session/remove/${this.sessionId}`, false); // false = synchronous
-          xhr.setRequestHeader('Content-Type', 'application/json');
-          xhr.send(JSON.stringify({}));
-          
-          // 2. Also try WebSocket if available
-          if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-            this.websocket.send(JSON.stringify({ type: 'disconnect' }));
-          }
-          
-          // 3. Beacon as last resort fallback
-          navigator.sendBeacon(
+          // Use sendBeacon as primary method (most reliable)
+          const success = navigator.sendBeacon(
             `${this.backendUrl}/session/remove/${this.sessionId}`,
             JSON.stringify({})
           );
+          
+          if (!success) {
+            // Fallback to synchronous XHR if sendBeacon fails
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${this.backendUrl}/session/remove/${this.sessionId}`, false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify({}));
+          }
+          
+          // Also signal through WebSocket if available
+          if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.websocket.send(JSON.stringify({ type: 'disconnect' }));
+          }
           
           console.log('Session cleanup triggered on page unload');
         } catch (error) {
@@ -496,7 +579,23 @@ class SessionService {
    * Get the API base URL with proper fallbacks - matches api.js logic but for session endpoints
    */
   getApiBaseUrl() {
-    // Force localhost for local development
+    // In production on the marcus.decimer.ai server
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      // Direct API connection instead of proxy
+      return 'https://api.marcus.decimer.ai';
+    }
+
+    // Check for environment variables
+    if (process.env.VUE_APP_API_URL) {
+      return process.env.VUE_APP_API_URL;
+    }
+
+    // Docker compose environment - frontend can reach backend directly
+    if (process.env.NODE_ENV === 'production') {
+      return 'http://backend:9000';
+    }
+
+    // Development fallback - always use localhost for development
     return 'http://localhost:9000';
   }
 
@@ -504,7 +603,24 @@ class SessionService {
    * Get WebSocket URL based on the HTTP API URL
    */
   getWebSocketUrl() {
-    // Force localhost for local development
+    // In production on the marcus.decimer.ai server
+    if (window.location.hostname === 'marcus.decimer.ai') {
+      // Use the API domain but with WebSocket protocol
+      return 'wss://api.marcus.decimer.ai';
+    }
+
+    // Check for environment variables and convert to WebSocket URL
+    if (process.env.VUE_APP_API_URL) {
+      const apiUrl = process.env.VUE_APP_API_URL;
+      return apiUrl.replace(/^https?:/, 'ws:');
+    }
+
+    // Docker compose environment - frontend can reach backend directly
+    if (process.env.NODE_ENV === 'production') {
+      return 'ws://backend:9000';
+    }
+
+    // Development fallback - always use localhost for development
     return 'ws://localhost:9000';
   }
 }

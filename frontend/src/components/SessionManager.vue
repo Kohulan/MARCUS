@@ -45,6 +45,35 @@
           <div class="progress-text">{{ progressPercentage }}% complete</div>
         </div>
 
+        <!-- While You Wait Section -->
+        <div class="while-wait-section">
+          <h3 class="while-wait-title">While you wait, why don't you check out our other services?</h3>
+          <div class="service-buttons">
+            <a 
+              href="https://coconut.naturalproducts.net" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              class="service-btn coconut-btn"
+              title="COCONUT - Collection of Open Natural Products Database"
+              data-tooltip="Explore the world's largest collection of natural products with detailed molecular information and biological activities"
+            >
+              <img src="@/assets/coconut-logo.svg" alt="COCONUT" class="service-logo">
+              <span class="service-name">COCONUT</span>
+            </a>
+            <a 
+              href="https://decimer.ai" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              class="service-btn decimer-btn"
+              title="DECIMER - Deep Learning for Chemical Image Recognition"
+              data-tooltip="Advanced AI-powered tool for extracting chemical structures from images and documents with high accuracy"
+            >
+              <img src="@/assets/decimer-logo.png" alt="DECIMER" class="service-logo">
+              <span class="service-name">DECIMER</span>
+            </a>
+          </div>
+        </div>
+
         <!-- Clean Action Buttons -->
         <div class="action-section">
           <button 
@@ -55,7 +84,7 @@
             <span v-if="isRefreshing">Refreshing...</span>
             <span v-else>Refresh Status</span>
           </button>
-
+          
           <button @click="leaveQueue" class="btn btn-outline">
             Leave Queue
           </button>
@@ -95,13 +124,11 @@ export default {
   name: 'SessionManager',
   data() {
     return {
-      // UI states
       isInitializing: true,
-      isActive: false,
       isWaiting: false,
+      isActive: false,
       hasConnectionError: false,
       isRefreshing: false,
-
       
       // Session data
       sessionStatus: null,
@@ -134,9 +161,6 @@ export default {
   async mounted() {
     this.setupEventListeners();
     await this.initializeSession();
-    
-    // Check for page reload and clear any stale session data
-    this.handlePageReload();
   },
   
   beforeUnmount() {
@@ -152,7 +176,6 @@ export default {
       sessionService.on('queueUpdate', this.onQueueUpdate);
       sessionService.on('error', this.onError);
       sessionService.on('reconnectFailed', this.onReconnectFailed);
-      sessionService.on('sessionExpired', this.onSessionExpired);
       
       // Browser events
       window.addEventListener('beforeunload', this.handleBeforeUnload);
@@ -202,12 +225,6 @@ export default {
       
       try {
         this.isRefreshing = true;
-        // Only try to refresh if we have an active session
-        if (!sessionService.isActive()) {
-          console.log('No active session for status refresh, skipping');
-          return;
-        }
-        
         const result = await sessionService.getSessionStatus();
         
         if (result.success) {
@@ -215,10 +232,7 @@ export default {
         }
       } catch (error) {
         console.error('Failed to refresh status:', error);
-        // Don't emit error for "No active session" as this is expected during reinitialization
-        if (!error.message.includes('No active session')) {
-          this.$emit('error', 'Failed to refresh status');
-        }
+        this.$emit('error', 'Failed to refresh status');
       } finally {
         this.isRefreshing = false;
       }
@@ -226,63 +240,19 @@ export default {
     
     async leaveQueue() {
       try {
-        const result = await sessionService.endSession();
-        console.log('Leave queue result:', result);
-        
-        // Close the tab/window
-        if (window.opener) {
-          // If opened by another window, close this window
-          window.close();
-        } else {
-          // Try to close the tab
-          window.close();
-          
-          // If close doesn't work (some browsers prevent it), 
-          // redirect to a goodbye page or show a message
-          setTimeout(() => {
-            if (!window.closed) {
-              // Fallback: navigate to about:blank or show message
-              document.body.innerHTML = `
-                <div style="
-                  display: flex; 
-                  flex-direction: column; 
-                  align-items: center; 
-                  justify-content: center; 
-                  height: 100vh; 
-                  font-family: system-ui, -apple-system, sans-serif;
-                  text-align: center;
-                  background: #f8fafc;
-                  color: #334155;
-                ">
-                  <h1 style="font-size: 2rem; margin-bottom: 1rem; color: #0f172a;">You've left the queue</h1>
-                  <p style="font-size: 1.1rem; margin-bottom: 2rem; color: #64748b;">You can safely close this tab now.</p>
-                  <button onclick="window.close()" style="
-                    padding: 0.75rem 1.5rem;
-                    background: #3b82f6;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    font-size: 1rem;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                  " onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
-                    Close Tab
-                  </button>
-                </div>
-              `;
-            }
-          }, 100);
-        }
-        
+        // End the session first
+        await sessionService.endSession();
         this.$emit('session-ended');
+        
+        // Immediately close the browser tab
+        window.close();
       } catch (error) {
         console.error('Failed to leave queue:', error);
-        // Still try to close the tab even if there was an error
+        // Even if there's an error, still close the tab
         window.close();
       }
     },
     
-
     async retryConnection() {
       if (this.connectionRetries >= this.maxRetries) {
         this.$emit('max-retries-reached');
@@ -293,26 +263,15 @@ export default {
       await this.initializeSession();
     },
     
-    onSessionExpired() {
-      console.log('Session expired, reinitializing...');
-      this.isActive = false;
-      this.isWaiting = false;
-      this.sessionStatus = null;
-      this.queueStatus = null;
-      
-      // Automatically try to create a new session
-      this.initializeSession();
-    },
-    
     // Event handlers
     onConnected() {
-      console.log('Session WebSocket connected - SessionId:', sessionService.getSessionId());
+      console.log('Session WebSocket connected');
       this.hasConnectionError = false;
       this.connectionRetries = 0;
     },
     
     onDisconnected() {
-      console.log('Session WebSocket disconnected - SessionId:', sessionService.getSessionId());
+      console.log('Session WebSocket disconnected');
     },
     
     onStatusUpdate(data) {
@@ -351,17 +310,6 @@ export default {
       }
     },
     
-    handlePageReload() {
-      // Clear any stale session data on page reload
-      const isPageReload = performance.getEntriesByType('navigation')[0]?.type === 'reload';
-      
-      if (isPageReload) {
-        console.log('Page reload detected, will reinitialize session');
-        // Don't cleanup immediately - let the session recovery process handle it
-        // If the stored session is invalid, it will be cleared during createSession()
-      }
-    },
-    
     cleanup() {
       // Remove event listeners
       sessionService.off('connected', this.onConnected);
@@ -370,7 +318,6 @@ export default {
       sessionService.off('queueUpdate', this.onQueueUpdate);
       sessionService.off('error', this.onError);
       sessionService.off('reconnectFailed', this.onReconnectFailed);
-      sessionService.off('sessionExpired', this.onSessionExpired);
       
       window.removeEventListener('beforeunload', this.handleBeforeUnload);
       window.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -401,12 +348,13 @@ export default {
 
 .session-manager {
   width: 100%;
-  height: 100vh;
+  min-height: calc(100vh - 90px); /* Updated to match actual header height (~85px) */
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
   font-family: var(--font-family);
+  padding: 2rem 0;
 }
 
 /* Remove background when session is active */
@@ -414,6 +362,8 @@ export default {
   background: none;
   display: block;
   height: auto;
+  min-height: auto;
+  padding: 0;
 }
 
 /* Screen Content Containers */
@@ -530,6 +480,161 @@ export default {
   font-size: 0.9rem;
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+/* While You Wait Section */
+.while-wait-section {
+  margin-bottom: 2.5rem;
+}
+
+.while-wait-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.service-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.service-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: 14px;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  min-width: 140px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+.service-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.service-btn:hover::before {
+  left: 100%;
+}
+
+.coconut-btn {
+  background: linear-gradient(135deg, #E8F5E8, #F0FFF0);
+  color: #2E7D32;
+  border-color: #A5D6A7;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.1);
+}
+
+.coconut-btn:hover {
+  background: linear-gradient(135deg, #C8E6C9, #E8F5E8);
+  border-color: #66BB6A;
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(76, 175, 80, 0.25);
+}
+
+.decimer-btn {
+  background: linear-gradient(135deg, #E3F2FD, #F0F8FF);
+  color: #1565C0;
+  border-color: #90CAF9;
+  box-shadow: 0 4px 15px rgba(33, 150, 243, 0.1);
+}
+
+.decimer-btn:hover {
+  background: linear-gradient(135deg, #BBDEFB, #E3F2FD);
+  border-color: #42A5F5;
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(33, 150, 243, 0.25);
+}
+
+.service-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  transition: transform 0.3s ease;
+}
+
+.service-btn:hover .service-logo {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.service-name {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Advanced Tooltip Styling */
+.service-btn[data-tooltip] {
+  position: relative;
+}
+
+.service-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  width: 280px;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.service-btn[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1001;
+}
+
+.service-btn[data-tooltip]:hover::after,
+.service-btn[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+.service-btn[data-tooltip]:hover::before {
+  transform: translateX(-50%) translateY(-4px);
 }
 
 /* Action Section */
@@ -711,6 +816,23 @@ export default {
     padding: 1.25rem 1rem;
   }
 
+  .service-buttons {
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .service-btn {
+    width: 100%;
+    max-width: 240px;
+    min-width: auto;
+  }
+
+  .service-btn[data-tooltip]::after {
+    width: 250px;
+    font-size: 0.8rem;
+  }
+
   .action-section {
     flex-direction: column;
     align-items: center;
@@ -756,6 +878,30 @@ export default {
 
   .stat-number {
     font-size: 1.5rem;
+  }
+
+  .service-btn {
+    padding: 0.75rem 1rem;
+    min-width: auto;
+  }
+
+  .service-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .service-name {
+    font-size: 1rem;
+  }
+
+  .service-btn[data-tooltip]::after {
+    width: 220px;
+    font-size: 0.75rem;
+    padding: 10px 12px;
+  }
+
+  .while-wait-title {
+    font-size: 1rem;
   }
 }
 </style>
