@@ -429,7 +429,7 @@ export default {
   top: 0;
   z-index: var(--z-sticky, 100);
   overflow: hidden;
-  min-height: 70px;
+  min-height: 57px;
   border-bottom: 2px solid transparent;
   border-image: var(--header-primary-gradient) 1;
   backdrop-filter: blur(15px) saturate(180%);
@@ -527,8 +527,8 @@ export default {
       0 5px 20px rgba(59, 130, 246, 0.1);
 
     .header-content {
-      padding-top: 0.75rem;
-      padding-bottom: 0.75rem;
+      padding-top: 0.675rem;
+      padding-bottom: 0.675rem;
     }
 
     .logo-img {
@@ -545,12 +545,12 @@ export default {
 .header-content {
   max-width: 100%;
   margin: 0;
-  padding: 1rem 2rem;
+  padding: 0.8rem 2rem;
   position: relative;
   z-index: 1;
 
   @media (max-width: 768px) {
-    padding: 1rem;
+    padding: 0.8rem;
   }
 }
 
@@ -607,34 +607,11 @@ export default {
     align-items: center;
     justify-content: center;
     border-radius: 12px;
-    background: rgba(var(--header-primary-rgb), 0.08);
-    box-shadow:
-      0 4px 10px -2px rgba(var(--header-primary-rgb), 0.15),
-      inset 0 0 0 1px rgba(var(--header-primary-rgb), 0.2);
     overflow: hidden;
     transition: all 0.3s ease;
 
-    &:before {
-      content: '';
-      position: absolute;
-      top: -2px;
-      left: -2px;
-      right: -2px;
-      bottom: -2px;
-      background: var(--header-primary-gradient);
-      opacity: 0.4;
-      border-radius: 14px;
-      transform: rotate(-3deg) scale(0.97);
-      transition: transform 0.5s ease;
-      z-index: 0;
-    }
-
     &:hover {
       transform: translateY(-2px) scale(1.05);
-
-      &:before {
-        transform: rotate(0) scale(1);
-      }
 
       .logo-shine {
         transform: translateX(100%) rotate(25deg);

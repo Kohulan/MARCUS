@@ -1895,7 +1895,7 @@ getStoredDOI() {
 .columns-container {
   display: flex;
   gap: 0;
-  height: calc(100vh - 320px); /* Increased to ensure header, page title, warning banner, content, and footer are all visible */
+  height: calc(100vh - 253px); /* Adjusted for reduced header height (was 260px, now 253px - saving 7px) */
   width: 100%;
   position: relative;
   overflow: hidden; /* Keep this as hidden to prevent horizontal scrolling */

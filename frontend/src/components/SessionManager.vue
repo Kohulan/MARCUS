@@ -348,7 +348,7 @@ export default {
 
 .session-manager {
   width: 100%;
-  min-height: calc(100vh - 120px); /* Account for header/footer space */
+  min-height: calc(100vh - 90px); /* Updated to match actual header height (~85px) */
   display: flex;
   align-items: center;
   justify-content: center;
