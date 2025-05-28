@@ -176,13 +176,13 @@ export default {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  padding: 0.5rem;
+  padding: 0.25rem 0.5rem; /* Reduced top/bottom padding from 0.5rem to 0.25rem */
   overflow-y: auto; /* Allow scrolling within the content if needed */
 }
 
 @media (min-width: 1200px) {
   .main-content {
-    padding: 2rem;
+    padding: 0.5rem 2rem; /* Reduced top/bottom padding from 2rem to 0.5rem, kept horizontal at 2rem */
   }
 }
 
