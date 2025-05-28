@@ -2022,34 +2022,61 @@ getStoredDOI() {
   }
 }
 
-/* Styling for the new export button */
+/* Material Design Download Data Button with Flat Pastel Indigo */
 .export-button {
+  --export-50: #EDE7F6;
+  --export-100: #c4cae9;
+  --export-200: #9daddb;
+  --export-800: #2727a0;
+  --export-900: #1b3592;
+  
   position: relative;
   padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3), 0 0 0 2px rgba(59, 130, 246, 0.2);
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
   isolation: isolate;
   
-  /* Gradient background with animation */
-  background: linear-gradient(-45deg, #4338ca, #3b82f6, #2563eb, #1d4ed8);
-  background-size: 300% 300%;
-  animation: gradientShift 8s ease infinite;
+  /* Flat Material Design Pastel Background */
+  background: var(--export-100);
+  
+  /* Professional shadow with indigo accent */
+  box-shadow: 
+    0 2px 8px rgba(69, 39, 160, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   
   .button-content {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    color: white;
+    gap: 0.4rem;
+    padding: 0.375rem 0.625rem; /* Reduced from 0.75rem 1.5rem */
+    color: var(--export-800);
     font-weight: 600;
-    font-size: 0.95rem;
-    letter-spacing: 0.01em;
+    font-size: 0.75rem; /* Reduced from 0.95rem */
+    letter-spacing: 0.02em;
     z-index: 5;
+  }
+  
+  /* Professional shine effect */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    transition: left 0.6s ease;
+    z-index: 3;
   }
   
   /* Subtle button glow effect */
@@ -2059,79 +2086,94 @@ getStoredDOI() {
     left: -25%;
     width: 150%;
     height: 150%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+    background: radial-gradient(circle, rgba(69, 39, 160, 0.1) 0%, rgba(69, 39, 160, 0) 70%);
     opacity: 0;
     transition: opacity 0.3s ease;
     z-index: 2;
     pointer-events: none;
   }
   
-  /* Interactive states */
+  /* Professional hover state */
   &:hover:not(.disabled) {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.35), 0 0 0 2px rgba(96, 165, 250, 0.5);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 
+      0 6px 20px rgba(69, 39, 160, 0.25),
+      0 2px 8px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    
+    /* Flat pastel hover color */
+    background: var(--export-200);
     
     .button-glow {
       opacity: 1;
-      animation: pulse 2s infinite;
     }
     
     .export-icon {
-      animation: levitate 1.5s ease-in-out infinite;
-      filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+      transform: scale(1.1);
+      filter: drop-shadow(0 2px 4px rgba(69, 39, 160, 0.3));
     }
     
     .badge-container {
-      transform: scale(1.1);
+      transform: scale(1.05);
+    }
+    
+    /* Trigger shine animation */
+    &::before {
+      left: 100%;
     }
   }
   
   &:active:not(.disabled) {
-    transform: translateY(1px) scale(0.98);
-    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.25);
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 
+      0 3px 12px rgba(69, 39, 160, 0.2),
+      0 1px 4px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
     
     .button-glow {
       opacity: 0.7;
     }
   }
   
-  /* Disabled state with improved contrast */
+  /* Professional disabled state */
   &.disabled {
-    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    background: #F5F5F5; /* Flat gray instead of gradient */
+    color: #9E9E9E;
     cursor: not-allowed;
-    opacity: 0.8;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), 0 0 0 0 0 1px rgba(255, 255, 255, 0.1);
+    opacity: 0.6;
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
     filter: saturate(0.7);
+    
+    .export-icon {
+      color: #9E9E9E;
+    }
+    
+    .badge {
+      background: #E0E0E0;
+      color: #9E9E9E;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
   }
   
-  /* Pulsing effect when active */
-  &.pulse:not(.disabled)::after {
-    content: '';
-    position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    border-radius: 16px;
-    background: rgba(59, 130, 246, 0.3);
-    z-index: 1;
-    animation: pulse 2s infinite;
-    pointer-events: none;
+  /* Subtle pulsing effect when active */
+  &.pulse:not(.disabled) {
+    animation: subtlePulse 2s ease-in-out infinite;
   }
   
-  /* Icon styling */
+  /* Icon styling - reduced size */
   .export-icon {
-    width: 20px;
-    height: 20px;
-    color: white;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    width: 16px; /* Reduced from 20px */
+    height: 16px; /* Reduced from 20px */
+    color: var(--export-800);
     transition: all 0.3s ease;
   }
   
   /* Label styling */
   .label {
-    font-weight: 700;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+    color: var(--export-800);
   }
   
   /* Badge container and styling */
@@ -2144,31 +2186,33 @@ getStoredDOI() {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #ffffff;
-    color: #3b82f6;
+    background: var(--export-800);
+    color: white;
     border-radius: 999px;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 0.5rem;
-    font-size: 0.85rem;
-    font-weight: 800;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(59, 130, 246, 0.3);
+    min-width: 18px; /* Reduced from 24px */
+    height: 18px; /* Reduced from 24px */
+    padding: 0 0.375rem; /* Reduced from 0.5rem */
+    font-size: 0.7rem; /* Reduced from 0.85rem */
+    font-weight: 700;
+    box-shadow: 0 2px 4px rgba(69, 39, 160, 0.3);
     transition: all 0.3s ease;
-    
-    /* Ensure badge is readable in dark mode */
-    @media (prefers-color-scheme: dark) {
-      background: #ffffff;
-      color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2), 0 0 10px rgba(255, 255, 255, 0.4);
-    }
   }
 }
 
 /* Define animations */
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+@keyframes subtlePulse {
+  0%, 100% { 
+    box-shadow: 
+      0 2px 8px rgba(69, 39, 160, 0.15),
+      0 1px 3px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% { 
+    box-shadow: 
+      0 4px 12px rgba(69, 39, 160, 0.25),
+      0 2px 6px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
 }
 
 @keyframes pulse {
@@ -2569,33 +2613,61 @@ getStoredDOI() {
   gap: 0.75rem;
 }
 
+/* Material Design COCONUT Button with Professional Teal Styling */
 .coconut-button {
+  --coconut-50: #E0F2F1;
+  --coconut-100: #B2DFDB;
+  --coconut-200: #80CBC4;
+  --coconut-800: #00695C;
+  --coconut-900: #004D40;
+  
   position: relative;
   padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3), 0 0 0 2px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
   isolation: isolate;
   
-  /* Gradient background with animation */
-  background: linear-gradient(-45deg, #047857, #10b981, #059669, #065f46);
-  background-size: 300% 300%;
-  animation: gradientShift 8s ease infinite;
+  /* Flat Material Design Teal Pastel Background */
+  background: var(--coconut-100);
+  
+  /* Professional shadow with teal accent */
+  box-shadow: 
+    0 2px 8px rgba(0, 105, 92, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   
   .button-content {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    color: white;
+    gap: 0.4rem;
+    padding: 0.375rem 0.625rem; /* Reduced from 0.75rem 1.5rem */
+    color: var(--coconut-800);
     font-weight: 600;
-    font-size: 0.95rem;
-    letter-spacing: 0.01em;
+    font-size: 0.75rem; /* Reduced from 0.95rem */
+    letter-spacing: 0.02em;
     z-index: 5;
+  }
+  
+  /* Professional shine effect */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    transition: left 0.6s ease;
+    z-index: 3;
   }
   
   /* Subtle button glow effect */
@@ -2605,75 +2677,100 @@ getStoredDOI() {
     left: -25%;
     width: 150%;
     height: 150%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+    background: radial-gradient(circle, rgba(0, 105, 92, 0.1) 0%, rgba(0, 105, 92, 0) 70%);
     opacity: 0;
     transition: opacity 0.3s ease;
     z-index: 2;
     pointer-events: none;
   }
   
-  /* Interactive states */
+  /* Professional hover state */
   &:hover:not(.disabled) {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.35), 0 0 0 2px rgba(16, 185, 129, 0.5);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 
+      0 6px 20px rgba(0, 105, 92, 0.25),
+      0 2px 8px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    
+    /* Flat pastel hover color */
+    background: var(--coconut-200);
     
     .button-glow {
       opacity: 1;
-      animation: pulse 2s infinite;
     }
     
     .coconut-icon {
-      animation: levitate 1.5s ease-in-out infinite;
-      filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+      transform: scale(1.1);
+      filter: drop-shadow(0 2px 4px rgba(0, 105, 92, 0.3));
+    }
+    
+    /* Trigger shine animation */
+    &::before {
+      left: 100%;
     }
   }
   
   &:active:not(.disabled) {
-    transform: translateY(1px) scale(0.98);
-    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.25);
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 
+      0 3px 12px rgba(0, 105, 92, 0.2),
+      0 1px 4px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
     
     .button-glow {
       opacity: 0.7;
     }
   }
   
-  /* Disabled state with improved contrast */
+  /* Professional disabled state */
   &.disabled {
-    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    background: #F5F5F5; /* Flat gray instead of gradient */
+    color: #9E9E9E;
     cursor: not-allowed;
-    opacity: 0.8;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    opacity: 0.6;
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
     filter: saturate(0.7);
+    
+    .coconut-icon {
+      color: #9E9E9E;
+    }
+    
+    .label {
+      color: #9E9E9E;
+    }
   }
   
-  /* Pulsing effect when active */
+  /* Elegant pulsing effect when active */
   &.pulse:not(.disabled)::after {
     content: '';
     position: absolute;
-    top: -8px;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    border-radius: 16px;
-    background: rgba(16, 185, 129, 0.3);
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-radius: 14px;
+    background: rgba(0, 105, 92, 0.2);
     z-index: 1;
-    animation: pulse 2s infinite;
+    animation: pulse 2.5s infinite;
     pointer-events: none;
   }
   
   /* Icon styling */
   .coconut-icon {
-    width: 20px;
-    height: 20px;
-    color: white;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-    transition: all 0.3s ease;
+    width: 16px; /* Reduced from 20px */
+    height: 16px; /* Reduced from 20px */
+    color: var(--coconut-800);
+    filter: drop-shadow(0 1px 2px rgba(0, 105, 92, 0.1));
+    transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
   }
   
   /* Label styling */
   .label {
-    font-weight: 700;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+    color: var(--coconut-800);
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
   }
 }
 </style>

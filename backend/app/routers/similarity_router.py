@@ -12,6 +12,8 @@ from app.schemas.rdkit_schema import (
     SimilarityMatrix,
 )
 
+RDKIT_AVAILABLE = True
+
 
 # Create the router
 router = APIRouter(

@@ -28,36 +28,71 @@
         </button>
       </div>
 
-      <!-- New filter bar with segment selection options -->
-      <div class="segments-filter-bar">
-        <div class="filter-section">
-          <span class="filter-section-label">Selection:</span>
-          <div class="filter-options">
-            <label class="filter-option">
-              <input type="checkbox" v-model="hideIncorrectSegments" @change="toggleHideIncorrect">
-              <span>Hide incorrect segments</span>
-            </label>
+      <!-- Enhanced segments control panel -->
+      <div class="segments-control-panel">
+        <!-- Primary Control Row: Selection status and bulk actions -->
+        <div class="control-row primary-controls">
+          <div class="selection-summary">
+            <div class="selection-badge" :class="{ 'has-selection': selectedSegmentCount > 0 }">
+              <vue-feather type="check-circle" size="16" class="selection-icon"></vue-feather>
+              <span class="selection-count">{{ selectedSegmentCount }}</span>
+              <span class="selection-divider">of</span>
+              <span class="total-count">{{ visibleSegments.length }}</span>
+            </div>
+            <span class="selection-label">segments selected</span>
+          </div>
 
-            <label class="filter-option">
-              <input type="checkbox" v-model="onlyProcessSelected" @change="toggleOnlyProcessSelected">
-              <span>Only process selected segments</span>
-            </label>
+          <div class="bulk-actions">
+            <button 
+              class="control-btn secondary" 
+              @click="selectAllVisible" 
+              :disabled="!sortedVisibleSegments.length || selectedSegmentCount === visibleSegments.length"
+              :title="selectedSegmentCount === visibleSegments.length ? 'All segments already selected' : 'Select all visible segments'">
+              <vue-feather type="check-square" size="16"></vue-feather>
+              <span>Select All</span>
+            </button>
+            <button 
+              class="control-btn secondary" 
+              @click="clearSelection" 
+              :disabled="selectedSegmentCount === 0"
+              title="Clear current selection">
+              <vue-feather type="x-square" size="16"></vue-feather>
+              <span>Clear</span>
+            </button>
           </div>
         </div>
 
-        <div class="filter-stats">
-          <span class="stats-item">
-            <span class="stats-value">{{ selectedSegmentCount }}</span> selected /
-            <span class="stats-value">{{ visibleSegments.length }}</span> visible
-          </span>
-          <button class="select-all-btn" @click="selectAllVisible" :disabled="!sortedVisibleSegments.length">
-            <vue-feather type="check-square" size="14"></vue-feather>
-            <span>Select All Visible</span>
-          </button>
-          <button class="clear-selection-btn" @click="clearSelection" :disabled="selectedSegmentCount === 0">
-            <vue-feather type="square" size="14"></vue-feather>
-            <span>Clear Selection</span>
-          </button>
+        <!-- Secondary Control Row: Display and processing options -->
+        <div class="control-row secondary-controls">
+          <div class="control-group display-options">
+            <span class="group-label">Display:</span>
+            <label class="toggle-control">
+              <input 
+                type="checkbox" 
+                v-model="hideIncorrectSegments" 
+                @change="toggleHideIncorrect"
+                class="toggle-input">
+              <span class="toggle-track">
+                <span class="toggle-thumb"></span>
+              </span>
+              <span class="toggle-text">Hide incorrect</span>
+            </label>
+          </div>
+
+          <div class="control-group processing-options">
+            <span class="group-label">Processing:</span>
+            <label class="toggle-control">
+              <input 
+                type="checkbox" 
+                v-model="onlyProcessSelected" 
+                @change="toggleOnlyProcessSelected"
+                class="toggle-input">
+              <span class="toggle-track">
+                <span class="toggle-thumb"></span>
+              </span>
+              <span class="toggle-text">Selected only</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -977,264 +1012,278 @@ export default {
       }
     }
 
-    /* Enhanced segments filter bar styling */
-    .segments-filter-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-      padding: 1rem 1.25rem;
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(79, 70, 229, 0.12) 100%);
+    /* Modern segments control panel */
+    .segments-control-panel {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(226, 232, 240, 0.8);
       border-radius: 16px;
-      flex-wrap: wrap;
-      gap: 0.875rem;
-      border: 1px solid rgba(79, 70, 229, 0.2);
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.06);
-      position: relative;
-      overflow: hidden;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      flex-shrink: 0;
 
-      &::before {
-        content: '';
-        position: absolute;
-        top: -10px;
-        right: -10px;
-        width: 80px;
-        height: 80px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(79, 70, 229, 0.3) 0%, transparent 70%);
-        opacity: 0.4;
-        z-index: 0;
-      }
-
-      .filter-section {
+      .control-row {
         display: flex;
-        align-items: flex-start;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        position: relative;
-        z-index: 1;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
 
-        .filter-section-label {
-          font-weight: 600;
-          color: #334155;
-          font-size: 0.9375rem;
-          white-space: nowrap;
+        &:not(:last-child) {
+          margin-bottom: 0.75rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.5);
         }
 
-        .filter-options {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 1rem;
-
-          .filter-option {
+        &.primary-controls {
+          .selection-summary {
             display: flex;
             align-items: center;
-            gap: 0.625rem;
-            cursor: pointer;
-            font-size: 0.875rem;
-            color: #475569;
-            transition: color 0.2s ease;
-            font-weight: 500;
-            min-width: 0;
+            gap: 0.75rem;
 
-            &:hover {
-              color: #4f46e5;
-            }
-
-            span {
-              white-space: normal;
-              line-height: 1.2;
-            }
-
-            input[type="checkbox"] {
-              cursor: pointer;
-              width: 18px;
-              height: 18px;
-              min-width: 18px;
-              margin: 0;
-              appearance: none;
-              -webkit-appearance: none;
-              background-color: white;
-              border: 2px solid #cbd5e1;
-              border-radius: 6px;
+            .selection-badge {
+              display: flex;
+              align-items: center;
+              gap: 0.375rem;
+              padding: 0.375rem 0.75rem;
+              background: rgba(241, 245, 249, 0.8);
+              border: 1px solid rgba(226, 232, 240, 0.6);
+              border-radius: 12px;
               transition: all 0.2s ease;
-              position: relative;
-              flex-shrink: 0;
 
-              &:checked {
-                background-color: #4f46e5;
-                border-color: #4f46e5;
-                box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+              &.has-selection {
+                background: rgba(79, 70, 229, 0.1);
+                border-color: rgba(79, 70, 229, 0.3);
 
-                &::after {
-                  content: '';
-                  position: absolute;
-                  top: 3px;
-                  left: 6px;
-                  width: 4px;
-                  height: 8px;
-                  border: solid white;
-                  border-width: 0 2px 2px 0;
-                  transform: rotate(45deg);
+                .selection-icon {
+                  color: #4f46e5;
                 }
               }
 
-              &:hover {
-                border-color: #4f46e5;
+              .selection-icon {
+                color: #94a3b8;
+                transition: color 0.2s ease;
               }
+
+              .selection-count {
+                font-weight: 700;
+                color: #4f46e5;
+                font-size: 0.9375rem;
+              }
+
+              .selection-divider {
+                color: #94a3b8;
+                font-size: 0.8125rem;
+              }
+
+              .total-count {
+                font-weight: 600;
+                color: #64748b;
+                font-size: 0.9375rem;
+              }
+            }
+
+            .selection-label {
+              color: #64748b;
+              font-size: 0.875rem;
+              font-weight: 500;
+            }
+          }
+
+          .bulk-actions {
+            display: flex;
+            gap: 0.5rem;
+          }
+        }
+
+        &.secondary-controls {
+          .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+
+            .group-label {
+              font-size: 0.8125rem;
+              font-weight: 600;
+              color: #475569;
+              white-space: nowrap;
             }
           }
         }
       }
 
-      .filter-stats {
+      .control-btn {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 0.875rem;
-        position: relative;
-        z-index: 1;
+        gap: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #475569;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
 
-        .stats-item {
-          font-size: 0.9375rem;
+        &:hover:not(:disabled) {
+          background: rgba(248, 250, 252, 1);
+          border-color: rgba(148, 163, 184, 0.4);
           color: #334155;
-          font-weight: 500;
-          white-space: nowrap;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
 
-          .stats-value {
-            font-weight: 700;
+        &:active:not(:disabled) {
+          transform: translateY(0);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        &.secondary {
+          &:hover:not(:disabled) {
+            background: rgba(79, 70, 229, 0.05);
+            border-color: rgba(79, 70, 229, 0.2);
             color: #4f46e5;
-            background: linear-gradient(90deg, #4f46e5, #6366f1);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
           }
         }
 
-        button {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.8125rem;
-          padding: 0.5rem 0.75rem;
-          border-radius: 10px;
-          border: 1px solid rgba(226, 232, 240, 0.8);
-          cursor: pointer;
-          font-weight: 500;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        svg {
+          flex-shrink: 0;
+        }
+      }
+
+      .toggle-control {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        cursor: pointer;
+        user-select: none;
+
+        .toggle-input {
+          position: absolute;
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
+        .toggle-track {
           position: relative;
-          overflow: hidden;
-          white-space: nowrap;
+          width: 44px;
+          height: 24px;
+          background: rgba(203, 213, 225, 0.6);
+          border-radius: 12px;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
 
-          &::before {
-            content: '';
+          .toggle-thumb {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            z-index: 1;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
           }
+        }
 
-          svg {
-            position: relative;
-            z-index: 2;
-            flex-shrink: 0;
+        .toggle-input:checked + .toggle-track {
+          background: #4f46e5;
+
+          .toggle-thumb {
+            transform: translateX(20px);
           }
+        }
 
-          span {
-            position: relative;
-            z-index: 2;
-          }
+        .toggle-text {
+          color: #475569;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          white-space: nowrap;
+        }
 
-          &:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
-
-            &::before {
-              opacity: 1;
-            }
-          }
-
-          &:active:not(:disabled) {
-            transform: translateY(0);
-          }
-
-          &:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-          }
-
-          &.select-all-btn {
-            background-color: #f1f5f9;
+        &:hover {
+          .toggle-text {
             color: #334155;
-
-            &:hover:not(:disabled) {
-              background-color: #e2e8f0;
-              border-color: #cbd5e1;
-              color: #1e293b;
-            }
           }
 
-          &.clear-selection-btn {
-            background-color: white;
-            color: #64748b;
+          .toggle-track {
+            background: rgba(148, 163, 184, 0.4);
+          }
 
-            &:hover:not(:disabled) {
-              background-color: #fef2f2;
-              border-color: #fecaca;
-              color: #ef4444;
-            }
+          .toggle-input:checked + .toggle-track {
+            background: #4338ca;
           }
         }
       }
 
+      // Responsive design
       @media (max-width: 768px) {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 1rem;
-        padding: 1rem;
+        padding: 0.875rem;
 
-        .filter-section {
-          width: 100%;
+        .control-row {
           flex-direction: column;
-          align-items: flex-start;
-        }
+          align-items: stretch;
+          gap: 0.75rem;
 
-        .filter-options {
-          width: 100%;
-        }
+          &.primary-controls {
+            .selection-summary {
+              justify-content: center;
+            }
 
-        .filter-stats {
-          width: 100%;
-          justify-content: space-between;
-          
-          .stats-item {
-            flex: 1;
+            .bulk-actions {
+              justify-content: center;
+            }
           }
-          
-          button {
-            min-width: auto;
-            padding: 0.5rem;
-            
-            @media (max-width: 370px) {
-              span {
-                display: none;
+
+          &.secondary-controls {
+            .control-group {
+              justify-content: space-between;
+              flex-wrap: wrap;
+              gap: 0.5rem;
+
+              .group-label {
+                min-width: fit-content;
+              }
+
+              .toggle-control {
+                flex: 1;
+                justify-content: flex-end;
               }
             }
           }
         }
+
+        .control-btn {
+          flex: 1;
+          justify-content: center;
+        }
       }
-      
+
       @media (max-width: 480px) {
-        .filter-stats {
-          button {
-            flex: 1;
-            justify-content: center;
+        .control-row.secondary-controls {
+          .control-group {
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+
+            .toggle-control {
+              justify-content: center;
+            }
           }
+        }
+
+        .selection-badge {
+          flex-wrap: wrap;
+          justify-content: center;
         }
       }
     }
