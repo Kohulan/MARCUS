@@ -81,12 +81,25 @@ class SessionService {
     }
 
     try {
-      const url = new URL(`${this.backendUrl}/session/create`);
-      if (userId) {
-        url.searchParams.append('user_id', userId);
+      // Make sure we have a valid backend URL
+      if (!this.backendUrl) {
+        this.backendUrl = this.getApiBaseUrl();
       }
       
-      const response = await fetch(url.toString(), {
+      // Safely construct the URL or fall back to string concatenation
+      let requestUrl;
+      try {
+        const url = new URL(`${this.backendUrl}/session/create`);
+        if (userId) {
+          url.searchParams.append('user_id', userId);
+        }
+        requestUrl = url.toString();
+      } catch (urlError) {
+        console.warn('URL construction failed, falling back to string concatenation');
+        requestUrl = `${this.backendUrl}/session/create${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
+      }
+      
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -502,7 +515,7 @@ class SessionService {
     }
 
     // Check for environment variables
-    if (process.env && process.env.VUE_APP_API_URL) {
+    if (process.env.VUE_APP_API_URL) {
       return process.env.VUE_APP_API_URL;
     }
 
@@ -511,10 +524,8 @@ class SessionService {
       return 'http://backend:9000';
     }
 
-    // Development fallback - use same host as current page but port 9000
-    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-    const hostname = window.location.hostname;
-    return `${protocol}//${hostname}:9000`;
+    // Development fallback - always use localhost for development
+    return 'http://localhost:9000';
   }
 
   /**
@@ -527,7 +538,7 @@ class SessionService {
     }
 
     // Check for environment variables and convert to WebSocket URL
-    if (process.env && process.env.VUE_APP_API_URL) {
+    if (process.env.VUE_APP_API_URL) {
       const apiUrl = process.env.VUE_APP_API_URL;
       return apiUrl.replace(/^https?:/, 'ws:');
     }
@@ -537,10 +548,8 @@ class SessionService {
       return 'ws://backend:9000';
     }
 
-    // Development fallback - use same host as current page but port 9000
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    return `${protocol}//${hostname}:9000`;
+    // Development fallback - always use localhost for development
+    return 'ws://localhost:9000';
   }
 }
 
