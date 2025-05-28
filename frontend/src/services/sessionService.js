@@ -86,6 +86,14 @@ class SessionService {
         this.backendUrl = this.getApiBaseUrl();
       }
       
+      console.log('Creating session with backend URL:', this.backendUrl);
+      
+      // For production environment, ensure we're using the direct API URL
+      if (window.location.hostname === 'marcus.decimer.ai' && !this.backendUrl.startsWith('https://api.')) {
+        console.log('Updating backendUrl for production environment');
+        this.backendUrl = 'https://api.marcus.decimer.ai';
+      }
+      
       // Safely construct the URL or fall back to string concatenation
       let requestUrl;
       try {
@@ -98,6 +106,8 @@ class SessionService {
         console.warn('URL construction failed, falling back to string concatenation');
         requestUrl = `${this.backendUrl}/session/create${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
       }
+      
+      console.log('Session creation URL:', requestUrl);
       
       const response = await fetch(requestUrl, {
         method: 'POST',
@@ -140,6 +150,12 @@ class SessionService {
     }
 
     try {
+      // Ensure the WebSocket URL is properly formatted
+      if (window.location.hostname === 'marcus.decimer.ai' && !this.wsUrl.startsWith('wss://')) {
+        console.log('Updating wsUrl for production environment');
+        this.wsUrl = 'wss://api.marcus.decimer.ai';
+      }
+      
       const wsUrl = `${this.wsUrl}/session/ws/${this.sessionId}`;
       console.log('Connecting to WebSocket:', wsUrl);
       this.websocket = new WebSocket(wsUrl);
@@ -511,7 +527,8 @@ class SessionService {
   getApiBaseUrl() {
     // In production on the marcus.decimer.ai server
     if (window.location.hostname === 'marcus.decimer.ai') {
-      return '/api'; // This will be proxied by Nginx
+      // Direct API connection instead of proxy
+      return 'https://api.marcus.decimer.ai';
     }
 
     // Check for environment variables
@@ -534,7 +551,8 @@ class SessionService {
   getWebSocketUrl() {
     // In production on the marcus.decimer.ai server
     if (window.location.hostname === 'marcus.decimer.ai') {
-      return '/ws'; // This will be proxied by Nginx
+      // Use the API domain but with WebSocket protocol
+      return 'wss://api.marcus.decimer.ai';
     }
 
     // Check for environment variables and convert to WebSocket URL
