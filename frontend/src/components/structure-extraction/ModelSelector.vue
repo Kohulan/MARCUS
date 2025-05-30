@@ -35,8 +35,11 @@
         </div>
         
         <div class="model-content">
-          <div class="model-name">DECIMER</div>
-          <div class="model-subtitle">Deep learning based optical chemical structure recognition</div>
+          <div class="model-name">
+            DECIMER
+            <span class="info-icon">i</span>
+          </div>
+          <div class="model-tooltip">Deep learning based optical chemical structure recognition</div>
         </div>
       </div>
       
@@ -68,8 +71,11 @@
         </div>
         
         <div class="model-content">
-          <div class="model-name">MolNexTR</div>
-          <div class="model-subtitle">ConvNext based Image-to-graph model with enhanced spatial understanding</div>
+          <div class="model-name">
+            MolNexTR
+            <span class="info-icon">i</span>
+          </div>
+          <div class="model-tooltip">ConvNext based Image-to-graph model with enhanced spatial understanding</div>
         </div>
       </div>
       
@@ -101,8 +107,11 @@
         </div>
         
         <div class="model-content">
-          <div class="model-name">MolScribe</div>
-          <div class="model-subtitle">Swin Transformer based image to graph generation with state-of-the-art performance</div>
+          <div class="model-name">
+            MolScribe
+            <span class="info-icon">i</span>
+          </div>
+          <div class="model-tooltip">Swin Transformer based image to graph generation with state-of-the-art performance</div>
         </div>
       </div>
     </div>
@@ -261,6 +270,7 @@ export default {
     gap: 0.75rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
+    justify-content: space-between;
 
     @media (max-width: 768px) {
       flex-direction: column;
@@ -269,7 +279,8 @@ export default {
 
   .model-button {
     flex: 1;
-    min-width: 120px;
+    max-width: 220px;
+    min-width: 160px;
     background: rgba(255, 255, 255, 0.9);
     border: 2px solid rgba(226, 232, 240, 0.8);
     border-radius: 8px;
@@ -281,6 +292,7 @@ export default {
     gap: 0.75rem;
     position: relative;
     overflow: hidden;
+    min-height: 60px;
 
     &::before {
       content: '';
@@ -366,25 +378,68 @@ export default {
     .model-content {
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
+      gap: 0.125rem;
       flex: 1;
       position: relative;
       z-index: 2;
+      justify-content: center;
+      align-items: flex-start;
 
       .model-name {
-        font-size: 0.875rem;
+        font-size: 0.9rem;
         font-weight: 600;
         color: #1f2937;
         letter-spacing: -0.01em;
         line-height: 1.2;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+
+        .info-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          background: rgba(99, 102, 241, 0.1);
+          border: 1px solid rgba(99, 102, 241, 0.2);
+          border-radius: 50%;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          color: #6366f1;
+          font-style: italic;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+
+          &:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: rgba(99, 102, 241, 0.3);
+            transform: scale(1.1);
+          }
+        }
       }
 
-      .model-subtitle {
+      .model-tooltip {
         font-size: 0.75rem;
         font-weight: 400;
         color: #6b7280;
-        line-height: 1.3;
+        line-height: 1.25;
         letter-spacing: -0.005em;
+        margin-top: 0.125rem;
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-3px);
+        transition: all 0.25s ease;
+        pointer-events: none;
+        overflow: hidden;
+      }
+    }
+
+    &:hover {
+      .model-content .model-tooltip {
+        opacity: 0.9;
+        max-height: 40px;
+        transform: translateY(0);
       }
     }
   }
@@ -494,26 +549,44 @@ export default {
     }
 
     .model-button {
-      padding: 0.625rem 0.75rem;
+      padding: 0.625rem 0.875rem;
       min-width: auto;
+      max-width: none;
+      min-height: 50px;
+      align-items: center;
 
       .model-icon {
-        width: 28px;
-        height: 28px;
+        width: 26px;
+        height: 26px;
 
         .icon {
-          width: 14px;
-          height: 14px;
+          width: 13px;
+          height: 13px;
         }
       }
 
       .model-content {
         .model-name {
-          font-size: 0.8125rem;
+          font-size: 0.8rem;
+
+          .info-icon {
+            width: 12px;
+            height: 12px;
+            font-size: 0.5625rem;
+          }
         }
 
-        .model-subtitle {
+        .model-tooltip {
           font-size: 0.6875rem;
+          line-height: 1.2;
+        }
+      }
+
+      &:hover {
+        .model-content .model-tooltip {
+          opacity: 0.9;
+          max-height: 35px;
+          transform: translateY(0);
         }
       }
     }
