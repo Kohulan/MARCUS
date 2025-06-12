@@ -142,7 +142,6 @@ async def create_depiction(request: DepictionRequest):
             format=request.format,
             use_molfile_directly=request.use_molfile_directly,
         )
-        print(result)
         # Return response based on format
         if request.format == "svg":
             return Response(content=result["depiction"], media_type="image/svg+xml")

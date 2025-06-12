@@ -814,14 +814,17 @@ export default {
       const structure = this.getStructureForSegment(segment)
       if (!structure) return false
 
-      // First check if useCoordinates flag is explicitly set
-      if (structure.useCoordinates === true) {
-        return true
+      // Check if we have molfile data and if it's a coordinate-capable engine
+      const hasValidMolfile = !!structure.molfile
+      const isCoordinateCapableEngine = structure.engine === 'molnextr' || structure.engine === 'molscribe'
+      
+      if (!hasValidMolfile || !isCoordinateCapableEngine) {
+        return false
       }
 
-      // Otherwise determine based on engine type and available molfile data
-      return !!structure.molfile &&
-        (structure.engine === 'molnextr' || structure.engine === 'molscribe')
+      // Use current toggle state from modelOptions to determine coordinate usage
+      // This allows the toggle to work for already processed structures
+      return this.modelOptions.includeMolfile
     },
     /**
      * Handle the selection of a prediction from comparison view
