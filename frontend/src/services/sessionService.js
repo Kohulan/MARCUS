@@ -581,8 +581,8 @@ class SessionService {
   getApiBaseUrl() {
     // In production on the marcus.decimer.ai server
     if (window.location.hostname === 'marcus.decimer.ai') {
-      // Direct API connection instead of proxy
-      return 'https://api.marcus.decimer.ai';
+      // Use nginx proxy for API routing
+      return '/api';
     }
 
     // Check for environment variables
@@ -590,13 +590,14 @@ class SessionService {
       return process.env.VUE_APP_API_URL;
     }
 
-    // Docker compose environment - frontend can reach backend directly
+    // Docker compose environment - use nginx proxy instead of direct backend connection
     if (process.env.NODE_ENV === 'production') {
-      return 'http://backend:9000';
+      return '/api'; // This will be proxied by nginx to the backend
     }
 
-    // Development fallback - always use localhost for development
-    return 'http://localhost:9000';
+    // Development fallback - use nginx proxy on current host instead of direct backend
+    // This ensures all requests go through nginx which handles routing to backend
+    return '/api';
   }
 
   /**
@@ -615,13 +616,14 @@ class SessionService {
       return apiUrl.replace(/^https?:/, 'ws:');
     }
 
-    // Docker compose environment - frontend can reach backend directly
+    // Docker compose environment - use nginx proxy with WebSocket upgrade
     if (process.env.NODE_ENV === 'production') {
-      return 'ws://backend:9000';
+      return `ws://${window.location.host}/api`;
     }
 
-    // Development fallback - always use localhost for development
-    return 'ws://localhost:9000';
+    // Development fallback - use the nginx proxy on current host instead of direct backend
+    // This ensures WebSocket goes through nginx proxy which handles the routing to backend
+    return `ws://${window.location.host}/api`;
   }
 }
 

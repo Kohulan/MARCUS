@@ -297,11 +297,11 @@ export default {
         this.coconutMoleculeCount = moleculeCount;
         this.coconutSearchUrl = coconutUrl;
 
-        // Show results to user
-        if (moleculeCount > 0) {
-          // Also open the COCONUT page
-          window.open(coconutUrl, '_blank');
-        }
+        // Show notification to user instead of opening tab
+        this.$emit('notification', {
+          type: 'success',
+          message: `Found ${moleculeCount} molecule${moleculeCount === 1 ? '' : 's'} in COCONUT database`
+        });
 
       } catch (error) {
         console.error('Error searching COCONUT:', error);

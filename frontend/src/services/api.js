@@ -11,9 +11,9 @@ const getApiBaseUrl = () => {
     return process.env.VUE_APP_API_URL;
   }
 
-  // Docker compose environment - frontend can reach backend directly
+  // Docker compose environment - use nginx proxy instead of direct backend connection
   if (process.env.NODE_ENV === 'production') {
-    return 'http://backend:9000';
+    return '/api'; // This will be proxied by nginx to the backend
   }
 
   // Development fallback

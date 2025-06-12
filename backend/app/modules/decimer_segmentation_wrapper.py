@@ -6,9 +6,9 @@ import json
 from typing import List, Optional, Tuple, Dict, Any
 from pathlib import Path
 from pdf2doi import pdf2doi
-from pdf2image import convert_from_path
+import fitz
 from fastapi import HTTPException, status
-from decimer_segmentation import segment_chemical_structures_from_file
+from concurrent.futures import ThreadPoolExecutor
 from decimer_segmentation import segment_chemical_structures
 from app.config import PDF_DIR, SEGMENTS_DIR
 
@@ -88,20 +88,16 @@ def create_output_directory(filepath: str) -> str:
     return str(output_directory)
 
 
-def get_segments_with_bbox(
-    file_path: str, poppler_path=None
-) -> Tuple[str, List[Dict[str, Any]]]:
+def get_segments_with_bbox(file_path: str) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Run DECIMER segmentation on a PDF file and extract chemical structure segments with bounding boxes.
 
-    This function processes a PDF file by converting it to images, then uses DECIMER segmentation
-    to identify and extract chemical structures along with their bounding box coordinates. Each
-    segment is saved as a separate image file with comprehensive metadata.
+    This function processes a PDF file by converting it to images using PyMuPDF, then uses DECIMER
+    segmentation to identify and extract chemical structures along with their bounding box coordinates.
+    Each segment is saved as a separate image file with comprehensive metadata.
 
     Args:
         file_path (str): Path to the PDF file to be processed for segmentation.
-        poppler_path (Optional[str]): Path to Poppler binaries if needed for PDF conversion.
-                                    Defaults to None, using system default.
 
     Returns:
         Tuple[str, List[Dict[str, Any]]]: A tuple containing:
@@ -126,18 +122,48 @@ def get_segments_with_bbox(
         >>> print(f"Found {len(segments)} chemical structures in {base_dir}")
         Found 5 chemical structures in /segments/paper
     """
-    # First get the PDF images
+    # Convert PDF to images using PyMuPDF
     if file_path.lower().endswith(".pdf"):
         try:
-            images = convert_from_path(file_path, 300, poppler_path=poppler_path)
-            images = [np.array(image) for image in images]
+            pdf_document = fitz.open(file_path)
+            images = []
+            # Pre-allocate list for known size
+            images = [None] * pdf_document.page_count
+
+            # Use thread pool for parallel page rendering
+            def render_page(page_num):
+                page = pdf_document[page_num]
+                # Render page to image with 300 DPI
+                matrix = fitz.Matrix(300 / 72, 300 / 72)
+                pix = page.get_pixmap(matrix=matrix, alpha=False)  # Skip alpha channel
+                # Direct conversion to numpy array
+                img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                    pix.h, pix.w, pix.n
+                )
+                return page_num, img_array
+
+            # Use thread pool for I/O bound operations
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [
+                    executor.submit(render_page, i)
+                    for i in range(pdf_document.page_count)
+                ]
+                for future in futures:
+                    page_num, img_array = future.result()
+                    images[page_num] = img_array
+
+            pdf_document.close()
+            # Filter out any None values
+            images = [img for img in images if img is not None]
+
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error converting PDF to images: {str(e)}",
             )
     else:
-        images = [cv2.imread(file_path)]
+        # Use faster image reading with proper flags
+        images = [cv2.imread(file_path, cv2.IMREAD_COLOR)]
 
     # Create output directory
     base_directory = create_output_directory(file_path)
@@ -148,7 +174,6 @@ def get_segments_with_bbox(
     segments_metadata = []
     for page_num, page_img in enumerate(images):
         try:
-
             segments, bboxes = segment_chemical_structures(
                 page_img, expand=True, return_bboxes=True
             )
@@ -292,9 +317,7 @@ def get_complete_segments(path_to_pdf: str, collect_all: bool = True) -> Dict[st
                     stored_segment_info[pdf_filename] = segments_metadata
         else:
             # Run the segmentation with bounding box collection
-            segment_directory, segments_metadata = get_segments_with_bbox(
-                path_to_pdf, poppler_path=None
-            )
+            segment_directory, segments_metadata = get_segments_with_bbox(path_to_pdf)
 
             # Store segment info for later use
             pdf_filename = os.path.basename(path_to_pdf)

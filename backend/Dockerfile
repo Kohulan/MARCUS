@@ -64,12 +64,12 @@ RUN pip install --upgrade pip
 ARG TARGETPLATFORM
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] || [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then \
         # For ARM architecture (M1/M2 Macs) \
-        pip install torch==2.0.0 torchvision==0.16.0 && \
+        pip install torch==2.1.0 torchvision==0.16.0 && \
         pip install --no-cache-dir -r requirements.mac.txt && \
         pip install "docling[mac_intel]"; \
     else \
         # For x86 architecture with CUDA \
-        pip install torch==2.0.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu118 && \
+        pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu118 && \
         pip install --no-cache-dir -r requirements.txt && \
         pip install docling; \
     fi
@@ -78,7 +78,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] || [ "$(uname -m)" = "aarch64" ] ||
 RUN pip install decimer --no-deps && \
     pip install git+https://github.com/Kohulan/MolNexTR.git --no-deps && \
     pip install git+https://github.com/CrystalEye42/MolScribe.git@250f683f52f5050eb624870ccfd04bccbcaa27e1 --no-deps && \
-    pip install git+https://github.com/Kohulan/DECIMER-Image-Segmentation.git@bbox --no-deps
+    pip install git+https://github.com/Kohulan/DECIMER-Image-Segmentation.git@development --no-deps
 
 RUN pip install numpy==1.24.3
 
