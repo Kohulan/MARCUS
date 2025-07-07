@@ -121,10 +121,10 @@ docker-compose up -d
 docker-compose -f docker-compose.mac.yml up -d
 ```
 
-# Access the application
-# Frontend: http://localhost:8080
-# API documentation: http://localhost:8000/v1/docs
-```
+- Access the application
+- Frontend: http://localhost:8080
+- API documentation: http://localhost:8000/v1/docs
+
 
 ### System Architecture Considerations
 
