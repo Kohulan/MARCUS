@@ -103,9 +103,40 @@ Project MARCUS follows a modern microservices architecture:
 
 ### Prerequisites
 
-- Docker and Docker Compose
+**Software Requirements:**
+- Docker Engine 20.10+ with NVIDIA Container Toolkit
+- Docker Compose
 - Python 3.10+ (for development)
 - Node.js and npm (for frontend development)
+- OpenAI API key (required for AI features)
+- Stable internet connectivity for OpenAI API integration
+
+**Hardware Requirements:**
+
+- **GPU**: NVIDIA GPU with ~20GB VRAM (development used V100)
+- **CPU**: Minimum 8-core (16-core recommended)
+- **RAM**: 32GB recommended (minimum requirements may vary)
+- **Storage**: ~50GB for container images and processing files
+- **Concurrent Users**: Up to 3 users (GPU memory limited, scalable with additional hardware)
+- **Container Runtime**: Docker Engine 20.10+ with NVIDIA Container Toolkit
+
+### Environment Configuration
+
+Before running the application, copy the example environment file and configure your settings:
+
+```bash
+cp .env.example .env
+```
+
+**Required Environment Variables:**
+- `OPENAI_API_KEY`: Your OpenAI API key for AI-powered text analysis
+- `OPENAI_MODEL_ID`: OpenAI model to use (e.g., `gpt-4`, `gpt-3.5-turbo`)
+
+**Optional Configuration:**
+- `MARCUS_MAX_CONCURRENT_USERS`: Maximum concurrent users (default: 3)
+- `VUE_APP_BACKEND_URL`: Backend URL for frontend (default: `http://localhost:9000`)
+
+See `.env.example` for all available configuration options.
 
 ### Installation
 
