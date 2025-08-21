@@ -83,7 +83,30 @@ class SecureSessionStorage {
         encrypted += String.fromCharCode(dataChar ^ keyChar);
       }
       
-      return btoa(encrypted);
+   * Encrypt session data using AES-GCM via Web Crypto API
+   * Returns a Promise that resolves to a base64 string containing IV and ciphertext
+   */
+  async encrypt(data) {
+    try {
+      if (typeof data !== 'string') {
+        data = JSON.stringify(data);
+      }
+      const enc = new TextEncoder();
+      const iv = this.getIV();
+      const key = await this.keyPromise;
+      const ciphertext = await window.crypto.subtle.encrypt(
+        {
+          name: "AES-GCM",
+          iv: iv
+        },
+        key,
+        enc.encode(data)
+      );
+      // Combine IV and ciphertext for storage
+      const ivBase64 = btoa(String.fromCharCode(...iv));
+      const ctBase64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
+      // Store as iv:ciphertext
+      return ivBase64 + ":" + ctBase64;
     } catch (error) {
       console.error('Encryption failed:', error);
       return btoa(JSON.stringify(data)); // Fallback to base64 encoding
