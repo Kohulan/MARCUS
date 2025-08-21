@@ -377,7 +377,10 @@ class SessionSecurityManager {
       }
       return originalFetch.apply(window, args);
     };
+    // To monitor fetch requests for rapid activity, use this.monitoredFetch instead of window.fetch in your code.
+    // Example: secureSessionStorage.monitoredFetch(url, options)
     
+    // See the monitoredFetch method for implementation.
     // Track page focus/blur for session security
     window.addEventListener('focus', () => {
       this.logSecurityEvent('page_focus');
