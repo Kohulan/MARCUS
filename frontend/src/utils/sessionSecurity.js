@@ -66,7 +66,18 @@ class SecureSessionStorage {
   generateKeyFromFingerprint(fingerprint) {
     // Simple key derivation - in production, consider using Web Crypto API
     const baseKey = 'marcus_session_' + fingerprint;
-    return btoa(baseKey).substring(0, 32).padEnd(32, '0');
+    // Securely hash the fingerprint using SHA-256 and encode as base64
+    const data = new TextEncoder().encode(JSON.stringify(fingerprint));
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    return this.arrayBufferToBase64(hashBuffer);
+  }
+
+  /**
+   * Generate encryption key from browser fingerprint
+   */
+  generateKeyFromFingerprint(fingerprint) {
+    // Use the base64-encoded SHA-256 hash as the key, padded/truncated to 32 chars
+    return (fingerprint.substring(0, 32).padEnd(32, '0'));
   }
 
   /**
