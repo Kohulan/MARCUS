@@ -1,7 +1,9 @@
 /**
- * Session Management Service for MARCUS
- * Handles user session creation, WebSocket connections, and queue management
+ * Enhanced session service with security improvements
+ * Implements comprehensive session management
  */
+
+import { sessionSecurityManager } from '../utils/sessionSecurity.js';
 
 class SessionService {
   constructor() {
@@ -27,31 +29,66 @@ class SessionService {
   }
 
   /**
-   * Try to recover an existing session from storage
+   * Try to recover an existing session from secure storage
    */
   recoverSession() {
+    try {
+      // Try secure session recovery first
+      const validation = sessionSecurityManager.validateSession();
+      if (validation.valid && validation.sessionData) {
+        this.sessionId = validation.sessionData.sessionId;
+        console.log('Recovered secure session:', this.sessionId);
+        
+        if (validation.requiresReauth) {
+          console.warn('Session requires re-authentication due to security concerns');
+          this.emit('requiresReauth', validation.reason);
+        }
+        return;
+      }
+    } catch (error) {
+      console.warn('Secure session recovery failed:', error);
+    }
+    
+    // Fallback to regular session storage
     const storedSessionId = sessionStorage.getItem(this.sessionKey);
     if (storedSessionId) {
       this.sessionId = storedSessionId;
-      console.log('Recovered session from storage:', storedSessionId);
+      console.log('Recovered session from regular storage:', storedSessionId);
     }
   }
 
   /**
-   * Store session ID in session storage
+   * Store session ID in secure encrypted storage
    */
   storeSession(sessionId) {
     if (sessionId) {
       this.sessionId = sessionId;
-      sessionStorage.setItem(this.sessionKey, sessionId);
+      
+      // Use secure storage with encryption
+      try {
+        sessionSecurityManager.createSecureSession(sessionId, {
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString()
+        });
+        console.log('Session stored securely with encryption');
+      } catch (error) {
+        console.warn('Secure storage failed, falling back to regular storage:', error);
+        sessionStorage.setItem(this.sessionKey, sessionId);
+      }
     }
   }
 
   /**
-   * Clear stored session
+   * Clear stored session securely
    */
   clearStoredSession() {
-    sessionStorage.removeItem(this.sessionKey);
+    try {
+      sessionSecurityManager.invalidateSession('user_logout');
+      console.log('Session cleared securely');
+    } catch (error) {
+      console.warn('Secure session clearing failed, using fallback:', error);
+      sessionStorage.removeItem(this.sessionKey);
+    }
   }
 
   /**
@@ -576,17 +613,16 @@ class SessionService {
   }
 
   /**
-   * Get the API base URL with proper fallbacks - matches api.js logic but for session endpoints
+   * Get the API base URL with proper fallbacks - matches api.js logic
    */
   getApiBaseUrl() {
     // In production on the marcus.decimer.ai server
     if (window.location.hostname === 'marcus.decimer.ai') {
-      // Use nginx proxy for API routing
-      return '/api';
+      return '/api'; // This will be proxied by Nginx
     }
 
     // Check for environment variables
-    if (process.env.VUE_APP_API_URL) {
+    if (process.env && process.env.VUE_APP_API_URL) {
       return process.env.VUE_APP_API_URL;
     }
 
@@ -595,9 +631,8 @@ class SessionService {
       return '/api'; // This will be proxied by nginx to the backend
     }
 
-    // Development fallback - use nginx proxy on current host instead of direct backend
-    // This ensures all requests go through nginx which handles routing to backend
-    return '/api';
+    // Development fallback
+    return 'http://localhost:9000';
   }
 
   /**
@@ -611,7 +646,7 @@ class SessionService {
     }
 
     // Check for environment variables and convert to WebSocket URL
-    if (process.env.VUE_APP_API_URL) {
+    if (process.env && process.env.VUE_APP_API_URL) {
       const apiUrl = process.env.VUE_APP_API_URL;
       return apiUrl.replace(/^https?:/, 'ws:');
     }
@@ -621,9 +656,8 @@ class SessionService {
       return `ws://${window.location.host}/api`;
     }
 
-    // Development fallback - use the nginx proxy on current host instead of direct backend
-    // This ensures WebSocket goes through nginx proxy which handles the routing to backend
-    return `ws://${window.location.host}/api`;
+    // Development fallback - connect directly to backend
+    return 'ws://localhost:9000';
   }
 }
 

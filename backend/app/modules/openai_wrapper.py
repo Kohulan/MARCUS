@@ -1,29 +1,50 @@
 import os
 import json
 import re
+import logging
 from typing import Dict, List, Tuple, Any, Optional
 from openai import OpenAI
+from app.security.validators import APIKeyManager
 
-# Get API key from environment variable
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+# Configure logging
+logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Get API key from environment variable with validation
+try:
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+
+    # Initialize secure API key manager
+    api_key_manager = APIKeyManager(OPENAI_API_KEY)
+    logger.info(f"OpenAI API key configured: {api_key_manager.get_masked_key()}")
+
+except Exception as e:
+    logger.error(f"OpenAI API key configuration failed: {e}")
+    raise
+
+# Initialize OpenAI client with validated key
+client = OpenAI(api_key=api_key_manager.api_key)
 
 # Use environment variable for model ID or fall back to the existing value
-OPENAI_MODEL_ID = os.environ.get("OPENAI_MODEL_ID")
+OPENAI_MODEL_ID = os.environ.get("OPENAI_MODEL_ID", "gpt-4")
 
-retrieve_job_response = client.fine_tuning.jobs.retrieve(OPENAI_MODEL_ID)
+try:
+    retrieve_job_response = client.fine_tuning.jobs.retrieve(OPENAI_MODEL_ID)
+    fine_tuned_model = retrieve_job_response.fine_tuned_model
+    logger.info(f"Fine-tuned model configured: {fine_tuned_model}")
+except Exception as e:
+    logger.warning(f"Could not retrieve fine-tuned model, using base model: {e}")
+    fine_tuned_model = OPENAI_MODEL_ID
 
-fine_tuned_model = retrieve_job_response.fine_tuned_model
 
-
-def get_response(user_message: str) -> str:
+def get_response(user_message: str, endpoint: str = "chat_completion") -> str:
     """
-    Get response from OpenAI API using fine-tuned model
+    Get response from OpenAI API using fine-tuned model with security logging
 
     Args:
         user_message (str): User message to process
+        endpoint (str): API endpoint being used for logging
 
     Returns:
         str: OpenAI API response content
@@ -34,13 +55,22 @@ def get_response(user_message: str) -> str:
     test_messages.append({"role": "user", "content": user_message})
 
     try:
+        # Log API key usage for security monitoring
+        api_key_manager.log_usage(endpoint)
+
         response = client.chat.completions.create(
             model=fine_tuned_model, messages=test_messages, temperature=0.3
         )
-        return response.choices[0].message.content
+
+        result = response.choices[0].message.content
+        logger.info(f"OpenAI API request successful for endpoint: {endpoint}")
+        return result
+
     except Exception as e:
-        print(f"Error calling OpenAI API: {str(e)}")
-        raise
+        logger.error(f"Error calling OpenAI API on {endpoint}: {str(e)}")
+        # Don't expose API key in error messages
+        sanitized_error = str(e).replace(OPENAI_API_KEY, "***REDACTED***")
+        raise Exception(f"OpenAI API error: {sanitized_error}")
 
 
 def find_positions(

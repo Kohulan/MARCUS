@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import os
+import logging
 
 # Add environment variable loading
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Import configuration first to trigger environment validation
+from app.config import CORS_ORIGINS, RATE_LIMIT_ENABLED
 
 from fastapi import FastAPI
 from fastapi import status
@@ -25,6 +29,15 @@ from app.exception_handlers import input_exception_handler
 from app.exception_handlers import InvalidInputException
 from app.middleware.session_middleware import SessionMiddleware
 from app.schemas.healthcheck import HealthCheck
+
+# Import security middleware
+try:
+    from app.middleware.rate_limit_middleware import RateLimitMiddleware
+except ImportError:
+    print(
+        "⚠️  Rate limiting middleware not available - continuing without rate limiting"
+    )
+    RateLimitMiddleware = None
 
 app = FastAPI(
     title="NP data extraction service",
@@ -69,30 +82,28 @@ app = VersionedFastAPI(
 # Add session router AFTER versioning to avoid WebSocket versioning issues
 app.include_router(session_router.router)
 
-
-origins = ["*"]
+# Add security middleware first (rate limiting)
+if RateLimitMiddleware and RATE_LIMIT_ENABLED:
+    app.add_middleware(RateLimitMiddleware, enabled=RATE_LIMIT_ENABLED)
+    print("✅ Rate limiting middleware enabled")
+else:
+    print("⚠️  Rate limiting disabled")
 
 # Add session management middleware
 app.add_middleware(SessionMiddleware)
 
-
-@app.middleware("http")
-async def add_cors_headers(request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    return response
-
-
+# CORS configuration with security improvements
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=CORS_ORIGINS,  # Use specific origins instead of "*"
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Specific methods instead of "*"
+    allow_headers=["Content-Type", "Authorization", "X-Session-ID"],  # Specific headers
 )
+
+print(f"✅ CORS configured with origins: {CORS_ORIGINS}")
+
+# Remove the duplicate manual CORS middleware since we're using CORSMiddleware properly now
 
 # register exception handlers
 for sub_app in app.routes:

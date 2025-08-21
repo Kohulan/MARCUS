@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import uuid
+import logging
 from PyPDF2 import PdfReader
 from fastapi import (
     APIRouter,
@@ -18,6 +19,9 @@ from app.modules.dockling_wrapper import (
     extract_from_docling_document,
     combine_to_paragraph,
 )
+from app.security.file_validator import validate_pdf_upload
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -75,10 +79,21 @@ async def extract_pdf_json(
     Returns:
         JSON: The extracted document structure
     """
-    if not pdf_file.filename.lower().endswith(".pdf"):
+    # Comprehensive file validation
+    try:
+        validation_result = await validate_pdf_upload(pdf_file)
+        logger.info(
+            f"File validation successful: {validation_result['filename']} "
+            f"({validation_result['size']} bytes, hash: {validation_result['hash'][:16]}...)"
+        )
+    except HTTPException as e:
+        logger.warning(f"File validation failed for {pdf_file.filename}: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.error(f"Unexpected validation error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be a PDF",
+            detail="File validation failed due to server error",
         )
 
     try:
@@ -95,6 +110,8 @@ async def extract_pdf_json(
         with open(file_path, "wb") as buffer:
             content = await pdf_file.read()
             buffer.write(content)
+
+        logger.info(f"File saved successfully: {safe_filename}")
 
         # Process the PDF file
         json_data = get_converted_document(file_path, number_of_pages=3)
