@@ -435,7 +435,9 @@ class SessionSecurityManager {
     const threshold = 160;
     
     setInterval(() => {
-      if (window.outerHeight - window.innerHeight > threshold || 
+
+    const detectDevtools = () => {
+      if (window.outerHeight - window.innerHeight > threshold ||
           window.outerWidth - window.innerWidth > threshold) {
         if (!devtools.open) {
           devtools.open = true;
