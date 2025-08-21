@@ -24,7 +24,13 @@ class SecureSessionStorage {
         // Generate new key based on browser characteristics
         const browserData = this.getBrowserFingerprint();
         key = this.generateKeyFromFingerprint(browserData);
-        localStorage.setItem('marcus_enc_key', key);
+      let key = sessionStorage.getItem('marcus_enc_key');
+      
+      if (!key) {
+        // Generate new key based on browser characteristics
+        const browserData = this.getBrowserFingerprint();
+        key = this.generateKeyFromFingerprint(browserData);
+        sessionStorage.setItem('marcus_enc_key', key);
       }
       
       return key;
