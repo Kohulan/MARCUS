@@ -1,15 +1,13 @@
 <div align="center">
 
-# 🧪 MARCUS 🧬
+<p align="center">
+  <img src="https://github.com/Kohulan/MARCUS/blob/main/frontend/public/logo_full.png" alt="MARCUS Logo" width="600">
+</p>
 
 ### **M**olecular **A**nnotation and **R**ecognition for **C**urating **U**nravelled **S**tructures
 
-<p align="center">
-  <!-- <img src="https://github.com/Kohulan/MARCUS/blob/main/frontend/public/logo.png" alt="MARCUS Logo" width="600"> -->
-</p>
-
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0-blue.svg?style=for-the-badge)](https://github.com/username/Project_MARCUS/releases/)
+[![Version](https://img.shields.io/badge/version-1.0-blue.svg?style=for-the-badge)](https://github.com/Kohulan/MARCUS/releases/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.95+-009688.svg?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![Vue.js](https://img.shields.io/badge/Vue.js-3.0+-4FC08D.svg?style=for-the-badge&logo=vue.js)](https://vuejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?style=for-the-badge&logo=docker)](https://www.docker.com/)
@@ -142,8 +140,8 @@ See `.env.example` for all available configuration options.
 
 **Step 1: Clone the repository**
 ```bash
-git clone https://github.com/username/Project_MARCUS.git
-cd Project_MARCUS
+git clone https://github.com/Kohulan/MARCUS.git
+cd MARCUS
 docker-compose up -d
 ```
 
