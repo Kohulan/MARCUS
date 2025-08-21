@@ -137,7 +137,37 @@ class RateLimiter:
 
             except Exception as e:
                 logger.error(f"Error in rate limit cleanup: {e}")
+        try:
+            while True:
+                try:
+                    await asyncio.sleep(300)  # Cleanup every 5 minutes
+                    current_time = datetime.now()
 
+                    # Remove old client records
+                    clients_to_remove = []
+                    for client_id, record in self.clients.items():
+                        if (
+                            record.last_request
+                            and current_time - record.last_request > timedelta(hours=1)
+                        ):
+                            clients_to_remove.append(client_id)
+
+                    for client_id in clients_to_remove:
+                        del self.clients[client_id]
+
+                    # Update stats
+                    self.stats["clients_tracking"] = len(self.clients)
+
+                    if clients_to_remove:
+                        logger.debug(
+                            f"Cleaned up {len(clients_to_remove)} old client records"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Error in rate limit cleanup: {e}")
+        except asyncio.CancelledError:
+            logger.info("Rate limit cleanup task cancelled. Exiting cleanup loop.")
+            raise
     def get_endpoint_type(self, path: str) -> str:
         """Determine endpoint type from path for rule matching."""
         path_lower = path.lower()
