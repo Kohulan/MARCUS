@@ -1,0 +1,55 @@
+# Changelog
+
+## 0.1.0 (2025-08-21)
+
+
+### Features
+
+* About information ([0699cbe](https://github.com/Kohulan/MARCUS/commit/0699cbe0c5a81a7d76acc460f579785c55c0dd69))
+* Backend ready indicator ([bf88bb2](https://github.com/Kohulan/MARCUS/commit/bf88bb267a3e026901fe066108d00e9a3e63eaa1))
+* Backend ready indicator ([e642de9](https://github.com/Kohulan/MARCUS/commit/e642de90637bf172eeb19e07a063fb6f44c33898))
+* COCONUT submission ([8b37fe9](https://github.com/Kohulan/MARCUS/commit/8b37fe96e904968669e882106fb450a7a2f07f1a))
+* docker build for mac ([d66563e](https://github.com/Kohulan/MARCUS/commit/d66563e1ae885262bcc6c4379867feb4ba47e338))
+* export data ([ef2bf05](https://github.com/Kohulan/MARCUS/commit/ef2bf059794d07a938ae812922a716d1b2322b7d))
+* Frontend optimization and backend enhancements ([a46f6fa](https://github.com/Kohulan/MARCUS/commit/a46f6fa60db47d3c8c0214277cbc2fe7ccac6a8d))
+* Frontend optimization and Cleanup ([3a11d02](https://github.com/Kohulan/MARCUS/commit/3a11d0231774a847b75d2af82af133ac47c03cd9))
+* improved PDF viewer ([65f7bfd](https://github.com/Kohulan/MARCUS/commit/65f7bfda8587ebcfc3d8778b7f828ed756ab5b52))
+* improved UI/UX and bug fixes ([4658cba](https://github.com/Kohulan/MARCUS/commit/4658cbadcc0191dcba8d9c2e56b0c215e2dc1af9))
+* Initial commit MARCUS-Beta ([b0fcff8](https://github.com/Kohulan/MARCUS/commit/b0fcff80f6d68c9b7f2fc39c9279dca6e84947e8))
+* Ketcher intergration ([e6753d5](https://github.com/Kohulan/MARCUS/commit/e6753d5b8ce0372d8fde3d25d10a0633e7a76880))
+* PDFJs viewer ([40af403](https://github.com/Kohulan/MARCUS/commit/40af403d20b77ede96409900d49de12e598128ab))
+* release workflow ([323e58e](https://github.com/Kohulan/MARCUS/commit/323e58e0551b6b9deac94dd9883e3645e8a0f57e))
+* Search in COCONUT and  visual improvements for button ([ece4185](https://github.com/Kohulan/MARCUS/commit/ece4185dfc583be1a58fc0c11baf9a7fb4f2eb80))
+* Similarity comparison and MCS ([02ef9d2](https://github.com/Kohulan/MARCUS/commit/02ef9d20d032d1369a8cd9bde64f6f83a0c01adf))
+* similarity implementation ([7ceed89](https://github.com/Kohulan/MARCUS/commit/7ceed8963859a95c53a04d08c69953e07702ab40))
+* structure selection and rendering ([924edbe](https://github.com/Kohulan/MARCUS/commit/924edbe64407a7472425226be75fac05a332db15))
+* User session controller ([11ef71b](https://github.com/Kohulan/MARCUS/commit/11ef71bdcbdb471bbdb2745d4aae9cc9f6bd8e99))
+
+
+### Bug Fixes
+
+* App header and Home ([ce17f66](https://github.com/Kohulan/MARCUS/commit/ce17f66b92e65849447a3c26e13f7c066005e0ac))
+* backend segmentation ([9faca98](https://github.com/Kohulan/MARCUS/commit/9faca989bed79c9a148a95e972853fa5f91a9dda))
+* bullet list README.md ([86de10d](https://github.com/Kohulan/MARCUS/commit/86de10d544d7e6bec0b944139bda8db875230805))
+* buttons ([921a5df](https://github.com/Kohulan/MARCUS/commit/921a5df677e19786168864b036a14bee5ef7faf1))
+* docker build for mac ([1272e48](https://github.com/Kohulan/MARCUS/commit/1272e4883ed7ca667e93a61757718717ef89b075))
+* Dockfile backend issues ([40c4b29](https://github.com/Kohulan/MARCUS/commit/40c4b294cfd14cb3fa62389376cd579802ac357c))
+* docling instalation ([8c082f3](https://github.com/Kohulan/MARCUS/commit/8c082f37632ad9bc7b30506098ee647d696371a7))
+* include structure editor ([5c5736c](https://github.com/Kohulan/MARCUS/commit/5c5736cdc4c135e6ff225e7aee618b1710eba7c5))
+* include structure editor ([94a5285](https://github.com/Kohulan/MARCUS/commit/94a5285d78672a3654b53f71cbbaaa954ef20513))
+* information, organism bugs ([d708c74](https://github.com/Kohulan/MARCUS/commit/d708c74d97f43bdb8ef45613c6b51ce2326ba417))
+* logos ([0b8f1b5](https://github.com/Kohulan/MARCUS/commit/0b8f1b56c2dc8efc96c89bbf4107c40bf68c9664))
+* ocsr prediction fix and segmentation ([16c5d4d](https://github.com/Kohulan/MARCUS/commit/16c5d4d360e4cf5da9d2778627920de532ec93ea))
+* session backend connection ([170f28b](https://github.com/Kohulan/MARCUS/commit/170f28b3a710482c8077c68892f34e4488a0d762))
+* session backend connection ([68be5a6](https://github.com/Kohulan/MARCUS/commit/68be5a627d0c01e272e90ba607c539e70d9c0605))
+* session backend connection ([34720e0](https://github.com/Kohulan/MARCUS/commit/34720e0d3a1222028e683ed8b480e988e2378ab1))
+* session backend connection fallback ([629e62d](https://github.com/Kohulan/MARCUS/commit/629e62d830015a972deb79f19e3a9936f2d48ff1))
+* session clearning and queing ([e5c80b1](https://github.com/Kohulan/MARCUS/commit/e5c80b17936d6a02ade7b859be7f87b97c92d26c))
+* Session Router fix ([7d4fcb5](https://github.com/Kohulan/MARCUS/commit/7d4fcb5f571aba007da608be286add0af54fe561))
+* session window alignement ([0468194](https://github.com/Kohulan/MARCUS/commit/0468194d37d7c4cce8d9552fec37904af3fd435b))
+* sessions in production ([31483c4](https://github.com/Kohulan/MARCUS/commit/31483c43649c2844eb7ca378ed97d7f2d9a0541b))
+* substructure highlighting ([f6d7a17](https://github.com/Kohulan/MARCUS/commit/f6d7a17bbb218ae649e9be79e2aed0489fff3532))
+* Test notebook ([94b0905](https://github.com/Kohulan/MARCUS/commit/94b090532eb0da0209c02334aed2d356e3c25cdb))
+* update decimer segmentation ([b4cca28](https://github.com/Kohulan/MARCUS/commit/b4cca285d80af6983e75044fc04c45e1e63b7073))
+* Update README ([86d0755](https://github.com/Kohulan/MARCUS/commit/86d075558904525602e40e022fd7f87158c17610))
+* Update README.md ([651c7f2](https://github.com/Kohulan/MARCUS/commit/651c7f26fa639351a5e32f8553993f7a879623a4))
