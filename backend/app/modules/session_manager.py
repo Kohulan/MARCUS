@@ -25,7 +25,7 @@ class SessionManager:
         self._session_lock = asyncio.Lock()  # For session operations
         self._cleanup_lock = asyncio.Lock()  # Separate lock for cleanup
         self._last_cleanup = time.time()
-        self._cleanup_interval = 30  # Run cleanup every 30 seconds
+        self._cleanup_interval = 60  # Run cleanup every 60 seconds (increased from 30)
 
         # Start background cleanup task
         asyncio.create_task(self._background_cleanup())
