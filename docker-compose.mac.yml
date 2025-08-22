@@ -24,6 +24,7 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL_ID=${OPENAI_MODEL_ID}
+      - SECRET_KEY=${SECRET_KEY}
       - RELEASE_VERSION=${RELEASE_VERSION:-1.0}
       - HOMEPAGE_URL=${HOMEPAGE_URL:-/latest/docs}
       - DOCLING_MODELS_PATH=/app/models/docling

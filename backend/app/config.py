@@ -12,14 +12,26 @@ try:
     # 2. Current working directory (for Docker)
     cwd_env_path = Path.cwd() / ".env"
 
+    print(f"🔍 Looking for .env files:")
+    print(f"   Root path: {root_env_path} (exists: {root_env_path.exists()})")
+    print(f"   CWD path: {cwd_env_path} (exists: {cwd_env_path.exists()})")
+
     # Load from root first, then override with cwd if it exists
     if root_env_path.exists():
         load_dotenv(root_env_path)
+        print(f"✅ Loaded .env from {root_env_path}")
     if cwd_env_path.exists():
         load_dotenv(cwd_env_path, override=True)
+        print(f"✅ Loaded .env from {cwd_env_path}")
+
+    # Debug: Print current environment variables related to our app
+    print(f"🔍 Environment variables:")
+    print(f"   SECRET_KEY: {'SET' if os.getenv('SECRET_KEY') else 'NOT SET'}")
+    print(f"   OPENAI_API_KEY: {'SET' if os.getenv('OPENAI_API_KEY') else 'NOT SET'}")
 
 except ImportError:
     # dotenv not available, continue without it
+    print("⚠️ dotenv not available, skipping .env file loading")
     pass
 
 # Validate environment variables on startup
