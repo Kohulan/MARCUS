@@ -85,9 +85,27 @@ export default {
     },
     filteredAnnotations() {
       if (this.isEmpty) return []
-      if (this.selectedFilter === 'all') return this.annotations
       
-      return this.annotations.filter(ann => ann.label === this.selectedFilter)
+      let annotations = this.annotations
+      
+      // Filter by selected label if not 'all'
+      if (this.selectedFilter !== 'all') {
+        annotations = annotations.filter(ann => ann.label === this.selectedFilter)
+      }
+      
+      // Remove duplicates based on text and label combination
+      const uniqueAnnotations = []
+      const seen = new Set()
+      
+      for (const annotation of annotations) {
+        const key = `${annotation.text}||${annotation.label}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          uniqueAnnotations.push(annotation)
+        }
+      }
+      
+      return uniqueAnnotations
     },
     hasFilteredResults() {
       return this.selectedFilter !== 'all' && this.filteredAnnotations.length > 0
