@@ -70,7 +70,9 @@ def get_response(user_message: str, endpoint: str = "chat_completion") -> str:
         logger.error(f"Error calling OpenAI API on {endpoint}: {str(e)}")
         # Don't expose API key in error messages
         sanitized_error = str(e).replace(OPENAI_API_KEY, "***REDACTED***")
-        raise Exception("OpenAI API error: An internal error occurred while processing your request.")
+        raise Exception(
+            "OpenAI API error: An internal error occurred while processing your request."
+        )
 
 
 def find_positions(

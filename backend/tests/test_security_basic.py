@@ -10,7 +10,9 @@ import json
 from unittest.mock import Mock, patch
 
 # Add the app directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
+)
 
 
 def test_environment_validation():

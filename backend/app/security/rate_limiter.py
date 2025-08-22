@@ -168,6 +168,7 @@ class RateLimiter:
         except asyncio.CancelledError:
             logger.info("Rate limit cleanup task cancelled. Exiting cleanup loop.")
             raise
+
     def get_endpoint_type(self, path: str) -> str:
         """Determine endpoint type from path for rule matching."""
         path_lower = path.lower()
