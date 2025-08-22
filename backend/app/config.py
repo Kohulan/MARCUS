@@ -64,6 +64,13 @@ OPENAI_MODEL_ID = validated_env.get("OPENAI_MODEL_ID", "gpt-4")
 
 # CORS configuration
 CORS_ORIGINS = get_cors_origins()
+print(f"✅ Configuration loaded:")
+print(f"   - CORS Origins: {len(CORS_ORIGINS)} configured: {CORS_ORIGINS}")
+print(
+    f"   - Rate Limiting: {'Enabled' if validated_env.get('RATE_LIMIT_ENABLED', 'true').lower() == 'true' else 'Disabled'}"
+)
+print(f"   - Session Timeout: {validated_env.get('SESSION_TIMEOUT_HOURS', '24')} hours")
+print(f"   - Max Upload Size: {20} MB")
 
 # Rate limiting configuration
 RATE_LIMIT_ENABLED = validated_env.get("RATE_LIMIT_ENABLED", "true").lower() == "true"
