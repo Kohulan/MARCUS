@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     openjdk-11-jre \
     git \
+    libmagic1 \
     # OpenGL libraries for transformers/PyTorch
     libgl1-mesa-glx \
     libglib2.0-0 \
