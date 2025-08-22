@@ -43,7 +43,9 @@ class EnvironmentValidator:
         for var in cls.REQUIRED_VARS:
             value = os.getenv(var)
             if not value:
-                missing_vars.append(var)
+                # Skip SECRET_KEY here, handle it separately below
+                if var != "SECRET_KEY":
+                    missing_vars.append(var)
             else:
                 # Validate specific variable formats
                 if var == "OPENAI_API_KEY" and not cls.validate_openai_key(value):
