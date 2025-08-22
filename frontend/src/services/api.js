@@ -208,16 +208,9 @@ export const checkBackendHealth = async () => {
   try {
     console.log('Checking backend health...');
     
-    // Special case for production environment
-    let url;
-    if (window.location.hostname === 'marcus.decimer.ai') {
-      // Use the direct API domain for health check in production
-      url = 'https://api.marcus.decimer.ai/health';
-    } else {
-      // For all other environments, use the base URL
-      const baseUrl = getApiBaseUrl();
-      url = `${baseUrl}/health`;
-    }
+    // Use the standard API base URL for health check
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/health`;
     
     console.log('Health check URL:', url);
     
