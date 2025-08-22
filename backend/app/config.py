@@ -6,9 +6,18 @@ from app.security.validators import EnvironmentValidator, get_cors_origins
 try:
     from dotenv import load_dotenv
 
-    # Load from root directory
+    # Try to load from multiple locations
+    # 1. Root directory (for development)
     root_env_path = Path(__file__).parent.parent.parent / ".env"
-    load_dotenv(root_env_path)
+    # 2. Current working directory (for Docker)
+    cwd_env_path = Path.cwd() / ".env"
+
+    # Load from root first, then override with cwd if it exists
+    if root_env_path.exists():
+        load_dotenv(root_env_path)
+    if cwd_env_path.exists():
+        load_dotenv(cwd_env_path, override=True)
+
 except ImportError:
     # dotenv not available, continue without it
     pass
