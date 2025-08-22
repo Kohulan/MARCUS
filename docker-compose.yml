@@ -28,7 +28,7 @@ services:
       - RELEASE_VERSION=${RELEASE_VERSION:-1.0}
       - HOMEPAGE_URL=${HOMEPAGE_URL:-/latest/docs}
       - DOCLING_MODELS_PATH=/app/models/docling
-      - CORS_ORIGINS=http://frontend
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://frontend}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/models:/app/models
