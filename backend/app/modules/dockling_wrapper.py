@@ -21,247 +21,29 @@ doc_converter = DocumentConverter(
 
 
 def _is_author_line(content: str) -> bool:
-    """
-    Check if a line of text appears to be author information.
-
-    Args:
-        content (str): Text content to check
-
-    Returns:
-        bool: True if the line appears to be author information
-    """
-    content_lower = content.lower()
-    content_stripped = content.strip()
-
-    # Skip empty or very short content
-    if len(content_stripped) < 3:
+    """Simple check for author/affiliation information."""
+    if len(content.strip()) < 3:
         return False
-
-    # Common patterns in author lines
-    author_patterns = [
-        # Multiple names with commas (typical author list format)
-        r"^[A-Z][a-z]+ [A-Z][a-z]+(?:,\s*[A-Z][a-z]+ [A-Z][a-z]+)+",
-        # Names with superscript numbers/letters (affiliation markers)
-        r"[A-Z][a-z]+ [A-Z][a-z]+[¹²³⁴⁵⁶⁷⁸⁹⁰ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ\*†‡§¶]+",
-        # Typical affiliation patterns with numbers
-        r"^\d+\s*[A-Z][a-z]+ [A-Z][a-z]+",
-        # Author names with academic titles
-        r"[A-Z][a-z]+\s+[A-Z][a-z]+,?\s*(PhD|Ph\.D\.|MD|Dr\.|Prof\.|Professor)",
+    
+    content_lower = content.lower()
+    
+    # Key indicators for author/affiliation content
+    indicators = [
+        "@", "university", "universita", "institute", "department", 
+        "correspondence:", "received:", "tel:", "fax:", "email:", 
+        "dipartimento", "via ", "italy", "hospital", "center",
+        "†", "‡", "§", "*", "orcid", "laboratory", "college",
+        "table ", "figure ", "compounds 1", "anti-inflammatory activity"
     ]
-
-    # Check for author-like patterns
-    for pattern in author_patterns:
-        if re.search(pattern, content):
-            return True
-
-    # Check for multiple proper names (likely authors) - more strict
+    
+    # Check for multiple capitalized names (likely authors)
     words = content.split()
-    if len(words) >= 2 and len(content) < 300:
-        # Count capitalized words that look like names
-        name_words = []
-        for word in words:
-            # Remove punctuation and check if it's a proper name
-            clean_word = re.sub(r"[^\w]", "", word)
-            if (
-                len(clean_word) > 1
-                and clean_word[0].isupper()
-                and clean_word[1:].islower()
-                and len(clean_word) > 2
-            ):
-                name_words.append(clean_word)
-
-        # If we have 3+ name-like words, it's likely an author line
-        if len(name_words) >= 3 and len(content) < 200:
+    if len(words) >= 3 and len(content) < 200:
+        cap_words = [w for w in words[:5] if len(w) > 1 and w[0].isupper()]
+        if len(cap_words) >= 3:
             return True
-
-    # Check for author/affiliation/table/figure patterns
-    problematic_patterns = [
-        # Author-specific
-        "corresponding author",
-        "equal contribution",
-        "present address",
-        "current address",
-        "orcid:",
-        "email:",
-        "e-mail:",
-        "tel:",
-        "fax:",
-        "phone:",
-        # Institution patterns
-        "dipartimento",
-        "universita",
-        "università",
-        "university",
-        "institute",
-        "institut",
-        "department",
-        "college",
-        "school of",
-        "faculty of",
-        "laboratory",
-        "lab ",
-        "center for",
-        "centre for",
-        "hospital",
-        "medical center",
-        "research center",
-        # Geographic/Address patterns
-        "via ",
-        "avenue",
-        "street",
-        "road",
-        "blvd",
-        "boulevard",
-        "italy",
-        "genova",
-        "salerno",
-        "bamako",
-        "mali",
-        # Journal/Publication patterns
-        "received",
-        "accepted",
-        "published",
-        "correspondence:",
-        "funding:",
-        "doi:",
-        "copyright",
-        "journal of",
-        "volume",
-        "issue",
-        "page",
-        # Table/Figure patterns
-        "table ",
-        "figure ",
-        "fig ",
-        "chart ",
-        "scheme ",
-        "plate ",
-        "anti-inflammatory activity",
-        "carrageenan-induced",
-        # Chemical compound patterns (often in titles/captions)
-        "compounds 1",
-        "compounds ",
-        "compound ",
-        "structures of",
-        "chemical",
-        "synthesis",
-        "analysis",
-        "characterization",
-        # Author symbols and markers
-        "†",
-        "‡",
-        "§",
-        "¶",
-        "*",
-        "**",
-        "***",
-        # Common institutional suffixes
-        ".it",
-        ".edu",
-        ".org",
-        ".ac.",
-        ".univ",
-    ]
-
-    # Check for problematic content
-    for pattern in problematic_patterns:
-        if pattern in content_lower:
-            return True
-
-    # Check for lines that are mostly symbols or numbers (affiliations)
-    symbol_count = sum(1 for c in content if c in "†‡§¶*,()[]{}0123456789")
-    if symbol_count > len(content) * 0.3:  # More than 30% symbols
-        return True
-
-    # Check for lines with unusual punctuation patterns (like affiliation markers)
-    if re.search(r"[†‡§¶\*]{1,3}", content):
-        return True
-
-    # Check for email patterns
-    if re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", content):
-        return True
-
-    # Check for address-like patterns
-    if re.search(r"\b\d{4,5}\s+[A-Z][a-z]+", content):  # Postal codes
-        return True
-
-    return False
-
-
-def _is_unwanted_content(content: str) -> bool:
-    """
-    Check if content should be filtered out (tables, figures, references, etc.)
-
-    Args:
-        content (str): Text content to check
-
-    Returns:
-        bool: True if content should be filtered out
-    """
-    content_lower = content.lower().strip()
-
-    if len(content_lower) < 3:
-        return True
-
-    # Table and figure patterns
-    table_fig_patterns = [
-        r"^table\s+\d+",
-        r"^figure\s+\d+",
-        r"^fig\s+\d+",
-        r"^chart\s+\d+",
-        r"^scheme\s+\d+",
-        r"^plate\s+\d+",
-        r"^\d+\s*[a-z]\s+values",
-        r"^\d+\s*[a-z]\s+assignments",
-        r"anti-inflammatory activity.*on.*edema",
-        r"carrageenan-induced.*edema",
-        r"mean.*sem.*n\s*[=\(]",
-        r"p\s*<\s*0\.",
-        r"student.*test",
-        r"\bpo\s*,",
-        r"extraction yields?",
-        r"fractionation yield",
-    ]
-
-    for pattern in table_fig_patterns:
-        if re.search(pattern, content_lower):
-            return True
-
-    # Chemical compound lists and structure descriptions
-    if re.search(r"compounds?\s+\d+\s*[-–—]\s*\d+", content_lower):
-        return True
-
-    # References and citations
-    if re.search(r"^\d+\s*[-–—]\s*\d+\s*$", content_lower):
-        return True
-
-    # Journal metadata
-    journal_patterns = [
-        "received",
-        "accepted",
-        "published online",
-        "publication date",
-        "doi:",
-        "issn",
-        "copyright",
-        "journal of",
-        "vol.",
-        "volume",
-        "issue",
-        "pages",
-        "pp.",
-        "manuscript",
-    ]
-
-    for pattern in journal_patterns:
-        if pattern in content_lower:
-            return True
-
-    # Very short content that's likely metadata
-    if len(content_lower) < 10 and any(c.isdigit() for c in content_lower):
-        return True
-
-    return False
+    
+    return any(indicator in content_lower for indicator in indicators)
 
 
 def extract_first_three_pages(input_pdf_path, number_of_pages=2):
@@ -344,199 +126,117 @@ def get_converted_document(path, number_of_pages=2):
 
 def extract_paper_content(doc_json):
     """
-    Extract the title, abstract, and main text up to the results section from a document JSON.
+    Extract paper content from Docling format JSON with optimized performance.
+
+    Processes structured document JSON to extract title, abstract, and main text
+    while filtering out author information, affiliations, and other metadata.
 
     Args:
-        doc_json (dict): The JSON representation of the document
+        doc_json (dict): The structured document JSON from Docling conversion.
 
     Returns:
-        dict: A dictionary containing the title, abstract, and main text
+        dict: Dictionary containing extracted content with keys:
+              - title: Paper title text
+              - abstract: Abstract section content
+              - main_text: Main body text content
+
+    Example:
+        >>> content = extract_paper_content(docling_json)
+        >>> print(content['title'])
+        "Chemical Structure Analysis Methods"
     """
-    title = ""
-    abstract = ""
-    main_text = []
-
-    # Get all text elements
+    # Pre-compile patterns for speed
+    section_keywords = {"ABSTRACT", "INTRODUCTION", "EXPERIMENTAL", "METHODS", "RESULTS"}
+    intro_keywords = {"INTRODUCTION", "METHODOLOGY", "MATERIALS", "EXPERIMENTAL"}
+    stop_keywords = {"RESULTS", "REFERENCES", "BIBLIOGRAPHY", "ACKNOWLEDGMENT"}
+    metadata_indicators = {"correspondence:", "received:", "funding:", "doi:", "copyright"}
+    
     texts = doc_json.get("texts", [])
-
-    # Find the title (usually the first section_header with level 1, but be more flexible)
-    for text in texts:
-        if text.get("label") == "section_header" and text.get("level") == 1:
-            if (
-                "RESULTS" not in text.get("text", "").upper()
-                and len(text.get("text", "")) > 5  # Reduced from 10 to 5
-            ):
-                title = text.get("text", "")
-                break
-        # Also look for titles without level information
-        elif text.get("label") == "section_header":
-            content = text.get("text", "").strip()
-            if len(content) > 20 and not any(  # Look for substantial headers
-                keyword in content.upper()
-                for keyword in [
-                    "ABSTRACT",
-                    "INTRODUCTION",
-                    "EXPERIMENTAL",
-                    "METHODS",
-                    "RESULTS",
-                ]
-            ):
-                title = content
-                break
-
-    # Find abstract section - look for both standalone "ABSTRACT" headers and inline "ABSTRACT:" text
-    abstract_found = False
-    abstract_section = []
+    if not texts:
+        return {"title": "", "abstract": "", "main_text": ""}
+    
+    # Single pass processing with state tracking
+    title = ""
+    abstract_parts = []
+    main_text_parts = []
+    
+    # State variables
     collecting_abstract = False
-
-    for i, text in enumerate(texts):
+    found_intro = False
+    abstract_found = False
+    
+    for text in texts:
         content = text.get("text", "").strip()
-
         if not content:
             continue
-
-        # Check for standalone ABSTRACT header
-        if text.get("label") == "section_header" and content.upper() == "ABSTRACT":
-            collecting_abstract = True
-            abstract_found = True
+            
+        # APPLY OPTIMIZED AUTHOR FILTERING HERE
+        if _is_author_line(content):
             continue
-
-        # Check for inline ABSTRACT: format
-        if "ABSTRACT:" in content.upper():
-            abstract_section.append(
-                content.replace("ABSTRACT:", "").replace("Abstract:", "").strip()
-            )
-            abstract_found = True
-            collecting_abstract = True
-            continue
-
-        # If we're collecting abstract content
-        if collecting_abstract:
-            # Stop at next section header (like "1 | Introduction")
-            if text.get("label") == "section_header" and any(
-                section in content.upper()
-                for section in ["INTRODUCTION", "EXPERIMENTAL", "METHODS", "RESULTS"]
-            ):
-                break
-            # Skip page headers/footers but be more inclusive
-            if text.get("label") not in ["page_header", "page_footer"]:
-                # Only skip obvious metadata
-                if not any(
-                    indicator in content.lower()
-                    for indicator in [
-                        "correspondence:",
-                        "received:",
-                        "funding:",
-                        "doi:",
-                        "copyright",
-                    ]
-                ):
-                    abstract_section.append(content)
-
-    abstract = " ".join(abstract_section)
-
-    # Extract main text including introduction and up to results section (more comprehensive)
-    found_intro = False
-    main_text = []
-
-    for text in texts:
-        content = text.get("text", "").strip()
+            
+        # Pre-compute expensive operations once
+        content_upper = content.upper()
+        content_lower = content.lower()
+        label = text.get("label", "")
+        is_header = label == "section_header"
         page_no = text.get("prov", [{}])[0].get("page_no", 1) if text.get("prov") else 1
-
-        # Skip empty content and page headers/footers
-        if not content or text.get("label") in ["page_header", "page_footer"]:
+        
+        # Skip page headers/footers early
+        if label in ["page_header", "page_footer"]:
             continue
-
-        # Look for introduction section header (like "1 | Introduction" or "Introduction")
-        if text.get("label") == "section_header" and (
-            "INTRODUCTION" in content.upper()
-            or ("|" in content and "INTRODUCTION" in content.upper())
-        ):
+            
+        # Skip metadata content early
+        if any(indicator in content_lower for indicator in metadata_indicators):
+            continue
+            
+        # Title extraction (only if not found yet)
+        if not title and is_header:
+            if text.get("level") == 1 and "RESULTS" not in content_upper and len(content) > 5:
+                title = content
+            elif len(content) > 20 and not any(kw in content_upper for kw in section_keywords):
+                title = content
+                
+        # Abstract processing
+        if not abstract_found:
+            if is_header and content_upper == "ABSTRACT":
+                collecting_abstract = True
+                abstract_found = True
+                continue
+            elif "ABSTRACT:" in content_upper:
+                abstract_parts.append(content.replace("ABSTRACT:", "").replace("Abstract:", "").strip())
+                collecting_abstract = True
+                abstract_found = True
+                continue
+                
+        if collecting_abstract and not any(kw in content_upper for kw in section_keywords):
+            abstract_parts.append(content)
+        elif collecting_abstract and is_header:
+            collecting_abstract = False
+            
+        # Main text processing
+        if is_header and any(kw in content_upper for kw in intro_keywords):
             found_intro = True
-            # Include the introduction header itself
-            main_text.append(content)
-            continue
-
-        # Also look for methodology/materials sections as valid content
-        if text.get("label") == "section_header" and any(
-            section in content.upper()
-            for section in ["METHODOLOGY", "MATERIALS", "EXPERIMENTAL"]
-        ):
-            found_intro = True  # Start collecting from here if we haven't found intro
-            main_text.append(content)
-            continue
-
-        # Stop at results or references section
-        if found_intro and text.get("label") == "section_header":
-            if any(
-                section in content.upper()
-                for section in [
-                    "RESULTS",
-                    "REFERENCES",
-                    "BIBLIOGRAPHY",
-                    "ACKNOWLEDGMENT",
-                ]
-            ):
-                break
-
-        # Collect main text after introduction (be more inclusive)
-        if (
-            found_intro and page_no <= 6
-        ):  # Limit to first 6 pages to avoid too much content
-            # Only skip obvious metadata
-            if not any(
-                indicator in content.lower()
-                for indicator in [
-                    "correspondence:",
-                    "received:",
-                    "funding:",
-                    "doi:",
-                    "copyright",
-                ]
-            ):
-                main_text.append(content)
-
-    # Enhanced fallback: if we didn't get much content, be more aggressive
-    if not abstract and not main_text:
-        # Get more content from early pages
-        for text in texts:
+            main_text_parts.append(content)
+        elif found_intro and is_header and any(kw in content_upper for kw in stop_keywords):
+            break
+        elif found_intro and page_no <= 6:
+            main_text_parts.append(content)
+            
+    # Fallback for missing content (simplified single pass)
+    if not abstract_parts and not main_text_parts:
+        for text in texts[:50]:  # Limit to first 50 elements for speed
             content = text.get("text", "").strip()
-            page_no = (
-                text.get("prov", [{}])[0].get("page_no", 1) if text.get("prov") else 1
-            )
-
-            # Skip page headers/footers and very short content
-            if (
-                not content
-                or text.get("label") in ["page_header", "page_footer"]
-                or len(content) < 5
-            ):
-                continue
-
-            # Only process first 3 pages for fallback
-            if page_no > 3:
-                continue
-
-            # Only skip obvious metadata
-            if any(
-                indicator in content.lower()
-                for indicator in [
-                    "correspondence:",
-                    "received:",
-                    "funding:",
-                    "doi:",
-                    "copyright",
-                ]
-            ):
-                continue
-
-            # Add to main_text
-            main_text.append(content)
-
-    # Join the main text paragraphs
-    main_text_str = " ".join(main_text)
-
-    return {"title": title, "abstract": abstract, "main_text": main_text_str}
+            if (len(content) >= 5 and 
+                text.get("label") not in ["page_header", "page_footer"] and
+                text.get("prov", [{}])[0].get("page_no", 1) <= 3 and
+                not _is_author_line(content)):  # APPLY OPTIMIZED FILTERING HERE TOO
+                main_text_parts.append(content)
+    
+    return {
+        "title": title,
+        "abstract": " ".join(abstract_parts),
+        "main_text": " ".join(main_text_parts)
+    }
 
 
 def extract_from_docling_document(data):
@@ -912,40 +612,9 @@ def extract_enhanced_paper_content(doc_json):
             ):
                 capturing_main = False
 
-        # Capture abstract content (more lenient but filter out author info and unwanted content)
-        if capturing_abstract and page_no <= 3:  # Increased from 2 to 3
-            # Enhanced filtering to exclude author names, affiliations, and unwanted content
-            if (
-                not any(
-                    indicator in content.lower()
-                    for indicator in [
-                        "correspondence:",
-                        "received:",
-                        "funding:",
-                        "doi:",
-                        "copyright",
-                        "@",  # Email addresses
-                        "university",
-                        "institute",
-                        "department",
-                        "college",
-                        "school of",
-                        "faculty of",
-                        "laboratory",
-                        "lab ",
-                        "center for",
-                        "centre for",
-                        "hospital",
-                        "medical center",
-                        "research center",
-                        "orcid",
-                        "author",
-                        "affiliation",
-                    ]
-                )
-                and not _is_author_line(content)
-                and not _is_unwanted_content(content)
-            ):
+        # Capture abstract content with simple filtering
+        if capturing_abstract and page_no <= 3:
+            if not _is_author_line(content):
                 abstract_content.append(content)
 
         # Capture introduction content (more pages but with comprehensive filtering)
@@ -980,7 +649,7 @@ def extract_enhanced_paper_content(doc_json):
                     ]
                 )
                 and not _is_author_line(content)
-                and not _is_unwanted_content(content)
+               
             ):
                 introduction_content.append(content)
 
@@ -1016,7 +685,7 @@ def extract_enhanced_paper_content(doc_json):
                     ]
                 )
                 and not _is_author_line(content)
-                and not _is_unwanted_content(content)
+               
             ):
                 main_content.append(content)
 
@@ -1103,7 +772,7 @@ def extract_enhanced_paper_content(doc_json):
                     ]
                 )
                 or _is_author_line(content)
-                or _is_unwanted_content(content)
+               
             ):
                 continue
 
@@ -1158,123 +827,76 @@ def extract_enhanced_paper_content(doc_json):
 
 def extract_full_page_text(doc_json):
     """
-    Extract all text content from the first few pages of a document.
+    Extract all text content from the first few pages with optimized performance.
 
-    Retrieves and concatenates all text elements from the first few pages,
-    excluding headers and footers, with cleaned formatting.
+    Retrieves and concatenates text from early pages, excluding unwanted content
+    like author information and affiliations.
 
     Args:
         doc_json (dict): The JSON representation of the document structure.
 
     Returns:
         str: Concatenated and cleaned text from the first few pages.
-             Falls back to all pages if page numbers are unavailable.
 
     Example:
         >>> text = extract_full_page_text(document_json)
         >>> print(len(text.split()))
         245
     """
-    # Get all text elements
+    # Pre-compile patterns for speed
+    metadata_indicators = {
+        "correspondence:", "received:", "funding:", "doi:", "copyright",
+        "@", "university", "institute", "department", "college", 
+        "school of", "faculty of", "laboratory", "lab ", "center for", 
+        "centre for", "hospital", "medical center", "research center", 
+        "orcid", "author", "affiliation"
+    }
+    
     texts = doc_json.get("texts", [])
-
-    # Filter texts from the first few pages (expanded from just page 1)
+    if not texts:
+        return ""
+    
     early_page_texts = []
+    
+    # Single pass processing for first 3 pages
     for text in texts:
-        # Check page number from prov data
-        page_no = 1
-        if text.get("prov") and len(text.get("prov", [])) > 0:
-            page_no = text.get("prov")[0].get("page_no", 1)
-
-        # Check if this text element is on first 3 pages (expanded from just page 1)
-        if page_no <= 3:
+        content = text.get("text", "").strip()
+        if not content or text.get("label") in ["page_header", "page_footer"]:
+            continue
+            
+        # Get page number efficiently
+        page_no = text.get("prov", [{}])[0].get("page_no", 1) if text.get("prov") else 1
+        if page_no > 3:
+            continue
+            
+        # Pre-compute content_lower once
+        content_lower = content.lower()
+        
+        # Skip unwanted content efficiently
+        if (not any(indicator in content_lower for indicator in metadata_indicators) and
+            not _is_author_line(content)):
+            early_page_texts.append(content)
+    
+    # Fallback if no content found
+    if not early_page_texts:
+        for text in texts[:30]:  # Limit for performance
             content = text.get("text", "").strip()
-            if content and text.get("label") not in ["page_header", "page_footer"]:
-                # Enhanced filtering to exclude author information and unwanted content
-                if (
-                    not any(
-                        indicator in content.lower()
-                        for indicator in [
-                            "correspondence:",
-                            "received:",
-                            "funding:",
-                            "doi:",
-                            "copyright",
-                            "@",  # Email addresses
-                            "university",
-                            "institute",
-                            "department",
-                            "college",
-                            "school of",
-                            "faculty of",
-                            "laboratory",
-                            "lab ",
-                            "center for",
-                            "centre for",
-                            "hospital",
-                            "medical center",
-                            "research center",
-                            "orcid",
-                            "author",
-                            "affiliation",
-                        ]
-                    )
-                    and not _is_author_line(content)
-                    and not _is_unwanted_content(content)
-                ):
-                    early_page_texts.append(content)
-
-    # Enhanced fallback if there's no early page content
-    if not early_page_texts and texts:
-        # Take first reasonable number of text elements as fallback
-        for i, text in enumerate(texts[:30]):  # Increased from 20 to 30 elements
-            content = text.get("text", "").strip()
-            if content and text.get("label") not in ["page_header", "page_footer"]:
-                # Enhanced filtering to exclude author information and unwanted content
-                if (
-                    not any(
-                        indicator in content.lower()
-                        for indicator in [
-                            "correspondence:",
-                            "received:",
-                            "funding:",
-                            "doi:",
-                            "copyright",
-                            "@",  # Email addresses
-                            "university",
-                            "institute",
-                            "department",
-                            "college",
-                            "school of",
-                            "faculty of",
-                            "laboratory",
-                            "lab ",
-                            "center for",
-                            "centre for",
-                            "hospital",
-                            "medical center",
-                            "research center",
-                            "orcid",
-                            "author",
-                            "affiliation",
-                        ]
-                    )
-                    and not _is_author_line(content)
-                    and not _is_unwanted_content(content)
-                ):
-                    early_page_texts.append(content)
-
-    # Join all text elements with spaces
+            if (content and 
+                text.get("label") not in ["page_header", "page_footer"] and
+                not any(indicator in content.lower() for indicator in metadata_indicators) and
+                not _is_author_line(content)):
+                early_page_texts.append(content)
+    
+    # Fast text cleaning with single regex operations
     full_text = " ".join(early_page_texts)
-
-    # Clean up the text similar to combine_to_paragraph function
-    full_text = full_text.replace("\n", " ")
-    full_text = re.sub(r"\s+", " ", full_text)
-    full_text = re.sub(r"\s+([.,;:?!])", r"\1", full_text)
-    full_text = re.sub(r"\s*\|\s*", " | ", full_text)
-    full_text = re.sub(r"\s*~\s*", " ", full_text)
-    full_text = re.sub(r"[ŒœŸÿ]", "", full_text)
-    full_text = re.sub(r"(\w)-\s+(\w)", r"\1\2", full_text)
-    full_text = re.sub(r"\s+", " ", full_text).strip()
-
+    if not full_text:
+        return ""
+        
+    # Optimized regex operations
+    full_text = re.sub(r'\s+', ' ', full_text.replace('\n', ' '))
+    full_text = re.sub(r'\s*([.,;:?!])', r'\1', full_text)
+    full_text = re.sub(r'\s*\|\s*', ' | ', full_text)
+    full_text = re.sub(r'(\w)-\s+(\w)', r'\1\2', full_text)
+    full_text = re.sub(r'[ŒœŸÿ~]', '', full_text).strip()
+    
     return full_text
