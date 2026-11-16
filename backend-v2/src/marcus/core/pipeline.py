@@ -91,6 +91,44 @@ def start_paper(
     return paper
 
 
+def start_image_job(
+    session: Session, owner: Owner, png: bytes, display_name: str, engine: Engine
+) -> ImageJob:
+    """Store the normalised PNG and create the image job plus its ocsr step. Caller commits."""
+    engine = Engine(engine)
+    job = ImageJob(
+        owner_id=owner.id,
+        display_name=display_name,
+        image_sha256=hashlib.sha256(png).hexdigest(),
+        engine=engine.value,
+        status="queued",
+        expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
+    )
+    session.add(job)
+    session.flush()  # assigns job.id
+
+    path = storage.image_job_path(job.id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(png)
+    os.replace(tmp, path)
+
+    session.add(
+        Step(
+            image_job_id=job.id,
+            kind=StepKind.OCSR.value,
+            queue=queue_for(StepKind.OCSR, engine),
+            engine=engine.value,
+            seq=0,
+            status=StepStatus.PENDING.value,
+        )
+    )
+    session.flush()
+    return job
+
+
 # --- helpers -------------------------------------------------------------------------------
 
 

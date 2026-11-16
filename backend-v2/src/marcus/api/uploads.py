@@ -1,12 +1,26 @@
 """Upload helpers: bounded reads, type sniffing, display-name sanitising."""
 
+import io
 import unicodedata
+import warnings
 
 from fastapi import HTTPException, UploadFile
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 CHUNK = 1024 * 1024
 DEFAULT_NAME = "upload.pdf"
 MAX_NAME = 200
+MAX_IMAGE_SIDE = 10_000
+MAX_IMAGE_PIXELS = 50_000_000
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS  # Pillow warns above this, raises above twice this
+
+_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "PNG"),
+    (b"\xff\xd8\xff", "JPEG"),
+    (b"II*\x00", "TIFF"),
+    (b"MM\x00*", "TIFF"),
+)
 
 
 async def read_limited(upload: UploadFile, limit: int) -> bytes:
@@ -30,6 +44,65 @@ async def read_limited(upload: UploadFile, limit: int) -> bytes:
 def sniff_pdf(data: bytes) -> None:
     if b"%PDF-" not in data[:1024]:
         raise HTTPException(status_code=415, detail="Not a PDF file")
+
+
+def _magic_ok(data: bytes) -> bool:
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return True
+    return any(data.startswith(m) for m, _ in _MAGIC)
+
+
+def sniff_image(data: bytes) -> str:
+    """Return the detected format (PNG, JPEG, TIFF, WEBP) of a safe-to-decode image.
+
+    415 for anything that is not one of those or does not decode, 413 above 10 000 px per
+    side or 50 megapixels (including decompression bombs).
+    """
+    if not _magic_ok(data):
+        raise HTTPException(status_code=415, detail="Not a supported image file")
+    too_big = HTTPException(status_code=413, detail="Image too large")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as probe:
+                probe.verify()
+            with Image.open(io.BytesIO(data)) as img:
+                width, height = img.size
+                fmt = img.format or ""
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise too_big from None
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError, EOFError):
+        raise HTTPException(status_code=415, detail="Not a supported image file") from None
+    if width > MAX_IMAGE_SIDE or height > MAX_IMAGE_SIDE or width * height > MAX_IMAGE_PIXELS:
+        raise too_big
+    if fmt not in {"PNG", "JPEG", "TIFF", "WEBP"}:
+        raise HTTPException(status_code=415, detail="Not a supported image file")
+    return fmt
+
+
+def normalize_to_png(data: bytes) -> bytes:
+    """Decode, apply EXIF orientation, flatten to RGB on white, and re-encode as plain PNG.
+
+    Drops all metadata. Call only after sniff_image accepted `data`.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.load()
+            img = ImageOps.exif_transpose(img)
+            if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+                rgba = img.convert("RGBA")
+                flat = Image.new("RGB", rgba.size, "white")
+                flat.paste(rgba, mask=rgba.getchannel("A"))
+                img = flat
+            else:
+                img = img.convert("RGB")
+            out = io.BytesIO()
+            img.save(out, "PNG")
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise HTTPException(status_code=413, detail="Image too large") from None
+    except (OSError, SyntaxError, ValueError, EOFError):
+        raise HTTPException(status_code=415, detail="Not a supported image file") from None
+    return out.getvalue()
 
 
 def sanitize_display_name(name: str | None) -> str:

@@ -16,11 +16,11 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
-from marcus.api.deps import _parse_ip, client_ip, current_owner, get_owned_paper, not_found
+from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found
+from marcus.api.limits import enforce_active_limits
 from marcus.api.schemas import (
     Counts,
     CurationOut,
@@ -34,7 +34,7 @@ from marcus.api.schemas import (
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, OwnerKind, PaperStatus
+from marcus.core.enums import Engine, PaperStatus
 from marcus.core.models import Curation, Owner, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import cancel_paper, start_paper
 from marcus.core.settings import get_settings
@@ -42,43 +42,6 @@ from marcus.core.settings import get_settings
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
 router = APIRouter()
-
-ACTIVE = [PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value]
-
-
-async def _enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None:
-    settings = get_settings()
-    # Locks live until the upload commits (or rolls back). Order: owner, then IP.
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"owner:{owner.id}"))))
-    if owner.kind != OwnerKind.BROWSER.value:
-        return  # API keys get a daily page quota instead
-    if _parse_ip(ip) is not None:
-        await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"ip:{ip}"))))
-    own = (
-        await db.execute(
-            select(func.count())
-            .select_from(Paper)
-            .where(Paper.owner_id == owner.id, Paper.status.in_(ACTIVE))
-        )
-    ).scalar_one()
-    if own >= settings.browser_max_active_papers:
-        raise HTTPException(status_code=429, detail="Too many active papers")
-    if _parse_ip(ip) is None:
-        return
-    per_ip = (
-        await db.execute(
-            select(func.count())
-            .select_from(Paper)
-            .join(Owner, Owner.id == Paper.owner_id)
-            .where(
-                Owner.kind == OwnerKind.BROWSER.value,
-                Owner.created_ip == func.cast(ip, INET),
-                Paper.status.in_(ACTIVE),
-            )
-        )
-    ).scalar_one()
-    if per_ip >= settings.ip_max_active_papers:
-        raise HTTPException(status_code=429, detail="Too many active papers from this address")
 
 
 @router.post("/papers", status_code=202)
@@ -93,7 +56,7 @@ async def upload_paper(
     settings = get_settings()
     if engine == Engine.FAKE and not settings.enable_fake_engines:
         raise HTTPException(status_code=422, detail="Engine not available")
-    await _enforce_active_limits(db, owner, client_ip(request))
+    await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)
     sniff_pdf(data)

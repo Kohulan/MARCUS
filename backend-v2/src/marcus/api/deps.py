@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.core.db import get_db
 from marcus.core.enums import OwnerKind, PaperStatus, PriorityClass
-from marcus.core.models import Owner, Paper, Segment
+from marcus.core.models import ImageJob, Owner, Paper, Segment
 from marcus.core.settings import get_settings
 from marcus.core.tokens import hash_token, new_token
 
@@ -166,6 +166,21 @@ async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -
     if paper is None:
         raise not_found()
     return paper
+
+
+async def get_owned_image_job(db: AsyncSession, owner: Owner, job_id: uuid.UUID) -> ImageJob:
+    job = (
+        await db.execute(
+            select(ImageJob).where(
+                ImageJob.id == job_id,
+                ImageJob.owner_id == owner.id,
+                ImageJob.status != "deleted",
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise not_found()
+    return job
 
 
 async def get_owned_segment(
