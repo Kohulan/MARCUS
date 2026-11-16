@@ -67,6 +67,10 @@ class SegmentOut(BaseModel):
     predictions: list[PredictionOut]
 
 
+class SegmentList(BaseModel):
+    segments: list[SegmentOut]
+
+
 class PaperDetail(PaperSummary):
     counts: Counts
     segments: list[SegmentOut]

@@ -85,12 +85,22 @@ def to_json(paper: Paper, chosen: list[Chosen]) -> bytes:
     return json.dumps(doc, indent=2).encode("utf-8")
 
 
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: object) -> str:
+    """A spreadsheet must not run a cell as a formula: prefix risky starts with a quote."""
+    text = "" if value is None else str(value)
+    return "'" + text if text.startswith(_FORMULA_START) else text
+
+
 def to_csv(chosen: list[Chosen]) -> bytes:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(["segment_id", "page", "idx", "smiles", "source"])
     for c in chosen:
-        writer.writerow([str(c.segment_id), c.page, c.idx, c.smiles or "", c.source])
+        row = [c.segment_id, c.page, c.idx, c.smiles, c.source]
+        writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue().encode("utf-8")
 
 

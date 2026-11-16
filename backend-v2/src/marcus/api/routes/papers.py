@@ -28,6 +28,7 @@ from marcus.api.schemas import (
     PaperList,
     PaperSummary,
     PredictionOut,
+    SegmentList,
     SegmentOut,
 )
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
@@ -148,6 +149,23 @@ async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
     return segments, curations, predictions
 
 
+async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut]:
+    segments, curations, predictions = await load_segments(db, paper_id)
+    return [
+        SegmentOut(
+            id=seg.id,
+            page=seg.page,
+            idx=seg.idx,
+            bbox=list(seg.bbox),
+            curation=(
+                CurationOut.model_validate(curations[seg.id]) if seg.id in curations else None
+            ),
+            predictions=[PredictionOut.model_validate(p) for p in predictions[seg.id]],
+        )
+        for seg in segments
+    ]
+
+
 @router.get("/papers", response_model=PaperList)
 async def list_papers(
     owner: Owner = Depends(current_owner), db: AsyncSession = Depends(get_db)
@@ -170,24 +188,21 @@ async def get_paper(
 ) -> PaperDetail:
     paper = await get_owned_paper(db, owner, paper_id)
     counts = await steps_by_status(db, paper.id)
-    segments, curations, predictions = await load_segments(db, paper.id)
     return PaperDetail(
         **PaperSummary.model_validate(paper).model_dump(),
         counts=Counts(steps_by_status=counts),
-        segments=[
-            SegmentOut(
-                id=seg.id,
-                page=seg.page,
-                idx=seg.idx,
-                bbox=list(seg.bbox),
-                curation=(
-                    CurationOut.model_validate(curations[seg.id]) if seg.id in curations else None
-                ),
-                predictions=[PredictionOut.model_validate(p) for p in predictions[seg.id]],
-            )
-            for seg in segments
-        ],
+        segments=await segments_out(db, paper.id),
     )
+
+
+@router.get("/papers/{paper_id}/segments", response_model=SegmentList)
+async def get_segments(
+    paper_id: uuid.UUID,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> SegmentList:
+    paper = await get_owned_paper(db, owner, paper_id)
+    return SegmentList(segments=await segments_out(db, paper.id))
 
 
 @router.delete("/papers/{paper_id}", status_code=204)

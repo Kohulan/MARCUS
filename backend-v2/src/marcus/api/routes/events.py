@@ -3,7 +3,15 @@
 The stream starts with one `event: snapshot` ({status, counts}) and then forwards each
 worker event published on `marcus:paper:{id}` as a `data:` line, with a `: ping` comment
 every `sse_ping_interval_s` seconds. Events are only a hint: the database stays the source
-of truth, and a client that reconnects (or misses an event) re-reads `GET /papers/{id}`.
+of truth, and a client that reconnects re-reads `GET /papers/{id}`.
+
+Order inside the stream: subscribe first, then read the snapshot, then forward messages. An
+event published while the snapshot is being read is therefore delivered after it; the
+client may see a change twice (in the snapshot and as an event), which is harmless.
+
+The snapshot is read with the request's session inside the stream. FastAPI (>= 0.118) keeps
+yield dependencies open until the response ends; the read transaction is committed right
+after the snapshot, so an open stream holds no pooled database connection.
 """
 
 import json
@@ -18,13 +26,14 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from redis.exceptions import RedisError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import current_owner, get_owned_paper
 from marcus.api.routes.papers import steps_by_status
 from marcus.core.db import get_db
 from marcus.core.events import paper_channel
-from marcus.core.models import Owner
+from marcus.core.models import Owner, Paper
 from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -52,11 +61,19 @@ def _frame(data: bytes | str) -> str | None:
         return None
 
 
-async def _stream(request: Request, paper_id: uuid.UUID, snapshot: dict) -> AsyncIterator[str]:
+async def _snapshot(db: AsyncSession, paper_id: uuid.UUID) -> dict:
+    status = await db.scalar(select(Paper.status).where(Paper.id == paper_id))
+    counts = await steps_by_status(db, paper_id)
+    await db.commit()  # end the read transaction: release the pooled connection
+    return {"status": status, "counts": {"steps_by_status": counts}}
+
+
+async def _stream(request: Request, db: AsyncSession, paper_id: uuid.UUID) -> AsyncIterator[str]:
     ping_s = get_settings().sse_ping_interval_s
     pubsub = redis_client().pubsub(ignore_subscribe_messages=True)
     try:
         await pubsub.subscribe(paper_channel(paper_id))
+        snapshot = await _snapshot(db, paper_id)  # after subscribe: no event can fall between
         yield f"event: snapshot\ndata: {json.dumps(snapshot)}\n\n"
         last_ping = time.monotonic()
         while not await request.is_disconnected():
@@ -91,13 +108,7 @@ async def paper_events(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     paper = await get_owned_paper(db, owner, paper_id)
-    snapshot = {
-        "status": paper.status,
-        "counts": {"steps_by_status": await steps_by_status(db, paper.id)},
-    }
-    # End the read transaction now: the session (and its pooled connection) would otherwise
-    # stay checked out for the whole life of the stream.
-    await db.commit()
+    await db.commit()  # the stream reads the snapshot itself, after subscribing
     return StreamingResponse(
-        _stream(request, paper.id, snapshot), media_type="text/event-stream", headers=SSE_HEADERS
+        _stream(request, db, paper.id), media_type="text/event-stream", headers=SSE_HEADERS
     )

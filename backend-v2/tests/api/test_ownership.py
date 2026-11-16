@@ -13,6 +13,7 @@ NOT_FOUND = {"detail": "not found"}
 # (method, path template, json body); {p} = paper id, {s} = segment id
 ROUTES = [
     ("GET", "/api/v2/papers/{p}", None),
+    ("GET", "/api/v2/papers/{p}/segments", None),
     ("DELETE", "/api/v2/papers/{p}", None),
     ("GET", "/api/v2/papers/{p}/pages/0/image", None),
     ("GET", "/api/v2/papers/{p}/text", None),

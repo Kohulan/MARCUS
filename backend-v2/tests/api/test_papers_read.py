@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from rdkit import Chem
 from sqlalchemy import select, update
 
+from marcus.api import export
 from marcus.core import storage
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, Paper, Prediction, Step
@@ -87,6 +88,18 @@ async def test_get_paper_shape(app, async_db_session):
     assert [p["smiles"] for p in preds] == ["CCN", "CCO"]  # newest first
     assert set(preds[0]) >= {"engine", "engine_version", "smiles", "molfile", "valid", "created_at"}
     assert [p["engine"] for p in preds] == ["molnextr", "decimer"]
+
+
+async def test_segments_route_matches_paper_detail(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    async with make_client(app, token) as c:
+        detail = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+        r = await c.get(f"/api/v2/papers/{seeded.paper_id}/segments")
+    assert r.status_code == 200
+    assert r.json() == {"segments": detail["segments"]}
+    assert [s["id"] for s in r.json()["segments"]] == [str(i) for i in seeded.segment_ids]
 
 
 async def test_delete_cancels_paper(app, async_db_session):
@@ -354,6 +367,35 @@ async def test_export_falls_back_to_any_engine_and_uses_curated_molfile(app, asy
     r = await _export(app, token, seeded.paper_id, "csv")
     rows = list(csv.reader(io.StringIO(r.text)))[1:]
     assert [(row[0], row[4]) for row in rows] == [(str(s0), "predicted"), (str(s1), "curated")]
+
+
+def test_csv_cells_escape_formulas():
+    seg = uuid.uuid4()
+    risky = ["=HYPERLINK(1)", "+1", "-1", "@SUM(A1)", "\tC", "\rC", "CCO"]
+    chosen = [export.Chosen(seg, 0, i, s, None, "predicted") for i, s in enumerate(risky)]
+    rows = list(csv.reader(io.StringIO(export.to_csv(chosen).decode())))[1:]
+    assert [r[3] for r in rows] == [
+        "'=HYPERLINK(1)", "'+1", "'-1", "'@SUM(A1)", "'\tC", "'\rC", "CCO",
+    ]  # fmt: skip
+
+
+async def test_export_csv_escapes_predicted_formula(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    s0 = seeded.segment_ids[0]
+
+    def add(s):
+        s.add(
+            Prediction(segment_id=s0, engine="decimer", engine_version="d",
+                       smiles="=cmd|' /C calc'!A0", valid=True, ms=1)
+        )  # fmt: skip
+
+    await db.run_sync(add)
+    await db.commit()
+    r = await _export(app, token, seeded.paper_id, "csv")
+    rows = list(csv.reader(io.StringIO(r.text)))
+    assert rows[1][3] == "'=cmd|' /C calc'!A0"
 
 
 async def test_export_bad_format_is_422(app, async_db_session):

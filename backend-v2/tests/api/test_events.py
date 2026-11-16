@@ -142,6 +142,33 @@ async def test_snapshot_events_ping_and_cleanup(
     assert subscribers(redis_server, channel) == 0
 
 
+async def test_event_racing_the_snapshot_is_delivered(
+    app, async_db_session, redis_server, monkeypatch
+):
+    """A worker event published after the subscribe but before the snapshot is read must
+    reach the client (after the snapshot; it may duplicate what the snapshot shows)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    channel = paper_channel(seeded.paper_id)
+    racing = {"step_id": "r", "kind": "doi", "status": "done"}
+    original = events_route.steps_by_status
+    calls = []
+
+    async def publish_then_count(session, paper_id):
+        calls.append(subscribers(redis_server, channel))
+        fakeredis.FakeRedis(server=redis_server).publish(channel, json.dumps(racing))
+        return await original(session, paper_id)
+
+    monkeypatch.setattr(events_route, "steps_by_status", publish_then_count)
+    sse = SSE(app, f"/api/v2/papers/{seeded.paper_id}/events", token)
+    assert (await sse.start())["status"] == 200
+    assert parse_snapshot(await sse.chunk())["status"] == "processing"
+    assert await sse.chunk() == f"data: {json.dumps(racing)}\n\n"
+    await sse.disconnect()
+    assert calls == [1]  # the snapshot was read while already subscribed
+
+
 async def test_state_complete_after_sse_disconnect(app, async_db_session, redis_server):
     db = async_db_session
     alice, token = await new_owner(db)
