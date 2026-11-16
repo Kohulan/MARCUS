@@ -1,0 +1,276 @@
+"""Worker runtime: the `marcus.run_step` Celery task, the handler registry and error mapping.
+
+One delivery of `run_step(step_id)` goes through three short transactions, never one held
+open across the handler's (possibly long) ML work:
+
+1. Claim. One conditional UPDATE moves the step `queued -> running`, adds an attempt and
+   commits. A step found `running` is a redelivery after a lost worker: it counts as a new
+   attempt (guarded on the attempts value seen), or fails as `worker_lost` once
+   MAX_ATTEMPTS is reached. Any other status (pending, done, failed, cancelled) is acked
+   and ignored.
+2. Handler. `handler(step, session)` runs with no transaction open. `step` is a detached
+   Step (plain column reads only, no lazy loads). `session` is a fresh Session for short
+   reads: a handler that reads must end its read (`session.rollback()`) before long work,
+   must never write or commit (its result is the returned dict), and the runtime closes
+   the session afterwards.
+3. Finish. Under the planner's lock order (parent row, then step row) the runtime checks
+   that the step is still `running` with the attempt number this delivery set (attempt
+   fence). If not, a newer delivery or the watchdog owns the step and this result or
+   failure is dropped. Otherwise complete_step / fail_step runs and commits.
+
+After each commit one event is published (marcus.core.events); publishing never raises.
+
+Error mapping: SoftTimeLimitExceeded -> timeout (retryable); BadInput -> bad_input (final);
+BadResult from complete_step -> engine_error (final); anything else -> engine_error
+(retryable). The message is stored on the step (max 2000 chars) and never sent to clients.
+"""
+
+import logging
+import os
+import socket
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from celery.exceptions import SoftTimeLimitExceeded
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
+
+from marcus.core import events
+from marcus.core.celery_app import celery_app
+from marcus.core.db import sync_session
+from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.models import ImageJob, Paper, Step
+from marcus.core.pipeline import MAX_ATTEMPTS, BadResult, complete_step, fail_step
+
+log = logging.getLogger(__name__)
+
+MAX_ERROR_CHARS = 2000
+
+Handler = Callable[[Step, Session], dict]
+
+HANDLERS: dict[StepKind, Handler] = {}
+
+
+class BadInput(Exception):
+    """The step's input can never work (e.g. not a PDF). Raised by handlers; not retried."""
+
+
+def register(kind: StepKind, handler: Handler) -> None:
+    """Register the handler for a step kind (each worker image imports only its own)."""
+    HANDLERS[StepKind(kind)] = handler
+
+
+@dataclass(frozen=True)
+class Claim:
+    """What one delivery owns: the step at the attempt number this delivery set."""
+
+    step_id: uuid.UUID
+    attempts: int
+    kind: str
+    paper_id: uuid.UUID | None
+    image_job_id: uuid.UUID | None
+    page: int | None
+    segment_id: uuid.UUID | None
+
+
+_RETURNING = (
+    Step.attempts, Step.kind, Step.paper_id, Step.image_job_id, Step.page, Step.segment_id,
+)  # fmt: skip
+
+
+def _publish(claim: Claim, status: str) -> None:
+    event = {
+        "type": "step",
+        "step_id": str(claim.step_id),
+        "kind": claim.kind,
+        "status": status,
+        "page": claim.page,
+        "segment_id": str(claim.segment_id) if claim.segment_id else None,
+    }
+    if claim.paper_id is not None:
+        events.publish_event(claim.paper_id, event)
+    else:
+        events.publish_image_event(claim.image_job_id, event)
+
+
+def _message(exc: BaseException) -> str:
+    return (str(exc) or type(exc).__name__)[:MAX_ERROR_CHARS]
+
+
+# --- 1. claim ------------------------------------------------------------------------------
+
+
+def _start(session: Session, step_id: uuid.UUID, worker: str, *guard) -> Claim | None:
+    """The guarded claim UPDATE: running, attempts + 1, started now. None if no row matched."""
+    row = session.execute(
+        update(Step)
+        .where(Step.id == step_id, *guard)
+        .values(
+            status=StepStatus.RUNNING.value,
+            attempts=Step.attempts + 1,
+            started_at=func.now(),
+            worker_name=worker,
+        )
+        .returning(*_RETURNING)
+        .execution_options(synchronize_session=False)
+    ).one_or_none()
+    if row is None:
+        return None
+    return Claim(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id, row.page,
+                 row.segment_id)  # fmt: skip
+
+
+def claim(step_id: uuid.UUID, worker: str) -> Claim | None:
+    """Claim the step for this delivery and commit. None means: ack and do nothing."""
+    with sync_session() as session:
+        mine = _start(session, step_id, worker, Step.status == StepStatus.QUEUED.value)
+        if mine is None:
+            row = session.execute(
+                select(*_RETURNING, Step.status).where(Step.id == step_id)
+            ).one_or_none()
+            if row is None or row.status != StepStatus.RUNNING.value:
+                session.rollback()
+                return None  # unknown, pending, done, failed or cancelled
+            seen = Claim(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id,
+                         row.page, row.segment_id)  # fmt: skip
+            if row.attempts >= MAX_ATTEMPTS:
+                session.rollback()
+                log.warning("step %s redelivered after %d attempts: worker_lost", step_id,
+                            row.attempts)  # fmt: skip
+                _fail(seen, ErrorClass.WORKER_LOST, "worker lost", retryable=False)
+                return None
+            # Redelivery after a lost worker: count it as a new attempt and run it.
+            guard = (Step.status == StepStatus.RUNNING.value, Step.attempts == row.attempts)
+            mine = _start(session, step_id, worker, *guard)
+            if mine is None:
+                session.rollback()
+                return None  # someone else moved it on meanwhile
+        session.commit()
+    _publish(mine, StepStatus.RUNNING.value)
+    return mine
+
+
+# --- 3. finish (fenced) --------------------------------------------------------------------
+
+
+def _still_mine(session: Session, mine: Claim) -> bool:
+    """Lock parent then step (planner order); True if this delivery still owns the step."""
+    if mine.paper_id is not None:
+        session.execute(select(Paper.id).where(Paper.id == mine.paper_id).with_for_update())
+    else:
+        session.execute(
+            select(ImageJob.id).where(ImageJob.id == mine.image_job_id).with_for_update()
+        )
+    row = session.execute(
+        select(Step.status, Step.attempts).where(Step.id == mine.step_id).with_for_update()
+    ).one_or_none()
+    ok = row is not None and row.status == StepStatus.RUNNING.value
+    return ok and row.attempts == mine.attempts
+
+
+def _complete(mine: Claim, result: dict) -> None:
+    """complete_step under the attempt fence. Raises (after rollback) on any error."""
+    with sync_session() as session:
+        try:
+            if not _still_mine(session, mine):
+                session.rollback()
+                log.warning("step %s attempt %d is stale; result dropped", mine.step_id,
+                            mine.attempts)  # fmt: skip
+                return
+            complete_step(session, mine.step_id, result)
+            session.commit()
+        except BaseException:
+            session.rollback()
+            raise
+    _publish(mine, StepStatus.DONE.value)
+
+
+def _fail(mine: Claim, error_class: ErrorClass, error: str, retryable: bool) -> None:
+    """fail_step under the attempt fence, then publish the step's new status."""
+    with sync_session() as session:
+        try:
+            if not _still_mine(session, mine):
+                session.rollback()
+                log.warning("step %s attempt %d is stale; failure dropped", mine.step_id,
+                            mine.attempts)  # fmt: skip
+                return
+            fail_step(session, mine.step_id, error_class, error, retryable)
+            status = session.get(Step, mine.step_id).status
+            session.commit()
+        except BaseException:
+            session.rollback()
+            raise
+    _publish(mine, status)
+
+
+def _classify(exc: BaseException) -> tuple[ErrorClass, bool]:
+    if isinstance(exc, SoftTimeLimitExceeded):
+        return ErrorClass.TIMEOUT, True
+    if isinstance(exc, BadInput):
+        return ErrorClass.BAD_INPUT, False
+    if isinstance(exc, BadResult):
+        return ErrorClass.ENGINE_ERROR, False
+    return ErrorClass.ENGINE_ERROR, True
+
+
+# --- 2. handler, and the whole delivery ----------------------------------------------------
+
+
+def _load_view(step_id: uuid.UUID) -> Step:
+    """The step as a detached object; the read transaction ends before the handler runs."""
+    with sync_session() as session:
+        step = session.get(Step, step_id)
+        session.expunge(step)
+        session.rollback()
+    return step
+
+
+def _call(handler: Handler, step_id: uuid.UUID) -> dict:
+    view = _load_view(step_id)
+    with sync_session() as reads:
+        try:
+            return handler(view, reads)
+        finally:
+            reads.rollback()
+
+
+def execute(step_id: uuid.UUID, worker: str) -> None:
+    """One delivery of a step: claim, run the handler, then complete or fail (fenced)."""
+    mine = claim(step_id, worker)
+    if mine is None:
+        return
+    handler = HANDLERS.get(StepKind(mine.kind))
+    if handler is None:
+        _fail(mine, ErrorClass.ENGINE_ERROR, f"no handler for {mine.kind}", retryable=False)
+        return
+    try:
+        result = _call(handler, step_id)
+        _complete(mine, result)
+    except Exception as exc:
+        error_class, retryable = _classify(exc)
+        log.exception("step %s (%s) attempt %d failed: %s", step_id, mine.kind, mine.attempts,
+                      error_class.value)  # fmt: skip
+        _fail(mine, error_class, _message(exc), retryable)
+
+
+def _worker_name() -> str:
+    hostname = getattr(run_step.request, "hostname", None)
+    return hostname or f"{socket.gethostname()}:{os.getpid()}"
+
+
+@celery_app.task(name="marcus.run_step", ignore_result=True)
+def run_step(step_id: str) -> None:
+    """Celery entry point. Always acks: state lives in the database, not in the task result.
+
+    A database error that leaves the step `running` is logged; the watchdog rescues it.
+    """
+    try:
+        sid = uuid.UUID(step_id)
+    except (TypeError, ValueError):
+        log.error("run_step: malformed step id %r", step_id)
+        return
+    try:
+        execute(sid, _worker_name())
+    except Exception:
+        log.exception("run_step: step %s could not be recorded; left to the watchdog", sid)
