@@ -8,6 +8,7 @@ from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import Engine, ErrorClass
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import (
+    BadResult,
     cancel_paper,
     complete_step,
     fail_step,
@@ -386,3 +387,125 @@ def test_concurrent_last_two_steps_mark_paper_done(db_session):
     s.expire_all()
     assert s.get(Paper, paper.id).status == "done"
     assert {st.status for st in steps(s, paper)} == {"done"}
+
+
+def _assert_untouched(s, step_id):
+    """BadResult is raised before any change: nothing pending in the session, then roll back."""
+    assert not s.new and not s.dirty and not s.deleted
+    s.rollback()
+    st = s.get(Step, step_id)
+    assert st.status == "running" and st.finished_at is None
+
+
+GOOD_SEG = {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64}
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"segments": [GOOD_SEG, {"idx": 1, "bbox": [0, 0, 1], "image_sha256": "1" * 64}]},
+        {"segments": [GOOD_SEG, {**GOOD_SEG}]},  # duplicate idx
+        {"segments": [{**GOOD_SEG, "idx": 1000}]},
+        {"segments": [{**GOOD_SEG, "idx": True}]},
+        {"segments": [{**GOOD_SEG, "idx": "0"}]},
+        {"segments": [{**GOOD_SEG, "bbox": [0, 0, 1.5, 2]}]},
+        {"segments": [{**GOOD_SEG, "bbox": [0, -1, 1, 2]}]},
+        {"segments": [{**GOOD_SEG, "image_sha256": "0" * 65}]},
+        {"segments": [{**GOOD_SEG, "image_sha256": "G" * 64}]},
+        {"segments": [{"idx": 0, "bbox": [0, 0, 1, 1]}]},
+        {"segments": "nope"},
+        {},
+        None,
+    ],
+)
+def test_malformed_segment_page_result_changes_nothing(db_session, result):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    run(s, seg_step)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, seg_step.id, result)
+    _assert_untouched(s, seg_step.id)
+    assert count(s, Segment) == 0 and count(s, Curation) == 0
+    assert steps(s, paper, "ocsr") == []
+    s.refresh(paper)
+    assert paper.status == "processing"
+    # the runtime then records the failure in a fresh transaction
+    fail_step(s, seg_step.id, ErrorClass.BAD_INPUT, "bad result", retryable=False)
+    assert seg_step.status == "failed"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"smiles": None},
+        {"smiles": "C\x00C"},
+        {"valid": 1},
+        {"valid": "yes"},
+        {"ms": "12"},
+        {"ms": -1},
+        {"ms": 2**31},
+        {"ms": True},
+        {"molfile": 5},
+        {"engine_version": ""},
+        {"engine_version": None},
+    ],
+)
+def test_malformed_ocsr_result_changes_nothing(db_session, bad):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    ocsr1, _ = finish(s, seg_step, {"segments": SEGS})
+    run(s, ocsr1)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, ocsr1.id, {**OCSR, **bad})
+    _assert_untouched(s, ocsr1.id)
+    assert count(s, Prediction) == 0
+
+
+def test_malformed_image_job_result_leaves_job(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    run(s, step)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, step.id, {**OCSR, "valid": "true"})
+    _assert_untouched(s, step.id)
+    s.refresh(job)
+    assert job.status == "queued" and count(s, Prediction) == 0
+
+
+@pytest.mark.parametrize("pages", [0, 101, -1, "3", 2.0, True, None])
+def test_malformed_check_pdf_pages_changes_nothing(db_session, pages):
+    s = db_session
+    paper = make_paper(s)
+    (check,) = steps(s, paper, "check_pdf")
+    run(s, check)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, check.id, {"pages": pages})
+    _assert_untouched(s, check.id)
+    s.refresh(paper)
+    assert paper.status == "checking" and paper.pages is None
+    assert len(steps(s, paper)) == 1
+
+
+@pytest.mark.parametrize("result", [{}, {"doi": 123}, {"doi": ["10.1/x"]}])
+def test_malformed_doi_result_changes_nothing(db_session, result):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    run(s, doi)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, doi.id, result)
+    _assert_untouched(s, doi.id)
+
+
+def test_bad_result_is_a_value_error():
+    assert issubclass(BadResult, ValueError)

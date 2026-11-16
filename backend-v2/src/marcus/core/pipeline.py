@@ -8,6 +8,7 @@ workers finishing the last two steps of one paper cannot both miss the `done` tr
 
 import hashlib
 import os
+import re
 import shutil
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,18 @@ MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 _FINISHED = (StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value)
+
+MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
+_INT32_MAX = 2**31 - 1
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+
+class BadResult(ValueError):
+    """A worker result does not have the shape its step kind requires.
+
+    Raised by complete_step before any state changes. The caller must roll back and may then
+    record the failure with fail_step in a fresh transaction.
+    """
 
 
 def start_paper(
@@ -185,15 +198,89 @@ def _finish_check(session: Session, paper: Paper) -> None:
         paper.status = PaperStatus.DONE.value
 
 
+# --- result validation (runs before any state change) -------------------------------------
+
+
+def _is_int(value: object, lo: int = 0, hi: int = _INT32_MAX) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and lo <= value <= hi
+
+
+def _is_text(value: object) -> bool:
+    return isinstance(value, str) and "\x00" not in value
+
+
+def _check_pdf_result(result: dict) -> None:
+    pages = result.get("pages")
+    if not _is_int(pages, 1, get_settings().max_pages):
+        raise BadResult(f"check_pdf: 'pages' must be an int in 1..{get_settings().max_pages}")
+
+
+def _check_segment_page_result(result: dict) -> None:
+    segments = result.get("segments")
+    if not isinstance(segments, list):
+        raise BadResult("segment_page: 'segments' must be a list")
+    seen: set[int] = set()
+    for item in segments:
+        if not isinstance(item, dict):
+            raise BadResult("segment_page: each segment must be an object")
+        idx, bbox, sha = item.get("idx"), item.get("bbox"), item.get("image_sha256")
+        if not _is_int(idx, 0, MAX_SEGMENTS_PER_PAGE - 1):
+            raise BadResult(f"segment_page: 'idx' must be an int in 0..{MAX_SEGMENTS_PER_PAGE - 1}")
+        if idx in seen:
+            raise BadResult(f"segment_page: duplicate idx {idx}")
+        seen.add(idx)
+        if not isinstance(bbox, list | tuple) or len(bbox) != 4 or not all(map(_is_int, bbox)):
+            raise BadResult("segment_page: 'bbox' must be 4 non-negative ints")
+        if not isinstance(sha, str) or not _SHA256_HEX.fullmatch(sha):
+            raise BadResult("segment_page: 'image_sha256' must be 64 lowercase hex characters")
+
+
+def _check_ocsr_result(result: dict) -> None:
+    if not _is_text(result.get("smiles")):
+        raise BadResult("ocsr: 'smiles' must be a string")
+    molfile = result.get("molfile")
+    if molfile is not None and not _is_text(molfile):
+        raise BadResult("ocsr: 'molfile' must be a string or null")
+    if not isinstance(result.get("valid"), bool):
+        raise BadResult("ocsr: 'valid' must be a bool")
+    if not _is_int(result.get("ms")):
+        raise BadResult("ocsr: 'ms' must be a non-negative int")
+    version = result.get("engine_version")
+    if not _is_text(version) or not version:
+        raise BadResult("ocsr: 'engine_version' must be a non-empty string")
+
+
+def _check_doi_result(result: dict) -> None:
+    if "doi" not in result:
+        raise BadResult("doi: 'doi' is missing")
+    doi = result["doi"]
+    if doi is not None and not _is_text(doi):
+        raise BadResult("doi: 'doi' must be a string or null")
+
+
+def _check_nothing(result: dict) -> None:
+    pass
+
+
+_CHECK = {
+    StepKind.CHECK_PDF.value: _check_pdf_result,
+    StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
+    StepKind.OCSR.value: _check_ocsr_result,
+    StepKind.DOI.value: _check_doi_result,
+}
+
+
+def _validate(kind: str, result: object) -> None:
+    if not isinstance(result, dict):
+        raise BadResult(f"{kind}: result must be an object")
+    _CHECK.get(kind, _check_nothing)(result)
+
+
 # --- successors per step kind --------------------------------------------------------------
 
 
 def _after_check_pdf(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     pages = result["pages"]
-    if isinstance(pages, bool) or not isinstance(pages, int):
-        raise ValueError("check_pdf result 'pages' must be an int")
-    if not 1 <= pages <= get_settings().max_pages:
-        raise ValueError(f"check_pdf result 'pages' out of range: {pages}")
     paper.pages = pages
     if paper.status == PaperStatus.CHECKING.value:
         paper.status = PaperStatus.PROCESSING.value
@@ -208,20 +295,16 @@ def _after_render_page(session: Session, paper: Paper, step: Step, result: dict)
 
 
 def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    segments = []
-    for item in result["segments"]:
-        bbox = [int(v) for v in item["bbox"]]
-        if len(bbox) != 4:
-            raise ValueError("segment bbox must have 4 values")
-        segments.append(
-            Segment(
-                paper_id=paper.id,
-                page=step.page,
-                idx=int(item["idx"]),
-                bbox=bbox,
-                image_sha256=item["image_sha256"],
-            )
+    segments = [
+        Segment(
+            paper_id=paper.id,
+            page=step.page,
+            idx=item["idx"],
+            bbox=list(item["bbox"]),
+            image_sha256=item["image_sha256"],
         )
+        for item in result["segments"]
+    ]
     session.add_all(segments)
     session.flush()  # assigns segment ids
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
@@ -248,8 +331,8 @@ def _prediction(step: Step, result: dict) -> Prediction:
         engine_version=result["engine_version"],
         smiles=result["smiles"],
         molfile=result.get("molfile"),
-        valid=bool(result["valid"]),
-        ms=int(result["ms"]),
+        valid=result["valid"],
+        ms=result["ms"],
     )
 
 
@@ -259,7 +342,7 @@ def _after_ocsr(session: Session, paper: Paper, step: Step, result: dict) -> lis
 
 
 def _after_doi(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    paper.doi = result.get("doi")
+    paper.doi = result["doi"]
     return []
 
 
@@ -286,17 +369,22 @@ def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[St
 
     A step that is already finished or cancelled, or whose paper/image job is deleted, is a
     no-op returning [] (a redelivered or late Celery result). Caller commits.
+
+    The result is checked in full before anything changes; a malformed result raises
+    BadResult. On any exception the caller must roll back the session before reusing it.
     """
     loaded = _load_for_change(session, step_id)
     if loaded is None:
         return []
     step, paper, job = loaded
+    if job is not None and step.kind != StepKind.OCSR.value:
+        raise BadResult(f"image job step has unexpected kind {step.kind!r}")
+    _validate(step.kind, result)
+
     step.status = StepStatus.DONE.value
     step.finished_at = _now()
 
     if job is not None:
-        if step.kind != StepKind.OCSR.value:
-            raise ValueError(f"image job step has unexpected kind {step.kind!r}")
         session.add(_prediction(step, result))
         job.status = "done"
         job.error = None
