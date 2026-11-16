@@ -1,8 +1,11 @@
+import asyncio
 import io
+import threading
 
 from PIL import Image
 from sqlalchemy import select
 
+from marcus.api.routes import images as images_route
 from marcus.core import storage
 from marcus.core.models import ImageJob, Prediction, Step
 from marcus.core.pipeline import complete_step
@@ -194,3 +197,47 @@ def test_32bit_int_grayscale_uses_data_range():
     out = Image.open(io.BytesIO(normalize_to_png(buf.getvalue())))
     px = list(out.convert("L").getdata())
     assert px[0] == 0 and px[3] == 255 and 100 < px[2] < 150
+
+
+async def test_at_most_two_image_decodes_at_once(app, monkeypatch):
+    """A third concurrent decode waits for a slot (the semaphore is per app / API process)."""
+    assert get_settings().image_decode_concurrency == 2
+    release = threading.Event()
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def slow_png(data: bytes) -> bytes:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        release.wait(5)
+        with lock:
+            running -= 1
+        return b"png"
+
+    monkeypatch.setattr(images_route, "sniff_image", lambda data: None)
+    monkeypatch.setattr(images_route, "normalize_to_png", slow_png)
+    tasks = [
+        asyncio.create_task(images_route.decode_image(app.state.decode_slots, b"x"))
+        for _ in range(3)
+    ]
+    for _ in range(100):  # wait until two decodes are inside the threadpool
+        if running == 2:
+            break
+        await asyncio.sleep(0.02)
+    await asyncio.sleep(0.1)
+    assert running == 2 and not any(t.done() for t in tasks)  # the third is waiting
+    release.set()
+    assert await asyncio.gather(*tasks) == [b"png"] * 3
+    assert peak == 2
+
+
+async def test_image_decode_concurrency_setting(monkeypatch):
+    from marcus.api.main import create_app
+
+    monkeypatch.setenv("MARCUS_IMAGE_DECODE_CONCURRENCY", "5")
+    get_settings.cache_clear()
+    app = create_app()
+    assert app.state.decode_slots._value == 5

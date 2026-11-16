@@ -16,11 +16,12 @@ import httpx
 import pydantic
 import pytest
 import redis.asyncio as aioredis
+import redis.exceptions as redis_exceptions
 from fastapi import APIRouter, Response
 from starlette.datastructures import Headers
 
 from marcus.api import security
-from marcus.api.deps import UNKNOWN_IP, client_ip
+from marcus.api.deps import UNKNOWN_IP, client_ip, rate_key_for_ip
 from marcus.api.main import create_app
 from marcus.api.routes import events as events_route
 from marcus.core.db import get_db
@@ -160,7 +161,8 @@ async def test_headers_on_every_route(app):
             assert_security_headers(r)
 
 
-async def test_request_id_reused_only_when_well_formed(app):
+async def test_request_id_reused_only_when_well_formed(app, monkeypatch):
+    env(monkeypatch, trusted_proxies='["127.0.0.1"]')
     async with client(app) as c:
         ok = await c.get("/api/v2/health", headers={"X-Request-ID": "abc-DEF-12345678"})
         assert ok.headers["x-request-id"] == "abc-DEF-12345678"
@@ -171,6 +173,21 @@ async def test_request_id_reused_only_when_well_formed(app):
         a = (await c.get("/api/v2/health")).headers["x-request-id"]
         b = (await c.get("/api/v2/health")).headers["x-request-id"]
     assert a != b
+
+
+async def test_request_id_from_untrusted_peer_is_replaced(app, monkeypatch):
+    sent = {"X-Request-ID": "abc-DEF-12345678"}
+    async with client(app) as c:  # no trusted proxies at all
+        r = await c.get("/api/v2/health", headers=sent)
+    assert re.fullmatch(r"[0-9a-f]{32}", r.headers["x-request-id"])
+    env(monkeypatch, trusted_proxies='["10.0.0.0/8"]')
+    async with client(app, ("203.0.113.5", 1)) as c:  # a client, not the proxy
+        r = await c.get("/api/v2/_boom", headers=sent)
+    assert r.headers["x-request-id"] != sent["X-Request-ID"]
+    assert r.json()["request_id"] == r.headers["x-request-id"]
+    async with client(app, ("10.1.2.3", 1)) as c:  # the proxy
+        r = await c.get("/api/v2/health", headers=sent)
+    assert r.headers["x-request-id"] == sent["X-Request-ID"]
 
 
 async def test_route_headers_are_not_overridden(app):
@@ -213,7 +230,8 @@ async def test_sse_still_streams_through_the_middleware(app, async_db_session, r
 # --- errors ---------------------------------------------------------------------------------
 
 
-async def test_500_body_has_no_trace(app, caplog):
+async def test_500_body_has_no_trace(app, caplog, monkeypatch):
+    env(monkeypatch, trusted_proxies='["127.0.0.1"]')  # the request id comes from the proxy
     caplog.set_level(logging.ERROR)
     async with client(app) as c:
         r = await c.get("/api/v2/_boom", headers={"X-Request-ID": "req-12345678"})
@@ -334,12 +352,14 @@ async def test_xff_spoof_does_not_reset_limit(app, monkeypatch, frozen_time):
 
 
 async def test_health_is_exempt_but_other_paths_are_not(app, monkeypatch, frozen_time):
-    env(monkeypatch, rate_limit_ip_per_min="3")
+    env(monkeypatch, rate_limit_ip_per_min="5")
     async with client(app) as c:
         for _ in range(10):
             assert (await c.get("/api/v2/health")).status_code == 200
-        codes = [(await c.get(p)).status_code for p in ("/", "/api/v2/x", "/api", "/docs")]
-        assert codes == [404, 404, 404, 429]
+        # look-alikes of the health path are counted like any other path
+        paths = ("/api/v2/health/", "/API/V2/HEALTH", "/", "/api/v2/x", "/api", "/docs")
+        codes = [(await c.get(p)).status_code for p in paths]
+        assert codes == [307, 404, 404, 404, 404, 429]
         assert (await c.head("/api/v2/health")).status_code == 429  # only GET is exempt
 
 
@@ -365,6 +385,57 @@ async def test_upload_fails_closed_and_others_fail_open_when_redis_is_down(app, 
     # throttled: one warning per scope, not one per request
     assert {w.getMessage().split()[0] for w in warnings} >= {"rate-limit"}
     assert len(warnings) <= 3
+
+
+class DeadRedis:
+    """Counts how often the limiter reaches for Redis; every call fails."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def pipeline(self, transaction=True):
+        self.calls += 1
+        raise redis_exceptions.ConnectionError("down")
+
+
+async def test_circuit_breaker_skips_redis_for_five_seconds(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(security, "_monotonic", lambda: clock[0])
+    dead = DeadRedis()
+    limiter = security.RateLimiter(dead)
+    assert await limiter.hit("ip", "k", fail_open=True) is None
+    assert dead.calls == 1
+    clock[0] += 4.9  # circuit open: Redis is not touched, behaviour per scope stays
+    assert await limiter.hit("ip", "k", fail_open=True) is None
+    assert await limiter.hit("tools", "o", fail_open=True) is None
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
+    assert dead.calls == 1
+    clock[0] += 0.2  # 5.1 s after the failure: one new try (fails again, circuit re-opens)
+    assert await limiter.hit("ip", "k", fail_open=True) is None
+    assert dead.calls == 2
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
+    assert dead.calls == 2
+    clock[0] += 5.1  # Redis is back: counting resumes
+    limiter.redis = fakeredis.aioredis.FakeRedis()
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    keys = await limiter.redis.keys("rl:upload:o:*")
+    assert len(keys) == 1
+
+
+async def test_upload_503_while_circuit_is_open(app, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(security, "_monotonic", lambda: clock[0])
+    dead = DeadRedis()
+    app.state.rate_limiter.redis = dead
+    async with client(app) as c:
+        assert (await c.get("/api/v2/nope")).status_code == 404  # opens the circuit
+        calls = dead.calls
+        r = await c.post("/api/v2/papers", files={"file": ("x.pdf", PNG, "application/pdf")})
+        assert r.status_code == 503
+        assert (await c.post("/api/v2/tools/depict", json={})).status_code == 422
+    assert dead.calls == calls
 
 
 # --- client IP ------------------------------------------------------------------------------
@@ -435,6 +506,56 @@ async def test_unknown_peers_share_one_ip_rate_bucket(app, monkeypatch, frozen_t
     assert codes == [404, 404, 404, 429]
 
 
+def test_rate_key_for_ip():
+    assert rate_key_for_ip("203.0.113.9") == "203.0.113.9"
+    assert rate_key_for_ip(UNKNOWN_IP) == UNKNOWN_IP
+    assert rate_key_for_ip("2001:db8:1:2:aaaa:bbbb:cccc:dddd") == "2001:db8:1:2::/64"
+    assert rate_key_for_ip("2001:db8:1:2::1") == rate_key_for_ip("2001:db8:1:2:ffff::9")
+    assert rate_key_for_ip("2001:db8:1:3::1") == "2001:db8:1:3::/64"
+
+
+def test_ipv4_mapped_peer_is_its_ipv4_address():
+    assert client_ip(fake_request("::ffff:198.51.100.7")) == "198.51.100.7"
+
+
+async def test_ipv6_rate_bucket_is_the_64_prefix(app, monkeypatch, frozen_time):
+    env(monkeypatch, rate_limit_ip_per_min="3")
+    codes = []
+    for host in ("2001:db8:1:2::1", "2001:db8:1:2::2", "2001:db8:1:2:ffff::3", "2001:db8:1:2::4"):
+        async with client(app, (host, 1)) as c:
+            codes.append((await c.get("/api/v2/nope")).status_code)
+    assert codes == [404, 404, 404, 429]
+    async with client(app, ("2001:db8:1:3::1", 1)) as c:  # the next /64 has its own bucket
+        assert (await c.get("/api/v2/nope")).status_code == 404
+
+
+async def test_ipv6_new_owner_limit_is_per_64(app):
+    for i in range(10):
+        async with client(app, (f"2001:db8:5:6::{i + 1:x}", 1)) as c:
+            assert (await c.get("/api/v2/papers")).status_code == 200
+    async with client(app, ("2001:db8:5:6:abcd::1", 1)) as c:
+        r = await c.get("/api/v2/papers")
+    assert r.status_code == 429
+    async with client(app, ("2001:db8:5:7::1", 1)) as c:
+        assert (await c.get("/api/v2/papers")).status_code == 200
+
+
+async def test_ipv6_active_paper_limit_is_per_64(app, monkeypatch):
+    env(monkeypatch, ip_max_active_papers="2", browser_max_active_papers="5")
+    pdf = b"%PDF-1.4\n" + b"0" * 100
+    async with (
+        client(app, ("2001:db8:9:9::1", 1)) as c1,
+        client(app, ("2001:db8:9:9::2", 1)) as c2,
+        client(app, ("2001:db8:9:a::1", 1)) as other,
+    ):
+        assert (await c1.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
+        assert (await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
+        r = await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        assert r.status_code == 429 and "address" in r.json()["detail"]
+        r = await other.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        assert r.status_code == 202
+
+
 # --- CORS -----------------------------------------------------------------------------------
 
 PREFLIGHT = {"Origin": "https://app.example", "Access-Control-Request-Method": "POST"}
@@ -469,6 +590,13 @@ async def test_cors_only_for_configured_origins(monkeypatch, async_db_session):
     assert_security_headers(ok)
 
 
+@pytest.mark.parametrize("bad", ['["*"]', '["https://app.example", " * "]'])
+def test_wildcard_cors_origin_fails_startup(monkeypatch, bad):
+    env(monkeypatch, cors_origins=bad)
+    with pytest.raises(pydantic.ValidationError):
+        create_app()
+
+
 # --- docs -----------------------------------------------------------------------------------
 
 DOC_PATHS = ["/docs", "/redoc", "/openapi.json", "/api/v2/docs", "/api/v2/redoc"]
@@ -493,6 +621,33 @@ async def test_docs_only_under_api_v2_when_enabled(monkeypatch):
             assert r.headers["x-frame-options"] == "DENY"
         for path in ("/docs", "/redoc", "/openapi.json"):
             assert (await c.get(path)).status_code == 404, path
+
+
+PINNED_CDN = re.compile(r"https://cdn\.jsdelivr\.net/npm/(swagger-ui-dist|redoc)@\d+\.\d+\.\d+/")
+
+
+async def test_docs_csp_pins_cdn_paths(monkeypatch):
+    env(monkeypatch, expose_docs="true")
+    app = create_app()
+    async with client(app) as c:
+        for path in ("/api/v2/docs", "/api/v2/redoc"):
+            r = await c.get(path)
+            directives = {
+                d.split()[0]: d.split()[1:]
+                for d in r.headers["content-security-policy"].split("; ")
+            }
+            pinned = []
+            for name in ("script-src", "style-src"):
+                for src in directives[name]:
+                    if "jsdelivr" in src:
+                        assert PINNED_CDN.fullmatch(src), (path, name, src)
+                        pinned.append(src)
+            assert pinned
+            # every CDN file the page loads sits under a pinned path
+            urls = re.findall(r"https://cdn\.jsdelivr\.net/[^\"' ]+", r.text)
+            assert urls, path
+            for url in urls:
+                assert any(url.startswith(p) for p in pinned), (path, url)
 
 
 # --- route list -----------------------------------------------------------------------------

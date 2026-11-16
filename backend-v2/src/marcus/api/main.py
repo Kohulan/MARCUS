@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, FastAPI
 
 from marcus.api import security
@@ -17,5 +19,7 @@ def create_app() -> FastAPI:
     api.include_router(events.router)
     api.include_router(tools.router)
     app.include_router(api)
+    # image uploads: bounded CPU-bound decodes per process (routes/images.py decode_image)
+    app.state.decode_slots = asyncio.Semaphore(settings.image_decode_concurrency)
     security.install(app, settings)
     return app

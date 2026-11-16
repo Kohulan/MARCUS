@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import current_owner, get_owned_segment, not_found
-from marcus.api.routes.papers import IMAGE_HEADERS
+from marcus.api.read import IMAGE_HEADERS
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db

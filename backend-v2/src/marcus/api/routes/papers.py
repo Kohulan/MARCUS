@@ -1,5 +1,4 @@
 import uuid
-from collections import defaultdict
 from typing import Literal
 
 from fastapi import (
@@ -15,32 +14,22 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
 from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found
 from marcus.api.limits import enforce_active_limits
-from marcus.api.schemas import (
-    Counts,
-    CurationOut,
-    PaperDetail,
-    PaperList,
-    PaperSummary,
-    PredictionOut,
-    SegmentList,
-    SegmentOut,
-)
+from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status
+from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
-from marcus.core.models import Curation, Owner, Paper, Prediction, Segment, Step
+from marcus.core.models import Owner, Paper
 from marcus.core.pipeline import cancel_paper, start_paper
 from marcus.core.settings import get_settings
-
-IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
 router = APIRouter()
 
@@ -66,68 +55,6 @@ async def upload_paper(
     paper = await db.run_sync(lambda s: start_paper(s, owner, data, name, engine, ocsr))
     await db.commit()
     return {"paper_id": str(paper.id), "status": PaperStatus.CHECKING.value}
-
-
-# --- read ----------------------------------------------------------------------------------
-
-
-async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, int]:
-    rows = await db.execute(
-        select(Step.status, func.count()).where(Step.paper_id == paper_id).group_by(Step.status)
-    )
-    return {status: n for status, n in rows.all()}
-
-
-async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
-    """Segments in (page, idx) order, curation per segment, predictions per segment (newest
-    first). Three queries, whatever the number of segments."""
-    segments = list(
-        (
-            await db.execute(
-                select(Segment)
-                .where(Segment.paper_id == paper_id)
-                .order_by(Segment.page, Segment.idx)
-            )
-        ).scalars()
-    )
-    curations = {
-        c.segment_id: c
-        for c in (
-            await db.execute(
-                select(Curation)
-                .join(Segment, Segment.id == Curation.segment_id)
-                .where(Segment.paper_id == paper_id)
-            )
-        ).scalars()
-    }
-    predictions: dict[uuid.UUID, list[Prediction]] = defaultdict(list)
-    for p in (
-        await db.execute(
-            select(Prediction)
-            .join(Segment, Segment.id == Prediction.segment_id)
-            .where(Segment.paper_id == paper_id)
-            .order_by(Prediction.created_at.desc(), Prediction.id)
-        )
-    ).scalars():
-        predictions[p.segment_id].append(p)
-    return segments, curations, predictions
-
-
-async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut]:
-    segments, curations, predictions = await load_segments(db, paper_id)
-    return [
-        SegmentOut(
-            id=seg.id,
-            page=seg.page,
-            idx=seg.idx,
-            bbox=list(seg.bbox),
-            curation=(
-                CurationOut.model_validate(curations[seg.id]) if seg.id in curations else None
-            ),
-            predictions=[PredictionOut.model_validate(p) for p in predictions[seg.id]],
-        )
-        for seg in segments
-    ]
 
 
 @router.get("/papers", response_model=PaperList)

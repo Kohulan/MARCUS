@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from marcus.api.chem import parse_smiles
+from marcus.api.chem import parse_molfile, parse_smiles
 from marcus.core.enums import Engine
 
 MAX_MOLFILE_BYTES = 200 * 1024
@@ -108,6 +108,8 @@ class CurationIn(BaseModel):
     def _molfile_size(cls, value: str | None) -> str | None:
         if value is not None and len(value.encode("utf-8")) > MAX_MOLFILE_BYTES:
             raise ValueError(f"molfile must be at most {MAX_MOLFILE_BYTES} bytes")
+        if value is not None and parse_molfile(value) is None:
+            raise ValueError("molfile could not be parsed")
         return value
 
     @field_validator("smiles")

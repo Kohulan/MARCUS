@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -42,6 +43,18 @@ class ImageJobOut(BaseModel):
     error: str | None
 
 
+async def decode_image(slots: asyncio.Semaphore, data: bytes) -> bytes:
+    """Sniff and re-encode as PNG in the threadpool; at most `slots` decodes at once, so a
+    burst of uploads cannot fill the threadpool with CPU-bound Pillow work."""
+
+    def _prepare() -> bytes:
+        sniff_image(data)
+        return normalize_to_png(data)
+
+    async with slots:
+        return await run_in_threadpool(_prepare)
+
+
 @router.post("/images", status_code=202, dependencies=[Depends(upload_limit)])
 async def upload_image(
     request: Request,
@@ -56,12 +69,7 @@ async def upload_image(
     await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)
-
-    def _prepare() -> bytes:  # Pillow decoding is CPU-bound and sync
-        sniff_image(data)
-        return normalize_to_png(data)
-
-    png = await run_in_threadpool(_prepare)
+    png = await decode_image(request.app.state.decode_slots, data)
     name = sanitize_display_name(file.filename)
     job = await db.run_sync(lambda s: start_image_job(s, owner, png, name, engine))
     await db.commit()

@@ -2,9 +2,11 @@
 
 Order of the ASGI stack (outermost first):
 
-    SecurityMiddleware   headers + X-Request-ID on every response; catch-all 500
+    SecurityMiddleware   headers + X-Request-ID on every response; a new owner's cookie;
+                         catch-all 500
     CORSMiddleware       only when settings.cors_origins is non-empty
-    IpRateLimitMiddleware  300/min per client IP, every route but GET /api/v2/health
+    IpRateLimitMiddleware  300/min per client IP (IPv6: per /64), every route but
+                           GET /api/v2/health
     FastAPI app          per-owner limits are dependencies (`upload_limit`, `tools_limit`)
 
 Both middlewares are pure ASGI (not BaseHTTPMiddleware), so SSE streams pass through
@@ -30,7 +32,15 @@ from redis.exceptions import RedisError
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from marcus.api.deps import client_ip, current_owner
+from marcus.api.deps import (
+    COOKIE_NAME,
+    NEW_OWNER_TOKEN,
+    client_ip,
+    current_owner,
+    is_trusted_proxy,
+    owner_cookie_header,
+    rate_key_for_ip,
+)
 from marcus.core.models import Owner
 from marcus.core.settings import Settings, get_settings
 
@@ -50,13 +60,17 @@ WINDOW_S = 60
 EXEMPT = ("GET", "/api/v2/health")
 RATE_LIMITED = "rate limited"
 REDIS_TIMEOUT_S = 0.5  # a hung Redis must not stall every request
+BREAKER_OPEN_S = 5.0  # after a Redis failure, skip Redis this long (no 0.5 s wait per request)
 WARN_EVERY_S = 60.0
 
 API_PREFIX = "/api/v2"
 # The docs pages load Swagger UI / ReDoc from jsdelivr and run an inline bootstrap script.
+# Exact versions, and the CSP allows only those package paths (not all of jsdelivr).
+SWAGGER_UI_CDN = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/"
+REDOC_CDN = "https://cdn.jsdelivr.net/npm/redoc@2.1.5/"
 DOCS_CSP = (
-    "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+    f"default-src 'none'; script-src 'unsafe-inline' {SWAGGER_UI_CDN} {REDOC_CDN}; "
+    f"style-src 'unsafe-inline' {SWAGGER_UI_CDN} {REDOC_CDN} https://fonts.googleapis.com; "
     "font-src https://fonts.gstatic.com; img-src 'self' data: https://fastapi.tiangolo.com "
     "https://cdn.redoc.ly; connect-src 'self'; worker-src blob:; frame-ancestors 'none'"
 )
@@ -64,6 +78,10 @@ DOCS_CSP = (
 
 def _now() -> float:
     return time.time()
+
+
+def _monotonic() -> float:
+    return time.monotonic()
 
 
 # --- request id, headers, catch-all ---------------------------------------------------------
@@ -78,8 +96,13 @@ def request_id_of(scope: Scope) -> str:
 
 
 def _new_request_id(scope: Scope) -> str:
+    """A proxy's well-formed X-Request-ID is kept (one id across the hops); else a new one.
+
+    Only a trusted proxy may name the id: a client could otherwise plant ids in our logs.
+    """
     incoming = Headers(scope=scope).get(REQUEST_ID_HEADER, "")
-    if _REQUEST_ID.fullmatch(incoming):
+    peer = scope.get("client")
+    if _REQUEST_ID.fullmatch(incoming) and peer and is_trusted_proxy(peer[0]):
         return incoming
     return uuid.uuid4().hex
 
@@ -103,6 +126,7 @@ class SecurityMiddleware:
                 for name, value in SECURITY_HEADERS.items():
                     headers.setdefault(name, value)  # a route's own value wins
                 headers.setdefault(REQUEST_ID_HEADER, rid)
+                _add_owner_cookie(scope, headers)
             await send(message)
 
         try:
@@ -116,6 +140,17 @@ class SecurityMiddleware:
                 {"detail": "internal error", "request_id": rid}, status_code=500
             )
             await response(scope, receive, send_with_headers)
+
+
+def _add_owner_cookie(scope: Scope, headers: MutableHeaders) -> None:
+    """The one place a new owner's cookie is set: on any response (error, file, stream)."""
+    token = scope.get("state", {}).get(NEW_OWNER_TOKEN)
+    if not token:
+        return
+    prefix = f"{COOKIE_NAME}="
+    if any(v.startswith(prefix) for v in headers.getlist("set-cookie")):
+        return  # the route set it itself
+    headers.append("set-cookie", owner_cookie_header(token))
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -140,11 +175,16 @@ class RateLimitUnavailable(Exception):
 
 
 class RateLimiter:
-    """Fixed one-minute windows in Redis: key `rl:{scope}:{key}:{window}`."""
+    """Fixed one-minute windows in Redis: key `rl:{scope}:{key}:{window}`.
+
+    A circuit breaker: after a Redis failure, Redis is skipped for BREAKER_OPEN_S and every
+    hit is treated as a failure (fail open or closed per scope, as with Redis down).
+    """
 
     def __init__(self, redis: aioredis.Redis) -> None:
         self.redis = redis
         self._last_warning: dict[str, float] = {}
+        self._open_until = 0.0
 
     @staticmethod
     def limit_for(scope: str, settings: Settings) -> int:
@@ -159,6 +199,10 @@ class RateLimiter:
 
         Redis down: None (fail open) or RateLimitUnavailable (fail closed).
         """
+        if _monotonic() < self._open_until:
+            if fail_open:
+                return None
+            raise RateLimitUnavailable(scope)
         now = _now()
         window = int(now) // WINDOW_S
         rkey = f"rl:{scope}:{key}:{window}"
@@ -168,6 +212,7 @@ class RateLimiter:
                 pipe.expire(rkey, WINDOW_S)
                 count, _ = await pipe.execute()
         except (RedisError, OSError) as exc:
+            self._open_until = _monotonic() + BREAKER_OPEN_S
             self._warn(scope, exc, fail_open)
             if fail_open:
                 return None
@@ -177,7 +222,7 @@ class RateLimiter:
         return max(1, math.ceil((window + 1) * WINDOW_S - now))
 
     def _warn(self, scope: str, exc: Exception, fail_open: bool) -> None:
-        now = time.monotonic()
+        now = _monotonic()
         last = self._last_warning.get(scope)
         if last is not None and now - last < WARN_EVERY_S:
             return
@@ -199,7 +244,8 @@ class IpRateLimitMiddleware:
         if scope["type"] != "http" or (scope["method"], scope["path"]) == EXEMPT:
             await self.app(scope, receive, send)
             return
-        retry = await self.limiter.hit("ip", client_ip(Request(scope)), fail_open=True)
+        key = rate_key_for_ip(client_ip(Request(scope)))
+        retry = await self.limiter.hit("ip", key, fail_open=True)
         if retry is not None:
             response = JSONResponse(
                 {"detail": RATE_LIMITED}, status_code=429, headers={"Retry-After": str(retry)}
@@ -238,13 +284,22 @@ def _docs_routes(app: FastAPI) -> None:
 
     @app.get(f"{API_PREFIX}/docs", include_in_schema=False)
     async def swagger():
-        response = get_swagger_ui_html(openapi_url=openapi_url, title=f"{app.title} docs")
+        response = get_swagger_ui_html(
+            openapi_url=openapi_url,
+            title=f"{app.title} docs",
+            swagger_js_url=f"{SWAGGER_UI_CDN}swagger-ui-bundle.js",
+            swagger_css_url=f"{SWAGGER_UI_CDN}swagger-ui.css",
+        )
         response.headers["Content-Security-Policy"] = DOCS_CSP
         return response
 
     @app.get(f"{API_PREFIX}/redoc", include_in_schema=False)
     async def redoc():
-        response = get_redoc_html(openapi_url=openapi_url, title=f"{app.title} docs")
+        response = get_redoc_html(
+            openapi_url=openapi_url,
+            title=f"{app.title} docs",
+            redoc_js_url=f"{REDOC_CDN}bundles/redoc.standalone.js",
+        )
         response.headers["Content-Security-Policy"] = DOCS_CSP
         return response
 

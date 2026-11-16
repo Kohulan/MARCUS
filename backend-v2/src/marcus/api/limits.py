@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import owners_from_ip
+from marcus.api.deps import owners_from_ip, rate_key_for_ip
 from marcus.core.enums import OwnerKind, PaperStatus
 from marcus.core.models import ImageJob, Owner, Paper
 from marcus.core.settings import get_settings
@@ -30,7 +30,7 @@ async def _count_active(db: AsyncSession, *filters_paper, ip: str | None = None)
 
 
 async def enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None:
-    """429 when the owner (3) or the client address (6) already has too much active work.
+    """429 when the owner (3) or the client address (6; an IPv6 /64) has too much active work.
 
     Active = papers checking|processing plus image jobs queued|processing.
     """
@@ -40,7 +40,8 @@ async def enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None
     if owner.kind != OwnerKind.BROWSER.value:
         return  # API keys get a daily page quota instead
     # An unknown client address is one shared bucket (fail closed), like any other address.
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"ip:{ip}"))))
+    ip_key = rate_key_for_ip(ip)  # an IPv6 client's /64
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"ip:{ip_key}"))))
     if await _count_active(db, owner.id) >= settings.browser_max_active_papers:
         raise HTTPException(status_code=429, detail="Too many active papers")
     if await _count_active(db, ip=ip) >= settings.ip_max_active_papers:

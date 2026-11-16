@@ -1,12 +1,15 @@
+import ast
 import csv
 import io
 import json
+import pathlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from rdkit import Chem
 from sqlalchemy import select, update
 
+import marcus.api.routes
 from marcus.api import export
 from marcus.core import storage
 from marcus.core.enums import Engine
@@ -216,6 +219,24 @@ async def test_curation_validation_limits(app, async_db_session):
     assert (await _curate(app, token, seg, ok)).status_code == 200
 
 
+async def test_curation_molfile_must_parse(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    good = Chem.MolToMolBlock(Chem.MolFromSmiles("CCO"))
+    # five-valent carbon: reads as a block but fails sanitization
+    bad_valence = Chem.MolToMolBlock(Chem.MolFromSmiles("C(C)(C)(C)(C)C", sanitize=False))
+    for molfile in ("not a molfile", "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n", bad_valence):
+        r = await _curate(app, token, seg, {"status": "accepted", "molfile": molfile})
+        assert r.status_code == 422, molfile
+        assert "molfile" in json.dumps(r.json()["detail"])
+    assert (await _curation_row(db, seg)).molfile is None
+    r = await _curate(app, token, seg, {"status": "accepted", "molfile": good})
+    assert r.status_code == 200
+    assert (await _curation_row(db, seg)).molfile == good
+
+
 # --- predictions --------------------------------------------------------------------------
 
 
@@ -255,6 +276,20 @@ async def test_fake_engine_allowed_when_enabled(app, async_db_session, monkeypat
             f"/api/v2/segments/{seeded.segment_ids[0]}/predictions", json={"engine": "fake"}
         )
     assert r.status_code == 202
+
+
+def test_routes_share_read_helpers_through_read_module():
+    """Route modules never import each other; shared read helpers live in marcus.api.read."""
+    from marcus.api import read
+    from marcus.api.routes import events, papers, segments
+
+    for path in pathlib.Path(marcus.api.routes.__path__[0]).glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith("marcus.api.routes"), (path.name, node.module)
+    assert events.steps_by_status is read.steps_by_status
+    assert papers.segments_out is read.segments_out
+    assert segments.IMAGE_HEADERS is read.IMAGE_HEADERS
 
 
 # --- export -------------------------------------------------------------------------------
@@ -367,6 +402,33 @@ async def test_export_falls_back_to_any_engine_and_uses_curated_molfile(app, asy
     r = await _export(app, token, seeded.paper_id, "csv")
     rows = list(csv.reader(io.StringIO(r.text)))[1:]
     assert [(row[0], row[4]) for row in rows] == [(str(s0), "predicted"), (str(s1), "curated")]
+
+
+async def test_export_leaves_out_segments_without_a_valid_structure(app, async_db_session):
+    """s0 has no predictions at all; s1 has only invalid ones: neither is exported."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    s0, s1 = seeded.segment_ids
+
+    def add(s):
+        for engine in ("decimer", "molnextr"):
+            s.add(Prediction(segment_id=s1, engine=engine, engine_version="v", smiles="C(",
+                             valid=False, ms=1))  # fmt: skip
+
+    await db.run_sync(add)
+    await db.commit()
+    r = await _export(app, token, seeded.paper_id, "json")
+    assert r.status_code == 200 and json.loads(r.content)["segments"] == []
+    r = await _export(app, token, seeded.paper_id, "csv")
+    assert list(csv.reader(io.StringIO(r.text))) == [
+        ["segment_id", "page", "idx", "smiles", "source"]
+    ]
+    r = await _export(app, token, seeded.paper_id, "sdf")
+    assert r.status_code == 200
+    assert list(Chem.ForwardSDMolSupplier(io.BytesIO(r.content))) == []
+    for seg in (s0, s1):
+        assert str(seg) not in r.text
 
 
 def test_csv_cells_escape_formulas():

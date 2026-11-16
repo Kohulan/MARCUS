@@ -1,9 +1,11 @@
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
 import pytest
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, update
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import func, select, update
 from starlette.datastructures import Headers
 
 from marcus.api.deps import client_ip, current_owner
@@ -11,6 +13,7 @@ from marcus.api.main import create_app
 from marcus.core.db import get_db
 from marcus.core.enums import OwnerKind, PriorityClass
 from marcus.core.models import Owner
+from marcus.core.settings import get_settings
 from marcus.core.tokens import hash_token, new_token
 
 COOKIE = "marcus_owner"
@@ -29,6 +32,30 @@ def app(async_db_session):
     @router.get("/api/v2/_whoami")
     async def whoami(owner: Owner = Depends(current_owner)):
         return {"id": str(owner.id), "kind": owner.kind, "priority": owner.priority_class}
+
+    @router.get("/api/v2/_file")
+    async def file(owner: Owner = Depends(current_owner)):
+        path = get_settings().data_root / "f.txt"
+        path.write_text("file body")
+        return FileResponse(path, media_type="text/plain")
+
+    @router.get("/api/v2/_stream")
+    async def stream(owner: Owner = Depends(current_owner)):
+        async def body():
+            yield "data: one\n\n"
+            yield "data: two\n\n"
+
+        return StreamingResponse(body(), media_type="text/event-stream")
+
+    @router.get("/api/v2/_own_cookie")
+    async def own_cookie(owner: Owner = Depends(current_owner)):
+        response = Response("ok")
+        response.set_cookie(COOKIE, "route-value", path="/api/v2")
+        return response
+
+    @router.get("/api/v2/_boom_after_owner")
+    async def boom(owner: Owner = Depends(current_owner)):
+        raise RuntimeError("late failure")
 
     app.include_router(router)
 
@@ -174,3 +201,127 @@ async def test_concurrent_new_owners_respect_the_ip_limit(migrated_db, app, asyn
     assert codes == [200] * 10 + [429] * 20
     n = (await async_db_session.execute(select(func.count()).select_from(Owner))).scalar_one()
     assert n == 10
+
+
+# --- the new-owner cookie reaches the client on any response ----------------------------
+
+
+def owner_cookies(r: httpx.Response) -> list[str]:
+    return [v for v in r.headers.get_list("set-cookie") if v.startswith(f"{COOKIE}=")]
+
+
+def assert_owner_cookie(r: httpx.Response) -> None:
+    (sc,) = owner_cookies(r)
+    low = sc.lower()
+    assert "httponly" in low and "samesite=strict" in low and "secure" in low
+    assert "path=/api/v2" in low and "max-age=2592000" in low
+
+
+async def owner_ids(db) -> list[str]:
+    return [str(i) for i in (await db.execute(select(Owner.id))).scalars()]
+
+
+async def assert_cookie_maps_to_the_new_owner(c, db) -> None:
+    (created,) = await owner_ids(db)
+    r = await c.get("/api/v2/_whoami")
+    assert r.status_code == 200 and r.json()["id"] == created
+    assert owner_cookies(r) == []  # a known cookie is not re-issued
+    assert await owner_ids(db) == [created]
+
+
+@pytest.mark.parametrize(
+    "path,status",
+    [
+        ("/api/v2/papers/00000000-0000-0000-0000-000000000000", 404),
+        ("/api/v2/_file", 200),
+        ("/api/v2/_stream", 200),
+        ("/api/v2/_boom_after_owner", 500),
+    ],
+)
+async def test_new_owner_cookie_on_any_response(app, async_db_session, path, status):
+    async with make_client(app) as c:
+        r = await c.get(path)
+        assert r.status_code == status
+        assert_owner_cookie(r)
+        await assert_cookie_maps_to_the_new_owner(c, async_db_session)
+
+
+async def test_new_owner_cookie_on_413(app, async_db_session):
+    big = b"%PDF-1.4\n" + b"0" * (20 * 1024 * 1024 + 1)
+    async with make_client(app) as c:
+        r = await c.post("/api/v2/papers", files={"file": ("p.pdf", big, "application/pdf")})
+        assert r.status_code == 413
+        assert_owner_cookie(r)
+        await assert_cookie_maps_to_the_new_owner(c, async_db_session)
+
+
+async def test_new_owner_cookie_on_429(app, async_db_session, monkeypatch, clear_settings_cache):
+    monkeypatch.setenv("MARCUS_IP_MAX_ACTIVE_PAPERS", "1")
+    clear_settings_cache()
+    pdf = b"%PDF-1.4\n" + b"0" * 100
+    async with make_client(app) as first:
+        assert (await first.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
+    async with make_client(app) as c:
+        r = await c.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        assert r.status_code == 429 and "address" in r.json()["detail"]
+        assert_owner_cookie(r)
+        new_id = (await c.get("/api/v2/_whoami")).json()["id"]
+    assert len(await owner_ids(async_db_session)) == 2 and new_id in await owner_ids(
+        async_db_session
+    )
+
+
+async def test_route_cookie_is_not_duplicated(app):
+    async with make_client(app) as c:
+        r = await c.get("/api/v2/_own_cookie")
+    assert owner_cookies(r) == [r.headers["set-cookie"]]
+    assert "route-value" in r.headers["set-cookie"]
+
+
+async def test_one_cookie_on_a_plain_json_response(app):
+    async with make_client(app) as c:
+        r = await c.get("/api/v2/_whoami")
+    assert_owner_cookie(r)
+
+
+# --- last_seen_at is written at most once a minute ----------------------------------------
+
+
+async def _set_last_seen(db, owner_id, when) -> None:
+    await db.execute(update(Owner).where(Owner.id == owner_id).values(last_seen_at=when))
+    await db.commit()
+
+
+async def _last_seen(db, owner_id) -> datetime:
+    return (
+        await db.execute(
+            select(Owner.last_seen_at)
+            .where(Owner.id == owner_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+
+
+async def test_last_seen_at_is_throttled(app, async_db_session):
+    db = async_db_session
+    token = new_token()
+    owner = Owner(
+        kind=OwnerKind.BROWSER.value,
+        token_hash=hash_token(token),
+        priority_class=int(PriorityClass.BROWSER),
+    )
+    db.add(owner)
+    await db.commit()
+    recent = datetime.now(UTC) - timedelta(seconds=30)
+    await _set_last_seen(db, owner.id, recent)
+    async with make_client(app) as c:
+        c.cookies.set(COOKIE, token)
+        assert (await c.get("/api/v2/_whoami")).status_code == 200
+        assert await _last_seen(db, owner.id) == recent  # under a minute: no write
+        stale = datetime.now(UTC) - timedelta(seconds=120)
+        await _set_last_seen(db, owner.id, stale)
+        before = datetime.now(UTC) - timedelta(seconds=5)
+        assert (await c.get("/api/v2/_whoami")).status_code == 200
+    assert await _last_seen(db, owner.id) >= before
+    n = (await db.execute(select(func.count()).select_from(Owner))).scalar_one()
+    assert n == 1

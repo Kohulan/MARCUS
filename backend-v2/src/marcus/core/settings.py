@@ -2,7 +2,7 @@ import ipaddress
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,12 +22,16 @@ class Settings(BaseSettings):
     trusted_proxies: list[str] = []
     enable_fake_engines: bool = False
     cookie_secure: bool = True
-    sse_ping_interval_s: float = 15.0
+    sse_ping_interval_s: float = Field(15.0, gt=0)
+    sse_max_streams_per_owner: int = Field(4, gt=0)
+    sse_max_duration_s: float = Field(30 * 60, gt=0)  # then the client reconnects
+    events_redis_max_connections: int = Field(200, gt=0)  # API pool: pub/sub + stream slots
     # fixed one-minute windows in Redis
     rate_limit_upload_per_min: int = 10  # per owner: POST /papers and POST /images together
     rate_limit_tools_per_min: int = 60  # per owner: every /tools/* call
     rate_limit_ip_per_min: int = 300  # per client IP: every route except GET /api/v2/health
     cors_origins: list[str] = []
+    image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
 
     @field_validator("trusted_proxies")
@@ -42,6 +46,14 @@ class Settings(BaseSettings):
                     f"trusted_proxies: {entry!r} is not an IP address or CIDR"
                 ) from None
         return [entry.strip() for entry in value]
+
+    @field_validator("cors_origins")
+    @classmethod
+    def _no_wildcard_origin(cls, value: list[str]) -> list[str]:
+        """Credentials are allowed, so a wildcard would let any site act as the visitor."""
+        if any(entry.strip() == "*" for entry in value):
+            raise ValueError("cors_origins: '*' is not allowed; list each origin")
+        return value
 
 
 @lru_cache

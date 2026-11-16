@@ -17,13 +17,32 @@ COOKIE_NAME = "marcus_owner"
 COOKIE_MAX_AGE = 30 * 24 * 3600
 COOKIE_PATH = "/api/v2"
 UNKNOWN_IP = "unknown"
+# request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out
+NEW_OWNER_TOKEN = "new_owner_token"
+TOUCH_EVERY = timedelta(seconds=60)  # last_seen_at is written at most this often
+IPV6_RATE_PREFIX = 64  # one IPv6 client usually holds a whole /64
 
 
 def _parse_ip(value: str):
+    """An address, or None. An IPv4-mapped IPv6 address (dual-stack socket) is its IPv4."""
     try:
-        return ipaddress.ip_address(value.strip())
+        addr = ipaddress.ip_address(value.strip())
     except ValueError:
         return None
+    if addr.version == 6 and addr.ipv4_mapped is not None:
+        return addr.ipv4_mapped
+    return addr
+
+
+def rate_key_for_ip(ip: str) -> str:
+    """The per-address bucket for limits: an IPv6 client's /64, else the address as is.
+
+    Used by the per-IP rate limit, the new-owner limit and the active-paper limit.
+    """
+    addr = _parse_ip(ip)
+    if addr is None or addr.version == 4:
+        return ip
+    return str(ipaddress.IPv6Network((int(addr), IPV6_RATE_PREFIX), strict=False))
 
 
 def _trusted_networks() -> list:
@@ -33,6 +52,12 @@ def _trusted_networks() -> list:
 
 def _is_trusted(addr, nets) -> bool:
     return any(addr in n for n in nets if n.version == addr.version)
+
+
+def is_trusted_proxy(host: str | None) -> bool:
+    """Whether a socket peer is one of `trusted_proxies`."""
+    addr = _parse_ip(host) if host else None
+    return addr is not None and _is_trusted(addr, _trusted_networks())
 
 
 def client_ip(request: Request) -> str:
@@ -62,11 +87,15 @@ def client_ip(request: Request) -> str:
 
 
 def owners_from_ip(ip: str):
-    """SQL condition for browser owners created from `ip` (unknown = created without an IP)."""
+    """SQL condition for browser owners created from `ip`'s bucket (`rate_key_for_ip`).
+
+    Unknown = created without an IP; IPv6 = any address in the same /64.
+    """
     if ip == UNKNOWN_IP or _parse_ip(ip) is None:
         where = Owner.created_ip.is_(None)
     else:
-        where = Owner.created_ip == func.cast(ip, INET)
+        # `<<=`: contained in or equal to (an IPv4 key is a single address)
+        where = Owner.created_ip.op("<<=")(func.cast(rate_key_for_ip(ip), INET))
     return and_(Owner.kind == OwnerKind.BROWSER.value, where)
 
 
@@ -79,13 +108,35 @@ def _bearer(request: Request) -> str | None:
 
 
 async def _touch(db: AsyncSession, owner: Owner) -> None:
-    owner.last_seen_at = datetime.now(UTC)
+    """Record activity at most once a minute (no write per request)."""
+    now = datetime.now(UTC)
+    if owner.last_seen_at is not None and now - owner.last_seen_at < TOUCH_EVERY:
+        return
+    owner.last_seen_at = now
     await db.commit()
 
 
-async def current_owner(
-    request: Request, response: Response, db: AsyncSession = Depends(get_db)
-) -> Owner:
+def owner_cookie_header(token: str) -> str:
+    """The `Set-Cookie` value for a new browser owner's token."""
+    response = Response()
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=COOKIE_MAX_AGE,
+        path=COOKIE_PATH,
+        httponly=True,
+        samesite="strict",
+        secure=get_settings().cookie_secure,
+    )
+    return response.headers["set-cookie"]
+
+
+async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner:
+    """The caller's owner: API key, else browser cookie, else a new browser owner.
+
+    A new owner's token goes on `request.state`; SecurityMiddleware sets the cookie on the
+    response, whatever it is (an error, a file, a stream), not only on a route's own one.
+    """
     settings = get_settings()
 
     key = _bearer(request)
@@ -122,7 +173,7 @@ async def current_owner(
     ip_valid = _parse_ip(ip) is not None
     # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
     # An unknown address is one shared bucket (fail closed), not a free pass.
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(ip))))
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
     since = datetime.now(UTC) - timedelta(hours=1)
     recent = (
         await db.execute(
@@ -143,15 +194,7 @@ async def current_owner(
     )
     db.add(owner)
     await db.commit()
-    response.set_cookie(
-        COOKIE_NAME,
-        token,
-        max_age=COOKIE_MAX_AGE,
-        path=COOKIE_PATH,
-        httponly=True,
-        samesite="strict",
-        secure=settings.cookie_secure,
-    )
+    setattr(request.state, NEW_OWNER_TOKEN, token)
     return owner
 
 
