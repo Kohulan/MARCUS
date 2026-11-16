@@ -1,0 +1,177 @@
+"""Fair dispatcher core: choose the next step per queue, hand it to Celery, rescue stuck steps.
+
+Every function takes a sync SQLAlchemy Session. Unlike the planner, these functions own
+their transactions and commit: a step is marked `queued` and committed before it is sent,
+so a fast worker never sees it still `pending`.
+
+Lock order. The planner locks the paper (or image job) row, then the step row.
+- pick_next locks ONLY the step row (FOR UPDATE OF s SKIP LOCKED), never the paper, so it
+  can never wait in a cycle with the planner; a step the planner holds is simply skipped.
+- watchdog locks the parent row, then the step row, the same order as the planner.
+"""
+
+import logging
+import uuid
+from collections.abc import Callable
+
+from sqlalchemy import case, func, select, text, update
+from sqlalchemy.orm import Session
+
+from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.models import ImageJob, Paper, Step
+from marcus.core.pipeline import fail_step
+from marcus.core.queues import SLOTS, TIME_LIMITS
+from marcus.core.settings import get_settings
+
+log = logging.getLogger(__name__)
+
+GRACE_S = 30  # watchdog: a step may sit in queued/running for its hard limit plus this
+
+Send = Callable[[str, uuid.UUID, StepKind], None]
+
+_BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
+
+# Order: priority class, then owner usage on this queue in the fair window, then the oldest
+# paper / image job, then step order. One statement; the chosen row is locked, rows another
+# dispatcher (or the planner) holds are skipped.
+_PICK_SQL = text(
+    """
+    WITH usage AS (
+      SELECT COALESCE(p.owner_id, j.owner_id) AS owner_id, count(*) AS n
+      FROM steps s LEFT JOIN papers p ON p.id = s.paper_id
+                   LEFT JOIN image_jobs j ON j.id = s.image_job_id
+      WHERE s.queue = :q AND (s.status IN ('queued','running')
+            OR s.finished_at > now() - make_interval(secs => :window))
+      GROUP BY 1)
+    SELECT s.* FROM steps s
+      LEFT JOIN papers p ON p.id = s.paper_id LEFT JOIN image_jobs j ON j.id = s.image_job_id
+      JOIN owners o ON o.id = COALESCE(p.owner_id, j.owner_id)
+      LEFT JOIN usage u ON u.owner_id = o.id
+    WHERE s.queue = :q AND s.status = 'pending'
+    ORDER BY o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
+             s.seq, s.created_at
+    LIMIT 1 FOR UPDATE OF s SKIP LOCKED
+    """
+)
+
+
+def free_slots(session: Session, queue: str) -> int:
+    """SLOTS[queue] minus the steps of that queue that are queued or running."""
+    busy = session.execute(
+        select(func.count()).select_from(Step).where(Step.queue == queue, Step.status.in_(_BUSY))
+    ).scalar_one()
+    return SLOTS[queue] - busy
+
+
+def pick_next(session: Session, queue: str) -> Step | None:
+    """Lock and return the next pending step of `queue` in fair order, or None.
+
+    The row stays locked until the caller ends the transaction.
+    """
+    stmt = select(Step).from_statement(_PICK_SQL).execution_options(populate_existing=True)
+    params = {"q": queue, "window": float(get_settings().fair_window_s)}
+    return session.execute(stmt, params).scalars().first()
+
+
+def _put_back(session: Session, step_id: uuid.UUID) -> None:
+    """After a failed send: back to pending, but only if nobody moved the step on since."""
+    session.execute(
+        update(Step)
+        .where(Step.id == step_id, Step.status == StepStatus.QUEUED.value)
+        .values(status=StepStatus.PENDING.value, queued_at=None)
+        .execution_options(synchronize_session=False)
+    )
+    session.commit()
+
+
+def dispatch_once(session: Session, send: Send) -> int:
+    """Fill every free slot of every queue. Returns the number of steps sent.
+
+    Per step: mark it `queued` (+ queued_at), commit, then send. If send raises, the step
+    goes back to `pending` in a new transaction and the dispatcher moves to the next queue.
+    """
+    sent = 0
+    for queue in SLOTS:  # stable order
+        while free_slots(session, queue) > 0:
+            step = pick_next(session, queue)
+            if step is None:
+                break
+            step_id, kind = step.id, StepKind(step.kind)
+            step.status = StepStatus.QUEUED.value
+            step.queued_at = func.now()
+            session.commit()
+            try:
+                send(queue, step_id, kind)
+            except Exception:
+                log.exception("send failed for step %s on %s; back to pending", step_id, queue)
+                session.rollback()
+                _put_back(session, step_id)
+                break
+            sent += 1
+        session.rollback()  # end the read-only transaction of the last free_slots / pick
+    return sent
+
+
+# --- watchdog ------------------------------------------------------------------------------
+
+
+def _deadline_s():
+    """Per-step allowance in seconds: the hard limit of its kind plus the grace."""
+    return case(
+        *((Step.kind == kind.value, hard + GRACE_S) for kind, (_, hard) in TIME_LIMITS.items()),
+        else_=max(hard for _, hard in TIME_LIMITS.values()) + GRACE_S,
+    )
+
+
+def _stuck():
+    """SQL condition: queued or running for longer than the step's deadline."""
+    limit = func.now() - func.make_interval(0, 0, 0, 0, 0, 0, _deadline_s())
+    return ((Step.status == StepStatus.QUEUED.value) & (Step.queued_at < limit)) | (
+        (Step.status == StepStatus.RUNNING.value) & (Step.started_at < limit)
+    )
+
+
+def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
+    """In the current transaction, lock the step's parent then the step and, if the step is
+    still stuck, fail it as worker_lost (retryable). Does not commit. Returns True if failed.
+    """
+    parent = session.execute(
+        select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
+    ).one_or_none()
+    if parent is None:
+        return False
+    if parent.paper_id is not None:
+        session.execute(select(Paper.id).where(Paper.id == parent.paper_id).with_for_update())
+    else:
+        session.execute(
+            select(ImageJob.id).where(ImageJob.id == parent.image_job_id).with_for_update()
+        )
+    still = session.execute(
+        select(Step.id).where(Step.id == step_id, _stuck()).with_for_update()
+    ).scalar_one_or_none()
+    if still is None:
+        return False
+    fail_step(session, step_id, ErrorClass.WORKER_LOST, "watchdog: no progress", retryable=True)
+    return True
+
+
+def watchdog_once(session: Session) -> int:
+    """Fail (retry once, then final) steps stuck in queued/running. Returns the count.
+
+    The scan takes no locks; each step is re-checked and failed in its own transaction.
+    """
+    ids = list(session.execute(select(Step.id).where(_stuck())).scalars())
+    session.rollback()
+    done = 0
+    for step_id in ids:
+        try:
+            if fail_if_stuck(session, step_id):
+                session.commit()
+                done += 1
+                log.warning("watchdog: step %s stuck, marked worker_lost", step_id)
+            else:
+                session.rollback()
+        except Exception:
+            log.exception("watchdog: could not fail step %s", step_id)
+            session.rollback()
+    return done
