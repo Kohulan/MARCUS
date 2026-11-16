@@ -88,26 +88,72 @@ def test_page_count_works_inside_celery_prefork_style_daemon_process(tmp_path):
 
 def test_docling_threads_are_pinned_and_cpu_limit_scaled():
     env = pdfsafe._child_env(4)
+    assert env["TOKENIZERS_PARALLELISM"] == "false"
     assert env["OMP_NUM_THREADS"] == env["MKL_NUM_THREADS"] == env["OPENBLAS_NUM_THREADS"] == "4"
     assert "OMP_NUM_THREADS" not in pdfsafe._child_env()
 
 
-def test_cpu_limit_is_applied_in_child_and_kills_busy_loop():
-    # 1 s timeout -> RLIMIT_CPU 6 s; a busy child dies from SIGXCPU/timeout, never hangs.
-    with pytest.raises((pdfsafe.ChildTimeout, pdfsafe.ChildFailed)):
-        pdfsafe.run_op("_spin", [], timeout_s=1)
-
-
-def test_setrlimit_failure_is_a_child_failure():
+def _child(op, mem_mb, cpu_s, preexec=None, timeout=60):
     import json
     import subprocess
     import sys
 
-    out = subprocess.run(
-        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", "_fail", "2048", "-5"],
-        input=b'{"args": []}',
-        capture_output=True,
-        timeout=30,
-    )
-    reply = json.loads(out.stdout)
+    proc = subprocess.run(
+        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op, str(mem_mb),
+         str(cpu_s), str(os.getpid())],
+        input=b'{"args": []}', capture_output=True, timeout=timeout, preexec_fn=preexec,
+    )  # fmt: skip
+    return proc, (json.loads(proc.stdout) if proc.stdout else None)
+
+
+def test_cpu_limit_kills_a_busy_child_with_sigxcpu():
+    import signal
+
+    # Wall timeout (60 s) is far above the 1 s CPU limit, so only RLIMIT_CPU can stop it.
+    start = time.monotonic()
+    proc, reply = _child("_spin", 2048, 1)
+    assert proc.returncode == -signal.SIGXCPU
+    assert reply is None
+    assert time.monotonic() - start < 20
+
+
+def test_setrlimit_failure_is_a_child_failure():
+    import resource
+
+    def lower_hard_limit():
+        resource.setrlimit(resource.RLIMIT_AS, (2**30, 2**30))
+
+    # Hard RLIMIT_AS is 1 GiB, the child asks for 2 GiB: raising it must fail.
+    proc, reply = _child("_sleep", 2048, 60, preexec=lower_hard_limit)
     assert reply["ok"] is False
+    assert "ValueError" in reply["error"]
+
+
+def test_child_exits_if_parent_pid_does_not_match():
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", "_sleep", "2048", "60", "1"],
+        input=b'{"args": []}', capture_output=True, timeout=20,
+    )  # fmt: skip
+    assert out.returncode == 1 and out.stdout == b""
+
+
+def test_run_op_cpu_limit_has_headroom_for_threaded_ops(monkeypatch):
+    seen = {}
+
+    class Boom(Exception):
+        pass
+
+    def fake_popen(argv, **kw):
+        seen["argv"] = argv
+        raise Boom
+
+    monkeypatch.setattr(pdfsafe.subprocess, "Popen", fake_popen)
+    with pytest.raises(Boom):
+        pdfsafe.run_op("docling", [], 280, 32768, threads=4)
+    assert seen["argv"][-3:-1] == ["32768", str((4 + 2) * 285)]
+    with pytest.raises(Boom):
+        pdfsafe.run_op("count", [], 15)
+    assert seen["argv"][-2] == "20"

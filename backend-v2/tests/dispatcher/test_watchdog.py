@@ -171,3 +171,25 @@ def test_running_step_without_started_at_uses_queued_at(db_session):
     s.expire_all()
     row = s.get(Step, stuck.id)
     assert row.status == "pending" and row.error_class == "worker_lost"
+
+
+def test_watchdog_does_not_fail_100_page_docling_at_400s(db_session):
+    s = db_session
+    paper = make_paper(s)
+    paper.pages = 100
+    big = Step(
+        paper_id=paper.id, kind="docling", queue="q.cpu", seq=100_000, status="running",
+        attempts=1, started_at=ago(400),
+    )  # fmt: skip
+    small_paper = make_paper(s)
+    small_paper.pages = 2
+    small = Step(
+        paper_id=small_paper.id, kind="docling", queue="q.cpu", seq=100_000, status="running",
+        attempts=1, started_at=ago(400),
+    )  # fmt: skip
+    s.add_all([big, small])
+    s.commit()
+    assert watchdog_once(s) == 1  # only the 2-page paper is past 360 + 30 s
+    s.expire_all()
+    assert s.get(Step, big.id).status == "running"
+    assert s.get(Step, small.id).status != "running"

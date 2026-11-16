@@ -46,12 +46,14 @@ def paper_at(s, owner, minutes_ago: int) -> Paper:
 class Sent:
     def __init__(self, fail_on: set | None = None):
         self.calls: list[tuple[str, uuid.UUID, StepKind, int]] = []
+        self.pages: list[int | None] = []
         self.fail_on = fail_on or set()
 
-    def __call__(self, queue, step_id, kind, attempts):
+    def __call__(self, queue, step_id, kind, attempts, pages=None):
         if queue in self.fail_on:
             raise ConnectionError("broker down")
         self.calls.append((queue, step_id, kind, attempts))
+        self.pages.append(pages)
 
     def ids(self, queue=Q):
         return [sid for q, sid, _, _ in self.calls if q == queue]
@@ -187,7 +189,7 @@ def test_dispatch_commits_before_send(db_session, one_slot):
     s.commit()
     seen: list[str] = []
 
-    def send(queue, step_id, kind, attempts):
+    def send(queue, step_id, kind, attempts, pages=None):
         if queue != Q:
             return
         with get_sync_sessionmaker()() as other:  # a worker reading the row
@@ -282,3 +284,36 @@ def test_dispatch_sends_attempts_token(db_session, one_slot):
     dispatch_once(s, sent)
     assert [(sid, a) for q, sid, _, a in sent.calls if q == Q] == [(step.id, 1)]
     assert [a for q, _, _, a in sent.calls if q == "q.cpu"] == [0]
+
+
+def test_dispatch_sends_docling_pages_and_scaled_limits(db_session):
+    from marcus.core.queues import time_limits_for
+
+    s = db_session
+    paper = paper_at(s, make_owner(s), minutes_ago=1)
+    paper.pages = 100
+    s.add(
+        Step(
+            paper_id=paper.id, kind="docling", queue="q.cpu", seq=100_000, status="pending",
+        )
+    )
+    s.commit()
+    sent = Sent()
+    dispatch_once(s, sent)
+    docling = [(c, p) for c, p in zip(sent.calls, sent.pages) if c[2] == StepKind.DOCLING]
+    assert [p for _, p in docling] == [100]
+    assert time_limits_for(StepKind.DOCLING, 100) == (1260, 1320)
+
+
+def test_celery_send_uses_scaled_limits(monkeypatch):
+    from marcus.core import celery_app as ca
+    from marcus.dispatcher.__main__ import celery_send
+
+    seen = {}
+    monkeypatch.setattr(
+        ca.celery_app, "send_task", lambda name, **kw: seen.update(kw)
+    )
+    celery_send()("q.cpu", uuid.uuid4(), StepKind.DOCLING, 0, 100)
+    assert (seen["soft_time_limit"], seen["time_limit"]) == (1260, 1320)
+    celery_send()("q.cpu", uuid.uuid4(), StepKind.CHECK_PDF, 0, None)
+    assert (seen["soft_time_limit"], seen["time_limit"]) == (20, 30)

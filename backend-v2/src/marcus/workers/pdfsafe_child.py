@@ -54,17 +54,25 @@ def op_render(path: str, page: int, out: str, max_pages: int) -> None:
         doc.close()
 
 
-DOCLING_THREADS = 4
-
-
-def op_docling(path: str, out_dir: str) -> dict:
-    """Same call chain as v1: convert, then export_to_dict(); write text.json atomically."""
+def op_docling(path: str, out_dir: str, threads: int) -> dict:
+    """Same call chain as v1: convert, then export_to_dict(); write text.json atomically.
+    Every thread pool is pinned to `threads` (the parent scales RLIMIT_CPU by it)."""
     import torch
 
-    torch.set_num_threads(DOCLING_THREADS)  # CPU limit is scaled by this; see pdfsafe.run_op
-    from docling.document_converter import DocumentConverter
+    torch.set_num_interop_threads(1)  # must run before any torch work
+    torch.set_num_threads(threads)
+    from docling.datamodel.accelerator_options import AcceleratorOptions
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    doc = DocumentConverter().convert(path).document.export_to_dict()
+    options = PdfPipelineOptions(
+        accelerator_options=AcceleratorOptions(num_threads=threads, device="cpu")
+    )
+    converter = DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+    )
+    doc = converter.convert(path).document.export_to_dict()
     target = Path(out_dir)
     target.mkdir(parents=True, exist_ok=True)
     tmp = target / f".text.{uuid.uuid4().hex}.tmp"
@@ -136,15 +144,16 @@ OPS = {
 }
 
 
-def _harden(mem_mb: int, cpu_s: int) -> None:
+def _harden(mem_mb: int, cpu_s: int, parent_pid: int) -> None:
     """First thing in the child: die with the parent, then apply the resource limits."""
-    try:
+    if sys.platform == "linux":
         import ctypes
         import signal
 
-        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG (Linux)
-    except Exception:  # noqa: BLE001 - not Linux: no-op
-        pass
+        if ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL) != 0:  # PR_SET_PDEATHSIG
+            raise OSError("prctl(PR_SET_PDEATHSIG) failed")
+        if os.getppid() != parent_pid:  # the parent died before the prctl took effect
+            os._exit(1)
     import resource
 
     if mem_mb:
@@ -154,11 +163,11 @@ def _harden(mem_mb: int, cpu_s: int) -> None:
 
 
 def main(argv: list[str]) -> int:
-    """argv: [prog, OP, MEM_MB, CPU_S]. Limits are applied before anything is read or parsed."""
+    """argv: [prog, OP, MEM_MB, CPU_S, PARENT_PID]. Limits are applied before anything is read or parsed."""
     reply_fd = os.dup(1)
     os.dup2(2, 1)  # stray prints go to stderr
     try:
-        _harden(int(argv[2]), int(argv[3]))
+        _harden(int(argv[2]), int(argv[3]), int(argv[4]))
         op = OPS[argv[1]]
         args = json.loads(sys.stdin.read())["args"]
         reply = {"ok": True, "result": op(*args)}

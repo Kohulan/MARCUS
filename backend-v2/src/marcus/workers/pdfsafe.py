@@ -25,7 +25,8 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 DEFAULT_MEM_MB = 2048
-DOCLING_THREADS = 4
+DOCLING_THREADS = 4  # defined once; passed to the child as an op argument
+CPU_HEADROOM_THREADS = 2  # RLIMIT_CPU = (threads + 2) x (timeout + 5): stray pools never trip it
 # docling imports torch, which maps ~24 GiB of address space (thread stacks, CUDA libs): measured
 # segfault at 8 GiB, "resource unavailable" at 16 GiB, success at 24 GiB. RLIMIT_AS is a
 # virtual limit, so 32 GiB still caps a runaway parse.
@@ -49,6 +50,7 @@ def _child_env(threads: int | None = None) -> dict[str, str]:
     if threads:
         for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
             env[name] = str(threads)
+        env["TOKENIZERS_PARALLELISM"] = "false"
     return env
 
 
@@ -83,12 +85,12 @@ def run_op(
     """Run a child op with JSON-able args; return its JSON result. Raises ChildTimeout or
     ChildFailed. The child applies RLIMIT_AS (mem_mb) and RLIMIT_CPU itself before touching the
     input. RLIMIT_CPU counts CPU seconds over all threads, so a multi-threaded op passes
-    `threads`: the thread env vars are pinned to it and the CPU limit is threads x (timeout+5)."""
-    cpu_s = (threads or 1) * (int(timeout_s) + 5)
+    `threads`: the thread env vars are pinned to it and the CPU limit is (threads+2) x (timeout+5)."""
+    cpu_s = (threads + CPU_HEADROOM_THREADS if threads else 1) * (int(timeout_s) + 5)
     proc = subprocess.Popen(
         [
             sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op,
-            str(mem_mb or 0), str(cpu_s),
+            str(mem_mb or 0), str(cpu_s), str(os.getpid()),
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -182,4 +184,5 @@ def render_page_png(
 
 def run_docling(path: Path, out_dir: Path, timeout_s: int, mem_mb: int = DOCLING_MEM_MB) -> None:
     """Convert in a child; it writes out_dir/text.json (temp + replace)."""
-    _run_pdf("docling", [str(path), str(out_dir)], timeout_s, mem_mb, DOCLING_THREADS)
+    _run_pdf("docling", [str(path), str(out_dir), DOCLING_THREADS], timeout_s, mem_mb, DOCLING_THREADS
+    )

@@ -4,6 +4,7 @@ Handlers are called directly with a fake Step view; no Celery or database needed
 """
 
 import json
+import resource
 import shutil
 import time
 import uuid
@@ -107,6 +108,30 @@ def test_docling_goes_through_isolated_child(monkeypatch):
     assert calls == [(pdf_path(pid), paper_dir(pid), 280, 32768)]
 
 
+class _FakeSession:
+    def __init__(self, pages):
+        self.pages = pages
+        self.rolled_back = False
+
+    def execute(self, stmt):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.pages)
+
+    def rollback(self):
+        self.rolled_back = True
+
+
+def test_docling_child_timeout_scales_with_pages(monkeypatch):
+    pid = make_paper_with("two_page.pdf")
+    seen = []
+    monkeypatch.setattr(
+        cpu.pdfsafe, "run_docling", lambda path, out, timeout_s, mem_mb=0: seen.append(timeout_s)
+    )
+    session = _FakeSession(100)
+    cpu.docling(view(pid), session)
+    assert seen == [1260 - 20]  # soft limit for 100 pages minus the margin
+    assert session.rolled_back
+
+
 @pytest.mark.ml
 def test_docling_real_conversion():
     pid = make_paper_with("two_page.pdf")
@@ -141,7 +166,7 @@ def test_child_timeouts_are_below_celery_soft_limits():
 
     assert cpu.CHECK_TIMEOUT_S < TIME_LIMITS["check_pdf"][0]
     assert cpu.RENDER_TIMEOUT_S < TIME_LIMITS["render_page"][0]
-    assert cpu.DOCLING_TIMEOUT_S < TIME_LIMITS["docling"][0]
+    assert 300 - cpu.DOCLING_MARGIN_S < TIME_LIMITS["docling"][0]
     assert cpu.DOI_TOTAL_S < TIME_LIMITS["doi"][0]
 
 
@@ -161,5 +186,13 @@ def test_docling_real_multipage_paper_within_cpu_limit():
     pid = uuid.uuid4()
     pdf_path(pid).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(GOLD, pdf_path(pid))
+    before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    start = time.monotonic()
     assert cpu.docling(view(pid), None) == {"text_path": "text.json"}
+    wall = time.monotonic() - start
+    after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    cpu_used = (after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime)
+    limit = (pdfsafe.DOCLING_THREADS + pdfsafe.CPU_HEADROOM_THREADS) * (280 + 5)
+    print(f"docling wall {wall:.1f} s, child cpu {cpu_used:.1f} s, cpu limit {limit} s")
+    assert cpu_used < 0.8 * limit
     assert "texts" in json.loads((paper_dir(pid) / "text.json").read_text())

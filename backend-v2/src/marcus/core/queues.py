@@ -57,3 +57,18 @@ TIME_LIMITS: dict[StepKind, tuple[int, int]] = {
     StepKind.DOI: (15, 20),
     StepKind.ANNOTATE: (120, 150),
 }
+
+
+# Docling time scales with the page count (~11 s/page measured): soft = max(300, 60 + 12 x pages).
+DOCLING_MIN_SOFT_S = 300
+DOCLING_FIXED_S = 60
+DOCLING_PER_PAGE_S = 12
+DOCLING_HARD_EXTRA_S = 60
+
+
+def time_limits_for(kind: StepKind, pages: int | None) -> tuple[int, int]:
+    """(soft, hard) seconds for a step. Only docling depends on the paper's page count."""
+    if StepKind(kind) is StepKind.DOCLING:
+        soft = max(DOCLING_MIN_SOFT_S, DOCLING_FIXED_S + DOCLING_PER_PAGE_S * (pages or 0))
+        return soft, soft + DOCLING_HARD_EXTRA_S
+    return TIME_LIMITS[StepKind(kind)]

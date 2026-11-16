@@ -20,7 +20,7 @@ from sqlalchemy.engine import make_url
 
 from marcus.core.db import sync_session
 from marcus.core.enums import StepKind
-from marcus.core.queues import TIME_LIMITS
+from marcus.core.queues import time_limits_for
 from marcus.core.settings import get_settings
 from marcus.dispatcher.pick import Send, dispatch_once, watchdog_once
 
@@ -41,8 +41,10 @@ def celery_send() -> Send:
     """The real `send`: one Celery task per step, carrying the step id and attempt token."""
     from marcus.core.celery_app import celery_app  # lazy: pick.py stays Celery-free
 
-    def send(queue: str, step_id: uuid.UUID, kind: StepKind, attempts: int) -> None:
-        soft, hard = TIME_LIMITS[kind]
+    def send(
+        queue: str, step_id: uuid.UUID, kind: StepKind, attempts: int, pages: int | None = None
+    ) -> None:
+        soft, hard = time_limits_for(kind, pages)
         celery_app.send_task(
             "marcus.run_step",
             args=[str(step_id), attempts],

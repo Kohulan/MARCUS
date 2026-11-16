@@ -7,18 +7,22 @@ detached read-only Step view and never write to the database; results are plain 
 import logging
 import re
 
+from sqlalchemy import select
+
 from marcus.core.enums import StepKind
+from marcus.core.models import Paper
+from marcus.core.queues import time_limits_for
 from marcus.core.storage import page_image_path, paper_dir, pdf_path
 from marcus.workers import pdfsafe
 from marcus.workers.runtime import register
 
 log = logging.getLogger(__name__)
 
-# Child timeouts sit below the Celery soft limits (20/30/300/15) so a timeout here is mapped
+# Child timeouts sit below the Celery soft limits (20/30/scaled/15) so a timeout here is mapped
 # to BadInput before the runtime's SoftTimeLimitExceeded can fire.
 CHECK_TIMEOUT_S = 15
 RENDER_TIMEOUT_S = 25
-DOCLING_TIMEOUT_S = 280
+DOCLING_MARGIN_S = 20  # child timeout = Celery soft limit - margin (soft scales with pages)
 DOI_CALL_TIMEOUT_S = 5
 DOI_TOTAL_S = 12
 DOI_OP = "doi"
@@ -42,8 +46,17 @@ def render_page(step, session) -> dict:
 
 def docling(step, session) -> dict:
     """Docling parses the untrusted PDF in an isolated child (32 GiB address space cap)."""
+    pages = None
+    if session is not None:
+        try:
+            pages = session.execute(
+                select(Paper.pages).where(Paper.id == step.paper_id)
+            ).scalar_one_or_none()
+        finally:
+            session.rollback()  # end the read transaction before the long work
+    soft, _ = time_limits_for(StepKind.DOCLING, pages)
     pdfsafe.run_docling(
-        pdf_path(step.paper_id), paper_dir(step.paper_id), timeout_s=DOCLING_TIMEOUT_S
+        pdf_path(step.paper_id), paper_dir(step.paper_id), timeout_s=soft - DOCLING_MARGIN_S
     )
     return {"text_path": "text.json"}
 
