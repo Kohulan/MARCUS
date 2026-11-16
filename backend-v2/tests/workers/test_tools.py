@@ -183,3 +183,35 @@ def test_soft_time_limit_is_not_turned_into_bad_input(monkeypatch, target):
             kwargs={"smiles": "CCO", "fmt": "svg", "width": 100, "height": 100},
             throw=True,
         )
+
+
+def test_jvm_starts_when_the_worker_process_starts(monkeypatch):
+    """JVM start + CDK class loading (~3.5 s molfile, ~3 s depiction, measured in the tools
+    image) is most of the 5 s soft limit: it happens at worker process init, not in a task."""
+    from celery.signals import worker_process_init
+
+    from marcus.workers import tools
+
+    calls = []
+    monkeypatch.setattr(tools, "smiles_to_molfile", lambda s: calls.append(("molfile", s)))
+    monkeypatch.setattr(tools, "depict", lambda s, fmt, *args: calls.append((fmt, s)))
+    assert tools.warm_up_jvm in [r() for _, r in worker_process_init.receivers]
+    worker_process_init.send(sender=None)
+    assert calls == [("molfile", "C"), ("svg", "C"), ("png", "C")]
+
+
+def test_jvm_warm_up_failure_does_not_kill_the_worker_process(monkeypatch, caplog):
+    from marcus.workers import tools
+
+    def boom(smiles):
+        raise RuntimeError("CDK jars missing")
+
+    monkeypatch.setattr(tools, "smiles_to_molfile", boom)
+    tools.warm_up_jvm()  # logged; the first task then reports the real error
+    assert "JVM warm-up failed" in caplog.text
+
+
+def test_worker_waits_long_enough_for_a_process_warm_up():
+    from marcus.core.celery_app import celery_app
+
+    assert celery_app.conf.worker_proc_alive_timeout >= 30

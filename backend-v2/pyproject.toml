@@ -16,12 +16,12 @@ api = [
   "pydantic-settings", "rdkit", "prometheus-client", "pillow", "numpy", "pymupdf",
 ]
 cpu = [
-  "pymupdf", "docling", "pdf2doi", "sqlalchemy", "psycopg[binary]", "celery[redis]",
+  "pymupdf", "docling", "pdf2doi", "sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]",
   "redis", "pydantic-settings", "rdkit",
 ]
 tools = ["jpype1==1.5.2", "rdkit", "celery[redis]", "redis", "pydantic-settings"]
-tf = ["sqlalchemy", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
-torch = ["sqlalchemy", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
+tf = ["sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
+torch = ["sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
 dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "fakeredis"]
 
 [project.scripts]

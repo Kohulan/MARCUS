@@ -1,4 +1,4 @@
-"""Generate the small PDF fixtures used by the CPU worker tests (PyMuPDF only).
+"""Generate the small PDF fixtures used by the CPU worker and e2e tests (PyMuPDF only).
 
 Run: python tests/fixtures/make_pdfs.py   (outputs go to tests/fixtures/pdfs/)
 
@@ -41,6 +41,10 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     doc = _text_pdf(["Two page fixture.", "Ethanol CCO."], pages=2)
     doc.save(OUT / "two_page.pdf")
+    # e2e fairness: the "big" paper (text only, a few KB; fake engines ignore page content)
+    _text_pdf(["Twenty page fixture.", "Benzene c1ccccc1."], pages=20).save(
+        OUT / "twenty_page.pdf", garbage=4, deflate=True
+    )
     doc = _text_pdf(["Secret."])
     doc.save(
         OUT / "encrypted.pdf",

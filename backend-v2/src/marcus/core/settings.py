@@ -1,9 +1,12 @@
 import ipaddress
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from marcus.core.queues import SLOTS, TOOLS_QUEUE
 
 
 class Settings(BaseSettings):
@@ -33,6 +36,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
+    # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
+    expected_queues: Annotated[list[str], NoDecode] = []
 
     @field_validator("trusted_proxies")
     @classmethod
@@ -46,6 +51,20 @@ class Settings(BaseSettings):
                     f"trusted_proxies: {entry!r} is not an IP address or CIDR"
                 ) from None
         return [entry.strip() for entry in value]
+
+    @field_validator("expected_queues", mode="before")
+    @classmethod
+    def _queue_list(cls, value):
+        """Comma list (env) or list; every name must be a known queue (a typo would make
+        /ready wait for a queue nobody serves, or never check the real one)."""
+        if isinstance(value, str):
+            value = value.split(",")
+        names = [str(v).strip() for v in value if str(v).strip()]
+        known = {*SLOTS, TOOLS_QUEUE}
+        unknown = [n for n in names if n not in known]
+        if unknown:
+            raise ValueError(f"expected_queues: unknown queue(s) {', '.join(unknown)}")
+        return names
 
     @field_validator("cors_origins")
     @classmethod

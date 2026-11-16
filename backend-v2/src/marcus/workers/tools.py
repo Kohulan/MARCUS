@@ -12,12 +12,14 @@ a 500. Tool tasks keep their results (unlike pipeline steps) because the API wai
 """
 
 import base64
+import logging
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Literal
 
 from celery.exceptions import SoftTimeLimitExceeded
+from celery.signals import worker_process_init
 
 from marcus.core.celery_app import celery_app
 
@@ -273,6 +275,23 @@ def compare(smiles_a: str, smiles_b: str) -> dict[str, Any]:
         "same_structure": Chem.MolToSmiles(mols[0]) == Chem.MolToSmiles(mols[1]),
         "agree": sim > AGREEMENT_THRESHOLD,
     }
+
+
+# --- worker process start ------------------------------------------------------------------
+
+
+@worker_process_init.connect
+def warm_up_jvm(**_) -> None:
+    """Start the JVM and load the CDK layout and depiction classes when a pool process starts
+    (after the fork), not in the first tool task: measured in the tools image, JVM start +
+    first molfile ~3.5 s and first depiction ~3 s, against a 5 s soft limit. A failure is
+    only logged; the first task then raises the real error."""
+    try:
+        smiles_to_molfile("C")
+        depict("C", "svg", 64, 64, "")
+        depict("C", "png", 64, 64, "")  # the raster path loads its own classes (~1.3 s)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("JVM warm-up failed")
 
 
 # --- Celery wrappers -----------------------------------------------------------------------

@@ -47,6 +47,9 @@ def _load_slots() -> dict[str, int]:
 
 SLOTS: dict[str, int] = _load_slots()
 
+# Synchronous tools (depict, MCS, ...): not a pipeline queue, so no dispatcher slots.
+TOOLS_QUEUE = "q.tools"
+
 # (soft, hard) seconds
 TIME_LIMITS: dict[StepKind, tuple[int, int]] = {
     StepKind.CHECK_PDF: (20, 30),

@@ -1,0 +1,85 @@
+# Override: fake segment and OCSR workers for fast end-to-end and fairness tests.
+#
+#   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
+#
+# Fake engines: segmentation 2 s per page (2 segments per page), OCSR 1 s per segment.
+# Both fake workers run the api image (it already has everything they import) with exactly
+# their own handler module (--include). Concurrency 1 each = the q.segment / q.fake slots.
+#
+# Test-only relaxations on the API: all e2e traffic comes from one client IP (the Docker
+# gateway), so the per-IP limits (new owners per hour, active papers, requests per minute)
+# are raised; per-owner limits and every other check stay as in docker-compose.yml.
+# YAML anchors do not cross files, so the shared worker settings are repeated here.
+
+services:
+  api:
+    environment:
+      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      MARCUS_EXPECTED_QUEUES: q.cpu,q.tools,q.segment,q.fake
+      MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
+      MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
+      MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
+
+  worker-fake-segment:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    volumes:
+      - data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
+              "-n", "fake-segment@%h", "--loglevel", "INFO"]
+    environment:
+      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MARCUS_DATA_ROOT: /data
+      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      MARCUS_SEGMENTER: fake
+      MARCUS_FAKE_SEGMENTS_PER_PAGE: "2"
+      MARCUS_FAKE_SEGMENT_DELAY_S: "2"
+
+  worker-fake-ocsr:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    volumes:
+      - data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.fake",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "fake-ocsr@%h", "--loglevel", "INFO"]
+    environment:
+      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MARCUS_DATA_ROOT: /data
+      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      MARCUS_FAKE_OCSR_DELAY_S: "1"

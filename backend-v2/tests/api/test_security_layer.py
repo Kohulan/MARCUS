@@ -46,6 +46,7 @@ FIXED_NOW = 1_800_000_030.0  # 30 s into a window: Retry-After is 30
 # Every route the app serves. A new route must be added here on purpose.
 ALLOWED_ROUTES = {
     ("GET", "/api/v2/health"),
+    ("GET", "/api/v2/ready"),
     ("POST", "/api/v2/papers"),
     ("GET", "/api/v2/papers"),
     ("GET", "/api/v2/papers/{paper_id}"),
@@ -318,7 +319,8 @@ async def test_rate_limit_hits_429(app, real_redis, frozen_time):
         assert r.status_code == 429 and r.json() == {"detail": "rate limited"}
         assert r.headers["retry-after"] == "30"
         assert_security_headers(r)
-        # health is the one exempt route
+        # health is the one exempt route; /ready is not (it may broadcast to the broker)
+        assert (await c.get("/api/v2/ready")).status_code == 429
         assert (await c.get("/api/v2/health")).status_code == 200
     ttl = await real_redis.ttl(f"rl:ip:{peer[0]}:{int(FIXED_NOW) // 60}")
     assert 0 < ttl <= 120

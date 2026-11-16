@@ -1,0 +1,202 @@
+# MARCUS v2 local stack (CPU only, fake engines off).
+#
+#   cp .env.example .env    # set POSTGRES_PASSWORD and REDIS_PASSWORD
+#   docker compose -p marcus-v2 up -d --build
+#
+# With fake segment/OCSR workers (fast end-to-end and fairness tests):
+#   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
+#
+# Only nginx publishes a port (127.0.0.1:18090). API, Postgres and Redis stay on the internal
+# network. nginx has a fixed address; MARCUS_TRUSTED_PROXIES is exactly that address (never the
+# bridge CIDR), so only nginx may name the client IP and request id.
+#
+# Migrations: the one-shot `api-migrate` service runs `alembic upgrade head` once; api,
+# dispatcher and workers start only after it completed successfully.
+#
+# Images: api (api, api-migrate, dispatcher), cpu (worker-cpu), tools (worker-tools). Every app
+# container runs as uid 10001 with a read-only root filesystem, /tmp on tmpfs and the shared
+# named volume `data` at /data.
+
+name: marcus-v2
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+  volumes:
+    - data:/data
+  depends_on: &app-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    api-migrate:
+      condition: service_completed_successfully
+
+x-env: &env
+  MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+  MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  MARCUS_DATA_ROOT: /data
+
+x-api-image: &api-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.api
+  image: marcus-v2-api:local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: marcus
+      POSTGRES_DB: marcus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marcus -d marcus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # Broker + results + rate limits + events. noeviction: a broker message is never dropped.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --maxmemory-policy noeviction"]
+    volumes:
+      - redisdata:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api-migrate:
+    <<: [*app, *api-image]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: [*app, *api-image]
+    # Client IP and request id are resolved by the app (marcus.api.deps.client_ip, trusted
+    # proxies = nginx). gunicorn's --forwarded-allow-ips stays 127.0.0.1 so uvicorn does not
+    # rewrite the socket peer first: the app must see nginx as the peer to trust its headers.
+    command:
+      - gunicorn
+      - marcus.api.main:create_app()
+      - --worker-class=uvicorn.workers.UvicornWorker
+      - --workers=${GUNICORN_WORKERS:-2}
+      - --bind=0.0.0.0:8000
+      - --forwarded-allow-ips=127.0.0.1
+      - --worker-tmp-dir=/tmp
+      - --graceful-timeout=30
+      - --access-logfile=-
+    environment:
+      <<: *env
+      MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools}
+      MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
+      MARCUS_EXPOSE_DOCS: ${MARCUS_EXPOSE_DOCS:-false}
+      MARCUS_CORS_ORIGINS: ${MARCUS_CORS_ORIGINS:-[]}
+      MARCUS_ENABLE_FAKE_ENGINES: ${MARCUS_ENABLE_FAKE_ENGINES:-0}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v2/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  # Exactly ONE replica: slot accounting is not atomic across dispatchers (never scale this).
+  dispatcher:
+    <<: [*app, *api-image]
+    command: ["python", "-m", "marcus.dispatcher"]
+    environment:
+      <<: *env
+
+  worker-cpu:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    image: marcus-v2-cpu:local
+    # check_pdf, render_page, docling, doi: 4 processes (= q.cpu slots); -B: beat runs here only.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.cpu",
+              "-c", "4", "--pool", "prefork", "--include", "marcus.workers.cpu",
+              "-B", "--schedule", "/tmp/celerybeat-schedule", "-n", "cpu@%h", "--loglevel", "INFO"]
+    environment:
+      <<: *env
+    # PDF parsing children have RLIMIT_AS 32 GiB (address space, not memory: docling/torch
+    # reserve ~24 GiB virtual). This limit is what bounds their real memory (RSS).
+    mem_limit: 12g
+
+  worker-tools:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tools
+    image: marcus-v2-tools:local
+    # Prefork (soft time limits need it), 2 processes, each with its own JVM (-Xmx1g).
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.tools",
+              "-c", "2", "--pool", "prefork", "--include", "marcus.workers.tools",
+              "-n", "tools@%h", "--loglevel", "INFO"]
+    environment:
+      <<: *env
+    volumes: []  # tools work on request data only, never on /data
+    mem_limit: 4g
+
+  nginx:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:18090:8080"
+    networks:
+      internal:
+        ipv4_address: 172.30.0.10
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/v2/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  data:
+  pgdata:
+  redisdata:

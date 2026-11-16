@@ -1054,7 +1054,7 @@ cpu = [
     { name = "pymupdf" },
     { name = "rdkit" },
     { name = "redis" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 dev = [
     { name = "fakeredis" },
@@ -1070,7 +1070,7 @@ tf = [
     { name = "pydantic-settings" },
     { name = "rdkit" },
     { name = "redis" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 tools = [
     { name = "celery", extra = ["redis"] },
@@ -1086,7 +1086,7 @@ torch = [
     { name = "pydantic-settings" },
     { name = "rdkit" },
     { name = "redis" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
@@ -1135,10 +1135,10 @@ requires-dist = [
     { name = "redis", marker = "extra == 'tools'" },
     { name = "redis", marker = "extra == 'torch'" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "sqlalchemy", marker = "extra == 'cpu'" },
-    { name = "sqlalchemy", marker = "extra == 'tf'" },
-    { name = "sqlalchemy", marker = "extra == 'torch'" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'api'" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'cpu'" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'tf'" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'torch'" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'" },
 ]
 provides-extras = ["api", "cpu", "tools", "tf", "torch", "dev"]
