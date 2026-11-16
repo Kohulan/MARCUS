@@ -3,7 +3,6 @@ import time
 import pytest
 
 from marcus.api.routes import tools as tools_route
-from marcus.workers.tools import ToolInputError
 from tests.api.conftest import make_client
 
 BASE = "/api/v2/tools"
@@ -74,7 +73,7 @@ async def test_tool_timeout_is_504(app, monkeypatch):
 
 async def test_task_input_error_is_422_other_is_500(app, monkeypatch):
     def bad(*a, **k):
-        raise ToolInputError("cannot parse SMILES")
+        return {"ok": False, "error": "cannot parse SMILES"}
 
     def boom(*a, **k):
         raise RuntimeError("jvm exploded: secret")
@@ -86,6 +85,15 @@ async def test_task_input_error_is_422_other_is_500(app, monkeypatch):
         monkeypatch.setattr(tools_route, "_send_and_wait", boom)
         r = await c.post(f"{BASE}/compare", json={"smiles_a": "C", "smiles_b": "CC"})
         assert r.status_code == 500 and "secret" not in r.text
+
+
+async def test_envelope_ok_result_is_unwrapped(app, monkeypatch):
+    monkeypatch.setattr(
+        tools_route, "_send_and_wait", lambda *a, **k: {"ok": True, "result": "<svg/>"}
+    )
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "C"})
+    assert r.status_code == 200 and r.json() == {"format": "svg", "data": "<svg/>"}
 
 
 def test_run_tool_times_out_with_stub_task(monkeypatch):

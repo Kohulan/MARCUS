@@ -24,7 +24,7 @@ ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
 
 CDK = "org.openscience.cdk"
 JARS = ("cdk-2.10.jar", "centres.jar")
-MCS_TIMEOUT_S = 5
+MCS_TIMEOUT_S = 3  # below the 5 s task soft limit
 AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
 
 
@@ -241,7 +241,7 @@ def mcs(molfiles: list[str]) -> dict[str, Any]:
         matchValences=False,
     )
     if result.canceled:
-        raise RuntimeError("MCS calculation timed out")
+        raise ToolInputError("mcs timed out")
     return {
         "mcs_smarts": result.smartsString,
         "atom_count": result.numAtoms,
@@ -274,27 +274,37 @@ def compare(smiles_a: str, smiles_b: str) -> dict[str, Any]:
 
 
 # --- Celery wrappers -----------------------------------------------------------------------
+# Each task returns a JSON envelope: {"ok": true, "result": ...} or, for bad input,
+# {"ok": false, "error": "..."}. The API never needs to import ToolInputError (it cannot
+# rebuild exceptions from the result backend without the tools extra). Other errors raise.
 
 _LIMITS = {"soft_time_limit": 5, "time_limit": 10}  # routed to q.tools by task_routes
+
+
+def _envelope(fn, *args) -> dict:
+    try:
+        return {"ok": True, "result": fn(*args)}
+    except ToolInputError as exc:
+        return {"ok": False, "error": str(exc)[:300]}
 
 
 @celery_app.task(name="marcus.tools.depict", **_LIMITS)
 def depict_task(
     smiles: str, fmt: str = "svg", width: int = 512, height: int = 512, highlight: str = ""
-) -> str:
-    return depict(smiles, fmt, width, height, highlight)
+) -> dict:
+    return _envelope(depict, smiles, fmt, width, height, highlight)
 
 
 @celery_app.task(name="marcus.tools.smiles_to_molfile", **_LIMITS)
-def smiles_to_molfile_task(smiles: str) -> str:
-    return smiles_to_molfile(smiles)
+def smiles_to_molfile_task(smiles: str) -> dict:
+    return _envelope(smiles_to_molfile, smiles)
 
 
 @celery_app.task(name="marcus.tools.mcs", **_LIMITS)
 def mcs_task(molfiles: list[str]) -> dict:
-    return mcs(molfiles)
+    return _envelope(mcs, molfiles)
 
 
 @celery_app.task(name="marcus.tools.compare", **_LIMITS)
 def compare_task(smiles_a: str, smiles_b: str) -> dict:
-    return compare(smiles_a, smiles_b)
+    return _envelope(compare, smiles_a, smiles_b)

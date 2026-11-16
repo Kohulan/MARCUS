@@ -4,6 +4,7 @@ import base64
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,6 +26,7 @@ def _jar_dir(monkeypatch):
 
 def test_tasks_registered_on_tools_queue():
     from marcus.core.celery_app import celery_app
+    from marcus.workers import tools  # noqa: F401  (registers the tasks)
 
     for name in ("depict", "smiles_to_molfile", "mcs", "compare"):
         task = celery_app.tasks[f"marcus.tools.{name}"]
@@ -110,3 +112,54 @@ def test_compare_bad_smiles_is_input_error():
 
     with pytest.raises(ToolInputError):
         compare("CCO", "not a smiles(")
+
+
+@needs_cdk
+@pytest.mark.parametrize(
+    "name,good,bad",
+    [
+        (
+            "depict",
+            {"smiles": "CCO", "fmt": "svg", "width": 100, "height": 100},
+            {"smiles": "C1CC(", "fmt": "svg", "width": 100, "height": 100},
+        ),
+        ("smiles_to_molfile", {"smiles": "CCO"}, {"smiles": "C1CC("}),
+        ("mcs", {"molfiles": FIXTURE["find_mcs"]["request"]["molfiles"]}, {"molfiles": ["x", "y"]}),
+        (
+            "compare",
+            {"smiles_a": "CCO", "smiles_b": "CCN"},
+            {"smiles_a": "CCO", "smiles_b": "C1CC("},
+        ),
+    ],
+)
+def test_task_envelope_is_json_and_flags_bad_input(name, good, bad):
+    from marcus.core.celery_app import celery_app
+    from marcus.workers import tools  # noqa: F401  (registers the tasks)
+
+    task = celery_app.tasks[f"marcus.tools.{name}"]
+    ok = task.apply(kwargs=good).get()
+    assert json.loads(json.dumps(ok)) == ok and ok["ok"] is True and "result" in ok
+    err = task.apply(kwargs=bad).get()
+    assert json.loads(json.dumps(err)) == err
+    assert err["ok"] is False and isinstance(err["error"], str) and err["error"]
+
+
+def test_mcs_timeout_is_not_a_partial_result(monkeypatch):
+    from rdkit.Chem import rdFMCS
+
+    from marcus.workers import tools
+
+    seen = {}
+
+    res = SimpleNamespace(canceled=True, smartsString="[#6]", numAtoms=1, numBonds=1)
+
+    def fake(mols, **kw):
+        seen.update(kw)
+        return res
+
+    monkeypatch.setattr(rdFMCS, "FindMCS", fake)
+    out = tools.mcs_task.apply(
+        kwargs={"molfiles": FIXTURE["find_mcs"]["request"]["molfiles"]}
+    ).get()
+    assert seen["timeout"] == 3
+    assert out == {"ok": False, "error": "mcs timed out"}

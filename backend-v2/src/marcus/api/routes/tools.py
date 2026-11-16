@@ -1,7 +1,7 @@
 """`POST /tools/{depict,smiles-to-molfile,mcs,compare}`: short synchronous jobs on q.tools.
 
 Each call sends a Celery task to the tools queue and waits for its result (hard limit 10 s).
-Timeout -> 504; the task's ToolInputError -> 422; any other task error -> generic 500.
+Timeout -> 504; envelope {ok: false, error} (bad input) -> 422; any other task error -> 500.
 """
 
 from typing import Annotated, Literal
@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field, StringConstraints
 from marcus.api.deps import current_owner
 from marcus.core.celery_app import TOOLS_QUEUE, celery_app
 from marcus.core.models import Owner
-from marcus.workers.tools import ToolInputError
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -56,13 +55,16 @@ def _send_and_wait(name: str, kwargs: dict, timeout: float):
 def run_tool(name: str, kwargs: dict, timeout: float = WAIT_S):
     """Blocking: run a tools-queue task and map failures to HTTP errors."""
     try:
-        return _send_and_wait(name, kwargs, timeout)
+        envelope = _send_and_wait(name, kwargs, timeout)
     except CeleryTimeout:
         raise HTTPException(status_code=504, detail="tool timed out") from None
-    except ToolInputError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
         raise HTTPException(status_code=500, detail="tool failed") from None
+    if not isinstance(envelope, dict) or "ok" not in envelope:
+        raise HTTPException(status_code=500, detail="tool failed")
+    if not envelope["ok"]:
+        raise HTTPException(status_code=422, detail=str(envelope.get("error", "bad input")))
+    return envelope["result"]
 
 
 @router.post("/depict")
