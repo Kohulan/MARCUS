@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: marcus
+      POSTGRES_PASSWORD: marcus
+      POSTGRES_DB: marcus_test
+    ports:
+      - "127.0.0.1:55432:5432"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:56379:6379"

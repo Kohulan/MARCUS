@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marcus"
+version = "0.2.0.dev0"
+description = "MARCUS v2 backend"
+requires-python = ">=3.11,<3.12"
+dependencies = []
+
+[project.optional-dependencies]
+api = [
+  "fastapi", "uvicorn[standard]", "gunicorn", "sqlalchemy[asyncio]", "asyncpg",
+  "psycopg[binary]", "alembic", "redis", "celery[redis]", "python-multipart",
+  "pydantic-settings", "rdkit", "prometheus-client", "pillow", "pymupdf",
+]
+cpu = [
+  "pymupdf", "docling", "pdf2doi", "sqlalchemy", "psycopg[binary]", "celery[redis]",
+  "redis", "pydantic-settings", "rdkit",
+]
+tools = ["jpype1==1.5.2", "rdkit", "celery[redis]", "redis", "pydantic-settings"]
+tf = ["sqlalchemy", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
+torch = ["sqlalchemy", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
+dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "fakeredis"]
+
+[project.scripts]
+marcus = "marcus.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marcus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501", "N818"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "e2e: end-to-end tests needing the full stack",
+  "ml: tests needing ML model packages",
+]
