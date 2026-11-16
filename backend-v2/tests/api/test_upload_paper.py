@@ -152,3 +152,39 @@ async def test_bad_ocsr_value_is_422(app):
 )
 def test_sanitize_display_name(raw, expected):
     assert sanitize_display_name(raw) == expected
+
+
+async def test_concurrent_uploads_respect_the_owner_limit(migrated_db, app, async_db_session):
+    import asyncio
+
+    from sqlalchemy import func
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from marcus.core.db import async_db_url
+    from marcus.core.models import Owner
+    from marcus.core.tokens import hash_token, new_token
+
+    token = new_token()
+    async_db_session.add(
+        Owner(kind="browser", token_hash=hash_token(token), priority_class=0, created_ip=None)
+    )
+    await async_db_session.commit()
+
+    engine = create_async_engine(async_db_url(get_settings().database_url), poolclass=NullPool)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _own_session():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _own_session
+    try:
+        async with make_client(app) as c:
+            c.cookies.set("marcus_owner", token, path="/api/v2")
+            rs = await asyncio.gather(*(upload(c) for _ in range(10)))
+    finally:
+        await engine.dispose()
+    assert sorted(r.status_code for r in rs) == [202] * 3 + [429] * 7
+    n = (await async_db_session.execute(select(func.count()).select_from(Paper))).scalar_one()
+    assert n == 3

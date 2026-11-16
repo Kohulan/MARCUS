@@ -20,8 +20,12 @@ ACTIVE = [PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value]
 
 async def _enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None:
     settings = get_settings()
+    # Locks live until the upload commits (or rolls back). Order: owner, then IP.
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"owner:{owner.id}"))))
     if owner.kind != OwnerKind.BROWSER.value:
         return  # API keys get a daily page quota instead
+    if _parse_ip(ip) is not None:
+        await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"ip:{ip}"))))
     own = (
         await db.execute(
             select(func.count())
