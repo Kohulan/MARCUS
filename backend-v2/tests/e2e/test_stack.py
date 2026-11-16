@@ -198,7 +198,7 @@ def test_small_paper_starts_within_10s_behind_big_paper():
         time.sleep(5)
         small_id, sent = b.upload("two_page.pdf")
         created = _created(b.paper(small_id))
-        first_segment = first_prediction = None
+        first_segment = first_prediction = a_pages_segmented = None
         for at, event in _step_events(b, small_id, timeout_s=90):
             if event.get("type") != "step":
                 continue
@@ -208,6 +208,12 @@ def test_small_paper_starts_within_10s_behind_big_paper():
                 and (event["status"] == "running")
             ):
                 first_segment = at
+                # Contention check, right after B's start: a segment row exists only once its
+                # page's segment_page step is done, so fewer than 20 pages here means A still
+                # had segment_page work waiting while B's ran (the read comes after B started,
+                # which only makes the check stricter).
+                a_segs = a.client.get(f"/api/v2/papers/{big_id}/segments").json()["segments"]
+                a_pages_segmented = len({s["page"] for s in a_segs})
             if event["kind"] == "ocsr" and event["status"] == "done":
                 first_prediction = at
                 break
@@ -219,8 +225,10 @@ def test_small_paper_starts_within_10s_behind_big_paper():
             f"B upload->created {created - sent:.2f} s, "
             f"first segment_page running {first_segment - created:.2f} s, "
             f"first prediction {first_prediction - created:.2f} s; "
+            f"A pages segmented when B's first segment_page started: {a_pages_segmented}/20; "
             f"big paper status then: {big['status']}, steps {big['counts']['steps_by_status']}"
         )
+        assert a_pages_segmented < 20, "A had no segment_page work left: no contention"
         assert big["status"] not in ("done", "failed"), "big paper finished first: no contention"
         assert first_segment - created < 10
         assert first_prediction - created < 60

@@ -7,8 +7,9 @@
 #   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 #
 # Only nginx publishes a port (127.0.0.1:18090). API, Postgres and Redis stay on the internal
-# network. nginx has a fixed address; MARCUS_TRUSTED_PROXIES is exactly that address (never the
-# bridge CIDR), so only nginx may name the client IP and request id.
+# network. nginx has a fixed address outside the dynamic pool (ip_range); MARCUS_TRUSTED_PROXIES
+# is exactly that address (never the bridge CIDR), so only nginx may name the client IP and
+# request id.
 #
 # Migrations: the one-shot `api-migrate` service runs `alembic upgrade head` once; api,
 # dispatcher and workers start only after it completed successfully.
@@ -194,7 +195,11 @@ networks:
   internal:
     ipam:
       config:
+        # Docker hands containers the lowest free address of ip_range only; nginx's fixed
+        # 172.30.0.10 lies outside it, so no other container can ever take it (and become
+        # the trusted proxy, or keep nginx from starting).
         - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.128/25
 
 volumes:
   data:

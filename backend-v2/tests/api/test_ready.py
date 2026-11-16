@@ -121,3 +121,69 @@ def test_expected_queues_setting_refuses_unknown_queue(monkeypatch):
     monkeypatch.setenv("MARCUS_EXPECTED_QUEUES", "q.cpu,q.cpuu")
     with pytest.raises(ValidationError, match="q.cpuu"):
         Settings()
+
+
+async def test_hung_inspect_is_bounded_and_cached_as_no_consumer(app, monkeypatch):
+    """kombu's pidbox publish retries forever if the broker drops after the PING: the
+    broadcast thread is abandoned after INSPECT_BUDGET_S and the timeout is cached."""
+    import threading
+    import time
+
+    release = threading.Event()
+    calls = {"n": 0}
+
+    def hung_inspect() -> set[str]:
+        calls["n"] += 1
+        release.wait(10)
+        return {"q.cpu"}
+
+    monkeypatch.setattr(health, "inspect_live_queues", hung_inspect)
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    monkeypatch.setattr(health, "INSPECT_BUDGET_S", 0.3)
+    _expect(monkeypatch, "q.cpu")
+    try:
+        async with make_client(app) as c:
+            t0 = time.monotonic()
+            r = await c.get("/api/v2/ready")
+            assert time.monotonic() - t0 < 2
+            assert r.status_code == 503 and r.json()["missing"] == ["queue:q.cpu"]
+            r = await c.get("/api/v2/ready")  # cached timeout: no second broadcast
+            assert r.status_code == 503
+        assert calls["n"] == 1
+    finally:
+        release.set()
+
+
+async def test_lock_waiters_are_bounded_too(monkeypatch):
+    """A request waiting behind a hung broadcast gets an answer within its own budget."""
+    import threading
+    import time
+
+    import anyio
+
+    release = threading.Event()
+    calls = {"n": 0}
+
+    def hung_inspect() -> set[str]:
+        calls["n"] += 1
+        release.wait(10)
+        return {"q.cpu"}
+
+    monkeypatch.setattr(health, "inspect_live_queues", hung_inspect)
+    monkeypatch.setattr(health, "INSPECT_BUDGET_S", 0.3)
+    live = health.LiveQueues()
+    results = []
+
+    async def ask():
+        results.append(await live.get())
+
+    try:
+        t0 = time.monotonic()
+        async with anyio.create_task_group() as tg:
+            for _ in range(3):
+                tg.start_soon(ask)
+        assert time.monotonic() - t0 < 2
+        assert results == [frozenset()] * 3
+        assert calls["n"] == 1  # one broadcast; the waiters reuse the cached timeout
+    finally:
+        release.set()

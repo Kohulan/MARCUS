@@ -7,9 +7,14 @@ one live Celery consumer; otherwise 503 with the missing parts, e.g.
 
 The consumer check is a broker broadcast (`inspect(timeout=1).active_queues()`), so its result
 is cached per API process for READY_CACHE_S: /ready cannot be used to hammer the broker. Only
-one broadcast runs at a time per process; it runs in a thread (it blocks up to 1 s). /ready is
-not exempt from the per-IP rate limit. The database and Redis checks run on every call, each
-bounded by CHECK_TIMEOUT_S.
+one broadcast runs at a time per process, in a worker thread. `timeout=1` only bounds the
+reply collection: kombu publishes the broadcast with retry, and `Connection.ensure` retries
+for ever if the broker drops between the Redis PING and the publish. So each request waits at
+most INSPECT_BUDGET_S (for the lock and the broadcast together); a broadcast that overruns is
+abandoned (its thread finishes whenever kombu gives up or the broker returns) and cached as
+"no live queue". At most one such thread exists per process (a 1-token limiter), so a broker
+outage cannot pile up threads. /ready is not exempt from the per-IP rate limit. The database
+and Redis checks run on every call, each bounded by CHECK_TIMEOUT_S.
 """
 
 import asyncio
@@ -30,7 +35,8 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 READY_CACHE_S = 5.0
-INSPECT_TIMEOUT_S = 1.0
+INSPECT_TIMEOUT_S = 1.0  # reply collection inside the broadcast
+INSPECT_BUDGET_S = INSPECT_TIMEOUT_S + 1.0  # a request's whole wait: lock + broadcast
 CHECK_TIMEOUT_S = 2.0
 
 
@@ -54,31 +60,46 @@ def inspect_live_queues() -> set[str]:
 class LiveQueues:
     """Per-process cache of inspect_live_queues(): one broadcast per READY_CACHE_S at most.
 
-    A failed broadcast is cached too (as no live queue), so a broken broker is not hammered.
+    A failed or timed-out broadcast is cached too (as no live queue), so a broken broker is
+    not hammered. Every caller waits at most INSPECT_BUDGET_S, whether it runs the broadcast
+    or waits for the lock behind one.
     """
 
     def __init__(self) -> None:
         self._at: float | None = None
         self._value: frozenset[str] = frozenset()
         self._lock: asyncio.Lock | None = None
+        self._threads: anyio.CapacityLimiter | None = None
 
     def _fresh(self) -> bool:
         return self._at is not None and _monotonic() - self._at < READY_CACHE_S
+
+    def _store(self, value: frozenset[str]) -> frozenset[str]:
+        self._value, self._at = value, _monotonic()
+        return value
 
     async def get(self) -> frozenset[str]:
         if self._fresh():
             return self._value
         if self._lock is None:
             self._lock = asyncio.Lock()
-        async with self._lock:
-            if not self._fresh():  # another request may have refreshed it while we waited
-                try:
-                    self._value = frozenset(await anyio.to_thread.run_sync(inspect_live_queues))
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("ready: celery inspect failed: %s", type(exc).__name__)
-                    self._value = frozenset()
-                self._at = _monotonic()
+            self._threads = anyio.CapacityLimiter(1)
+        try:
+            with anyio.fail_after(INSPECT_BUDGET_S):
+                async with self._lock:
+                    if self._fresh():  # refreshed by the request we waited behind
+                        return self._value
+                    live = await anyio.to_thread.run_sync(
+                        inspect_live_queues, abandon_on_cancel=True, limiter=self._threads
+                    )
+                    return self._store(frozenset(live))
+        except TimeoutError:
+            log.warning("ready: celery inspect gave no answer within %.1f s", INSPECT_BUDGET_S)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ready: celery inspect failed: %s", type(exc).__name__)
+        if self._fresh():  # a waiter whose budget ran out after the holder stored a result
             return self._value
+        return self._store(frozenset())
 
 
 _live_queues = LiveQueues()
