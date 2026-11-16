@@ -54,8 +54,14 @@ def op_render(path: str, page: int, out: str, max_pages: int) -> None:
         doc.close()
 
 
+DOCLING_THREADS = 4
+
+
 def op_docling(path: str, out_dir: str) -> dict:
     """Same call chain as v1: convert, then export_to_dict(); write text.json atomically."""
+    import torch
+
+    torch.set_num_threads(DOCLING_THREADS)  # CPU limit is scaled by this; see pdfsafe.run_op
     from docling.document_converter import DocumentConverter
 
     doc = DocumentConverter().convert(path).document.export_to_dict()
@@ -105,6 +111,11 @@ def op_sleep(*args) -> None:  # diagnostic: lets tests exercise the timeout kill
     time.sleep(60)
 
 
+def op_spin(*args) -> None:  # diagnostic
+    while True:
+        pass
+
+
 def op_alloc(mb: int) -> int:  # diagnostic: lets tests exercise RLIMIT_AS
     return len(bytearray(mb * 2**20))
 
@@ -120,14 +131,34 @@ OPS = {
     "doi": op_doi,
     "_sleep": op_sleep,
     "_alloc": op_alloc,
+    "_spin": op_spin,
     "_fail": op_fail,
 }
 
 
+def _harden(mem_mb: int, cpu_s: int) -> None:
+    """First thing in the child: die with the parent, then apply the resource limits."""
+    try:
+        import ctypes
+        import signal
+
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG (Linux)
+    except Exception:  # noqa: BLE001 - not Linux: no-op
+        pass
+    import resource
+
+    if mem_mb:
+        limit = mem_mb * 2**20
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 2))
+
+
 def main(argv: list[str]) -> int:
+    """argv: [prog, OP, MEM_MB, CPU_S]. Limits are applied before anything is read or parsed."""
     reply_fd = os.dup(1)
     os.dup2(2, 1)  # stray prints go to stderr
     try:
+        _harden(int(argv[2]), int(argv[3]))
         op = OPS[argv[1]]
         args = json.loads(sys.stdin.read())["args"]
         reply = {"ok": True, "result": op(*args)}

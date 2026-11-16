@@ -11,8 +11,8 @@ Top-level imports are standard library only; `marcus.workers.runtime` is importe
 """
 
 import json
+import logging
 import os
-import resource
 import selectors
 import signal
 import subprocess
@@ -22,7 +22,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+log = logging.getLogger(__name__)
+
 DEFAULT_MEM_MB = 2048
+DOCLING_THREADS = 4
 # docling imports torch, which maps ~24 GiB of address space (thread stacks, CUDA libs): measured
 # segfault at 8 GiB, "resource unavailable" at 16 GiB, success at 24 GiB. RLIMIT_AS is a
 # virtual limit, so 32 GiB still caps a runaway parse.
@@ -40,20 +43,13 @@ class ChildFailed(Exception):
     """The child raised or died. Only a short message travels back."""
 
 
-def _child_env() -> dict[str, str]:
+def _child_env(threads: int | None = None) -> dict[str, str]:
     env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
     env.setdefault("PYTHONHASHSEED", "0")
+    if threads:
+        for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+            env[name] = str(threads)
     return env
-
-
-def _limits(mem_mb: int | None, cpu_s: int):
-    def apply() -> None:
-        if mem_mb:
-            limit = mem_mb * 2**20
-            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 2))
-
-    return apply
 
 
 def _kill_group(proc: subprocess.Popen) -> None:
@@ -71,20 +67,34 @@ def _kill_group(proc: subprocess.Popen) -> None:
         os.killpg(proc.pid, signal.SIGKILL)  # stragglers in the group
     except (ProcessLookupError, PermissionError):
         pass
-    proc.wait()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        log.error("pdf child %s did not exit after SIGKILL", proc.pid)
 
 
-def run_op(op: str, args: list, timeout_s: float, mem_mb: int | None = DEFAULT_MEM_MB) -> Any:
+def run_op(
+    op: str,
+    args: list,
+    timeout_s: float,
+    mem_mb: int | None = DEFAULT_MEM_MB,
+    threads: int | None = None,
+) -> Any:
     """Run a child op with JSON-able args; return its JSON result. Raises ChildTimeout or
-    ChildFailed."""
+    ChildFailed. The child applies RLIMIT_AS (mem_mb) and RLIMIT_CPU itself before touching the
+    input. RLIMIT_CPU counts CPU seconds over all threads, so a multi-threaded op passes
+    `threads`: the thread env vars are pinned to it and the CPU limit is threads x (timeout+5)."""
+    cpu_s = (threads or 1) * (int(timeout_s) + 5)
     proc = subprocess.Popen(
-        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op],
+        [
+            sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op,
+            str(mem_mb or 0), str(cpu_s),
+        ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        env=_child_env(),
+        env=_child_env(threads),
         start_new_session=True,
-        preexec_fn=_limits(mem_mb, int(timeout_s) + 5),  # noqa: PLW1509
     )
     try:
         try:
@@ -133,11 +143,13 @@ def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
         sel.close()
 
 
-def _run_pdf(op: str, args: list, timeout_s: float, mem_mb: int | None):
+def _run_pdf(
+    op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None
+):
     from marcus.workers.runtime import BadInput
 
     try:
-        return run_op(op, args, timeout_s, mem_mb)
+        return run_op(op, args, timeout_s, mem_mb, threads)
     except ChildTimeout:
         raise BadInput("timeout") from None
     except ChildFailed as exc:
@@ -170,4 +182,4 @@ def render_page_png(
 
 def run_docling(path: Path, out_dir: Path, timeout_s: int, mem_mb: int = DOCLING_MEM_MB) -> None:
     """Convert in a child; it writes out_dir/text.json (temp + replace)."""
-    _run_pdf("docling", [str(path), str(out_dir)], timeout_s, mem_mb)
+    _run_pdf("docling", [str(path), str(out_dir)], timeout_s, mem_mb, DOCLING_THREADS)

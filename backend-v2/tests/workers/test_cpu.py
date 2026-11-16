@@ -150,3 +150,16 @@ def test_normalise_doi_limits():
     assert cpu.normalise_doi("  ") is None
     assert cpu.normalise_doi("10." + "1" * 300) is None
     assert cpu.normalise_doi("http://dx.doi.org/10.1/x") == "10.1/x"
+
+
+GOLD = Path(__file__).resolve().parents[3] / "judges/goldset/data/pdf/PMC6017977.pdf"
+
+
+@pytest.mark.ml
+@pytest.mark.skipif(not GOLD.exists(), reason="goldset PDF not present")
+def test_docling_real_multipage_paper_within_cpu_limit():
+    pid = uuid.uuid4()
+    pdf_path(pid).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(GOLD, pdf_path(pid))
+    assert cpu.docling(view(pid), None) == {"text_path": "text.json"}
+    assert "texts" in json.loads((paper_dir(pid) / "text.json").read_text())

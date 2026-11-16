@@ -32,14 +32,14 @@ def test_hanging_child_is_killed_on_timeout():
 
 def test_timeout_maps_to_bad_input(monkeypatch):
     real = pdfsafe.run_op
-    monkeypatch.setattr(pdfsafe, "run_op", lambda op, args, t, m: real("_sleep", [], 2, m))
+    monkeypatch.setattr(pdfsafe, "run_op", lambda op, args, t, m, th=None: real("_sleep", [], 2, m))
     with pytest.raises(BadInput, match="timeout"):
         pdfsafe.page_count(_paper(), timeout_s=2)
 
 
 def test_rlimit_as_is_enforced():
     assert pdfsafe.run_op("_alloc", [10], timeout_s=20, mem_mb=2048) == 10 * 2**20
-    with pytest.raises(pdfsafe.ChildFailed):
+    with pytest.raises(pdfsafe.ChildFailed, match="out of memory"):
         pdfsafe.run_op("_alloc", [1500], timeout_s=20, mem_mb=512)
 
 
@@ -84,3 +84,30 @@ def test_page_count_works_inside_celery_prefork_style_daemon_process(tmp_path):
     finally:
         pool.close()
         pool.join()
+
+
+def test_docling_threads_are_pinned_and_cpu_limit_scaled():
+    env = pdfsafe._child_env(4)
+    assert env["OMP_NUM_THREADS"] == env["MKL_NUM_THREADS"] == env["OPENBLAS_NUM_THREADS"] == "4"
+    assert "OMP_NUM_THREADS" not in pdfsafe._child_env()
+
+
+def test_cpu_limit_is_applied_in_child_and_kills_busy_loop():
+    # 1 s timeout -> RLIMIT_CPU 6 s; a busy child dies from SIGXCPU/timeout, never hangs.
+    with pytest.raises((pdfsafe.ChildTimeout, pdfsafe.ChildFailed)):
+        pdfsafe.run_op("_spin", [], timeout_s=1)
+
+
+def test_setrlimit_failure_is_a_child_failure():
+    import json
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", "_fail", "2048", "-5"],
+        input=b'{"args": []}',
+        capture_output=True,
+        timeout=30,
+    )
+    reply = json.loads(out.stdout)
+    assert reply["ok"] is False
