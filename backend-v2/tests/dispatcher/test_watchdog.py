@@ -4,7 +4,7 @@ from marcus.core.enums import StepKind
 from marcus.core.models import Step
 from marcus.core.queues import TIME_LIMITS
 from marcus.dispatcher.pick import GRACE_S, fail_if_stuck, watchdog_once
-from tests.factories import make_paper
+from tests.factories import make_image_job, make_paper
 
 OCSR_HARD = TIME_LIMITS[StepKind.OCSR][1]
 
@@ -127,3 +127,47 @@ def test_fail_if_stuck_rechecks_before_failing(db_session):
     assert fail_if_stuck(s, step.id) is False
     s.expire_all()
     assert s.get(Step, step.id).status == "running"
+
+
+def test_fail_if_stuck_ignores_deleted_paper(db_session):
+    """A deleted parent: no attempt is added and the step is not reported as failed."""
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(s, paper, status="queued", queued_at=ago(OCSR_HARD + GRACE_S + 5))
+    paper.status = "deleted"
+    s.commit()
+
+    assert fail_if_stuck(s, stuck.id) is False
+    s.rollback()
+    s.expire_all()
+    row = s.get(Step, stuck.id)
+    assert row.status == "queued" and row.attempts == 0
+
+
+def test_fail_if_stuck_ignores_deleted_image_job(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    step.status = "queued"
+    step.queued_at = ago(OCSR_HARD + GRACE_S + 5)
+    job.status = "deleted"
+    s.commit()
+
+    assert fail_if_stuck(s, step.id) is False
+    s.rollback()
+    s.expire_all()
+    row = s.get(Step, step.id)
+    assert row.status == "queued" and row.attempts == 0
+
+
+def test_running_step_without_started_at_uses_queued_at(db_session):
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(
+        s, paper, status="running", attempts=1, queued_at=ago(OCSR_HARD + GRACE_S + 5)
+    )
+    s.commit()
+
+    assert watchdog_once(s) == 1
+    s.expire_all()
+    row = s.get(Step, stuck.id)
+    assert row.status == "pending" and row.error_class == "worker_lost"

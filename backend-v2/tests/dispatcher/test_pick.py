@@ -254,3 +254,18 @@ def test_main_module_imports_without_celery():
         main_mod.psycopg_conninfo("postgresql+asyncpg://u:p@h:5432/db")
         == "postgresql://u:p@h:5432/db"
     )
+
+
+def test_cancelled_steps_do_not_count_as_usage(db_session, one_slot):
+    """Spec §8 counts steps running or done; a cancelled step used no slot time."""
+    s = db_session
+    a, b = make_owner(s), make_owner(s)
+    a_paper = paper_at(s, a, minutes_ago=10)
+    add_steps(s, a_paper, 5, status="cancelled", seq0=0, finished_ago=60)
+    a_pending = add_steps(s, a_paper, 3, seq0=5)
+    b_paper = paper_at(s, b, minutes_ago=5)
+    add_steps(s, b_paper, 1, status="done", seq0=0, finished_ago=60)
+    add_steps(s, b_paper, 3, seq0=1)
+
+    picked = pick_next(s, Q)
+    assert picked is not None and picked.id == a_pending[0].id

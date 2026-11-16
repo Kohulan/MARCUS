@@ -17,7 +17,7 @@ from collections.abc import Callable
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.orm import Session
 
-from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.enums import ErrorClass, PaperStatus, StepKind, StepStatus
 from marcus.core.models import ImageJob, Paper, Step
 from marcus.core.pipeline import fail_step
 from marcus.core.queues import SLOTS, TIME_LIMITS
@@ -30,9 +30,11 @@ GRACE_S = 30  # watchdog: a step may sit in queued/running for its hard limit pl
 Send = Callable[[str, uuid.UUID, StepKind], None]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
+_DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
 
-# Order: priority class, then owner usage on this queue in the fair window, then the oldest
-# paper / image job, then step order. One statement; the chosen row is locked, rows another
+# Order: priority class, then owner usage on this queue in the fair window (steps busy now
+# or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
+# the oldest paper / image job, then step order. One statement; the chosen row is locked, rows another
 # dispatcher (or the planner) holds are skipped.
 _PICK_SQL = text(
     """
@@ -41,7 +43,8 @@ _PICK_SQL = text(
       FROM steps s LEFT JOIN papers p ON p.id = s.paper_id
                    LEFT JOIN image_jobs j ON j.id = s.image_job_id
       WHERE s.queue = :q AND (s.status IN ('queued','running')
-            OR s.finished_at > now() - make_interval(secs => :window))
+            OR (s.finished_at > now() - make_interval(secs => :window)
+                AND s.status <> 'cancelled'))
       GROUP BY 1)
     SELECT s.* FROM steps s
       LEFT JOIN papers p ON p.id = s.paper_id LEFT JOIN image_jobs j ON j.id = s.image_job_id
@@ -124,10 +127,15 @@ def _deadline_s():
 
 
 def _stuck():
-    """SQL condition: queued or running for longer than the step's deadline."""
+    """SQL condition: queued or running for longer than the step's deadline.
+
+    A running step without started_at (should not happen) falls back to queued_at, so it
+    can never escape the watchdog.
+    """
     limit = func.now() - func.make_interval(0, 0, 0, 0, 0, 0, _deadline_s())
+    since = func.coalesce(Step.started_at, Step.queued_at)
     return ((Step.status == StepStatus.QUEUED.value) & (Step.queued_at < limit)) | (
-        (Step.status == StepStatus.RUNNING.value) & (Step.started_at < limit)
+        (Step.status == StepStatus.RUNNING.value) & (since < limit)
     )
 
 
@@ -135,6 +143,7 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
     """In the current transaction, lock the step's parent then the step and, if the step is
     still stuck, fail it as worker_lost (retryable). A step stuck in `queued` never started,
     so its lost delivery is counted as an attempt here (the runtime counted a `running` one).
+    A missing or deleted parent is left alone (no attempt added): fail_step would ignore it.
     Does not commit. Returns True if failed.
     """
     parent = session.execute(
@@ -143,11 +152,15 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
     if parent is None:
         return False
     if parent.paper_id is not None:
-        session.execute(select(Paper.id).where(Paper.id == parent.paper_id).with_for_update())
+        parent_status = session.execute(
+            select(Paper.status).where(Paper.id == parent.paper_id).with_for_update()
+        ).scalar_one_or_none()
     else:
-        session.execute(
-            select(ImageJob.id).where(ImageJob.id == parent.image_job_id).with_for_update()
-        )
+        parent_status = session.execute(
+            select(ImageJob.status).where(ImageJob.id == parent.image_job_id).with_for_update()
+        ).scalar_one_or_none()
+    if parent_status is None or parent_status == _DELETED:
+        return False
     status = session.execute(
         select(Step.status).where(Step.id == step_id, _stuck()).with_for_update()
     ).scalar_one_or_none()

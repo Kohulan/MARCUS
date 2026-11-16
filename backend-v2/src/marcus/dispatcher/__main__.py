@@ -3,6 +3,9 @@
 LISTENs on `marcus_steps` (the steps trigger notifies on insert and status change), wakes
 on a notify or every 1 s, fills free slots, and runs the watchdog every 10 s.
 Stops cleanly on SIGTERM / SIGINT.
+
+Exactly one dispatcher replica must run: slot accounting (free_slots, then pick) is not
+atomic across processes, so two dispatchers could overfill a queue.
 """
 
 import logging
@@ -58,6 +61,27 @@ def _wait_and_drain(conn: psycopg.Connection, timeout: float) -> None:
         pass
 
 
+def _dispatch(send: Send) -> None:
+    try:
+        with sync_session() as session:
+            n = dispatch_once(session, send)
+        if n:
+            log.info("dispatched %d step(s)", n)
+    except Exception:
+        log.exception("dispatch error")
+
+
+def _watchdog() -> None:
+    """Own session and error handling: a failing dispatch can never starve the watchdog."""
+    try:
+        with sync_session() as session:
+            w = watchdog_once(session)
+        if w:
+            log.warning("watchdog failed or re-queued %d step(s)", w)
+    except Exception:
+        log.exception("watchdog error")
+
+
 def _run(stop: threading.Event, send: Send) -> None:
     conninfo = psycopg_conninfo(get_settings().database_url)
     last_watchdog = 0.0
@@ -68,15 +92,10 @@ def _run(stop: threading.Event, send: Send) -> None:
                 log.info("listening on %s", CHANNEL)
                 while not stop.is_set():
                     _wait_and_drain(conn, WAKE_S)
-                    with sync_session() as session:
-                        n = dispatch_once(session, send)
-                        if n:
-                            log.info("dispatched %d step(s)", n)
-                        if time.monotonic() - last_watchdog >= WATCHDOG_EVERY_S:
-                            last_watchdog = time.monotonic()
-                            w = watchdog_once(session)
-                            if w:
-                                log.warning("watchdog failed or re-queued %d step(s)", w)
+                    _dispatch(send)
+                    if time.monotonic() - last_watchdog >= WATCHDOG_EVERY_S:
+                        last_watchdog = time.monotonic()
+                        _watchdog()
         except Exception:
             log.exception("dispatcher loop error; reconnecting in %.0f s", WAKE_S)
             stop.wait(WAKE_S)
