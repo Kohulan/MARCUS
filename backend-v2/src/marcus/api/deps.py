@@ -108,6 +108,8 @@ async def current_owner(
     ip = client_ip(request)
     ip_valid = _parse_ip(ip) is not None
     if ip_valid:
+        # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
+        await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(ip))))
         since = datetime.now(UTC) - timedelta(hours=1)
         recent = (
             await db.execute(

@@ -142,3 +142,34 @@ def test_xff_used_from_trusted_proxy(monkeypatch, clear_settings_cache):
     assert client_ip(fake_request("10.0.0.5", "10.0.0.6")) == "10.0.0.5"
     assert client_ip(fake_request("10.0.0.5")) == "10.0.0.5"
     assert client_ip(fake_request("10.0.0.5", "garbage")) == "10.0.0.5"
+
+
+async def test_concurrent_new_owners_respect_the_ip_limit(migrated_db, app, async_db_session):
+    import asyncio
+
+    from sqlalchemy import func
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from marcus.core.db import async_db_url
+    from marcus.core.settings import get_settings
+
+    engine = create_async_engine(
+        async_db_url(get_settings().database_url), poolclass=NullPool
+    )
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _own_session():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _own_session
+    try:
+        async with make_client(app) as c:
+            rs = await asyncio.gather(*(c.get("/api/v2/_whoami") for _ in range(30)))
+    finally:
+        await engine.dispose()
+    codes = sorted(r.status_code for r in rs)
+    assert codes == [200] * 10 + [429] * 20
+    n = (await async_db_session.execute(select(func.count()).select_from(Owner))).scalar_one()
+    assert n == 10
