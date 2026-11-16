@@ -1,0 +1,36 @@
+# A PRIVATE second local copy of the production backend image, for load tests only.
+# Why: the shared copy on :19000 is used by other judges at the same time (security tests run
+# multi-minute docling jobs that block the single event loop), which would pollute timings.
+# Same image (marcus-backend:latest), CPU only, own uploads folder, own network, own port.
+# Start: docker compose -p marcus-judge-load -f judges/load/docker-compose.local-private.yml up -d
+# Stop:  docker compose -p marcus-judge-load -f judges/load/docker-compose.local-private.yml down
+services:
+  backend:
+    image: marcus-backend:latest
+    container_name: marcus-judge-load
+    environment:
+      - OPENAI_API_KEY=sk-judgeDUMMYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      - OPENAI_MODEL_ID=gpt-4o-mini
+      - SECRET_KEY=judge-local-secret-key-not-used-in-production-0123456789
+      - RELEASE_VERSION=1.0
+      - HOMEPAGE_URL=/latest/docs
+      - CORS_ORIGINS=http://localhost:18080
+      - CUDA_VISIBLE_DEVICES=
+      # WORKAROUND (see shim/sitecustomize.py): without it any PDF with 2+ pages crashes this CPU copy.
+      # Remove these two lines and the shim volume to run v1 exactly as shipped (and watch it crash).
+      - PYTHONPATH=/shim:/app
+      - JUDGE_FAKE_RAM_GIB=1
+    volumes:
+      - ./shim:/shim:ro
+      - ./data/private-uploads:/app/uploads
+      - ../stack/data/models:/app/models
+      - ../stack/data/cache:/root/.data
+      - ../stack/data/hf:/root/.cache
+    ports:
+      - "127.0.0.1:19100:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 60s

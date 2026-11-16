@@ -1,0 +1,1146 @@
+{
+ "scenario": "S3",
+ "target": "jarvis",
+ "base_url": "http://localhost:29000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T11:01:20+00:00",
+ "config": {
+  "target": "jarvis",
+  "base_url": null,
+  "scenarios": [
+   "S3"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "tag": ""
+ },
+ "stopped_early": false,
+ "results": {
+  "fixture": "synth_190.pdf",
+  "segmentation_window_ms": [
+   15024,
+   53169
+  ],
+  "run": {
+   "paper_id": "synth_190",
+   "engine": "decimer",
+   "wall_ms": 37522.4,
+   "segment_ms": null,
+   "segments_reported": null,
+   "segments_listed": null,
+   "expected_structures": 190,
+   "pages_total": 24,
+   "pages_with_segments": 0,
+   "page_errors": [
+    {
+     "page": 0,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 1,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 10,
+     "error": "Exception encountered when calling layer 'mrcnn_detection' (type DetectionLayer).",
+     "kind": "exception"
+    },
+    {
+     "page": 11,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 8,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 18,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 17,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 16,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 20,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    }
+   ],
+   "fatal_error": "RemoteProtocolError: Server disconnected without sending a response.",
+   "aborted": false,
+   "http_calls": 1,
+   "rate_limit_events": 0,
+   "server_segment_s": [],
+   "n_segments": 0,
+   "n_errors": 0,
+   "n_fallback": 0,
+   "ocsr_ms": {
+    "n": 0
+   }
+  },
+  "health": {
+   "idle_before": {
+    "n": 16,
+    "n_ok": 16,
+    "n_error": 0,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 16,
+     "min": 6.7,
+     "p50": 7.5,
+     "p95": 9.7,
+     "max": 10.1,
+     "mean": 7.8
+    },
+    "all_ms": {
+     "n": 16,
+     "min": 6.7,
+     "p50": 7.5,
+     "p95": 9.7,
+     "max": 10.1,
+     "mean": 7.8
+    },
+    "share_over_200ms": 0.0
+   },
+   "during_segmentation": {
+    "n": 38,
+    "n_ok": 0,
+    "n_error": 38,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 0
+    },
+    "all_ms": {
+     "n": 38,
+     "min": 3.3,
+     "p50": 18075.5,
+     "p95": 34702.7,
+     "max": 36552.1,
+     "mean": 18080.3
+    },
+    "share_over_200ms": 0.974
+   },
+   "after": {
+    "n": 15,
+    "n_ok": 0,
+    "n_error": 15,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 0
+    },
+    "all_ms": {
+     "n": 15,
+     "min": 2.8,
+     "p50": 3.1,
+     "p95": 4.3,
+     "max": 5.6,
+     "mean": 3.3
+    },
+    "share_over_200ms": 0.0
+   },
+   "all_samples": [
+    {
+     "t_ms": 2.5,
+     "ms": 8.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 1001.5,
+     "ms": 10.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 2001.6,
+     "ms": 7.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 3001.6,
+     "ms": 7.8,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 4001.5,
+     "ms": 7.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 5001.5,
+     "ms": 6.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 6001.5,
+     "ms": 6.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 7001.5,
+     "ms": 7.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 8001.7,
+     "ms": 7.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 9001.8,
+     "ms": 9.6,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 10001.5,
+     "ms": 7.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 11002.3,
+     "ms": 7.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 12001.5,
+     "ms": 7.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 13001.5,
+     "ms": 7.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 14001.5,
+     "ms": 7.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 15001.5,
+     "ms": 7.6,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 16001.8,
+     "ms": 36552.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 18002.2,
+     "ms": 34552.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 17002.1,
+     "ms": 35554.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 26002.4,
+     "ms": 26554.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 25002.2,
+     "ms": 27555.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 21002.4,
+     "ms": 31556.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 27002.2,
+     "ms": 25559.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 23002.2,
+     "ms": 29560.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 43002.0,
+     "ms": 9562.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 32002.5,
+     "ms": 20562.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 47002.0,
+     "ms": 5562.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 40002.2,
+     "ms": 12563.7,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 19002.2,
+     "ms": 33564.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 29002.0,
+     "ms": 23565.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 24002.3,
+     "ms": 28566.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 33002.3,
+     "ms": 19567.2,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 51002.1,
+     "ms": 1569.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 42002.0,
+     "ms": 10570.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 22002.5,
+     "ms": 30569.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 28002.2,
+     "ms": 24570.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 34002.0,
+     "ms": 18571.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 37002.1,
+     "ms": 15572.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 50003.7,
+     "ms": 2571.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 49002.1,
+     "ms": 3573.3,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 39002.1,
+     "ms": 13573.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 41002.0,
+     "ms": 11573.7,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 48002.1,
+     "ms": 4573.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 44001.9,
+     "ms": 8576.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 31002.1,
+     "ms": 21578.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 30002.1,
+     "ms": 22579.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 35002.1,
+     "ms": 17579.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 36002.2,
+     "ms": 16579.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 46002.3,
+     "ms": 6580.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 45002.1,
+     "ms": 7580.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 38002.1,
+     "ms": 14581.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 20002.4,
+     "ms": 32581.3,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 52002.1,
+     "ms": 582.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 53001.4,
+     "ms": 3.3,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 54002.0,
+     "ms": 3.2,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 55001.5,
+     "ms": 3.0,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 56003.1,
+     "ms": 3.1,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 57001.4,
+     "ms": 3.1,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 58001.5,
+     "ms": 2.9,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 59002.8,
+     "ms": 5.6,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 60001.5,
+     "ms": 2.8,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 61001.4,
+     "ms": 2.9,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 62001.5,
+     "ms": 3.8,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 63001.5,
+     "ms": 3.4,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 64001.6,
+     "ms": 3.2,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 65001.5,
+     "ms": 3.0,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 66001.5,
+     "ms": 3.6,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 67001.5,
+     "ms": 2.9,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 68001.6,
+     "ms": 3.2,
+     "status": null,
+     "error": "ReadError"
+    }
+   ]
+  },
+  "heartbeat": {
+   "idle_before": {
+    "n": 16,
+    "n_ok": 16,
+    "n_error": 0,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 16,
+     "min": 6.1,
+     "p50": 6.5,
+     "p95": 9.1,
+     "max": 9.2,
+     "mean": 7.0
+    },
+    "all_ms": {
+     "n": 16,
+     "min": 6.1,
+     "p50": 6.5,
+     "p95": 9.1,
+     "max": 9.2,
+     "mean": 7.0
+    },
+    "share_over_200ms": 0.0
+   },
+   "during_segmentation": {
+    "n": 38,
+    "n_ok": 0,
+    "n_error": 38,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 0
+    },
+    "all_ms": {
+     "n": 38,
+     "min": 3.4,
+     "p50": 18047.8,
+     "p95": 34681.7,
+     "max": 36529.6,
+     "mean": 18060.0
+    },
+    "share_over_200ms": 0.974
+   },
+   "after": {
+    "n": 15,
+    "n_ok": 0,
+    "n_error": 15,
+    "n_429": 0,
+    "ms_ok": {
+     "n": 0
+    },
+    "all_ms": {
+     "n": 15,
+     "min": 2.6,
+     "p50": 3.0,
+     "p95": 5.5,
+     "max": 6.3,
+     "mean": 3.5
+    },
+    "share_over_200ms": 0.0
+   },
+   "all_samples": [
+    {
+     "t_ms": 1.3,
+     "ms": 8.0,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 1001.1,
+     "ms": 7.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 2001.2,
+     "ms": 6.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 3001.3,
+     "ms": 7.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 4001.2,
+     "ms": 6.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 5001.1,
+     "ms": 6.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 6001.1,
+     "ms": 6.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 7001.1,
+     "ms": 6.6,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 8001.1,
+     "ms": 6.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 9001.1,
+     "ms": 6.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 10001.2,
+     "ms": 6.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 11001.2,
+     "ms": 9.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 12001.2,
+     "ms": 7.0,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 13001.2,
+     "ms": 6.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 14001.2,
+     "ms": 7.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 15001.2,
+     "ms": 9.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 16001.1,
+     "ms": 36529.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 17001.8,
+     "ms": 35529.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 18001.7,
+     "ms": 34532.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 19004.5,
+     "ms": 33530.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 24001.8,
+     "ms": 28535.3,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 47001.6,
+     "ms": 5536.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 25001.7,
+     "ms": 27537.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 20001.8,
+     "ms": 32538.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 21001.8,
+     "ms": 31538.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 23001.9,
+     "ms": 29539.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 52001.8,
+     "ms": 542.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 22001.8,
+     "ms": 30543.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 30001.9,
+     "ms": 22544.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 33001.8,
+     "ms": 19544.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 42001.7,
+     "ms": 10545.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 34001.8,
+     "ms": 18545.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 44001.7,
+     "ms": 8546.3,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 39001.7,
+     "ms": 13546.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 50001.7,
+     "ms": 2547.2,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 45001.6,
+     "ms": 7547.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 35001.7,
+     "ms": 17550.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 41001.5,
+     "ms": 11553.7,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 27001.8,
+     "ms": 25553.9,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 31003.9,
+     "ms": 21552.2,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 46001.8,
+     "ms": 6554.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 36001.6,
+     "ms": 16555.6,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 38001.6,
+     "ms": 14555.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 48001.7,
+     "ms": 4556.0,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 49001.6,
+     "ms": 3556.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 26001.9,
+     "ms": 26557.2,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 28001.9,
+     "ms": 24557.5,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 29001.8,
+     "ms": 23557.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 43001.6,
+     "ms": 9559.4,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 37001.5,
+     "ms": 15560.1,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 32002.0,
+     "ms": 20560.2,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 40001.7,
+     "ms": 12564.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 51001.8,
+     "ms": 1567.8,
+     "status": null,
+     "error": "RemoteProtocolError"
+    },
+    {
+     "t_ms": 53001.1,
+     "ms": 3.4,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 54001.2,
+     "ms": 3.7,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 55002.0,
+     "ms": 5.0,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 56001.3,
+     "ms": 3.2,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 57003.0,
+     "ms": 3.1,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 58002.0,
+     "ms": 2.8,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 59001.1,
+     "ms": 2.8,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 60002.0,
+     "ms": 2.7,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 61001.1,
+     "ms": 2.9,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 62001.0,
+     "ms": 6.3,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 63001.1,
+     "ms": 5.2,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 64001.1,
+     "ms": 3.4,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 65001.1,
+     "ms": 3.0,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 66001.5,
+     "ms": 3.0,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 67001.0,
+     "ms": 2.6,
+     "status": null,
+     "error": "ReadError"
+    },
+    {
+     "t_ms": 68001.1,
+     "ms": 3.0,
+     "status": null,
+     "error": "ReadError"
+    }
+   ]
+  }
+ },
+ "summary": {
+  "health": {
+   "idle_p95_ms": 9.7,
+   "during_p50_ms": 18075.5,
+   "during_p95_ms": 34702.7,
+   "during_max_ms": 36552.1,
+   "during_n": 38,
+   "during_n_error": 38,
+   "during_n_429": 0
+  },
+  "heartbeat": {
+   "idle_p95_ms": 9.1,
+   "during_p50_ms": 18047.8,
+   "during_p95_ms": 34681.7,
+   "during_max_ms": 36529.6,
+   "during_n": 38,
+   "during_n_error": 38,
+   "during_n_429": 0
+  },
+  "segmentation_s": 38.1
+ },
+ "guard": {
+  "enabled": true,
+  "checks": 3,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 4793,
+  "max_gpu_used_mib": 27702,
+  "events": [
+   {
+    "t": "2026-11-16T11:01:21+00:00",
+    "scenario": "S3",
+    "when": "before",
+    "prod_health": "healthy",
+    "gpu_free_mib": 4793,
+    "gpu_used_mib": 27702,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-16T11:01:51+00:00",
+    "scenario": "S3",
+    "when": "during",
+    "prod_health": "healthy",
+    "gpu_free_mib": 4793,
+    "gpu_used_mib": 27702,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-16T11:02:21+00:00",
+    "scenario": "S3",
+    "when": "during",
+    "prod_health": "healthy",
+    "gpu_free_mib": 14893,
+    "gpu_used_mib": 17602,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-16T11:02:29+00:00",
+    "scenario": "S3",
+    "when": "after",
+    "prod_health": "healthy",
+    "gpu_free_mib": 14893,
+    "gpu_used_mib": 17602,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-16T11:02:29+00:00",
+ "duration_s": 68.4
+}

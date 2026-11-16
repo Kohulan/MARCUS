@@ -1,0 +1,5639 @@
+{
+ "scenario": "S5",
+ "target": "local",
+ "base_url": "http://localhost:19102",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T11:31:05+00:00",
+ "config": {
+  "target": "local",
+  "base_url": "http://localhost:19102",
+  "scenarios": [
+   "S3",
+   "S2",
+   "S5"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 3,
+  "s2_small_count": 1,
+  "s2_big_size": 15,
+  "small_gap_s": 10.0,
+  "s3_size": 15,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 40.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "tag": "validation"
+ },
+ "stopped_early": false,
+ "results": {
+  "engine": "decimer",
+  "period_s": 3.5,
+  "alone": {
+   "n": 6,
+   "n_ok": 6,
+   "n_error": 0,
+   "n_429": 0,
+   "ms_ok": {
+    "n": 6,
+    "min": 4009.2,
+    "p50": 4386.8,
+    "p95": 4731.3,
+    "max": 4771.4,
+    "mean": 4415.1
+   },
+   "all_ms": {
+    "n": 6,
+    "min": 4009.2,
+    "p50": 4386.8,
+    "p95": 4731.3,
+    "max": 4771.4,
+    "mean": 4415.1
+   },
+   "share_over_200ms": 1.0,
+   "samples": [
+    {
+     "t_ms": 0.4,
+     "ms": 4386.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 7886.8,
+     "ms": 4009.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 15396.3,
+     "ms": 4771.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 23667.9,
+     "ms": 4387.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 31555.7,
+     "ms": 4610.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 39666.9,
+     "ms": 4325.5,
+     "status": 200,
+     "error": null
+    }
+   ]
+  },
+  "during_s2": {
+   "period_s": 3.5,
+   "n": 33,
+   "n_ok": 33,
+   "n_error": 0,
+   "n_429": 0,
+   "ms_ok": {
+    "n": 33,
+    "min": 4964.3,
+    "p50": 11344.2,
+    "p95": 90338.5,
+    "max": 157649.9,
+    "mean": 25702.1
+   },
+   "all_ms": {
+    "n": 33,
+    "min": 4964.3,
+    "p50": 11344.2,
+    "p95": 90338.5,
+    "max": 157649.9,
+    "mean": 25702.1
+   },
+   "share_over_200ms": 1.0,
+   "samples": [
+    {
+     "t_ms": 0.6,
+     "ms": 146479.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 149980.3,
+     "ms": 157649.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 311131.8,
+     "ms": 18136.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 332774.6,
+     "ms": 52911.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 389193.5,
+     "ms": 25615.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 418308.9,
+     "ms": 35339.0,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 457150.6,
+     "ms": 36256.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 496907.3,
+     "ms": 26490.8,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 526904.8,
+     "ms": 38215.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 568632.1,
+     "ms": 47088.5,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 619230.2,
+     "ms": 33827.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 656569.3,
+     "ms": 19159.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 679238.0,
+     "ms": 11976.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 694720.3,
+     "ms": 35589.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 733813.9,
+     "ms": 11344.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 748663.6,
+     "ms": 18563.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 770738.2,
+     "ms": 10833.8,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 785074.3,
+     "ms": 4964.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 793539.5,
+     "ms": 7632.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 804672.1,
+     "ms": 5933.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 814105.6,
+     "ms": 5075.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 822683.6,
+     "ms": 7493.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 833681.1,
+     "ms": 8134.6,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 845318.9,
+     "ms": 7690.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 856510.7,
+     "ms": 7479.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 867491.0,
+     "ms": 13325.4,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 884317.0,
+     "ms": 8473.0,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 896290.6,
+     "ms": 7396.9,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 907187.9,
+     "ms": 7890.3,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 918578.3,
+     "ms": 7820.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 929899.2,
+     "ms": 7469.0,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 940868.6,
+     "ms": 8544.1,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 952917.5,
+     "ms": 7368.8,
+     "status": 200,
+     "error": null
+    }
+   ],
+   "s2_small_wall_s": [
+    769.1
+   ],
+   "s2_health": {
+    "n": 710,
+    "min": 5933.5,
+    "p50": 295278.3,
+    "p95": 524551.5,
+    "max": 545388.2,
+    "mean": 284122.8
+   },
+   "s2_full": {
+    "engine": "decimer",
+    "big_structures": 15,
+    "big_ocsr_cap": 3,
+    "small_count": 1,
+    "big": {
+     "paper_id": "synth_015",
+     "engine": "decimer",
+     "wall_ms": 206545.5,
+     "segment_ms": 146223.2,
+     "segments_reported": 15,
+     "segments_listed": null,
+     "expected_structures": 15,
+     "pages_total": 5,
+     "pages_with_segments": 0,
+     "page_errors": [],
+     "fatal_error": "ReadTimeout: timed out",
+     "aborted": false,
+     "http_calls": 2,
+     "rate_limit_events": 0,
+     "server_segment_s": [
+      141.33
+     ],
+     "n_segments": 0,
+     "n_errors": 0,
+     "n_fallback": 0,
+     "ocsr_ms": {
+      "n": 0
+     }
+    },
+    "big_started_s": 5.696697150357068,
+    "big_finished_s": 212.4099480304867,
+    "small": [
+     {
+      "paper_id": "synth_015",
+      "engine": "decimer",
+      "wall_ms": 769107.7,
+      "segment_ms": 302048.1,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "http_calls": 17,
+      "rate_limit_events": 0,
+      "server_segment_s": [
+       141.33,
+       141.79
+      ],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 12866.9,
+       "p50": 24839.3,
+       "p95": 55582.5,
+       "max": 56090.1,
+       "mean": 31096.7
+      },
+      "submitted_at_s": 10.72,
+      "extract_segments_ms": 302048.1,
+      "during_big_run": false,
+      "slowdown_vs_s1": null,
+      "segments": [
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 12866.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 56090.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 24839.3,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 39010.7,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 47312.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 22990.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 40570.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 55365.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 37162.3,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 23517.2,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 15432.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 38248.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 15501.6,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 21841.8,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 15702.0,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 332.5,
+        "ms": 302048.0,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__fd6fd477a119/all_segments",
+        "status": 200,
+        "t_ms": 302380.7,
+        "ms": 275.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 302656.5,
+        "ms": 12866.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 315523.5,
+        "ms": 56089.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 371613.6,
+        "ms": 24839.1,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 396452.9,
+        "ms": 39010.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 435463.7,
+        "ms": 47311.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 482775.8,
+        "ms": 22989.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 505765.8,
+        "ms": 40569.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 546335.9,
+        "ms": 55364.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 601700.9,
+        "ms": 37162.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 638863.3,
+        "ms": 23517.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 662380.5,
+        "ms": 15432.2,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 677813.1,
+        "ms": 38248.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 716061.6,
+        "ms": 15501.4,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 731563.2,
+        "ms": 21841.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 753405.1,
+        "ms": 15701.8,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "health_probe": {
+     "n": 780,
+     "n_ok": 710,
+     "n_error": 70,
+     "n_429": 0,
+     "ms_ok": {
+      "n": 710,
+      "min": 5933.5,
+      "p50": 295278.3,
+      "p95": 524551.5,
+      "max": 545388.2,
+      "mean": 284122.8
+     },
+     "all_ms": {
+      "n": 780,
+      "min": 5933.5,
+      "p50": 300124.5,
+      "p95": 523265.9,
+      "max": 545388.2,
+      "mean": 285561.9
+     },
+     "share_over_200ms": 1.0
+    },
+    "health_samples": [
+     {
+      "t_ms": 1.3,
+      "ms": 5933.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 2001.5,
+      "ms": 150022.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 3001.5,
+      "ms": 149026.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 1001.5,
+      "ms": 151080.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 4002.4,
+      "ms": 148381.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 5001.8,
+      "ms": 152600.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 6001.1,
+      "ms": 152100.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 8001.3,
+      "ms": 300142.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 9001.9,
+      "ms": 300144.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 10001.9,
+      "ms": 300082.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 11016.9,
+      "ms": 300052.7,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 12001.3,
+      "ms": 300142.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 7002.9,
+      "ms": 306143.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 13002.4,
+      "ms": 300169.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 138002.0,
+      "ms": 175408.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 117001.8,
+      "ms": 196426.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 14001.5,
+      "ms": 299450.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 15001.4,
+      "ms": 298485.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 16003.1,
+      "ms": 298034.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 17001.3,
+      "ms": 297067.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 20001.7,
+      "ms": 296228.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 18001.4,
+      "ms": 298735.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 19001.3,
+      "ms": 297885.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 22001.4,
+      "ms": 296181.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 21001.5,
+      "ms": 297254.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 23001.3,
+      "ms": 295740.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 24001.3,
+      "ms": 295101.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 26001.2,
+      "ms": 293197.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 25001.8,
+      "ms": 300948.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 27001.8,
+      "ms": 298990.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 29001.4,
+      "ms": 297097.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 30004.3,
+      "ms": 296288.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 31001.5,
+      "ms": 295383.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 32001.4,
+      "ms": 294401.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 28001.4,
+      "ms": 298527.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 36011.0,
+      "ms": 290620.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 283001.1,
+      "ms": 43752.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 34002.2,
+      "ms": 292927.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 33001.1,
+      "ms": 294085.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 166002.9,
+      "ms": 161115.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 198001.4,
+      "ms": 129571.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 35001.4,
+      "ms": 292875.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 209005.1,
+      "ms": 120749.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 38001.3,
+      "ms": 296621.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 37006.0,
+      "ms": 297650.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 128001.4,
+      "ms": 207620.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 292008.7,
+      "ms": 43629.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 39001.3,
+      "ms": 297315.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 170001.5,
+      "ms": 166767.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 40001.3,
+      "ms": 296795.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 41004.6,
+      "ms": 295816.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 42001.4,
+      "ms": 295146.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 43001.9,
+      "ms": 295835.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 46001.3,
+      "ms": 300143.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 47001.4,
+      "ms": 300141.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 48001.8,
+      "ms": 300139.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 49001.3,
+      "ms": 300140.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 50003.6,
+      "ms": 300157.8,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 51001.3,
+      "ms": 300149.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 52001.4,
+      "ms": 300130.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 53001.8,
+      "ms": 300140.8,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 54001.8,
+      "ms": 300130.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 55001.7,
+      "ms": 300080.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 56002.5,
+      "ms": 300143.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 57001.5,
+      "ms": 300090.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 58002.0,
+      "ms": 300132.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 59001.5,
+      "ms": 300140.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 60001.4,
+      "ms": 300160.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 61004.2,
+      "ms": 300135.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 62001.2,
+      "ms": 300162.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 63002.5,
+      "ms": 300153.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 64002.1,
+      "ms": 300136.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 65003.9,
+      "ms": 300096.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 66002.2,
+      "ms": 300164.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 67001.5,
+      "ms": 300140.7,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 68001.8,
+      "ms": 300143.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 69001.3,
+      "ms": 300156.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 70002.9,
+      "ms": 300154.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 71001.3,
+      "ms": 300077.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 72001.4,
+      "ms": 300147.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 73001.3,
+      "ms": 300140.7,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 74003.0,
+      "ms": 300133.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 75001.7,
+      "ms": 300122.4,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 76002.0,
+      "ms": 300096.8,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 77001.9,
+      "ms": 300137.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 44001.6,
+      "ms": 333564.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 45001.4,
+      "ms": 332596.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 78001.5,
+      "ms": 300141.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 79001.4,
+      "ms": 300138.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 80002.3,
+      "ms": 300093.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 81001.4,
+      "ms": 300134.7,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 82001.6,
+      "ms": 300154.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 318006.1,
+      "ms": 64371.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 148001.4,
+      "ms": 234405.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 83005.6,
+      "ms": 300127.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 84002.5,
+      "ms": 300156.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 85001.5,
+      "ms": 300144.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 86001.7,
+      "ms": 300126.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 87003.1,
+      "ms": 300146.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 88001.5,
+      "ms": 300146.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 89001.5,
+      "ms": 300155.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 90001.7,
+      "ms": 300148.8,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 91002.5,
+      "ms": 300151.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 181001.7,
+      "ms": 210406.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 201001.6,
+      "ms": 190451.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 210001.2,
+      "ms": 181510.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 298001.3,
+      "ms": 93534.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 264004.8,
+      "ms": 128687.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 322019.7,
+      "ms": 70852.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 217002.1,
+      "ms": 176416.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 189003.1,
+      "ms": 205653.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 270001.1,
+      "ms": 125607.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 92001.4,
+      "ms": 306092.8,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 93001.3,
+      "ms": 305132.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 94001.3,
+      "ms": 304160.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 95001.9,
+      "ms": 303190.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 96001.3,
+      "ms": 302212.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 97002.2,
+      "ms": 301230.6,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 98004.2,
+      "ms": 300349.1,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 99002.9,
+      "ms": 300150.9,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 100001.4,
+      "ms": 300146.2,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 190001.3,
+      "ms": 230423.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 240004.0,
+      "ms": 180501.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 276002.3,
+      "ms": 145326.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 391000.9,
+      "ms": 50112.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 312002.0,
+      "ms": 129148.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 335012.0,
+      "ms": 107029.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 358005.6,
+      "ms": 88206.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 101001.3,
+      "ms": 351165.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 150001.4,
+      "ms": 302504.3,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 102002.6,
+      "ms": 355783.0,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 103001.3,
+      "ms": 355225.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 417002.0,
+      "ms": 42392.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 287001.3,
+      "ms": 172439.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 236005.8,
+      "ms": 252938.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 280001.2,
+      "ms": 236567.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 105002.2,
+      "ms": 411610.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 104001.6,
+      "ms": 412650.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 106001.4,
+      "ms": 411204.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 108003.8,
+      "ms": 410492.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 107001.5,
+      "ms": 412450.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 109001.4,
+      "ms": 419491.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 110003.0,
+      "ms": 418529.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 111001.4,
+      "ms": 417908.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 112001.5,
+      "ms": 417219.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 151001.3,
+      "ms": 378221.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 115001.5,
+      "ms": 414258.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 113001.5,
+      "ms": 416313.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 152014.0,
+      "ms": 378334.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 114001.4,
+      "ms": 417113.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 116001.5,
+      "ms": 435647.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 186001.8,
+      "ms": 365676.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 118002.3,
+      "ms": 438854.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 119001.4,
+      "ms": 438146.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 496001.4,
+      "ms": 61202.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 387000.9,
+      "ms": 170234.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 120003.2,
+      "ms": 437275.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 121001.4,
+      "ms": 436332.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 123011.8,
+      "ms": 434358.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 453001.0,
+      "ms": 104409.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 122002.5,
+      "ms": 435443.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 430004.8,
+      "ms": 127487.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 124002.3,
+      "ms": 441912.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 125002.2,
+      "ms": 445634.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 126001.6,
+      "ms": 444691.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 245002.4,
+      "ms": 325781.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 197002.0,
+      "ms": 376232.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 127001.6,
+      "ms": 446282.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 448004.8,
+      "ms": 125319.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 158001.9,
+      "ms": 415380.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 130002.2,
+      "ms": 443416.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 129001.3,
+      "ms": 444454.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 131001.7,
+      "ms": 481159.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 321007.8,
+      "ms": 291517.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 433001.3,
+      "ms": 179626.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 133002.3,
+      "ms": 479672.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 132001.5,
+      "ms": 480727.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 134003.8,
+      "ms": 479979.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 139002.0,
+      "ms": 475159.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 140001.2,
+      "ms": 474668.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 437006.2,
+      "ms": 178280.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 136002.2,
+      "ms": 479431.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 378000.9,
+      "ms": 237571.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 137004.4,
+      "ms": 478812.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 499001.9,
+      "ms": 118259.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 495002.0,
+      "ms": 124071.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 135001.5,
+      "ms": 486856.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 425000.8,
+      "ms": 198603.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 141002.8,
+      "ms": 483477.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 142001.4,
+      "ms": 482525.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 143001.3,
+      "ms": 481579.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 249001.2,
+      "ms": 375632.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 144002.3,
+      "ms": 480674.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 145005.3,
+      "ms": 479721.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 146004.0,
+      "ms": 479268.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 153001.9,
+      "ms": 472649.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 337010.1,
+      "ms": 289524.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 309001.9,
+      "ms": 317751.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 149001.4,
+      "ms": 478170.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 406003.3,
+      "ms": 221264.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 147005.6,
+      "ms": 480849.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 320019.8,
+      "ms": 312019.5,
+      "status": null,
+      "error": "ReadTimeout"
+     },
+     {
+      "t_ms": 154000.9,
+      "ms": 490739.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 155000.9,
+      "ms": 489843.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 156001.0,
+      "ms": 489092.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 307001.5,
+      "ms": 342770.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 311001.9,
+      "ms": 338825.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 160001.7,
+      "ms": 489864.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 159000.9,
+      "ms": 490926.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 161001.5,
+      "ms": 488977.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 508002.3,
+      "ms": 142036.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 157001.5,
+      "ms": 493076.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 548002.1,
+      "ms": 102117.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 366000.8,
+      "ms": 286077.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 392013.8,
+      "ms": 260163.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 519014.6,
+      "ms": 133299.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 163002.4,
+      "ms": 496541.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 164001.5,
+      "ms": 495581.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 462004.1,
+      "ms": 197622.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 162004.7,
+      "ms": 499040.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 165001.9,
+      "ms": 498445.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 167002.0,
+      "ms": 496500.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 168002.2,
+      "ms": 495547.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 395024.9,
+      "ms": 268573.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 343002.8,
+      "ms": 320646.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 172001.7,
+      "ms": 491690.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 169002.9,
+      "ms": 495239.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 171002.4,
+      "ms": 493948.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 468002.5,
+      "ms": 197191.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 173002.4,
+      "ms": 495617.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 175001.5,
+      "ms": 497881.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 174002.1,
+      "ms": 498923.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 176001.6,
+      "ms": 498239.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 269001.6,
+      "ms": 405273.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 177002.6,
+      "ms": 497614.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 178001.7,
+      "ms": 497663.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 535000.9,
+      "ms": 141321.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 410008.9,
+      "ms": 266410.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 621857.7,
+      "ms": 54619.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 557148.1,
+      "ms": 119375.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 179007.4,
+      "ms": 497571.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 404001.0,
+      "ms": 272781.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 180001.4,
+      "ms": 496875.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 645093.9,
+      "ms": 31999.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 529002.6,
+      "ms": 148209.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 435001.8,
+      "ms": 242248.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 514001.2,
+      "ms": 164725.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 182001.6,
+      "ms": 498803.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 403004.7,
+      "ms": 277879.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 427005.2,
+      "ms": 253921.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 184001.2,
+      "ms": 496957.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 183001.8,
+      "ms": 497999.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 510002.6,
+      "ms": 173271.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 185001.9,
+      "ms": 502075.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 191001.4,
+      "ms": 496148.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 187001.5,
+      "ms": 500196.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 192001.5,
+      "ms": 495241.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 538005.0,
+      "ms": 150250.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 188002.9,
+      "ms": 500314.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 193001.7,
+      "ms": 496172.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 194001.5,
+      "ms": 495317.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624676.6,
+      "ms": 64716.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 195001.4,
+      "ms": 495862.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 381002.8,
+      "ms": 309938.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 199073.8,
+      "ms": 495861.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 200003.5,
+      "ms": 494963.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 196001.5,
+      "ms": 499004.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 203002.1,
+      "ms": 494077.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 632039.5,
+      "ms": 65072.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 649927.4,
+      "ms": 47209.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 557204.1,
+      "ms": 139976.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 570783.6,
+      "ms": 126419.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 202001.8,
+      "ms": 495236.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 491001.6,
+      "ms": 206279.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 665194.1,
+      "ms": 32111.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 306001.5,
+      "ms": 394391.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624580.3,
+      "ms": 75851.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 511001.8,
+      "ms": 189474.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 613983.8,
+      "ms": 86529.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663550.2,
+      "ms": 37005.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 207004.5,
+      "ms": 493608.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 205003.8,
+      "ms": 495652.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 206001.9,
+      "ms": 494698.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 524002.4,
+      "ms": 176741.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 235002.8,
+      "ms": 465787.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 204001.3,
+      "ms": 497693.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 208003.4,
+      "ms": 513433.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 211013.3,
+      "ms": 510449.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 452002.1,
+      "ms": 274878.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 370000.8,
+      "ms": 356948.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 214005.2,
+      "ms": 513085.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 386000.9,
+      "ms": 341280.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 213001.9,
+      "ms": 514483.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 291003.4,
+      "ms": 436821.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 475004.0,
+      "ms": 252852.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 502006.7,
+      "ms": 226359.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 649772.1,
+      "ms": 78694.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 687198.3,
+      "ms": 42207.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 212008.6,
+      "ms": 519896.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 411002.7,
+      "ms": 321427.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 428001.3,
+      "ms": 311070.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 215009.3,
+      "ms": 524111.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 315023.8,
+      "ms": 424170.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 216003.2,
+      "ms": 523234.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 513001.2,
+      "ms": 227193.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 218003.5,
+      "ms": 522740.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 333000.8,
+      "ms": 407889.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 482003.2,
+      "ms": 259229.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 219001.2,
+      "ms": 522298.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 649827.5,
+      "ms": 91668.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 534003.7,
+      "ms": 207679.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 360003.2,
+      "ms": 386767.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 522012.1,
+      "ms": 224812.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 220010.8,
+      "ms": 526861.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 222001.1,
+      "ms": 524911.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 221003.8,
+      "ms": 525954.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 492001.3,
+      "ms": 254986.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 223002.1,
+      "ms": 524025.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 476001.5,
+      "ms": 271081.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 288001.3,
+      "ms": 459121.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 467001.3,
+      "ms": 280161.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 689393.2,
+      "ms": 57828.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 442010.6,
+      "ms": 305241.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 721463.2,
+      "ms": 26096.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 516007.9,
+      "ms": 231936.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 246005.8,
+      "ms": 502138.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 672883.0,
+      "ms": 75670.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624727.2,
+      "ms": 125217.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 557278.8,
+      "ms": 193413.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 250001.3,
+      "ms": 507525.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 224006.9,
+      "ms": 533560.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 225002.3,
+      "ms": 532602.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 267001.3,
+      "ms": 490658.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 500006.4,
+      "ms": 257699.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 547003.9,
+      "ms": 210749.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 229011.1,
+      "ms": 528845.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 227003.3,
+      "ms": 531263.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 615434.0,
+      "ms": 152716.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 230002.9,
+      "ms": 538227.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 226002.3,
+      "ms": 542732.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 688255.4,
+      "ms": 81584.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 650038.9,
+      "ms": 120987.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 228001.4,
+      "ms": 545388.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 354001.9,
+      "ms": 420447.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 399011.7,
+      "ms": 375520.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 233003.7,
+      "ms": 541563.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 231003.9,
+      "ms": 543600.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 232011.8,
+      "ms": 542624.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 407003.5,
+      "ms": 370784.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 242004.6,
+      "ms": 535817.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 377001.7,
+      "ms": 400857.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 558007.0,
+      "ms": 219904.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 237007.1,
+      "ms": 540948.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 485001.4,
+      "ms": 292994.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 238001.4,
+      "ms": 540025.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 626753.9,
+      "ms": 151334.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 488001.4,
+      "ms": 290146.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 400002.0,
+      "ms": 378194.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 234003.0,
+      "ms": 544382.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 239003.5,
+      "ms": 539620.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 471002.7,
+      "ms": 307654.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 517019.4,
+      "ms": 261782.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 241004.5,
+      "ms": 537838.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 243001.3,
+      "ms": 536010.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 244004.2,
+      "ms": 535321.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 372001.1,
+      "ms": 413602.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 424003.6,
+      "ms": 361651.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 504002.1,
+      "ms": 281691.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 559022.3,
+      "ms": 226719.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 464003.7,
+      "ms": 321779.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 490001.3,
+      "ms": 295825.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 521016.6,
+      "ms": 264852.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 247002.8,
+      "ms": 538897.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 473001.3,
+      "ms": 314409.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 248005.9,
+      "ms": 539408.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 626535.0,
+      "ms": 160883.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 365002.7,
+      "ms": 422423.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 251004.3,
+      "ms": 536428.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 252005.3,
+      "ms": 535432.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 382005.2,
+      "ms": 405436.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 536004.5,
+      "ms": 251440.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 253005.9,
+      "ms": 535434.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 254004.9,
+      "ms": 534441.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 449001.3,
+      "ms": 339574.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 393006.2,
+      "ms": 395600.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 255003.2,
+      "ms": 533777.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 260001.8,
+      "ms": 528841.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 265007.8,
+      "ms": 523871.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 463001.7,
+      "ms": 325877.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 537002.4,
+      "ms": 251885.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 262001.9,
+      "ms": 526895.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 690941.5,
+      "ms": 97960.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 263001.9,
+      "ms": 525905.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 259001.3,
+      "ms": 529906.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 570693.2,
+      "ms": 218218.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 483001.6,
+      "ms": 305915.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 652314.7,
+      "ms": 136606.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 256004.8,
+      "ms": 532921.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 258001.4,
+      "ms": 530933.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676578.9,
+      "ms": 112361.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697238.0,
+      "ms": 91706.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624526.5,
+      "ms": 164423.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 340000.9,
+      "ms": 448953.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 257002.9,
+      "ms": 531956.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 261008.0,
+      "ms": 527956.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 331005.9,
+      "ms": 457963.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 489000.9,
+      "ms": 299973.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 373000.8,
+      "ms": 415979.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 518015.1,
+      "ms": 270970.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 672925.5,
+      "ms": 116064.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 505001.3,
+      "ms": 283993.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 557235.6,
+      "ms": 231771.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 266010.6,
+      "ms": 523003.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 274008.7,
+      "ms": 515011.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 478002.1,
+      "ms": 311023.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 273001.1,
+      "ms": 516029.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 268001.3,
+      "ms": 521032.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 429003.3,
+      "ms": 360034.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 277001.3,
+      "ms": 512041.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 271003.5,
+      "ms": 518043.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 295006.0,
+      "ms": 494048.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 272001.2,
+      "ms": 517058.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 275001.3,
+      "ms": 514063.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 278001.4,
+      "ms": 511068.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 362000.9,
+      "ms": 427074.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 282004.8,
+      "ms": 507074.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 279006.4,
+      "ms": 510078.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 285004.2,
+      "ms": 504087.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 286001.4,
+      "ms": 503096.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 284004.4,
+      "ms": 505098.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 281001.3,
+      "ms": 508106.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 289001.6,
+      "ms": 500111.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 299001.3,
+      "ms": 490116.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 294004.5,
+      "ms": 495120.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 293001.9,
+      "ms": 496147.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 290001.3,
+      "ms": 499153.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 296001.5,
+      "ms": 493158.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 300002.8,
+      "ms": 489158.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 297005.4,
+      "ms": 492163.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 302002.8,
+      "ms": 487169.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 303001.4,
+      "ms": 486187.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 301004.1,
+      "ms": 488195.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 305004.8,
+      "ms": 484211.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 304001.2,
+      "ms": 485216.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 359001.0,
+      "ms": 430220.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 308001.9,
+      "ms": 481388.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 493001.3,
+      "ms": 296393.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 313003.6,
+      "ms": 476396.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 344001.7,
+      "ms": 445404.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 314017.6,
+      "ms": 475399.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 316015.3,
+      "ms": 473405.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 310001.7,
+      "ms": 479448.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697079.7,
+      "ms": 92372.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 627172.3,
+      "ms": 162281.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 347008.6,
+      "ms": 442453.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700744.0,
+      "ms": 88981.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 317013.9,
+      "ms": 472717.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 420003.8,
+      "ms": 369728.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 319011.1,
+      "ms": 470984.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 402000.8,
+      "ms": 387999.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 325007.6,
+      "ms": 464994.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 498009.8,
+      "ms": 291995.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 324002.3,
+      "ms": 466004.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 326000.8,
+      "ms": 464008.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 323011.8,
+      "ms": 466999.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 436002.0,
+      "ms": 354012.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 664242.5,
+      "ms": 125774.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 329024.7,
+      "ms": 460994.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 328011.2,
+      "ms": 462009.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 327016.3,
+      "ms": 463112.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 330009.9,
+      "ms": 460123.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 336006.0,
+      "ms": 454133.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 338017.8,
+      "ms": 452128.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 339008.6,
+      "ms": 451142.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 332002.7,
+      "ms": 458158.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 551649.4,
+      "ms": 238543.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 342001.1,
+      "ms": 448192.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 341007.7,
+      "ms": 449189.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 334001.9,
+      "ms": 456235.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 345002.7,
+      "ms": 445377.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 352001.0,
+      "ms": 438390.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 355001.7,
+      "ms": 435397.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 349003.3,
+      "ms": 441403.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 361003.6,
+      "ms": 429409.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 353003.2,
+      "ms": 437414.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 357002.4,
+      "ms": 433541.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 350001.0,
+      "ms": 440547.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 356001.7,
+      "ms": 434552.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 351002.8,
+      "ms": 439555.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 369003.0,
+      "ms": 421559.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 371006.5,
+      "ms": 419559.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 367000.8,
+      "ms": 423569.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 375000.9,
+      "ms": 415573.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 364003.0,
+      "ms": 426574.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 397014.1,
+      "ms": 393579.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 368005.8,
+      "ms": 422591.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 409012.6,
+      "ms": 381591.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 376011.6,
+      "ms": 414599.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 374002.9,
+      "ms": 416612.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 408002.7,
+      "ms": 382616.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 384000.8,
+      "ms": 406622.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 413003.4,
+      "ms": 377624.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 383004.8,
+      "ms": 407626.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 416003.7,
+      "ms": 374642.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 414010.1,
+      "ms": 376640.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 388001.3,
+      "ms": 402653.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 390000.9,
+      "ms": 400665.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 380000.9,
+      "ms": 410673.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 348000.8,
+      "ms": 442677.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 385001.2,
+      "ms": 405681.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 389000.9,
+      "ms": 401686.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 418002.6,
+      "ms": 372689.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 415001.9,
+      "ms": 375694.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 394024.7,
+      "ms": 396869.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 419002.6,
+      "ms": 371900.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 405000.8,
+      "ms": 385907.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 422038.6,
+      "ms": 368880.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 401003.1,
+      "ms": 389926.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 396006.8,
+      "ms": 394933.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 363005.8,
+      "ms": 427940.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 421021.7,
+      "ms": 369929.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 398011.0,
+      "ms": 392951.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 412005.2,
+      "ms": 378970.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 379001.2,
+      "ms": 411974.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 423001.6,
+      "ms": 367974.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 346002.1,
+      "ms": 445184.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 426004.8,
+      "ms": 365202.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 515001.3,
+      "ms": 276213.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 512008.5,
+      "ms": 279212.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 431006.8,
+      "ms": 360221.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 509002.2,
+      "ms": 282232.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 525002.5,
+      "ms": 266244.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 520006.0,
+      "ms": 271248.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 543001.6,
+      "ms": 248268.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 527001.3,
+      "ms": 264283.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 531011.3,
+      "ms": 260280.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 573324.8,
+      "ms": 217979.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 542001.2,
+      "ms": 249308.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 549001.4,
+      "ms": 242551.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 573284.4,
+      "ms": 218290.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 573234.8,
+      "ms": 218370.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 532018.6,
+      "ms": 259595.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 561006.5,
+      "ms": 230632.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 530009.0,
+      "ms": 261638.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 612627.9,
+      "ms": 179035.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 528001.4,
+      "ms": 263673.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 615572.7,
+      "ms": 176111.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 533001.6,
+      "ms": 258695.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 570637.0,
+      "ms": 221094.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 573419.1,
+      "ms": 218337.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 557333.5,
+      "ms": 234798.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 612524.9,
+      "ms": 179618.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 614161.9,
+      "ms": 177987.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 612160.8,
+      "ms": 180002.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 573455.8,
+      "ms": 218724.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 539003.6,
+      "ms": 253203.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 546006.0,
+      "ms": 246212.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 523001.2,
+      "ms": 269243.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 650078.1,
+      "ms": 142180.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 526002.7,
+      "ms": 266267.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 551678.6,
+      "ms": 240615.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 541003.1,
+      "ms": 251331.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 612675.3,
+      "ms": 179669.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 545004.4,
+      "ms": 247359.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 540001.4,
+      "ms": 252494.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 565914.8,
+      "ms": 226592.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 556857.3,
+      "ms": 235664.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700555.8,
+      "ms": 91978.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700513.2,
+      "ms": 92031.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 560016.7,
+      "ms": 232541.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697305.3,
+      "ms": 95263.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700393.3,
+      "ms": 92182.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700656.2,
+      "ms": 91927.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700476.5,
+      "ms": 92147.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 731904.8,
+      "ms": 60731.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 740743.7,
+      "ms": 51900.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 741683.4,
+      "ms": 50971.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746770.6,
+      "ms": 46035.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757566.9,
+      "ms": 35254.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778196.5,
+      "ms": 14638.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 438001.5,
+      "ms": 354848.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746912.9,
+      "ms": 45949.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 434004.5,
+      "ms": 358873.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 440001.3,
+      "ms": 352887.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 443001.8,
+      "ms": 349902.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 441004.4,
+      "ms": 351939.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 444008.7,
+      "ms": 349096.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 439002.5,
+      "ms": 354115.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 445001.3,
+      "ms": 348128.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 446005.3,
+      "ms": 347139.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 454001.3,
+      "ms": 339432.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 457005.1,
+      "ms": 336441.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 451008.8,
+      "ms": 342450.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 456002.1,
+      "ms": 337481.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 447000.9,
+      "ms": 346496.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 466001.4,
+      "ms": 329632.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 458000.8,
+      "ms": 337766.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 460021.8,
+      "ms": 335794.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 455002.4,
+      "ms": 340815.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 469008.7,
+      "ms": 326965.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 432003.7,
+      "ms": 363984.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 486001.7,
+      "ms": 309992.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 472004.1,
+      "ms": 324493.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 450001.8,
+      "ms": 346732.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 474002.1,
+      "ms": 322753.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 484001.3,
+      "ms": 312767.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 481005.3,
+      "ms": 315776.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 461001.1,
+      "ms": 335905.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 465002.7,
+      "ms": 331972.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 477005.9,
+      "ms": 319973.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 459001.1,
+      "ms": 337992.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 480009.7,
+      "ms": 316984.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 470005.0,
+      "ms": 326990.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 625272.4,
+      "ms": 171851.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 479003.8,
+      "ms": 318120.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624634.0,
+      "ms": 172493.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 625651.4,
+      "ms": 171509.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 615286.9,
+      "ms": 181894.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 623604.5,
+      "ms": 173577.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 741233.3,
+      "ms": 55949.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 624480.2,
+      "ms": 172704.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 617262.0,
+      "ms": 179955.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 615816.6,
+      "ms": 181421.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778026.8,
+      "ms": 19216.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 644844.3,
+      "ms": 152404.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 619073.8,
+      "ms": 178187.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 614669.8,
+      "ms": 182604.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787418.1,
+      "ms": 9857.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663447.4,
+      "ms": 133830.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 649978.6,
+      "ms": 147318.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 773389.6,
+      "ms": 23925.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 649866.1,
+      "ms": 147452.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 612729.5,
+      "ms": 184591.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 661044.8,
+      "ms": 136281.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 652078.1,
+      "ms": 145251.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663598.0,
+      "ms": 133733.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 627267.7,
+      "ms": 170069.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 652177.7,
+      "ms": 145169.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 644740.3,
+      "ms": 152611.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663649.0,
+      "ms": 133707.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787410.8,
+      "ms": 9948.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663692.5,
+      "ms": 133671.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676419.7,
+      "ms": 120946.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 659626.4,
+      "ms": 137742.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 659543.7,
+      "ms": 137829.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 668620.2,
+      "ms": 128755.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 664950.6,
+      "ms": 132432.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 677211.9,
+      "ms": 120176.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676876.9,
+      "ms": 120515.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676477.3,
+      "ms": 120921.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 739120.7,
+      "ms": 58280.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 663502.3,
+      "ms": 133902.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 680958.5,
+      "ms": 116448.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 650120.0,
+      "ms": 147289.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 659583.4,
+      "ms": 137833.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 694935.7,
+      "ms": 102487.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 674274.9,
+      "ms": 123150.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676322.2,
+      "ms": 121108.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700700.5,
+      "ms": 96737.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 774604.7,
+      "ms": 22841.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697280.9,
+      "ms": 100167.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700613.4,
+      "ms": 97028.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 721437.4,
+      "ms": 76204.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700790.1,
+      "ms": 96857.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 726881.0,
+      "ms": 70767.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 701694.5,
+      "ms": 95954.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 726948.9,
+      "ms": 70703.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 727824.8,
+      "ms": 69827.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 739072.1,
+      "ms": 58581.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747221.8,
+      "ms": 50432.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747122.5,
+      "ms": 50533.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747252.2,
+      "ms": 50404.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 748553.6,
+      "ms": 49106.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747944.9,
+      "ms": 49715.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 748144.5,
+      "ms": 49517.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757527.2,
+      "ms": 40134.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 749944.6,
+      "ms": 47717.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 750692.0,
+      "ms": 46970.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747560.0,
+      "ms": 50102.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757659.3,
+      "ms": 40218.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757605.1,
+      "ms": 40275.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757706.0,
+      "ms": 40176.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757753.8,
+      "ms": 40139.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 777821.7,
+      "ms": 20081.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 757856.9,
+      "ms": 40047.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 497002.6,
+      "ms": 300912.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785693.3,
+      "ms": 12223.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 501001.3,
+      "ms": 296925.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 507003.9,
+      "ms": 290928.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 494001.3,
+      "ms": 303933.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 506004.9,
+      "ms": 292161.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 487001.3,
+      "ms": 311169.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 503001.2,
+      "ms": 295172.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676523.4,
+      "ms": 121655.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 674241.5,
+      "ms": 123940.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 675665.2,
+      "ms": 122525.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 674617.2,
+      "ms": 123573.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 677093.1,
+      "ms": 121101.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 676782.4,
+      "ms": 121418.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 677250.1,
+      "ms": 120953.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697202.9,
+      "ms": 101005.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 680804.8,
+      "ms": 117406.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 678727.2,
+      "ms": 119491.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 779325.4,
+      "ms": 18896.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 680926.7,
+      "ms": 117498.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 680884.7,
+      "ms": 117546.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 681001.8,
+      "ms": 117437.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 683274.5,
+      "ms": 115165.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 689173.8,
+      "ms": 109273.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787414.8,
+      "ms": 11032.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 687243.5,
+      "ms": 111211.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 687149.5,
+      "ms": 111305.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 689319.1,
+      "ms": 109139.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 687077.2,
+      "ms": 111389.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 688317.2,
+      "ms": 110153.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 694966.7,
+      "ms": 103509.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 690864.1,
+      "ms": 107613.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 695005.9,
+      "ms": 103662.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697137.4,
+      "ms": 101534.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697112.0,
+      "ms": 101564.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 727090.8,
+      "ms": 71588.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 727281.5,
+      "ms": 71399.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 727485.3,
+      "ms": 71200.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 697180.3,
+      "ms": 101509.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 700431.6,
+      "ms": 98261.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 740889.8,
+      "ms": 57803.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 741496.0,
+      "ms": 57405.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 739194.0,
+      "ms": 59710.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 740194.9,
+      "ms": 58939.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 732430.5,
+      "ms": 66706.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 728466.2,
+      "ms": 70670.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 727856.1,
+      "ms": 71281.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 728366.2,
+      "ms": 70771.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747027.4,
+      "ms": 52321.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 741299.2,
+      "ms": 58051.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746824.9,
+      "ms": 52527.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 729405.5,
+      "ms": 69949.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 739237.3,
+      "ms": 60117.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 768230.7,
+      "ms": 31130.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787432.8,
+      "ms": 11928.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787437.5,
+      "ms": 11931.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787426.5,
+      "ms": 11943.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785741.5,
+      "ms": 13634.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785869.0,
+      "ms": 13511.0,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 777955.9,
+      "ms": 28836.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778657.4,
+      "ms": 28141.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785655.4,
+      "ms": 21144.8,
+      "status": null,
+      "error": "ReadError"
+     },
+     {
+      "t_ms": 777911.3,
+      "ms": 28896.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785783.5,
+      "ms": 21037.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778088.8,
+      "ms": 28733.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 787441.6,
+      "ms": 19391.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 777858.7,
+      "ms": 28978.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785826.7,
+      "ms": 21031.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785603.6,
+      "ms": 21280.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 777995.7,
+      "ms": 28898.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778148.0,
+      "ms": 28750.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778802.0,
+      "ms": 28097.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 785901.1,
+      "ms": 21013.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778385.1,
+      "ms": 28535.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 779012.0,
+      "ms": 27918.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778624.2,
+      "ms": 28339.5,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 758266.8,
+      "ms": 48697.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746958.1,
+      "ms": 60006.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746988.1,
+      "ms": 59987.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 768150.3,
+      "ms": 38829.1,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747082.9,
+      "ms": 59915.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 747163.3,
+      "ms": 59838.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 778842.8,
+      "ms": 28162.3,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 777788.4,
+      "ms": 29218.6,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 746872.0,
+      "ms": 60136.9,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 774567.4,
+      "ms": 32442.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 768734.6,
+      "ms": 38281.4,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 774636.8,
+      "ms": 32379.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 774532.1,
+      "ms": 32487.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 769840.4,
+      "ms": 37179.8,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 771026.4,
+      "ms": 35994.7,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 774449.3,
+      "ms": 32572.2,
+      "status": 200,
+      "error": null
+     },
+     {
+      "t_ms": 544001.6,
+      "ms": 313235.6,
+      "status": null,
+      "error": "ReadError"
+     },
+     {
+      "t_ms": 573382.7,
+      "ms": 339267.6,
+      "status": null,
+      "error": "ReadError"
+     },
+     {
+      "t_ms": 627855.1,
+      "ms": 331079.2,
+      "status": null,
+      "error": "ReadError"
+     }
+    ],
+    "script_user": {
+     "period_s": 3.5,
+     "n": 33,
+     "n_ok": 33,
+     "n_error": 0,
+     "n_429": 0,
+     "ms_ok": {
+      "n": 33,
+      "min": 4964.3,
+      "p50": 11344.2,
+      "p95": 90338.5,
+      "max": 157649.9,
+      "mean": 25702.1
+     },
+     "all_ms": {
+      "n": 33,
+      "min": 4964.3,
+      "p50": 11344.2,
+      "p95": 90338.5,
+      "max": 157649.9,
+      "mean": 25702.1
+     },
+     "share_over_200ms": 1.0,
+     "samples": [
+      {
+       "t_ms": 0.6,
+       "ms": 146479.3,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 149980.3,
+       "ms": 157649.9,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 311131.8,
+       "ms": 18136.7,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 332774.6,
+       "ms": 52911.3,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 389193.5,
+       "ms": 25615.2,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 418308.9,
+       "ms": 35339.0,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 457150.6,
+       "ms": 36256.5,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 496907.3,
+       "ms": 26490.8,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 526904.8,
+       "ms": 38215.9,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 568632.1,
+       "ms": 47088.5,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 619230.2,
+       "ms": 33827.2,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 656569.3,
+       "ms": 19159.2,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 679238.0,
+       "ms": 11976.9,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 694720.3,
+       "ms": 35589.7,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 733813.9,
+       "ms": 11344.2,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 748663.6,
+       "ms": 18563.3,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 770738.2,
+       "ms": 10833.8,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 785074.3,
+       "ms": 4964.3,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 793539.5,
+       "ms": 7632.4,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 804672.1,
+       "ms": 5933.1,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 814105.6,
+       "ms": 5075.1,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 822683.6,
+       "ms": 7493.4,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 833681.1,
+       "ms": 8134.6,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 845318.9,
+       "ms": 7690.4,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 856510.7,
+       "ms": 7479.9,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 867491.0,
+       "ms": 13325.4,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 884317.0,
+       "ms": 8473.0,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 896290.6,
+       "ms": 7396.9,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 907187.9,
+       "ms": 7890.3,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 918578.3,
+       "ms": 7820.7,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 929899.2,
+       "ms": 7469.0,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 940868.6,
+       "ms": 8544.1,
+       "status": 200,
+       "error": null
+      },
+      {
+       "t_ms": 952917.5,
+       "ms": 7368.8,
+       "status": 200,
+       "error": null
+      }
+     ]
+    },
+    "s1_reference": null
+   }
+  }
+ },
+ "summary": {
+  "alone_ms_ok": {
+   "n": 6,
+   "min": 4009.2,
+   "p50": 4386.8,
+   "p95": 4731.3,
+   "max": 4771.4,
+   "mean": 4415.1
+  },
+  "n_429": 0,
+  "during_s2_ms_ok": {
+   "n": 33,
+   "min": 4964.3,
+   "p50": 11344.2,
+   "p95": 90338.5,
+   "max": 157649.9,
+   "mean": 25702.1
+  },
+  "during_s2_n_error": 0,
+  "during_s2_all_ms": {
+   "n": 33,
+   "min": 4964.3,
+   "p50": 11344.2,
+   "p95": 90338.5,
+   "max": 157649.9,
+   "mean": 25702.1
+  }
+ },
+ "guard": {
+  "enabled": false,
+  "checks": 0,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-16T11:48:01+00:00",
+ "duration_s": 1015.9
+}
