@@ -31,6 +31,7 @@ from marcus.api.schemas import (
     SegmentList,
     SegmentOut,
 )
+from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
@@ -44,7 +45,7 @@ IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 router = APIRouter()
 
 
-@router.post("/papers", status_code=202)
+@router.post("/papers", status_code=202, dependencies=[Depends(upload_limit)])
 async def upload_paper(
     request: Request,
     file: UploadFile = File(...),

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import client_ip, current_owner, get_owned_image_job
 from marcus.api.limits import enforce_active_limits
+from marcus.api.security import upload_limit
 from marcus.api.uploads import normalize_to_png, read_limited, sanitize_display_name, sniff_image
 from marcus.core.db import get_db
 from marcus.core.enums import Engine
@@ -41,7 +42,7 @@ class ImageJobOut(BaseModel):
     error: str | None
 
 
-@router.post("/images", status_code=202)
+@router.post("/images", status_code=202, dependencies=[Depends(upload_limit)])
 async def upload_image(
     request: Request,
     file: UploadFile = File(...),

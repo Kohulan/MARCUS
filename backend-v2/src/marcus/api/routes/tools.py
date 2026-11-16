@@ -12,10 +12,11 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from marcus.api.deps import current_owner
+from marcus.api.security import tools_limit
 from marcus.core.celery_app import TOOLS_QUEUE, celery_app
 from marcus.core.models import Owner
 
-router = APIRouter(prefix="/tools", tags=["tools"])
+router = APIRouter(prefix="/tools", tags=["tools"], dependencies=[Depends(tools_limit)])
 
 WAIT_S = 10
 MAX_SMILES = 2000

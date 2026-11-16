@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from marcus.core.tokens import hash_token, new_token
 COOKIE_NAME = "marcus_owner"
 COOKIE_MAX_AGE = 30 * 24 * 3600
 COOKIE_PATH = "/api/v2"
+UNKNOWN_IP = "unknown"
 
 
 def _parse_ip(value: str):
@@ -26,13 +27,8 @@ def _parse_ip(value: str):
 
 
 def _trusted_networks() -> list:
-    nets = []
-    for entry in get_settings().trusted_proxies:
-        try:
-            nets.append(ipaddress.ip_network(entry.strip(), strict=False))
-        except ValueError:
-            continue
-    return nets
+    # Entries are validated when Settings load (an invalid one stops startup).
+    return [ipaddress.ip_network(e, strict=False) for e in get_settings().trusted_proxies]
 
 
 def _is_trusted(addr, nets) -> bool:
@@ -40,14 +36,21 @@ def _is_trusted(addr, nets) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    """Socket peer, or the right-most X-Forwarded-For entry that is not a trusted proxy."""
-    peer = request.client.host if request.client else ""
-    peer_addr = _parse_ip(peer)
+    """Socket peer, or the right-most X-Forwarded-For entry that is not a trusted proxy.
+
+    Every X-Forwarded-For header line is read (joined in order), so a client-sent line cannot
+    hide the line a proxy added. A missing or unparseable peer gives `UNKNOWN_IP`, which the
+    limits treat as one shared bucket.
+    """
+    peer_addr = _parse_ip(request.client.host) if request.client and request.client.host else None
+    if peer_addr is None:
+        return UNKNOWN_IP
+    peer = str(peer_addr)
     nets = _trusted_networks()
-    if peer_addr is None or not nets or not _is_trusted(peer_addr, nets):
+    if not nets or not _is_trusted(peer_addr, nets):
         return peer
-    header = request.headers.get("x-forwarded-for")
-    if not header:
+    header = ",".join(request.headers.getlist("x-forwarded-for"))
+    if not header.strip():
         return peer
     for part in reversed(header.split(",")):
         addr = _parse_ip(part)
@@ -56,6 +59,15 @@ def client_ip(request: Request) -> str:
         if not _is_trusted(addr, nets):
             return str(addr)
     return peer
+
+
+def owners_from_ip(ip: str):
+    """SQL condition for browser owners created from `ip` (unknown = created without an IP)."""
+    if ip == UNKNOWN_IP or _parse_ip(ip) is None:
+        where = Owner.created_ip.is_(None)
+    else:
+        where = Owner.created_ip == func.cast(ip, INET)
+    return and_(Owner.kind == OwnerKind.BROWSER.value, where)
 
 
 def _bearer(request: Request) -> str | None:
@@ -108,19 +120,19 @@ async def current_owner(
 
     ip = client_ip(request)
     ip_valid = _parse_ip(ip) is not None
-    if ip_valid:
-        # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
-        await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(ip))))
-        since = datetime.now(UTC) - timedelta(hours=1)
-        recent = (
-            await db.execute(
-                select(func.count())
-                .select_from(Owner)
-                .where(Owner.created_ip == func.cast(ip, INET), Owner.created_at >= since)
-            )
-        ).scalar_one()
-        if recent >= settings.ip_max_new_owners_per_hour:
-            raise HTTPException(status_code=429, detail="Too many new sessions from this address")
+    # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
+    # An unknown address is one shared bucket (fail closed), not a free pass.
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(ip))))
+    since = datetime.now(UTC) - timedelta(hours=1)
+    recent = (
+        await db.execute(
+            select(func.count())
+            .select_from(Owner)
+            .where(owners_from_ip(ip), Owner.created_at >= since)
+        )
+    ).scalar_one()
+    if recent >= settings.ip_max_new_owners_per_hour:
+        raise HTTPException(status_code=429, detail="Too many new sessions from this address")
 
     token = new_token()
     owner = Owner(

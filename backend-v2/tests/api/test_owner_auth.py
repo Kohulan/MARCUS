@@ -4,6 +4,7 @@ import httpx
 import pytest
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, update
+from starlette.datastructures import Headers
 
 from marcus.api.deps import client_ip, current_owner
 from marcus.api.main import create_app
@@ -16,8 +17,8 @@ COOKIE = "marcus_owner"
 
 
 def fake_request(peer, xff=None):
-    headers = {"x-forwarded-for": xff} if xff is not None else {}
-    return SimpleNamespace(client=SimpleNamespace(host=peer), headers=headers)
+    raw = [(b"x-forwarded-for", xff.encode())] if xff is not None else []
+    return SimpleNamespace(client=SimpleNamespace(host=peer), headers=Headers(raw=raw))
 
 
 @pytest.fixture

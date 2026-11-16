@@ -133,3 +133,15 @@ async def paper_row(db, paper_id) -> Paper:
             select(Paper).where(Paper.id == paper_id).execution_options(populate_existing=True)
         )
     ).scalar_one()
+
+
+@pytest.fixture(autouse=True)
+def _limiter_redis(monkeypatch):
+    """Each app gets its own empty fakeredis for rate limits, so tests never share counters."""
+    import fakeredis.aioredis
+
+    from marcus.api import security
+
+    monkeypatch.setattr(
+        security, "limiter_redis", lambda: fakeredis.aioredis.FakeRedis(), raising=False
+    )
