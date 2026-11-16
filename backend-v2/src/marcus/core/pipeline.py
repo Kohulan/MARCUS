@@ -197,7 +197,7 @@ def _after_check_pdf(session: Session, paper: Paper, step: Step, result: dict) -
     paper.pages = pages
     if paper.status == PaperStatus.CHECKING.value:
         paper.status = PaperStatus.PROCESSING.value
-    new = [_new_step(paper, StepKind.RENDER_PAGE, p, page=p) for p in range(1, pages + 1)]
+    new = [_new_step(paper, StepKind.RENDER_PAGE, p, page=p) for p in range(pages)]  # 0-based
     new.append(_new_step(paper, StepKind.DOCLING, DOCLING_SEQ))
     new.append(_new_step(paper, StepKind.DOI, DOI_SEQ))
     return new

@@ -63,9 +63,9 @@ def test_check_pdf_creates_render_docling_doi(db_session):
     assert got == [
         ("docling", None, 100000, "q.cpu", "pending"),
         ("doi", None, 100001, "q.cpu", "pending"),
+        ("render_page", 0, 0, "q.cpu", "pending"),
         ("render_page", 1, 1, "q.cpu", "pending"),
         ("render_page", 2, 2, "q.cpu", "pending"),
-        ("render_page", 3, 3, "q.cpu", "pending"),
     ]
     assert all(st.paper_id == paper.id for st in new)
     (check,) = steps(s, paper, "check_pdf")
@@ -76,12 +76,12 @@ def test_render_creates_segment_step_for_same_page(db_session):
     s = db_session
     paper = make_paper(s)
     to_processing(s, paper, pages=2)
-    render2 = steps(s, paper, "render_page")[1]
-    new = finish(s, render2, {})
+    render_p1 = steps(s, paper, "render_page")[1]
+    new = finish(s, render_p1, {})
     assert [(st.kind, st.page, st.seq, st.queue) for st in new] == [
-        ("segment_page", 2, 2, "q.segment")
+        ("segment_page", 1, 1, "q.segment")
     ]
-    assert render2.status == "done"
+    assert render_p1.status == "done"
 
 
 @pytest.mark.parametrize("mode", ["auto", "off"])
@@ -89,14 +89,14 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
     s = db_session
     paper = make_paper(s, engine=Engine.MOLNEXTR, ocsr_mode=mode)
     to_processing(s, paper, pages=3)
-    render3 = steps(s, paper, "render_page")[2]
-    (seg_step,) = finish(s, render3, {})
+    render_p2 = steps(s, paper, "render_page")[2]
+    (seg_step,) = finish(s, render_p2, {})
     new = finish(s, seg_step, {"segments": SEGS})
 
     segs = list(s.execute(select(Segment).order_by(Segment.idx)).scalars())
     assert [(g.paper_id, g.page, g.idx, g.bbox, g.image_sha256) for g in segs] == [
-        (paper.id, 3, 0, [0, 0, 10, 10], "0" * 64),
-        (paper.id, 3, 1, [5, 5, 50, 60], "1" * 64),
+        (paper.id, 2, 0, [0, 0, 10, 10], "0" * 64),
+        (paper.id, 2, 1, [5, 5, 50, 60], "1" * 64),
     ]
     curations = {c.segment_id: c.status for c in s.execute(select(Curation)).scalars()}
     assert curations == {g.id: "unchecked" for g in segs}
@@ -106,8 +106,8 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
         return
     got = [(st.kind, st.engine, st.queue, st.page, st.seq, st.segment_id) for st in new]
     assert got == [
-        ("ocsr", "molnextr", "q.molnextr", 3, 3000, segs[0].id),
-        ("ocsr", "molnextr", "q.molnextr", 3, 3001, segs[1].id),
+        ("ocsr", "molnextr", "q.molnextr", 2, 2000, segs[0].id),
+        ("ocsr", "molnextr", "q.molnextr", 2, 2001, segs[1].id),
     ]
 
 
@@ -331,7 +331,7 @@ def test_request_ocsr_creates_step_and_reopens_done_paper(db_session):
         "q.molscribe",
         "pending",
     )
-    assert (step.paper_id, step.segment_id, step.page, step.seq) == (paper.id, seg.id, 1, 1001)
+    assert (step.paper_id, step.segment_id, step.page, step.seq) == (paper.id, seg.id, 0, 1)
     s.refresh(paper)
     assert paper.status == "processing"
     finish(s, step, OCSR)
