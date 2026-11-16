@@ -1,6 +1,6 @@
 from fastapi import APIRouter, FastAPI
 
-from marcus.api.routes import events, health, images, papers, queue, segments
+from marcus.api.routes import events, health, images, papers, queue, segments, tools
 
 
 def create_app() -> FastAPI:
@@ -12,5 +12,6 @@ def create_app() -> FastAPI:
     api.include_router(segments.router)
     api.include_router(queue.router)
     api.include_router(events.router)
+    api.include_router(tools.router)
     app.include_router(api)
     return app

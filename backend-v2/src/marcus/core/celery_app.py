@@ -20,7 +20,7 @@ celery_app = Celery(
     "marcus",
     broker=_redis_url,
     backend=_redis_url,
-    include=["marcus.workers.runtime"],
+    include=["marcus.workers.runtime", "marcus.workers.tools"],
 )
 
 celery_app.conf.update(
@@ -34,4 +34,5 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     task_queues=tuple(Queue(name, routing_key=name) for name in [*SLOTS, TOOLS_QUEUE]),
     task_default_queue="q.cpu",
+    task_routes={"marcus.tools.*": {"queue": TOOLS_QUEUE}},
 )
