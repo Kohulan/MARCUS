@@ -12,6 +12,11 @@
 # YAML anchors do not cross files, so the shared worker settings are repeated here.
 
 services:
+  # The real DECIMER segmenter is replaced by worker-fake-segment below (both would consume
+  # q.segment). A profile that is never activated keeps it from being built or started.
+  worker-segment:
+    profiles: ["real-segment"]
+
   api:
     environment:
       MARCUS_ENABLE_FAKE_ENGINES: "1"

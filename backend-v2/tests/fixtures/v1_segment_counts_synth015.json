@@ -1,0 +1,12 @@
+{
+  "pdf": "tests/fixtures/pdfs/synth_015.pdf",
+  "pdf_source": "judges/load/data/fixtures/synth_015.pdf",
+  "pdf_sha256": "0a16d034cac3bd6879b6f237002d5b230f21059c0ed7d4e6630fd7a18bbf56dd",
+  "n_structures": 15,
+  "v1_image": "marcus-backend:latest sha256:9272328402d1fa4e69d90441a25fe118ef76f52e3b49e2946620ac2f4f89de6b",
+  "command": "cd /home/kohulan/MARCUS && docker run --rm -e CUDA_VISIBLE_DEVICES= -e TF_NUM_INTRAOP_THREADS=2 -e TF_NUM_INTEROP_THREADS=2 -v $PWD/judges/load:/work:ro -v $PWD/judges/stack/data/cache:/root/.data marcus-backend:latest python /work/count_segments_offline.py /work/data/fixtures/synth_015.pdf 5",
+  "computed": "2026-11-16, once, on CPU",
+  "v1_output": {"pdf": "/work/data/fixtures/synth_015.pdf", "pages": 5, "segments_total": 15, "pages_without_segments": [], "errors": {}, "per_page": [3, 3, 3, 3, 3], "seconds": 57.8},
+  "per_page": [3, 3, 3, 3, 3],
+  "segments_total": 15
+}

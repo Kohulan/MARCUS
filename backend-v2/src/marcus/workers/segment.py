@@ -1,4 +1,4 @@
-"""Segment worker: Segmenter protocol, FakeSegmenter and the `segment_page` handler.
+"""Segment worker: Segmenter protocol, DecimerSegmenter, FakeSegmenter, `segment_page` handler.
 
 Importing this module registers the handler (GPU worker images import it). Crops are stored
 content-addressed (`storage.segment_crop_path`): the planner creates Segment ids only after
@@ -73,7 +73,53 @@ class FakeSegmenter:
         return crops
 
 
-SEGMENTERS: dict[str, Callable[[], Segmenter]] = {}  # B1 registers "decimer"
+DECIMER_SEGMENTATION_COMMIT = "d0045d9ef4b29a2a8d865eae55399ba1b14481bf"  # docker/MODEL_PINS.md
+
+
+class DecimerSegmenter:
+    """DECIMER Segmentation (Mask R-CNN, TensorFlow), called exactly as v1's
+    `process_single_page`: the 300 DPI page as an RGB uint8 array (v1 passes `pix.samples`;
+    the CPU worker saved the same pixels as PNG), `expand=True, return_bboxes=True`.
+
+    The library returns crops as 4-channel arrays in the input's channel order plus alpha
+    (every pixel opaque; pixels outside the structure mask are white) and bboxes as
+    (y0, x0, y1, x1). Crops are returned here as RGB (alpha dropped) with (x0, y0, x1, y1).
+    Like v1, crops and bboxes are paired by position.
+    """
+
+    version = DECIMER_SEGMENTATION_COMMIT
+
+    def __init__(self) -> None:
+        self._segment: Callable | None = None
+
+    def load(self) -> None:
+        from marcus.workers import gpu
+
+        # Importing decimer_segmentation builds, loads and warms up the model (module level),
+        # so the GPU budget must be set first. Weights come from PYSTOW_HOME (baked in).
+        gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
+        from decimer_segmentation import segment_chemical_structures
+
+        self._segment = segment_chemical_structures
+
+    def segment(self, page_png: Path) -> list[Crop]:
+        if self._segment is None:
+            raise RuntimeError("DecimerSegmenter.segment() called before load()")
+        with Image.open(page_png) as im:
+            page = np.array(im.convert("RGB"), dtype=np.uint8)
+        segments, bboxes = self._segment(page, expand=True, return_bboxes=True)
+        crops: list[Crop] = []
+        for array, (y0, x0, y1, x1) in zip(segments, bboxes):  # paired by position, as v1
+            array = np.asarray(array, dtype=np.uint8)
+            if array.ndim == 2:
+                array = np.stack([array] * 3, axis=-1)
+            crops.append(
+                (np.ascontiguousarray(array[:, :, :3]), (int(x0), int(y0), int(x1), int(y1)))
+            )
+        return crops
+
+
+SEGMENTERS: dict[str, Callable[[], Segmenter]] = {"decimer": DecimerSegmenter}
 
 
 def _fake() -> Segmenter:

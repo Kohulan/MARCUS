@@ -1,0 +1,112 @@
+# syntax=docker/dockerfile:1.7
+# MARCUS v2 TensorFlow worker image (extra "tf"): segment_page with DECIMER Segmentation.
+#
+# Model stack = what the shipped v1 image runs (its `pip freeze`, controller ruling R10; table
+# in docker/MODEL_PINS.md). The "tf" extra comes from uv.lock; the model stack is installed over
+# it with every package pinned, including the transitive closure (resolved against the v1
+# freeze for Python 3.11). Where both pin a package (numpy, pillow, packaging, click) the v1
+# version wins; typing-extensions stays at the lock's 4.16.0 (pydantic needs >=4.16, TF any).
+# decimer_segmentation is installed --no-deps, as in v1 (backend/Dockerfile), at the commit
+# v1's `development` branch resolved to. The dependency check allows exactly its three
+# declared-but-unused requirements: opencv-python (we ship the headless build of the same
+# version), ipython and numba (never imported by the package).
+#
+# CPU only: tensorflow is installed without the [and-cuda] extra (no CUDA libraries). TF still
+# runs on CPU; the GPU variant belongs to the GPU override.
+#
+# Weights: the Mask R-CNN weights (mask_rcnn_molecule.h5, 273 MB, Zenodo record 10663579) are
+# downloaded at BUILD time with a pinned sha256 into /opt/pystow/DECIMER-Segmentation_model/,
+# where decimer_segmentation looks for them (pystow, PYSTOW_HOME=/opt/pystow). Runtime needs no
+# network; the root filesystem stays read-only.
+#
+# Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
+# `pytest -m ml` in this image). Build context: backend-v2/.
+
+FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
+
+FROM python:3.11-slim-bookworm AS builder
+COPY --from=uv /uv /usr/local/bin/uv
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+ENV UV_COMPILE_BYTECODE=1 UV_COMPILE_BYTECODE_TIMEOUT=600 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-editable --extra tf
+# Model stack, pinned from the v1 image freeze (closure resolved for Python 3.11).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python /app/.venv/bin/python \
+      tensorflow==2.15.1 keras==2.15.0 tensorflow-estimator==2.15.0 \
+      tensorflow-io-gcs-filesystem==0.37.1 tensorboard==2.15.2 tensorboard-data-server==0.7.2 \
+      numpy==1.24.3 ml-dtypes==0.3.2 h5py==3.15.1 protobuf==4.25.8 \
+      absl-py==2.4.0 astunparse==1.6.3 flatbuffers==25.12.19 gast==0.7.0 google-pasta==0.2.0 \
+      grpcio==1.76.0 libclang==18.1.1 opt-einsum==3.4.0 termcolor==3.3.0 wrapt==1.14.2 \
+      six==1.17.0 packaging==26.0 setuptools==84.2.1 wheel==0.48.0 \
+      google-auth==2.48.0 google-auth-oauthlib==1.2.4 oauthlib==3.3.1 requests-oauthlib==2.0.0 \
+      pyasn1==0.6.2 pyasn1-modules==0.4.2 rsa==4.9.1 \
+      cryptography==46.0.4 cffi==2.0.0 pycparser==3.0 \
+      markdown==3.10.1 markupsafe==2.1.5 werkzeug==3.1.5 \
+      requests==2.32.5 urllib3==1.26.13 idna==3.4 certifi==2026.1.4 charset-normalizer==2.1.1 \
+      PyMuPDF==1.26.7 opencv-python-headless==4.11.0.86 pillow==11.3.0 \
+      scikit-image==0.24.0 scipy==1.13.1 imageio==2.37.2 tifffile==2025.5.10 \
+      lazy-loader==0.4 networkx==3.4.2 \
+      matplotlib==3.9.0 contourpy==1.3.2 cycler==0.12.1 fonttools==4.61.1 kiwisolver==1.4.9 \
+      pyparsing==3.2.1 python-dateutil==2.9.0.post0 \
+      pystow==0.7.0 click==8.3.1 tqdm==4.67.1 \
+    && uv pip install --python /app/.venv/bin/python --no-deps \
+      "decimer_segmentation @ git+https://github.com/Kohulan/DECIMER-Image-Segmentation.git@d0045d9ef4b29a2a8d865eae55399ba1b14481bf" \
+    && { uv pip check --python /app/.venv/bin/python > /tmp/pip-check.txt 2>&1 || true; } \
+    && cat /tmp/pip-check.txt \
+    && ! grep -E "requires|not installed|incompatib" /tmp/pip-check.txt \
+         | grep -vE "^Found [0-9]+ incompatibilit" \
+         | grep -vE "decimer-segmentation\` requires \`(opencv-python|ipython|numba)\`, but it's not installed"
+
+FROM python:3.11-slim-bookworm AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 marcus \
+    && useradd --system --uid 10001 --gid marcus --home-dir /nonexistent --shell /usr/sbin/nologin marcus \
+    && mkdir -p /data && chown marcus:marcus /data
+ADD --checksum=sha256:329120facb69e88add819a3216db0fbfef57e9a37d6b6db0f6149819a11d46a5 --chmod=644 \
+    https://zenodo.org/record/10663579/files/mask_rcnn_molecule.h5?download=1 \
+    /opt/pystow/DECIMER-Segmentation_model/mask_rcnn_molecule.h5
+COPY --from=builder /app/.venv /app/.venv
+# pystow writes /opt/pystow/README.md on first import: create it now (read-only root at runtime)
+# and make the weights directory readable (ADD creates its parents root-only).
+RUN chmod -R a+rX /opt/pystow \
+    && PYSTOW_HOME=/opt/pystow /app/.venv/bin/python -c "import pystow" \
+    && test -f /opt/pystow/README.md && chmod a+r /opt/pystow/README.md
+# The project is not copied into the venv: a .pth file puts /app/src on sys.path (like an
+# editable install), so a code change rebuilds only this small layer, never the dependency
+# layer above. A .pth also works for `python -I` children (PYTHONPATH would be ignored there).
+COPY src /app/src
+RUN echo /app/src > /app/.venv/lib/python3.11/site-packages/marcus.pth \
+    && /app/.venv/bin/python -m compileall -q /app/src
+WORKDIR /app
+ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    MARCUS_DATA_ROOT=/data HOME=/tmp MPLCONFIGDIR=/tmp/matplotlib \
+    PYSTOW_HOME=/opt/pystow TF_CPP_MIN_LOG_LEVEL=2
+USER marcus
+# q.segment, ONE process (= SLOTS["q.segment"]): one model per process. Prefork: soft time
+# limits need it. The model loads in the pool process (after the fork), never in the parent.
+CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment", "-c", "1", \
+     "--pool", "prefork", "--include", "marcus.workers.segment", "-n", "segment@%h", \
+     "--loglevel", "INFO"]
+
+FROM runtime AS test
+USER root
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv pip install --python /app/.venv/bin/python --no-cache \
+      pytest==9.2.0 pytest-asyncio==1.5.0 iniconfig==2.3.1 pluggy==1.7.0 pygments==2.21.0
+COPY pyproject.toml /app/pyproject.toml
+COPY tests /app/tests
+USER marcus
+# The root filesystem is read-only: no pytest cache, no bytecode.
+ENV PYTEST_ADDOPTS="-p no:cacheprovider"
+CMD ["pytest", "-m", "ml", "tests/workers/test_decimer_segmenter.py", "-q"]
+
+FROM runtime

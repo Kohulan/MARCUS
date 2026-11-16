@@ -3,7 +3,6 @@
 .pytest_cache
 .ruff_cache
 *.egg-info
-tests
 .env
 .env.*
 !.env.example
