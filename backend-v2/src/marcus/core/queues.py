@@ -61,6 +61,14 @@ TIME_LIMITS: dict[StepKind, tuple[int, int]] = {
     StepKind.ANNOTATE: (120, 150),
 }
 
+# Per (kind, engine) overrides of TIME_LIMITS. decimer-hand loads its model on its first request
+# (spec: lazy), measured on CPU with 4 TF threads: load 76 s, then graph warm-up plus prediction
+# up to 23 s, ~100 s in all when quiet; steady predictions take 3-12 s. 180 s leaves room for a
+# busy host. Every decimer-hand step gets it (the dispatcher cannot know whether the model is
+# loaded); the normal decimer model loads at worker start and keeps the ocsr limit.
+ENGINE_TIME_LIMITS: dict[tuple[StepKind, Engine], tuple[int, int]] = {
+    (StepKind.OCSR, Engine.DECIMER_HAND): (180, 210),
+}
 
 # Docling time scales with the page count (~11 s/page measured): soft = max(300, 60 + 12 x pages).
 DOCLING_MIN_SOFT_S = 300
@@ -69,9 +77,17 @@ DOCLING_PER_PAGE_S = 12
 DOCLING_HARD_EXTRA_S = 60
 
 
-def time_limits_for(kind: StepKind, pages: int | None) -> tuple[int, int]:
-    """(soft, hard) seconds for a step. Only docling depends on the paper's page count."""
-    if StepKind(kind) is StepKind.DOCLING:
+def time_limits_for(
+    kind: StepKind, pages: int | None, engine: Engine | str | None = None
+) -> tuple[int, int]:
+    """(soft, hard) seconds for a step. Docling depends on the paper's page count; an ocsr step
+    may have an engine override (ENGINE_TIME_LIMITS)."""
+    kind = StepKind(kind)
+    if kind is StepKind.DOCLING:
         soft = max(DOCLING_MIN_SOFT_S, DOCLING_FIXED_S + DOCLING_PER_PAGE_S * (pages or 0))
         return soft, soft + DOCLING_HARD_EXTRA_S
-    return TIME_LIMITS[StepKind(kind)]
+    if engine is not None:
+        for (k, e), limits in ENGINE_TIME_LIMITS.items():
+            if k is kind and e.value == str(engine):
+                return limits
+    return TIME_LIMITS[kind]

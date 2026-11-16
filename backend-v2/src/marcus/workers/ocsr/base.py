@@ -1,6 +1,9 @@
-"""OCSR engine protocol and the per-process engine registry.
+"""OCSR engine protocol, the per-process engine registry and the model preload hook.
 
-Real engines register a factory with `register_engine` (Phase B); nothing here imports them.
+Real engines register a factory with `register_engine`; nothing here imports them (the
+package `marcus.workers.ocsr` imports the engine modules listed in `MARCUS_OCSR_ENGINES`).
+When a pool process starts, `preload_engines` loads every configured engine registered with
+`preload=True`; the others (decimer-hand) load on their first request.
 """
 
 import logging
@@ -11,8 +14,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from celery.signals import worker_process_init
+
 from marcus.core.enums import Engine
 from marcus.core.settings import get_settings
+from marcus.workers.runtime import abort_worker, in_pool_process
 
 log = logging.getLogger(__name__)
 
@@ -32,13 +38,34 @@ class OcsrEngine(Protocol):
     def predict(self, image: Path) -> OcsrResult: ...
 
 
+ENGINES_ENV = "MARCUS_OCSR_ENGINES"
+
 FACTORIES: dict[str, Callable[[], OcsrEngine]] = {}
+PRELOAD: set[str] = set()  # engines loaded when a pool process starts
 _ENGINES: dict[str, OcsrEngine] = {}
 _lock = threading.Lock()
 
 
-def register_engine(name: Engine | str, factory: Callable[[], OcsrEngine]) -> None:
-    FACTORIES[str(Engine(name))] = factory
+def register_engine(
+    name: Engine | str, factory: Callable[[], OcsrEngine], *, preload: bool = True
+) -> None:
+    """Make `name` available in this process. `preload=False`: load on first request only."""
+    key = str(Engine(name))
+    FACTORIES[key] = factory
+    if preload:
+        PRELOAD.add(key)
+    else:
+        PRELOAD.discard(key)
+
+
+def configured_engines() -> list[Engine]:
+    """Engines this worker serves: env MARCUS_OCSR_ENGINES, a comma list (empty = none)."""
+    raw = os.environ.get(ENGINES_ENV, "")
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    try:
+        return list(dict.fromkeys(Engine(name) for name in names))
+    except ValueError as exc:
+        raise RuntimeError(f"{ENGINES_ENV}: unknown engine in {raw!r}") from exc
 
 
 def _fake_factory() -> OcsrEngine:
@@ -66,3 +93,25 @@ def get_engine(name: Engine | str) -> OcsrEngine:
             _ENGINES[key] = engine
             log.info("loaded OCSR engine %s %s", key, engine.version)
         return engine
+
+
+@worker_process_init.connect
+def preload_engines(**_) -> None:
+    """Load the configured preload engines when a pool process starts (after the fork), so the
+    first ocsr step does not pay the model load against its time limit.
+
+    A failed load stops the whole worker with a non-zero exit (runtime.abort_worker): compose
+    restarts it and /ready reports the queue as unserved. Only in a Celery pool process.
+    """
+    if not in_pool_process():
+        return
+    for name in configured_engines():
+        if name not in PRELOAD:
+            continue
+        try:
+            engine = get_engine(name)
+        except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
+            log.exception("OCSR engine %s failed to load; stopping the worker", name)
+            abort_worker()
+            return
+        log.info("preloaded OCSR engine %s %s", name, engine.version)

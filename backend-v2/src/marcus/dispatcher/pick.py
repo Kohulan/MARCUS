@@ -25,6 +25,7 @@ from marcus.core.queues import (
     DOCLING_HARD_EXTRA_S,
     DOCLING_MIN_SOFT_S,
     DOCLING_PER_PAGE_S,
+    ENGINE_TIME_LIMITS,
     SLOTS,
     TIME_LIMITS,
 )
@@ -34,10 +35,11 @@ log = logging.getLogger(__name__)
 
 GRACE_S = 30  # watchdog: a step may sit in queued/running for its hard limit plus this
 
-# send(queue, step_id, kind, attempts, pages): `attempts` is the step's attempts value read in
-# the transaction that set it queued; the runtime uses it to drop stale duplicate messages.
-# `pages` is the paper's page count for docling steps (it scales the time limits), else None.
-Send = Callable[[str, uuid.UUID, StepKind, int, int | None], None]
+# send(queue, step_id, kind, attempts, pages, engine): `attempts` is the step's attempts value
+# read in the transaction that set it queued; the runtime uses it to drop stale duplicate
+# messages. `pages` is the paper's page count for docling steps (it scales the time limits),
+# else None. `engine` is the step's OCSR engine (it may have its own time limits), else None.
+Send = Callable[[str, uuid.UUID, StepKind, int, int | None, str | None], None]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 _DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
@@ -110,6 +112,7 @@ def dispatch_once(session: Session, send: Send) -> int:
             if step is None:
                 break
             step_id, kind, attempts = step.id, StepKind(step.kind), step.attempts
+            engine = step.engine
             pages = None
             if kind is StepKind.DOCLING and step.paper_id is not None:
                 pages = session.execute(
@@ -119,7 +122,7 @@ def dispatch_once(session: Session, send: Send) -> int:
             step.queued_at = func.now()
             session.commit()
             try:
-                send(queue, step_id, kind, attempts, pages)
+                send(queue, step_id, kind, attempts, pages, engine)
             except Exception:
                 log.exception("send failed for step %s on %s; back to pending", step_id, queue)
                 session.rollback()
@@ -134,8 +137,9 @@ def dispatch_once(session: Session, send: Send) -> int:
 
 
 def _deadline_s():
-    """Per-step allowance in seconds: the hard limit of its kind plus the grace. Docling's
-    hard limit depends on the paper's page count (same formula as queues.time_limits_for)."""
+    """Per-step allowance in seconds: the hard limit of its kind (or of its kind and engine,
+    ENGINE_TIME_LIMITS) plus the grace. Docling's hard limit depends on the paper's page count
+    (same formulas as queues.time_limits_for)."""
     pages = select(func.coalesce(Paper.pages, 0)).where(Paper.id == Step.paper_id).scalar_subquery()
     docling_hard = (
         func.greatest(DOCLING_MIN_SOFT_S, DOCLING_FIXED_S + DOCLING_PER_PAGE_S * pages)
@@ -145,11 +149,16 @@ def _deadline_s():
     return case(
         (Step.kind == StepKind.DOCLING.value, docling_hard),
         *(
+            ((Step.kind == kind.value) & (Step.engine == engine.value), hard + GRACE_S)
+            for (kind, engine), (_, hard) in ENGINE_TIME_LIMITS.items()
+        ),
+        *(
             (Step.kind == kind.value, hard + GRACE_S)
             for kind, (_, hard) in TIME_LIMITS.items()
             if kind is not StepKind.DOCLING
         ),
-        else_=max(hard for _, hard in TIME_LIMITS.values()) + GRACE_S,
+        else_=max(hard for _, hard in [*TIME_LIMITS.values(), *ENGINE_TIME_LIMITS.values()])
+        + GRACE_S,
     )
 
 

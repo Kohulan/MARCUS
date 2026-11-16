@@ -47,13 +47,15 @@ class Sent:
     def __init__(self, fail_on: set | None = None):
         self.calls: list[tuple[str, uuid.UUID, StepKind, int]] = []
         self.pages: list[int | None] = []
+        self.engines: list[str | None] = []
         self.fail_on = fail_on or set()
 
-    def __call__(self, queue, step_id, kind, attempts, pages=None):
+    def __call__(self, queue, step_id, kind, attempts, pages=None, engine=None):
         if queue in self.fail_on:
             raise ConnectionError("broker down")
         self.calls.append((queue, step_id, kind, attempts))
         self.pages.append(pages)
+        self.engines.append(engine)
 
     def ids(self, queue=Q):
         return [sid for q, sid, _, _ in self.calls if q == queue]
@@ -189,7 +191,7 @@ def test_dispatch_commits_before_send(db_session, one_slot):
     s.commit()
     seen: list[str] = []
 
-    def send(queue, step_id, kind, attempts, pages=None):
+    def send(queue, step_id, kind, attempts, pages=None, engine=None):
         if queue != Q:
             return
         with get_sync_sessionmaker()() as other:  # a worker reading the row
@@ -317,3 +319,27 @@ def test_celery_send_uses_scaled_limits(monkeypatch):
     assert (seen["soft_time_limit"], seen["time_limit"]) == (1260, 1320)
     celery_send()("q.cpu", uuid.uuid4(), StepKind.CHECK_PDF, 0, None)
     assert (seen["soft_time_limit"], seen["time_limit"]) == (20, 30)
+
+
+def test_dispatch_sends_the_ocsr_engine(db_session, one_slot):
+    s = db_session
+    paper = paper_at(s, make_owner(s), minutes_ago=1)
+    (step,) = add_steps(s, paper, 1)
+    step.engine = "decimer-hand"
+    s.commit()
+    sent = Sent()
+    dispatch_once(s, sent)
+    assert [e for c, e in zip(sent.calls, sent.engines) if c[0] == Q] == ["decimer-hand"]
+    assert [e for c, e in zip(sent.calls, sent.engines) if c[0] == "q.cpu"] == [None]
+
+
+def test_celery_send_uses_decimer_hand_limits(monkeypatch):
+    from marcus.core import celery_app as ca
+    from marcus.dispatcher.__main__ import celery_send
+
+    seen = {}
+    monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))
+    celery_send()("q.decimer", uuid.uuid4(), StepKind.OCSR, 0, None, "decimer-hand")
+    assert (seen["soft_time_limit"], seen["time_limit"]) == (180, 210)
+    celery_send()("q.decimer", uuid.uuid4(), StepKind.OCSR, 0, None, "decimer")
+    assert (seen["soft_time_limit"], seen["time_limit"]) == (30, 45)

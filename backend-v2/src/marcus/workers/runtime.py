@@ -30,6 +30,7 @@ BadResult from complete_step -> engine_error (final); anything else -> engine_er
 
 import logging
 import os
+import signal
 import socket
 import uuid
 from collections.abc import Callable
@@ -297,3 +298,23 @@ def run_step(step_id: str, sent_attempts: int) -> None:
         execute(sid, token, _worker_name())
     except Exception:
         log.exception("run_step: step %s could not be recorded; left to the watchdog", sid)
+
+
+# --- model preload helpers (worker_process_init hooks of the model workers) ----------------
+
+
+def in_pool_process() -> bool:
+    """True in a Celery prefork pool process. worker_process_init can also be sent elsewhere
+    (tests send it to exercise other workers' hooks); there the parent is not a Celery worker."""
+    from billiard.process import current_process
+
+    return current_process()._name != "MainProcess"
+
+
+def abort_worker() -> None:
+    """Stop the whole worker with a non-zero exit: SIGQUIT to the parent (Celery cold
+    shutdown, exit code 1), then leave this pool process. Compose restarts the container and
+    /ready reports the queue as unserved; a half-ready worker that keeps taking steps it
+    cannot run must not exist."""
+    os.kill(os.getppid(), signal.SIGQUIT)
+    os._exit(1)

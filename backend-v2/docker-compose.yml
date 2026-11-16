@@ -15,13 +15,15 @@
 # dispatcher and workers start only after it completed successfully.
 #
 # Images: api (api, api-migrate, dispatcher), cpu (worker-cpu), tools (worker-tools), tf
-# (worker-segment: DECIMER Segmentation, weights baked into the image). Every app container runs
-# as uid 10001 with a read-only root filesystem, /tmp on tmpfs and the shared named volume `data`
-# at /data.
+# (worker-segment: DECIMER Segmentation; worker-decimer: DECIMER OCSR, normal and hand-drawn;
+# all weights baked into the image). Every app container runs as uid 10001 with a read-only root
+# filesystem, /tmp on tmpfs and the shared named volume `data` at /data.
 #
-# ML test in the TF image (profile "test", no network, nothing else needed):
+# ML tests in the TF image (profile "test", no network, nothing else needed):
 #   docker compose -p marcus-v2 run --rm worker-segment-test
 #   (= pytest -m ml tests/workers/test_decimer_segmenter.py -q)
+#   docker compose -p marcus-v2 run --rm worker-decimer-test
+#   (= pytest -m ml tests/workers/test_decimer_ocsr.py -q -s)
 
 name: marcus-v2
 
@@ -56,6 +58,35 @@ x-api-image: &api-image
     context: .
     dockerfile: docker/Dockerfile.api
   image: marcus-v2-api:local
+
+x-tf-image: &tf-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.tf
+    target: runtime
+  image: marcus-v2-tf:local
+
+# Test-only services of the TF image's `test` target (profile "test"). No network at all:
+# proves the weights are baked in and nothing is fetched at runtime.
+x-tf-test: &tf-test
+  profiles: ["test"]
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.tf
+    target: test
+  image: marcus-v2-tf-test:local
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  network_mode: none
+  environment:
+    MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+    MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+  mem_limit: 8g
 
 services:
   postgres:
@@ -120,7 +151,7 @@ services:
     environment:
       <<: *env
       MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
-      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment}
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer}
       MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
       MARCUS_EXPOSE_DOCS: ${MARCUS_EXPOSE_DOCS:-false}
       MARCUS_CORS_ORIGINS: ${MARCUS_CORS_ORIGINS:-[]}
@@ -171,12 +202,7 @@ services:
     mem_limit: 4g
 
   worker-segment:
-    <<: *app
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.tf
-      target: runtime
-    image: marcus-v2-tf:local
+    <<: [*app, *tf-image]
     # segment_page with DECIMER Segmentation (Mask R-CNN, TensorFlow). ONE prefork process
     # (= q.segment slots): one model per process, loaded when the pool process starts (after the
     # fork; ~32 s on CPU, hence the long proc-alive timeout). A failed load stops the container
@@ -186,35 +212,43 @@ services:
               "-n", "segment@%h", "--loglevel", "INFO"]
     environment:
       <<: *env
-      # GPU budget in MiB for TensorFlow (marcus.workers.gpu); empty = no limit / CPU only.
-      MARCUS_GPU_MEM_MB: ${MARCUS_GPU_MEM_MB:-}
+      # GPU budget in MiB for TensorFlow (marcus.workers.gpu), set per service; empty = no
+      # limit / CPU only.
+      MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-}
       # TF CPU thread pools: one worker must not take every core next to docling.
       MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
       MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
-  # Test-only (profile "test"): the TF image's `test` target runs the ml-marked segmenter test.
-  # No network at all: proves the weights are baked in and nothing is fetched at runtime.
-  worker-segment-test:
-    profiles: ["test"]
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.tf
-      target: test
-    image: marcus-v2-tf-test:local
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    network_mode: none
+  worker-decimer:
+    <<: [*app, *tf-image]
+    # ocsr steps of the engines decimer and decimer-hand (q.decimer), same TF image. ONE prefork
+    # process (= q.decimer slots). Only the engines in MARCUS_OCSR_ENGINES are registered. The
+    # normal model loads when the pool process starts (hence the long proc-alive timeout; a
+    # failed load stops the container with exit 1); the hand-drawn model loads on its first
+    # request (~76 s on CPU), so decimer-hand steps have their own longer time limit
+    # (marcus.core.queues.ENGINE_TIME_LIMITS).
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.decimer",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "decimer@%h", "--loglevel", "INFO"]
     environment:
+      <<: *env
+      MARCUS_OCSR_ENGINES: decimer,decimer-hand
+      # GPU budget in MiB for TensorFlow, this service only; empty = no limit / CPU only.
+      MARCUS_GPU_MEM_MB: ${MARCUS_DECIMER_GPU_MEM_MB:-}
       MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
       MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
+
+  worker-segment-test:
+    <<: *tf-test
+    command: ["pytest", "-m", "ml", "tests/workers/test_decimer_segmenter.py", "-q"]
+
+  worker-decimer-test:
+    <<: *tf-test
+    command: ["pytest", "-m", "ml", "tests/workers/test_decimer_ocsr.py", "-q", "-s"]
 
   nginx:
     image: nginxinc/nginx-unprivileged:1.27-alpine

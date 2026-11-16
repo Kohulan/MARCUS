@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-# MARCUS v2 TensorFlow worker image (extra "tf"): segment_page with DECIMER Segmentation.
+# MARCUS v2 TensorFlow worker image (extra "tf"), one image for both TF workers: segment_page
+# with DECIMER Segmentation (worker-segment, the default CMD) and the DECIMER OCSR engines
+# `decimer` and `decimer-hand` (worker-decimer, q.decimer).
 #
 # Model stack = what the shipped v1 image runs (its `pip freeze`, controller ruling R10; table
 # in docker/MODEL_PINS.md). The "tf" extra comes from uv.lock; the model stack is installed over
@@ -7,17 +9,24 @@
 # freeze for Python 3.11). Where both pin a package (numpy, pillow, packaging, click) the v1
 # version wins; typing-extensions stays at the lock's 4.16.0 (pydantic needs >=4.16, TF any).
 # decimer_segmentation is installed --no-deps, as in v1 (backend/Dockerfile), at the commit
-# v1's `development` branch resolved to. The dependency check allows exactly its three
-# declared-but-unused requirements: opencv-python (we ship the headless build of the same
-# version), ipython and numba (never imported by the package).
+# v1's `development` branch resolved to. decimer==2.8.0 (OCSR) is installed --no-deps from
+# PyPI as in v1, with the packages it imports pinned from the v1 freeze (efficientnet,
+# Keras-Applications, pillow_heif, selfies, PyYAML). The dependency check allows exactly the
+# declared-but-unused requirements: opencv-python for both packages (we ship the headless build
+# of the same version), ipython and numba (never imported by decimer_segmentation).
 #
 # CPU only: tensorflow is installed without the [and-cuda] extra (no CUDA libraries). TF still
 # runs on CPU; the GPU variant belongs to the GPU override.
 #
-# Weights: the Mask R-CNN weights (mask_rcnn_molecule.h5, 273 MB, Zenodo record 10663579) are
-# downloaded at BUILD time with a pinned sha256 into /opt/pystow/DECIMER-Segmentation_model/,
-# where decimer_segmentation looks for them (pystow, PYSTOW_HOME=/opt/pystow). Runtime needs no
-# network; the root filesystem stays read-only.
+# Weights are downloaded at BUILD time with a pinned sha256 under PYSTOW_HOME=/opt/pystow, where
+# the packages look for them (pystow). Runtime needs no network; the root filesystem stays
+# read-only.
+# - Mask R-CNN weights (mask_rcnn_molecule.h5, 273 MB, Zenodo record 10663579) into
+#   /opt/pystow/DECIMER-Segmentation_model/.
+# - DECIMER OCSR SavedModels (Zenodo 8300489 models.zip and 10781330
+#   DECIMER_HandDrawn_model.zip, 285 MB each) unpacked into /opt/pystow/DECIMER-V2/ with the
+#   `.model_url` marker that decimer's ensure_models() writes after a download, so it finds them
+#   and downloads nothing. The unpacked files are identical to v1's runtime-downloaded cache.
 #
 # Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
 # `pytest -m ml` in this image). Build context: backend-v2/.
@@ -56,13 +65,27 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       matplotlib==3.9.0 contourpy==1.3.2 cycler==0.12.1 fonttools==4.61.1 kiwisolver==1.4.9 \
       pyparsing==3.2.1 python-dateutil==2.9.0.post0 \
       pystow==0.7.0 click==8.3.1 tqdm==4.67.1 \
+      efficientnet==1.1.1 keras-applications==1.0.8 pillow-heif==0.21.0 selfies==2.2.0 \
+      pyyaml==6.0.2 \
     && uv pip install --python /app/.venv/bin/python --no-deps \
       "decimer_segmentation @ git+https://github.com/Kohulan/DECIMER-Image-Segmentation.git@d0045d9ef4b29a2a8d865eae55399ba1b14481bf" \
+      decimer==2.8.0 \
     && { uv pip check --python /app/.venv/bin/python > /tmp/pip-check.txt 2>&1 || true; } \
     && cat /tmp/pip-check.txt \
     && ! grep -E "requires|not installed|incompatib" /tmp/pip-check.txt \
          | grep -vE "^Found [0-9]+ incompatibilit" \
-         | grep -vE "decimer-segmentation\` requires \`(opencv-python|ipython|numba)\`, but it's not installed"
+         | grep -vE "decimer-segmentation\` requires \`(opencv-python|ipython|numba)\`, but it's not installed" \
+         | grep -vE "decimer\` requires \`opencv-python\`, but it's not installed"
+
+# DECIMER OCSR weights: checksummed zips, unpacked as decimer's ensure_models() would do.
+FROM python:3.11-slim-bookworm AS decimer-weights
+ADD --checksum=sha256:8ebc7db18fffac7e71a2cf8487708053620d124846bc9502eddac1283b431d2b \
+    https://zenodo.org/record/8300489/files/models.zip /tmp/DECIMER.zip
+ADD --checksum=sha256:91c70fee79b7d64c09d433ff82e2216d16070e4d098b83da2c13d34c52439fde \
+    https://zenodo.org/records/10781330/files/DECIMER_HandDrawn_model.zip /tmp/DECIMER_HandDrawn.zip
+COPY docker/unpack_decimer_weights.py /tmp/unpack_decimer_weights.py
+RUN python /tmp/unpack_decimer_weights.py /tmp /opt/pystow/DECIMER-V2 \
+    && chmod -R a+rX /opt/pystow
 
 FROM python:3.11-slim-bookworm AS runtime
 RUN apt-get update \
@@ -74,6 +97,7 @@ RUN apt-get update \
 ADD --checksum=sha256:329120facb69e88add819a3216db0fbfef57e9a37d6b6db0f6149819a11d46a5 --chmod=644 \
     https://zenodo.org/record/10663579/files/mask_rcnn_molecule.h5?download=1 \
     /opt/pystow/DECIMER-Segmentation_model/mask_rcnn_molecule.h5
+COPY --from=decimer-weights /opt/pystow/DECIMER-V2 /opt/pystow/DECIMER-V2
 COPY --from=builder /app/.venv /app/.venv
 # pystow writes /opt/pystow/README.md on first import: create it now (read-only root at runtime)
 # and make the weights directory readable (ADD creates its parents root-only).

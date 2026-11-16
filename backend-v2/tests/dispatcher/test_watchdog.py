@@ -13,12 +13,12 @@ def ago(seconds: float) -> datetime:
     return datetime.now(UTC) - timedelta(seconds=seconds)
 
 
-def ocsr_step(s, paper, seq=0, **kw) -> Step:
+def ocsr_step(s, paper, seq=0, engine="decimer", **kw) -> Step:
     step = Step(
         paper_id=paper.id,
         kind=StepKind.OCSR.value,
         queue="q.decimer",
-        engine="decimer",
+        engine=engine,
         seq=seq,
         **kw,
     )
@@ -193,3 +193,33 @@ def test_watchdog_does_not_fail_100_page_docling_at_400s(db_session):
     s.expire_all()
     assert s.get(Step, big.id).status == "running"
     assert s.get(Step, small.id).status != "running"
+
+
+def test_watchdog_gives_decimer_hand_its_longer_deadline(db_session):
+    """decimer-hand steps may run up to their own hard limit (model load on first request)."""
+    from marcus.core.enums import Engine
+    from marcus.core.queues import time_limits_for
+
+    hand_hard = time_limits_for(StepKind.OCSR, None, Engine.DECIMER_HAND)[1]
+    s = db_session
+    paper = make_paper(s)
+    loading = ocsr_step(
+        s, paper, seq=0, engine="decimer-hand", status="running",
+        attempts=1, queued_at=ago(OCSR_HARD + GRACE_S + 60),
+        started_at=ago(OCSR_HARD + GRACE_S + 50),
+    )  # fmt: skip
+    normal = ocsr_step(
+        s, paper, seq=1, status="running", attempts=1, queued_at=ago(OCSR_HARD + GRACE_S + 60),
+        started_at=ago(OCSR_HARD + GRACE_S + 50),
+    )  # fmt: skip
+    stuck = ocsr_step(
+        s, paper, seq=2, engine="decimer-hand", status="running", attempts=1,
+        queued_at=ago(hand_hard + GRACE_S + 60), started_at=ago(hand_hard + GRACE_S + 5),
+    )  # fmt: skip
+    s.commit()
+
+    assert watchdog_once(s) == 2
+    s.expire_all()
+    assert s.get(Step, loading.id).status == "running"
+    assert s.get(Step, normal.id).status == "pending"
+    assert s.get(Step, stuck.id).status == "pending"

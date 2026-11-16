@@ -42,9 +42,14 @@ def celery_send() -> Send:
     from marcus.core.celery_app import celery_app  # lazy: pick.py stays Celery-free
 
     def send(
-        queue: str, step_id: uuid.UUID, kind: StepKind, attempts: int, pages: int | None = None
+        queue: str,
+        step_id: uuid.UUID,
+        kind: StepKind,
+        attempts: int,
+        pages: int | None = None,
+        engine: str | None = None,
     ) -> None:
-        soft, hard = time_limits_for(kind, pages)
+        soft, hard = time_limits_for(kind, pages, engine)
         celery_app.send_task(
             "marcus.run_step",
             args=[str(step_id), attempts],

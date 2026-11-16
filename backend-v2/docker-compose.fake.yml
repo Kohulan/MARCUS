@@ -16,6 +16,9 @@ services:
   # q.segment). A profile that is never activated keeps it from being built or started.
   worker-segment:
     profiles: ["real-segment"]
+  # The real DECIMER OCSR worker is not part of the fake stack either.
+  worker-decimer:
+    profiles: ["real-decimer"]
 
   api:
     environment:

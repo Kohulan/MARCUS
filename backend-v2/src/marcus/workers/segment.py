@@ -8,7 +8,6 @@ this handler returns, so the crop cannot be named by segment id. Crop arrays are
 import hashlib
 import logging
 import os
-import signal
 import threading
 import time
 from collections.abc import Callable
@@ -23,6 +22,8 @@ from marcus.core.enums import StepKind
 from marcus.core.settings import get_settings
 from marcus.core.storage import page_image_path, segment_crop_path
 from marcus.workers.runtime import BadInput, register
+from marcus.workers.runtime import abort_worker as _abort_worker
+from marcus.workers.runtime import in_pool_process as _in_pool_process
 
 log = logging.getLogger(__name__)
 
@@ -178,17 +179,6 @@ def preload_segmenter(**_) -> None:
         _abort_worker()
         return
     log.info("segmenter %s loaded", seg.version)
-
-
-def _in_pool_process() -> bool:
-    from billiard.process import current_process
-
-    return current_process()._name != "MainProcess"
-
-
-def _abort_worker() -> None:
-    os.kill(os.getppid(), signal.SIGQUIT)
-    os._exit(1)
 
 
 def _write_crop(paper_id, array: np.ndarray) -> str:
