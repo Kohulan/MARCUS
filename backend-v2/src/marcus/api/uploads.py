@@ -2,8 +2,8 @@
 
 import io
 import unicodedata
-import warnings
 
+import numpy as np
 from fastapi import HTTPException, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -62,13 +62,11 @@ def sniff_image(data: bytes) -> str:
         raise HTTPException(status_code=415, detail="Not a supported image file")
     too_big = HTTPException(status_code=413, detail="Image too large")
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(data)) as probe:
-                probe.verify()
-            with Image.open(io.BytesIO(data)) as img:
-                width, height = img.size
-                fmt = img.format or ""
+        with Image.open(io.BytesIO(data)) as probe:
+            probe.verify()
+        with Image.open(io.BytesIO(data)) as img:
+            width, height = img.size
+            fmt = img.format or ""
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise too_big from None
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError, EOFError):
@@ -80,6 +78,17 @@ def sniff_image(data: bytes) -> str:
     return fmt
 
 
+def _to_8bit(img: Image.Image) -> Image.Image:
+    """Scale 16/32-bit grayscale to 8-bit by its real range (convert("RGB") would clip)."""
+    arr = np.asarray(img).astype(np.int64)
+    if arr.size and (arr.min() < 0 or arr.max() > 65535):
+        lo, hi = int(arr.min()), int(arr.max())
+        scaled = (arr - lo) * 255 // max(hi - lo, 1)
+    else:
+        scaled = arr // 256
+    return Image.fromarray(scaled.clip(0, 255).astype(np.uint8), "L")
+
+
 def normalize_to_png(data: bytes) -> bytes:
     """Decode, apply EXIF orientation, flatten to RGB on white, and re-encode as plain PNG.
 
@@ -89,6 +98,8 @@ def normalize_to_png(data: bytes) -> bytes:
         with Image.open(io.BytesIO(data)) as img:
             img.load()
             img = ImageOps.exif_transpose(img)
+            if img.mode == "I" or img.mode.startswith("I;16"):
+                img = _to_8bit(img)
             if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
                 rgba = img.convert("RGBA")
                 flat = Image.new("RGB", rgba.size, "white")

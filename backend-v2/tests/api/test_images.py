@@ -168,3 +168,29 @@ async def test_image_jobs_count_toward_ip_limit(app, async_db_session, monkeypat
         assert (await upload_image(c2)).status_code == 202
     async with make_client(app) as c3:
         assert (await upload_image(c3)).status_code == 429
+
+
+def test_16bit_grayscale_is_scaled_not_clipped():
+    import numpy as np
+
+    from marcus.api.uploads import normalize_to_png
+
+    arr = np.full((8, 8), 20000, dtype=np.uint16)
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, "PNG")
+    out = Image.open(io.BytesIO(normalize_to_png(buf.getvalue())))
+    assert out.mode == "RGB"
+    assert set(out.getdata()) == {(78, 78, 78)}  # 20000 // 256
+
+
+def test_32bit_int_grayscale_uses_data_range():
+    import numpy as np
+
+    from marcus.api.uploads import normalize_to_png
+
+    arr = np.array([[0, 100000], [50000, 100000]], dtype=np.int32)
+    buf = io.BytesIO()
+    Image.fromarray(arr, "I").save(buf, "TIFF")
+    out = Image.open(io.BytesIO(normalize_to_png(buf.getvalue())))
+    px = list(out.convert("L").getdata())
+    assert px[0] == 0 and px[3] == 255 and 100 < px[2] < 150

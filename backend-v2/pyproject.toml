@@ -13,7 +13,7 @@ dependencies = []
 api = [
   "fastapi", "uvicorn[standard]", "gunicorn", "sqlalchemy[asyncio]", "asyncpg",
   "psycopg[binary]", "alembic", "redis", "celery[redis]", "python-multipart",
-  "pydantic-settings", "rdkit", "prometheus-client", "pillow", "pymupdf",
+  "pydantic-settings", "rdkit", "prometheus-client", "pillow", "numpy", "pymupdf",
 ]
 cpu = [
   "pymupdf", "docling", "pdf2doi", "sqlalchemy", "psycopg[binary]", "celery[redis]",
