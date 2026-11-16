@@ -68,6 +68,31 @@ def test_watchdog_requeues_stuck_queued_step(db_session):
     assert s.get(Step, stuck.id).status == "pending"
 
 
+def test_watchdog_lost_delivery_twice_is_final(db_session):
+    """A queued step that never starts counts as an attempt, so it cannot loop forever."""
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(s, paper, status="queued", queued_at=ago(OCSR_HARD + GRACE_S + 5))
+    s.commit()
+
+    assert watchdog_once(s) == 1
+    s.expire_all()
+    row = s.get(Step, stuck.id)
+    assert row.status == "pending" and row.attempts == 1
+    assert row.error_class == "worker_lost"
+
+    # Dispatched again, and the delivery is lost again: the second loss is final.
+    row.status = "queued"
+    row.queued_at = ago(OCSR_HARD + GRACE_S + 5)
+    s.commit()
+
+    assert watchdog_once(s) == 1
+    s.expire_all()
+    row = s.get(Step, stuck.id)
+    assert row.status == "failed" and row.error_class == "worker_lost"
+    assert row.attempts == 2 and row.finished_at is not None
+
+
 def test_watchdog_leaves_healthy_and_finished_steps(db_session):
     s = db_session
     paper = make_paper(s)

@@ -133,7 +133,9 @@ def _stuck():
 
 def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
     """In the current transaction, lock the step's parent then the step and, if the step is
-    still stuck, fail it as worker_lost (retryable). Does not commit. Returns True if failed.
+    still stuck, fail it as worker_lost (retryable). A step stuck in `queued` never started,
+    so its lost delivery is counted as an attempt here (the runtime counted a `running` one).
+    Does not commit. Returns True if failed.
     """
     parent = session.execute(
         select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
@@ -146,11 +148,20 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
         session.execute(
             select(ImageJob.id).where(ImageJob.id == parent.image_job_id).with_for_update()
         )
-    still = session.execute(
-        select(Step.id).where(Step.id == step_id, _stuck()).with_for_update()
+    status = session.execute(
+        select(Step.status).where(Step.id == step_id, _stuck()).with_for_update()
     ).scalar_one_or_none()
-    if still is None:
+    if status is None:
         return False
+    if status == StepStatus.QUEUED.value:
+        # Never started, so the runtime never counted it: a lost delivery is an attempt,
+        # otherwise a broker that keeps losing it would re-queue it forever.
+        session.execute(
+            update(Step)
+            .where(Step.id == step_id)
+            .values(attempts=Step.attempts + 1)
+            .execution_options(synchronize_session=False)
+        )
     fail_step(session, step_id, ErrorClass.WORKER_LOST, "watchdog: no progress", retryable=True)
     return True
 
