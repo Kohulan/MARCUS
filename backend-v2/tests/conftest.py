@@ -1,11 +1,28 @@
 import os
+from pathlib import Path
 
 import pytest
 
-os.environ.setdefault(
-    "MARCUS_DATABASE_URL", "postgresql+asyncpg://marcus:marcus@127.0.0.1:55432/marcus_test"
+# Always point tests at the test services; never inherit a developer's real URLs.
+TEST_DATABASE_URL = os.environ.get(
+    "MARCUS_TEST_DATABASE_URL",
+    "postgresql+asyncpg://marcus:marcus@127.0.0.1:55432/marcus_test",
 )
-os.environ.setdefault("MARCUS_REDIS_URL", "redis://127.0.0.1:56379/0")
+TEST_REDIS_URL = os.environ.get("MARCUS_TEST_REDIS_URL", "redis://127.0.0.1:56379/0")
+os.environ["MARCUS_DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["MARCUS_REDIS_URL"] = TEST_REDIS_URL
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _assert_test_database() -> None:
+    from sqlalchemy.engine import make_url
+
+    name = make_url(TEST_DATABASE_URL).database or ""
+    if not name.endswith("_test"):
+        raise RuntimeError(
+            f"Refusing to run DB tests: database name {name!r} does not end in '_test'"
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -25,3 +42,63 @@ def clear_settings_cache():
     get_settings.cache_clear()
     yield get_settings.cache_clear
     get_settings.cache_clear()
+
+
+def alembic_config():
+    from alembic.config import Config
+
+    cfg = Config(str(BACKEND_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    return cfg
+
+
+@pytest.fixture(scope="session")
+def migrated_db():
+    """Run `alembic upgrade head` once on the (guarded) test database."""
+    _assert_test_database()
+    from alembic import command
+
+    command.upgrade(alembic_config(), "head")
+    yield
+
+
+def _truncate_all(conn) -> None:
+    from sqlalchemy import text
+
+    from marcus.core.db import Base
+
+    names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+    conn.execute(text(f"TRUNCATE {names} CASCADE"))
+
+
+@pytest.fixture
+def db_session(migrated_db):
+    from marcus.core.db import get_sync_sessionmaker
+
+    _assert_test_database()
+    with get_sync_sessionmaker()() as session:
+        yield session
+        session.rollback()
+        _truncate_all(session)
+        session.commit()
+
+
+@pytest.fixture
+async def async_db_session(migrated_db):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from marcus.core.db import async_db_url
+    from marcus.core.settings import get_settings
+
+    _assert_test_database()
+    # Own NullPool engine: each test has its own event loop, so pooled connections can't be reused.
+    engine = create_async_engine(async_db_url(get_settings().database_url), poolclass=NullPool)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            yield session
+            await session.rollback()
+            await session.run_sync(lambda s: _truncate_all(s.connection()))
+            await session.commit()
+    finally:
+        await engine.dispose()

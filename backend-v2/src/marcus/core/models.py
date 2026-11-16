@@ -1,0 +1,215 @@
+"""ORM models. Status/kind/engine columns are text with CHECK constraints."""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, CHAR, INET, JSONB, TIMESTAMP, UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from marcus.core.db import Base
+from marcus.core.enums import (
+    Engine,
+    ErrorClass,
+    OwnerKind,
+    PaperStatus,
+    StepKind,
+    StepStatus,
+)
+
+TZ = TIMESTAMP(timezone=True)
+NOW = func.now()
+
+
+def _in(column: str, values) -> str:
+    return f"{column} IN (" + ", ".join(f"'{v}'" for v in values) + ")"
+
+
+ENGINES = [e.value for e in Engine]
+IMAGE_JOB_STATUSES = ["queued", "processing", "done", "failed", "deleted"]
+
+
+def _uuid_pk() -> Mapped[uuid.UUID]:
+    return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+
+def _fk(target: str, nullable: bool = False):
+    return mapped_column(
+        UUID(as_uuid=True), ForeignKey(target, ondelete="CASCADE"), nullable=nullable
+    )
+
+
+class Owner(Base):
+    __tablename__ = "owners"
+    __table_args__ = (
+        CheckConstraint(_in("kind", [k.value for k in OwnerKind]), name="ck_owners_kind"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    kind: Mapped[str] = mapped_column(Text)
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    priority_class: Mapped[int] = mapped_column(Integer)
+    created_ip: Mapped[str | None] = mapped_column(INET, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    last_seen_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    revoked_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+    daily_page_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Paper(Base):
+    __tablename__ = "papers"
+    __table_args__ = (
+        CheckConstraint("ocsr_mode IN ('auto', 'off')", name="ck_papers_ocsr_mode"),
+        CheckConstraint(_in("status", [s.value for s in PaperStatus]), name="ck_papers_status"),
+        CheckConstraint(_in("engine", ENGINES), name="ck_papers_engine"),
+        Index("ix_papers_owner_id_status", "owner_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    owner_id: Mapped[uuid.UUID] = _fk("owners.id")
+    display_name: Mapped[str] = mapped_column(Text)
+    pdf_sha256: Mapped[str] = mapped_column(CHAR(64))
+    bytes: Mapped[int] = mapped_column(Integer)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doi: Mapped[str | None] = mapped_column(Text, nullable=True)
+    engine: Mapped[str] = mapped_column(Text)
+    ocsr_mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    expires_at: Mapped[datetime] = mapped_column(TZ)
+
+
+class ImageJob(Base):
+    __tablename__ = "image_jobs"
+    __table_args__ = (
+        CheckConstraint(_in("status", IMAGE_JOB_STATUSES), name="ck_image_jobs_status"),
+        CheckConstraint(_in("engine", ENGINES), name="ck_image_jobs_engine"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    owner_id: Mapped[uuid.UUID] = _fk("owners.id")
+    display_name: Mapped[str] = mapped_column(Text)
+    image_sha256: Mapped[str] = mapped_column(CHAR(64))
+    engine: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    expires_at: Mapped[datetime] = mapped_column(TZ)
+
+
+class Segment(Base):
+    __tablename__ = "segments"
+    __table_args__ = (
+        UniqueConstraint("paper_id", "page", "idx", name="uq_segments_paper_page_idx"),
+        CheckConstraint("cardinality(bbox) = 4", name="ck_segments_bbox_len"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    paper_id: Mapped[uuid.UUID] = _fk("papers.id")
+    page: Mapped[int] = mapped_column(Integer)
+    idx: Mapped[int] = mapped_column(Integer)
+    bbox: Mapped[list[int]] = mapped_column(ARRAY(Integer))
+    image_sha256: Mapped[str] = mapped_column(CHAR(64))
+
+
+class Step(Base):
+    __tablename__ = "steps"
+    __table_args__ = (
+        CheckConstraint(
+            "(paper_id IS NOT NULL)::int + (image_job_id IS NOT NULL)::int = 1",
+            name="ck_steps_one_parent",
+        ),
+        CheckConstraint(_in("kind", [k.value for k in StepKind]), name="ck_steps_kind"),
+        CheckConstraint(_in("status", [s.value for s in StepStatus]), name="ck_steps_status"),
+        CheckConstraint("engine IS NULL OR " + _in("engine", ENGINES), name="ck_steps_engine"),
+        CheckConstraint(
+            "error_class IS NULL OR " + _in("error_class", [e.value for e in ErrorClass]),
+            name="ck_steps_error_class",
+        ),
+        Index("ix_steps_queue_status", "queue", "status"),
+        Index("ix_steps_paper_id_status", "paper_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    paper_id: Mapped[uuid.UUID | None] = _fk("papers.id", nullable=True)
+    image_job_id: Mapped[uuid.UUID | None] = _fk("image_jobs.id", nullable=True)
+    kind: Mapped[str] = mapped_column(Text)
+    queue: Mapped[str] = mapped_column(Text)
+    engine: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    segment_id: Mapped[uuid.UUID | None] = _fk("segments.id", nullable=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    error_class: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    queued_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+    worker_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+    __table_args__ = (CheckConstraint(_in("engine", ENGINES), name="ck_predictions_engine"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    segment_id: Mapped[uuid.UUID | None] = _fk("segments.id", nullable=True)
+    image_job_id: Mapped[uuid.UUID | None] = _fk("image_jobs.id", nullable=True)
+    engine: Mapped[str] = mapped_column(Text)
+    engine_version: Mapped[str] = mapped_column(Text)
+    smiles: Mapped[str] = mapped_column(Text)
+    molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    valid: Mapped[bool] = mapped_column()
+    ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class Curation(Base):
+    __tablename__ = "curation"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('unchecked', 'accepted', 'rejected')", name="ck_curation_status"
+        ),
+    )
+
+    segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(Text)
+    smiles: Mapped[str | None] = mapped_column(Text, nullable=True)
+    molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class SegCache(Base):
+    __tablename__ = "seg_cache"
+
+    pdf_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
+    seg_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class OcsrCache(Base):
+    __tablename__ = "ocsr_cache"
+
+    image_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
+    engine: Mapped[str] = mapped_column(Text, primary_key=True)
+    engine_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    smiles: Mapped[str] = mapped_column(Text)
+    molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
