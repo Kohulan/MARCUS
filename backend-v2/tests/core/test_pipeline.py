@@ -1,0 +1,388 @@
+import threading
+
+import pytest
+from sqlalchemy import func, select
+
+from marcus.core import storage
+from marcus.core.db import get_sync_sessionmaker
+from marcus.core.enums import Engine, ErrorClass
+from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.pipeline import (
+    cancel_paper,
+    complete_step,
+    fail_step,
+    request_ocsr,
+)
+from tests.factories import make_image_job, make_paper
+
+SEGS = [
+    {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64},
+    {"idx": 1, "bbox": [5, 5, 50, 60], "image_sha256": "1" * 64},
+]
+OCSR = {"smiles": "CCO", "molfile": None, "valid": True, "ms": 12, "engine_version": "2.7"}
+
+
+def steps(s, paper, kind=None, status=None) -> list[Step]:
+    q = select(Step).where(Step.paper_id == paper.id)
+    if kind:
+        q = q.where(Step.kind == kind)
+    if status:
+        q = q.where(Step.status == status)
+    return list(s.execute(q.order_by(Step.seq)).scalars())
+
+
+def run(s, step) -> Step:
+    """What the runtime does when it starts a step."""
+    step.status = "running"
+    step.attempts += 1
+    s.flush()
+    return step
+
+
+def finish(s, step, result) -> list[Step]:
+    run(s, step)
+    return complete_step(s, step.id, result)
+
+
+def to_processing(s, paper, pages=2) -> list[Step]:
+    (check,) = steps(s, paper, "check_pdf")
+    return finish(s, check, {"pages": pages})
+
+
+def count(s, model) -> int:
+    return s.execute(select(func.count()).select_from(model)).scalar_one()
+
+
+def test_check_pdf_creates_render_docling_doi(db_session):
+    s = db_session
+    paper = make_paper(s)
+    new = to_processing(s, paper, pages=3)
+    s.refresh(paper)
+    assert paper.status == "processing" and paper.pages == 3
+    got = sorted((st.kind, st.page, st.seq, st.queue, st.status) for st in new)
+    assert got == [
+        ("docling", None, 100000, "q.cpu", "pending"),
+        ("doi", None, 100001, "q.cpu", "pending"),
+        ("render_page", 1, 1, "q.cpu", "pending"),
+        ("render_page", 2, 2, "q.cpu", "pending"),
+        ("render_page", 3, 3, "q.cpu", "pending"),
+    ]
+    assert all(st.paper_id == paper.id for st in new)
+    (check,) = steps(s, paper, "check_pdf")
+    assert check.status == "done" and check.finished_at is not None
+
+
+def test_render_creates_segment_step_for_same_page(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    render2 = steps(s, paper, "render_page")[1]
+    new = finish(s, render2, {})
+    assert [(st.kind, st.page, st.seq, st.queue) for st in new] == [
+        ("segment_page", 2, 2, "q.segment")
+    ]
+    assert render2.status == "done"
+
+
+@pytest.mark.parametrize("mode", ["auto", "off"])
+def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode):
+    s = db_session
+    paper = make_paper(s, engine=Engine.MOLNEXTR, ocsr_mode=mode)
+    to_processing(s, paper, pages=3)
+    render3 = steps(s, paper, "render_page")[2]
+    (seg_step,) = finish(s, render3, {})
+    new = finish(s, seg_step, {"segments": SEGS})
+
+    segs = list(s.execute(select(Segment).order_by(Segment.idx)).scalars())
+    assert [(g.paper_id, g.page, g.idx, g.bbox, g.image_sha256) for g in segs] == [
+        (paper.id, 3, 0, [0, 0, 10, 10], "0" * 64),
+        (paper.id, 3, 1, [5, 5, 50, 60], "1" * 64),
+    ]
+    curations = {c.segment_id: c.status for c in s.execute(select(Curation)).scalars()}
+    assert curations == {g.id: "unchecked" for g in segs}
+
+    if mode == "off":
+        assert new == []
+        return
+    got = [(st.kind, st.engine, st.queue, st.page, st.seq, st.segment_id) for st in new]
+    assert got == [
+        ("ocsr", "molnextr", "q.molnextr", 3, 3000, segs[0].id),
+        ("ocsr", "molnextr", "q.molnextr", 3, 3001, segs[1].id),
+    ]
+
+
+def test_ocsr_result_writes_prediction(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    ocsr1, _ = finish(s, seg_step, {"segments": SEGS})
+    assert finish(s, ocsr1, OCSR) == []
+    (pred,) = s.execute(select(Prediction)).scalars()
+    assert (pred.segment_id, pred.image_job_id, pred.engine) == (ocsr1.segment_id, None, "decimer")
+    assert (pred.smiles, pred.molfile, pred.valid, pred.ms, pred.engine_version) == (
+        "CCO",
+        None,
+        True,
+        12,
+        "2.7",
+    )
+
+
+def test_doi_and_docling_results(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    (docling,) = steps(s, paper, "docling")
+    assert finish(s, doi, {"doi": "10.1000/xyz"}) == []
+    assert finish(s, docling, {"text_path": "text.json"}) == []
+    s.refresh(paper)
+    assert paper.doi == "10.1000/xyz"
+
+
+def test_paper_done_when_last_step_finishes(db_session):
+    s = db_session
+    paper = make_paper(s, ocsr_mode="off")
+    to_processing(s, paper, pages=1)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    s.refresh(paper)
+    assert paper.status == "processing"
+    finish(s, seg_step, {"segments": SEGS})
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_paper_done_when_some_pages_fail(db_session):
+    s = db_session
+    paper = make_paper(s, ocsr_mode="off")
+    to_processing(s, paper, pages=2)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    r1, r2 = steps(s, paper, "render_page")
+    run(s, r1)
+    fail_step(s, r1.id, ErrorClass.BAD_INPUT, "broken page", retryable=False)
+    (seg_step,) = finish(s, r2, {})
+    finish(s, seg_step, {"segments": []})
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_paper_failed_when_all_pages_fail(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    for r in steps(s, paper, "render_page"):
+        run(s, r)
+        fail_step(s, r.id, ErrorClass.BAD_INPUT, "broken page", retryable=False)
+    s.refresh(paper)
+    assert paper.status == "failed"
+    assert paper.error
+
+
+def test_paper_failed_when_check_pdf_fails(db_session):
+    s = db_session
+    paper = make_paper(s)
+    (check,) = steps(s, paper, "check_pdf")
+    run(s, check)
+    fail_step(s, check.id, ErrorClass.BAD_INPUT, "PDF is encrypted", retryable=False)
+    s.refresh(paper)
+    assert paper.status == "failed"
+    assert paper.error == "PDF is encrypted"
+    assert check.status == "failed" and check.error_class == "bad_input"
+
+
+def test_fail_retries_once_then_final(db_session):
+    s = db_session
+    paper = make_paper(s)
+    (check,) = steps(s, paper, "check_pdf")
+    run(s, check)  # attempts = 1
+    check.queued_at = check.started_at = func.now()
+    s.flush()
+    fail_step(s, check.id, ErrorClass.TIMEOUT, "soft time limit", retryable=True)
+    s.refresh(check)
+    s.refresh(paper)
+    assert check.status == "pending" and check.attempts == 1
+    assert check.started_at is None and check.queued_at is None and check.finished_at is None
+    assert (check.error_class, check.error) == ("timeout", "soft time limit")
+    assert paper.status == "checking"
+
+    run(s, check)  # attempts = 2
+    fail_step(s, check.id, ErrorClass.WORKER_LOST, "worker died", retryable=True)
+    s.refresh(check)
+    s.refresh(paper)
+    assert check.status == "failed" and check.finished_at is not None
+    assert (check.error_class, check.error) == ("worker_lost", "worker died")
+    assert paper.status == "failed"
+
+
+def test_fail_not_retryable_is_final_on_first_attempt(db_session):
+    s = db_session
+    paper = make_paper(s)
+    (check,) = steps(s, paper, "check_pdf")
+    run(s, check)
+    fail_step(s, check.id, ErrorClass.BAD_INPUT, "not a pdf", retryable=False)
+    s.refresh(check)
+    assert check.status == "failed"
+
+
+def test_complete_twice_is_noop(db_session):
+    s = db_session
+    paper = make_paper(s)
+    (check,) = steps(s, paper, "check_pdf")
+    assert len(finish(s, check, {"pages": 1})) == 3
+    assert complete_step(s, check.id, {"pages": 1}) == []
+    assert len(steps(s, paper)) == 4
+
+
+def test_delete_while_running_cancels_and_drops_late_result(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    run(s, seg_step)
+    assert storage.paper_dir(paper.id).is_dir()
+
+    cancel_paper(s, paper.id)
+    s.commit()
+    s.refresh(paper)
+    assert paper.status == "deleted"
+    assert not storage.paper_dir(paper.id).exists()
+    by_kind = {st.kind: st.status for st in steps(s, paper)}
+    assert by_kind == {
+        "check_pdf": "done",
+        "render_page": "done",
+        "segment_page": "cancelled",
+        "docling": "cancelled",
+        "doi": "cancelled",
+    }
+
+    assert complete_step(s, seg_step.id, {"segments": SEGS}) == []
+    s.refresh(seg_step)
+    s.refresh(paper)
+    assert seg_step.status == "cancelled"
+    assert paper.status == "deleted"
+    assert count(s, Segment) == 0 and count(s, Curation) == 0
+    assert count(s, Step) == 5
+    # a late failure is dropped too
+    fail_step(s, seg_step.id, ErrorClass.TIMEOUT, "late", retryable=True)
+    s.refresh(seg_step)
+    assert seg_step.status == "cancelled"
+
+
+def test_cancel_paper_with_missing_dir(db_session):
+    s = db_session
+    paper = make_paper(s)
+    storage.pdf_path(paper.id).unlink()
+    storage.paper_dir(paper.id).rmdir()
+    cancel_paper(s, paper.id)
+    s.refresh(paper)
+    assert paper.status == "deleted"
+
+
+def test_image_job_ocsr_done(db_session):
+    s = db_session
+    job, step = make_image_job(s, engine=Engine.MOLSCRIBE)
+    assert finish(s, step, OCSR) == []
+    s.refresh(job)
+    assert job.status == "done"
+    (pred,) = s.execute(select(Prediction)).scalars()
+    assert (pred.image_job_id, pred.segment_id, pred.engine) == (job.id, None, "molscribe")
+
+
+def test_image_job_ocsr_failed_after_retry(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    run(s, step)
+    fail_step(s, step.id, ErrorClass.TIMEOUT, "slow", retryable=True)
+    s.refresh(job)
+    assert job.status == "queued" and step.status == "pending"
+    run(s, step)
+    fail_step(s, step.id, ErrorClass.ENGINE_ERROR, "boom", retryable=True)
+    s.refresh(job)
+    assert job.status == "failed" and job.error == "boom"
+    assert count(s, Prediction) == 0
+
+
+def _done_paper_with_segment(s):
+    paper = make_paper(s, ocsr_mode="off")
+    to_processing(s, paper, pages=1)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    finish(s, seg_step, {"segments": SEGS})
+    s.refresh(paper)
+    assert paper.status == "done"
+    seg = s.execute(select(Segment).where(Segment.idx == 1)).scalar_one()
+    return paper, seg
+
+
+def test_request_ocsr_creates_step_and_reopens_done_paper(db_session):
+    s = db_session
+    paper, seg = _done_paper_with_segment(s)
+    step = request_ocsr(s, seg.id, Engine.MOLSCRIBE)
+    assert (step.kind, step.engine, step.queue, step.status) == (
+        "ocsr",
+        "molscribe",
+        "q.molscribe",
+        "pending",
+    )
+    assert (step.paper_id, step.segment_id, step.page, step.seq) == (paper.id, seg.id, 1, 1001)
+    s.refresh(paper)
+    assert paper.status == "processing"
+    finish(s, step, OCSR)
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_request_ocsr_refuses_deleted_paper_and_fake_engine(db_session):
+    s = db_session
+    paper, seg = _done_paper_with_segment(s)
+    with pytest.raises(ValueError):
+        request_ocsr(s, seg.id, Engine.FAKE)
+    cancel_paper(s, paper.id)
+    with pytest.raises(ValueError):
+        request_ocsr(s, seg.id, Engine.DECIMER)
+
+
+def test_concurrent_last_two_steps_mark_paper_done(db_session):
+    """Two workers finish the last two steps at once; the paper must still end `done`."""
+    s = db_session
+    paper = make_paper(s, ocsr_mode="off")
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    finish(s, seg_step, {"segments": []})
+    last = [run(s, st) for st in steps(s, paper, "doi") + steps(s, paper, "docling")]
+    s.commit()
+
+    results = {"doi": {"doi": None}, "docling": {"text_path": "text.json"}}
+    # Both threads wait here after complete_step and before commit. With the paper lock the
+    # second thread blocks inside complete_step, so the barrier times out and the first commits.
+    barrier = threading.Barrier(2, timeout=1.5)
+    errors: list[BaseException] = []
+
+    def worker(step_id, kind):
+        try:
+            with get_sync_sessionmaker()() as ws:
+                complete_step(ws, step_id, results[kind])
+                try:
+                    barrier.wait()
+                except threading.BrokenBarrierError:
+                    pass
+                ws.commit()
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(st.id, st.kind)) for st in last]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert not errors
+    s.expire_all()
+    assert s.get(Paper, paper.id).status == "done"
+    assert {st.status for st in steps(s, paper)} == {"done"}
