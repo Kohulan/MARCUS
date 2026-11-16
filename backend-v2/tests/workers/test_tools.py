@@ -163,3 +163,23 @@ def test_mcs_timeout_is_not_a_partial_result(monkeypatch):
     ).get()
     assert seen["timeout"] == 3
     assert out == {"ok": False, "error": "mcs timed out"}
+
+
+@needs_cdk
+@pytest.mark.parametrize("target", ["_cip_annotate", "_sdg"])
+def test_soft_time_limit_is_not_turned_into_bad_input(monkeypatch, target):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    from marcus.workers import tools
+
+    def boom(*a, **k):
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(tools, target, boom)
+    with pytest.raises(SoftTimeLimitExceeded):
+        tools.depict("CCO", "svg", 100, 100)
+    with pytest.raises(SoftTimeLimitExceeded):  # through the task wrapper too: no envelope
+        tools.depict_task.apply(
+            kwargs={"smiles": "CCO", "fmt": "svg", "width": 100, "height": 100},
+            throw=True,
+        )

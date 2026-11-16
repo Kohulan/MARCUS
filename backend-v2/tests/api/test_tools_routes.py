@@ -110,3 +110,37 @@ def test_run_tool_times_out_with_stub_task(monkeypatch):
     with pytest.raises(CeleryTimeout):
         tools_route._send_and_wait("marcus.tools.compare", {}, 0.2)
     assert time.monotonic() - start < 2
+
+
+async def test_mcs_total_size_cap(app, calls):
+    mf = ["x" * 200_000] * 6  # each within the per-file cap, 1.2 MB together
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/mcs", json={"molfiles": mf})
+    assert r.status_code == 422 and calls == []
+
+
+def test_result_is_released_even_on_timeout(monkeypatch):
+    from celery.exceptions import TimeoutError as CeleryTimeout
+
+    events = []
+
+    class Res:
+        id = "abc"
+
+        def get(self, timeout=None, **kw):
+            raise CeleryTimeout()
+
+        def forget(self):
+            events.append("forget")
+
+    class Consumer:
+        def cancel_for(self, task_id):
+            events.append(("cancel", task_id))
+
+    monkeypatch.setattr(tools_route.celery_app, "send_task", lambda *a, **k: Res())
+    monkeypatch.setattr(
+        tools_route.celery_app.backend, "result_consumer", Consumer(), raising=False
+    )
+    with pytest.raises(CeleryTimeout):
+        tools_route._send_and_wait("marcus.tools.compare", {}, 0.1)
+    assert events == ["forget", ("cancel", "abc")]

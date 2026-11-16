@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 from celery.exceptions import TimeoutError as CeleryTimeout
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from marcus.api.deps import current_owner
 from marcus.core.celery_app import TOOLS_QUEUE, celery_app
@@ -21,6 +21,7 @@ WAIT_S = 10
 MAX_SMILES = 2000
 MAX_MOLFILES = 20
 MAX_MOLFILE_BYTES = 200_000
+MAX_MCS_TOTAL = 1_000_000
 
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
@@ -41,6 +42,12 @@ class SmilesIn(BaseModel):
 class McsIn(BaseModel):
     molfiles: list[Molfile] = Field(min_length=2, max_length=MAX_MOLFILES)
 
+    @model_validator(mode="after")
+    def _total_size(self):
+        if sum(len(m) for m in self.molfiles) > MAX_MCS_TOTAL:
+            raise ValueError("molfiles too large in total")
+        return self
+
 
 class CompareIn(BaseModel):
     smiles_a: Smiles
@@ -49,7 +56,23 @@ class CompareIn(BaseModel):
 
 def _send_and_wait(name: str, kwargs: dict, timeout: float):
     result = celery_app.send_task(name, kwargs=kwargs, queue=TOOLS_QUEUE)
-    return result.get(timeout=timeout)
+    try:
+        return result.get(timeout=timeout)
+    finally:  # a 504 must not leave a result subscription behind for the API's lifetime
+        _release(result)
+
+
+def _release(result) -> None:
+    try:
+        result.forget()
+    except Exception:
+        pass
+    cancel = getattr(getattr(celery_app.backend, "result_consumer", None), "cancel_for", None)
+    if cancel is not None:
+        try:
+            cancel(result.id)
+        except Exception:
+            pass
 
 
 def run_tool(name: str, kwargs: dict, timeout: float = WAIT_S):

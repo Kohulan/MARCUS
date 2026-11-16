@@ -17,6 +17,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Literal
 
+from celery.exceptions import SoftTimeLimitExceeded
+
 from marcus.core.celery_app import celery_app
 
 ET.register_namespace("", "http://www.w3.org/2000/svg")
@@ -58,7 +60,7 @@ def _smiles_to_cdk(smiles: str):
     parser = jpype.JClass(f"{CDK}.smiles.SmilesParser")(builder)
     try:
         return parser.parseSmiles(smiles)
-    except Exception as exc:  # java.lang exceptions surface as JException
+    except jpype.JException as exc:  # SoftTimeLimitExceeded is not one: it propagates
         raise ToolInputError(f"cannot parse SMILES: {exc}") from exc
 
 
@@ -67,7 +69,7 @@ def _sdg(molecule):
     gen = jpype.JClass(f"{CDK}.layout.StructureDiagramGenerator")()
     try:
         gen.generateCoordinates(molecule)
-    except Exception as exc:
+    except jpype.JException as exc:
         raise ToolInputError(f"cannot lay out molecule: {exc}") from exc
     return gen.getMolecule()
 
@@ -158,7 +160,7 @@ def depict(
         mol = _cip_annotate(_sdg(mol))
         try:
             J(f"{CDK}.aromaticity.Kekulization").kekulize(mol)
-        except Exception:  # v1 logged and carried on
+        except jpype.JException:  # v1 logged and carried on; soft limits still propagate
             pass
 
         Std = J(f"{CDK}.renderer.generators.standard.StandardGenerator")
@@ -176,7 +178,7 @@ def depict(
                 pattern = J(f"{CDK}.smarts.SmartsPattern").create(highlight, builder)
                 J(f"{CDK}.smarts.SmartsPattern").prepare(mol)
                 subs = pattern.matchAll(mol).toSubstructures()
-            except Exception as exc:
+            except jpype.JException as exc:
                 raise ToolInputError(f"invalid highlight SMARTS: {exc}") from exc
             gen = gen.withHighlight(
                 subs, J("java.awt.Color")(173, 216, 230)
@@ -189,9 +191,9 @@ def depict(
         out = J("java.io.ByteArrayOutputStream")()
         J("javax.imageio.ImageIO").write(depiction.toImg(), "png", out)
         return base64.b64encode(bytes(out.toByteArray())).decode("ascii")
-    except ToolInputError:
+    except (ToolInputError, SoftTimeLimitExceeded):
         raise
-    except Exception as exc:
+    except jpype.JException as exc:
         raise ToolInputError(f"cannot depict molecule: {exc}") from exc
 
 
@@ -220,7 +222,7 @@ def _mol_from_molfile(molfile: str):
             mol = Chem.MolFromMolBlock(molfile, sanitize=False)
             if mol is not None:
                 Chem.SanitizeMol(mol)
-        except Exception:
+        except (ValueError, RuntimeError):  # RDKit sanitize errors subclass ValueError
             mol = None
     return mol
 
