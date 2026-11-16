@@ -3,7 +3,8 @@
 Workers publish one JSON message per step state change, after the change is committed:
 paper steps on `marcus:paper:{paper_id}`, image-job steps on `marcus:image:{job_id}`.
 Events are a hint for live UIs; the database stays the source of truth. Publishing never
-raises: a Redis outage is logged and the step carries on.
+raises (except a Celery soft time limit, which is re-raised): a Redis outage is logged
+and the step carries on.
 """
 
 import json
@@ -12,6 +13,7 @@ import uuid
 from functools import lru_cache
 
 import redis
+from celery.exceptions import SoftTimeLimitExceeded
 from redis.backoff import NoBackoff
 from redis.retry import Retry
 
@@ -47,6 +49,8 @@ def get_redis() -> redis.Redis:
 def _publish(channel: str, event: dict) -> None:
     try:
         get_redis().publish(channel, json.dumps(event, default=str))
+    except SoftTimeLimitExceeded:
+        raise  # the step's time is up; the runtime must see it
     except Exception:
         log.warning("could not publish event on %s", channel, exc_info=True)
 

@@ -27,7 +27,9 @@ log = logging.getLogger(__name__)
 
 GRACE_S = 30  # watchdog: a step may sit in queued/running for its hard limit plus this
 
-Send = Callable[[str, uuid.UUID, StepKind], None]
+# send(queue, step_id, kind, attempts): `attempts` is the step's attempts value read in the
+# transaction that set it queued; the runtime uses it to drop stale duplicate messages.
+Send = Callable[[str, uuid.UUID, StepKind, int], None]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 _DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
@@ -99,12 +101,12 @@ def dispatch_once(session: Session, send: Send) -> int:
             step = pick_next(session, queue)
             if step is None:
                 break
-            step_id, kind = step.id, StepKind(step.kind)
+            step_id, kind, attempts = step.id, StepKind(step.kind), step.attempts
             step.status = StepStatus.QUEUED.value
             step.queued_at = func.now()
             session.commit()
             try:
-                send(queue, step_id, kind)
+                send(queue, step_id, kind, attempts)
             except Exception:
                 log.exception("send failed for step %s on %s; back to pending", step_id, queue)
                 session.rollback()

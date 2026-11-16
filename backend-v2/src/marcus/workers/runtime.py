@@ -1,13 +1,16 @@
 """Worker runtime: the `marcus.run_step` Celery task, the handler registry and error mapping.
 
-One delivery of `run_step(step_id)` goes through three short transactions, never one held
-open across the handler's (possibly long) ML work:
+One delivery of `run_step(step_id, sent_attempts)` goes through three short transactions,
+never one held open across the handler's (possibly long) ML work. `sent_attempts` is the
+step's `attempts` when the dispatcher queued it: the token that ties a message to one
+attempt, so a stale duplicate message can never touch a newer attempt.
 
-1. Claim. One conditional UPDATE moves the step `queued -> running`, adds an attempt and
-   commits. A step found `running` is a redelivery after a lost worker: it counts as a new
-   attempt (guarded on the attempts value seen), or fails as `worker_lost` once
-   MAX_ATTEMPTS is reached. Any other status (pending, done, failed, cancelled) is acked
-   and ignored.
+1. Claim. One conditional UPDATE moves the step `queued -> running` (only if `attempts`
+   still equals the token), adds an attempt and commits. A step found `running` with
+   `attempts == sent_attempts + 1` was claimed by this very message, so this is a
+   redelivery after a lost worker: it counts as a new attempt (guarded on the attempts
+   value seen), or fails as `worker_lost` once MAX_ATTEMPTS is reached. Every other case
+   (another attempt's message, or pending, done, failed, cancelled) is acked and dropped.
 2. Handler. `handler(step, session)` runs with no transaction open. `step` is a detached
    Step (plain column reads only, no lazy loads). `session` is a fresh Session for short
    reads: a handler that reads must end its read (`session.rollback()`) before long work,
@@ -54,6 +57,10 @@ HANDLERS: dict[StepKind, Handler] = {}
 
 class BadInput(Exception):
     """The step's input can never work (e.g. not a PDF). Raised by handlers; not retried."""
+
+
+class _NoHandler(Exception):
+    """This worker image has no handler for the step's kind (final engine_error)."""
 
 
 def register(kind: StepKind, handler: Handler) -> None:
@@ -121,17 +128,28 @@ def _start(session: Session, step_id: uuid.UUID, worker: str, *guard) -> Claim |
                  row.segment_id)  # fmt: skip
 
 
-def claim(step_id: uuid.UUID, worker: str) -> Claim | None:
-    """Claim the step for this delivery and commit. None means: ack and do nothing."""
+def claim(step_id: uuid.UUID, sent_attempts: int, worker: str) -> Claim | None:
+    """Claim the step for this message and commit. None means: ack and do nothing.
+
+    Does not publish; the caller publishes the `running` event.
+    """
     with sync_session() as session:
-        mine = _start(session, step_id, worker, Step.status == StepStatus.QUEUED.value)
+        queued = (Step.status == StepStatus.QUEUED.value, Step.attempts == sent_attempts)
+        mine = _start(session, step_id, worker, *queued)
         if mine is None:
             row = session.execute(
                 select(*_RETURNING, Step.status).where(Step.id == step_id)
             ).one_or_none()
-            if row is None or row.status != StepStatus.RUNNING.value:
+            ours = (
+                row is not None
+                and row.status == StepStatus.RUNNING.value
+                and row.attempts == sent_attempts + 1
+            )
+            if not ours:
                 session.rollback()
-                return None  # unknown, pending, done, failed or cancelled
+                log.info("step %s: message for attempt token %d is stale (%s); dropped",
+                         step_id, sent_attempts, row.status if row else "unknown")  # fmt: skip
+                return None
             seen = Claim(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id,
                          row.page, row.segment_id)  # fmt: skip
             if row.attempts >= MAX_ATTEMPTS:
@@ -147,7 +165,6 @@ def claim(step_id: uuid.UUID, worker: str) -> Claim | None:
                 session.rollback()
                 return None  # someone else moved it on meanwhile
         session.commit()
-    _publish(mine, StepStatus.RUNNING.value)
     return mine
 
 
@@ -209,7 +226,7 @@ def _classify(exc: BaseException) -> tuple[ErrorClass, bool]:
         return ErrorClass.TIMEOUT, True
     if isinstance(exc, BadInput):
         return ErrorClass.BAD_INPUT, False
-    if isinstance(exc, BadResult):
+    if isinstance(exc, BadResult | _NoHandler):
         return ErrorClass.ENGINE_ERROR, False
     return ErrorClass.ENGINE_ERROR, True
 
@@ -235,16 +252,20 @@ def _call(handler: Handler, step_id: uuid.UUID) -> dict:
             reads.rollback()
 
 
-def execute(step_id: uuid.UUID, worker: str) -> None:
-    """One delivery of a step: claim, run the handler, then complete or fail (fenced)."""
-    mine = claim(step_id, worker)
+def execute(step_id: uuid.UUID, sent_attempts: int, worker: str) -> None:
+    """One delivery of a step: claim, run the handler, then complete or fail (fenced).
+
+    Everything after the claim, including the `running` event (publish re-raises a soft
+    time limit), is inside the error mapping, so the claimed attempt is always settled.
+    """
+    mine = claim(step_id, sent_attempts, worker)
     if mine is None:
         return
-    handler = HANDLERS.get(StepKind(mine.kind))
-    if handler is None:
-        _fail(mine, ErrorClass.ENGINE_ERROR, f"no handler for {mine.kind}", retryable=False)
-        return
     try:
+        _publish(mine, StepStatus.RUNNING.value)
+        handler = HANDLERS.get(StepKind(mine.kind))
+        if handler is None:
+            raise _NoHandler(f"no handler for {mine.kind}")
         result = _call(handler, step_id)
         _complete(mine, result)
     except Exception as exc:
@@ -260,17 +281,19 @@ def _worker_name() -> str:
 
 
 @celery_app.task(name="marcus.run_step", ignore_result=True)
-def run_step(step_id: str) -> None:
+def run_step(step_id: str, sent_attempts: int) -> None:
     """Celery entry point. Always acks: state lives in the database, not in the task result.
 
+    `sent_attempts` is the step's attempts value when it was queued (see module docstring).
     A database error that leaves the step `running` is logged; the watchdog rescues it.
     """
     try:
         sid = uuid.UUID(step_id)
+        token = int(sent_attempts)
     except (TypeError, ValueError):
-        log.error("run_step: malformed step id %r", step_id)
+        log.error("run_step: malformed message %r, %r", step_id, sent_attempts)
         return
     try:
-        execute(sid, _worker_name())
+        execute(sid, token, _worker_name())
     except Exception:
         log.exception("run_step: step %s could not be recorded; left to the watchdog", sid)

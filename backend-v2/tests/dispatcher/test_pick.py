@@ -45,16 +45,16 @@ def paper_at(s, owner, minutes_ago: int) -> Paper:
 
 class Sent:
     def __init__(self, fail_on: set | None = None):
-        self.calls: list[tuple[str, uuid.UUID, StepKind]] = []
+        self.calls: list[tuple[str, uuid.UUID, StepKind, int]] = []
         self.fail_on = fail_on or set()
 
-    def __call__(self, queue, step_id, kind):
+    def __call__(self, queue, step_id, kind, attempts):
         if queue in self.fail_on:
             raise ConnectionError("broker down")
-        self.calls.append((queue, step_id, kind))
+        self.calls.append((queue, step_id, kind, attempts))
 
     def ids(self, queue=Q):
-        return [sid for q, sid, _ in self.calls if q == queue]
+        return [sid for q, sid, _, _ in self.calls if q == queue]
 
 
 @pytest.fixture
@@ -171,8 +171,8 @@ def test_dispatch_marks_queued_and_sends_kind(db_session, monkeypatch):
     # 2 decimer slots, plus the paper's check_pdf step on q.cpu
     assert n == 3
     assert sent.ids() == [pending[0].id, pending[1].id]
-    assert all(kind == StepKind.OCSR for q, _, kind in sent.calls if q == Q)
-    assert [kind for q, _, kind in sent.calls if q == "q.cpu"] == [StepKind.CHECK_PDF]
+    assert all(kind == StepKind.OCSR for q, _, kind, _ in sent.calls if q == Q)
+    assert [kind for q, _, kind, _ in sent.calls if q == "q.cpu"] == [StepKind.CHECK_PDF]
     s.expire_all()
     for st in pending[:2]:
         row = s.get(Step, st.id)
@@ -187,7 +187,7 @@ def test_dispatch_commits_before_send(db_session, one_slot):
     s.commit()
     seen: list[str] = []
 
-    def send(queue, step_id, kind):
+    def send(queue, step_id, kind, attempts):
         if queue != Q:
             return
         with get_sync_sessionmaker()() as other:  # a worker reading the row
@@ -269,3 +269,16 @@ def test_cancelled_steps_do_not_count_as_usage(db_session, one_slot):
 
     picked = pick_next(s, Q)
     assert picked is not None and picked.id == a_pending[0].id
+
+
+def test_dispatch_sends_attempts_token(db_session, one_slot):
+    """The message carries the step's attempts at queue time (the runtime's fence token)."""
+    s = db_session
+    paper = paper_at(s, make_owner(s), minutes_ago=1)
+    (step,) = add_steps(s, paper, 1, attempts=1)  # retry after one failed attempt
+    s.commit()
+
+    sent = Sent()
+    dispatch_once(s, sent)
+    assert [(sid, a) for q, sid, _, a in sent.calls if q == Q] == [(step.id, 1)]
+    assert [a for q, _, _, a in sent.calls if q == "q.cpu"] == [0]

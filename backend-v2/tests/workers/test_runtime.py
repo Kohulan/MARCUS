@@ -102,7 +102,7 @@ def test_success_calls_complete_step_and_publishes(db_session, bus):
         return {"pages": 2}
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
 
     assert seen == {
         "kind": "check_pdf",
@@ -138,13 +138,13 @@ def test_soft_timeout_is_retried_then_failed_timeout(db_session, bus):
         raise SoftTimeLimitExceeded()
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     row = reload(s, step.id)
     assert row.status == "pending" and row.attempts == 1
     assert row.error_class == "timeout" and row.error
 
     requeue(s, step.id)
-    run_step(str(step.id))
+    run_step(str(step.id), 1)
     row = reload(s, step.id)
     assert row.status == "failed" and row.attempts == 2 and row.error_class == "timeout"
     assert s.get(Paper, paper.id).status == "failed"
@@ -159,7 +159,7 @@ def test_bad_input_not_retried(db_session, bus):
         raise BadInput("not a PDF")
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     row = reload(s, step.id)
     assert row.status == "failed" and row.attempts == 1
     assert row.error_class == "bad_input" and row.error == "not a PDF"
@@ -177,7 +177,7 @@ def test_cancelled_step_is_skipped(db_session, bus, status):
     calls = []
     register(StepKind.CHECK_PDF, lambda view, session: calls.append(1) or {"pages": 1})
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
 
     assert calls == []
     row = reload(s, step.id)
@@ -194,7 +194,7 @@ def test_redelivered_running_step_counts_attempt_and_fails_worker_lost_after_two
     # The first worker claimed it (attempt 1) and died: the redelivery is attempt 2 and runs.
     s.execute(update(Step).where(Step.id == step.id).values(status="running", attempts=1))
     s.commit()
-    run_step(str(step.id))
+    run_step(str(step.id), 0)  # the same message (sent at attempts=0) is redelivered
     assert calls == [1]
     row = reload(s, step.id)
     assert row.status == "done" and row.attempts == 2
@@ -203,7 +203,7 @@ def test_redelivered_running_step_counts_attempt_and_fails_worker_lost_after_two
     _, step2 = queued_check_pdf(s)
     s.execute(update(Step).where(Step.id == step2.id).values(status="running", attempts=2))
     s.commit()
-    run_step(str(step2.id))
+    run_step(str(step2.id), 1)  # this message (sent at attempts=1) was claimed, then lost
     assert calls == [1]
     row = reload(s, step2.id)
     assert row.status == "failed" and row.attempts == 2 and row.error_class == "worker_lost"
@@ -221,7 +221,7 @@ def test_engine_error_is_retried(db_session, bus):
         raise RuntimeError("x" * 5000)
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     row = reload(s, step.id)
     assert row.status == "pending" and row.attempts == 1
     assert row.error_class == "engine_error" and row.error == "x" * 2000
@@ -232,7 +232,7 @@ def test_bad_result_is_final_engine_error(db_session, bus):
     paper, step = queued_check_pdf(s)
     register(StepKind.CHECK_PDF, lambda view, session: {"pages": "many"})
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     row = reload(s, step.id)
     assert row.status == "failed" and row.error_class == "engine_error"
     assert "pages" in row.error
@@ -244,15 +244,15 @@ def test_missing_handler_is_final_engine_error(db_session, bus):
     s = db_session
     _, step = queued_check_pdf(s)
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     row = reload(s, step.id)
     assert row.status == "failed" and row.attempts == 1
     assert row.error_class == "engine_error" and row.error == "no handler for check_pdf"
 
 
 def test_unknown_or_malformed_step_id_is_ignored(db_session, bus):
-    run_step("not-a-uuid")
-    run_step("00000000-0000-0000-0000-000000000000")
+    run_step("not-a-uuid", 0)
+    run_step("00000000-0000-0000-0000-000000000000", 0)
     assert bus() == []
 
 
@@ -282,7 +282,7 @@ def test_stale_attempt_result_is_dropped(db_session, bus, takeover):
         return {"pages": 3}
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
 
     row = reload(s, step.id)
     assert row.status in ("running", "pending") and row.finished_at is None
@@ -300,7 +300,7 @@ def test_stale_attempt_failure_is_dropped(db_session, bus):
         raise BadInput("late")
 
     register(StepKind.CHECK_PDF, handler)
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
 
     row = reload(s, step.id)
     assert row.status == "running" and row.attempts == 2
@@ -318,7 +318,7 @@ def test_redis_down_does_not_fail_step(db_session, monkeypatch):
     monkeypatch.setattr(events, "get_redis", lambda: dead)
     register(StepKind.CHECK_PDF, lambda view, session: {"pages": 1})
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     assert reload(s, step.id).status == "done"
 
 
@@ -332,7 +332,7 @@ def test_redis_client_error_does_not_fail_step(db_session, monkeypatch):
     monkeypatch.setattr(events, "get_redis", broken)
     register(StepKind.CHECK_PDF, lambda view, session: {"pages": 1})
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
     assert reload(s, step.id).status == "done"
 
 
@@ -343,7 +343,7 @@ def test_image_job_step_publishes_on_image_channel(db_session, bus):
     s.commit()
     register(StepKind.OCSR, lambda view, session: dict(OCSR_RESULT))
 
-    run_step(str(step.id))
+    run_step(str(step.id), 0)
 
     assert reload(s, step.id).status == "done"
     assert s.get(ImageJob, job.id).status == "done"
@@ -366,3 +366,73 @@ def test_publish_event_shape(monkeypatch):
     events.publish_event(pid, {"type": "step", "step_id": uuid.uuid4(), "status": "done"})
     assert sent[0][0] == f"marcus:paper:{pid}" == events.paper_channel(pid)
     assert sent[0][1]["status"] == "done" and isinstance(sent[0][1]["step_id"], str)
+
+
+# --- attempt token (amended ruling 1) ------------------------------------------------------
+
+
+def test_stale_duplicate_message_never_touches_newer_attempt(db_session, bus):
+    """Reviewer scenario: the watchdog re-queued a lost queued step (attempts 0 -> 1) and the
+    dispatcher sent a second message (sent=1). The first message (sent=0) turns up late."""
+    s = db_session
+    _, step = queued_check_pdf(s)
+    s.execute(update(Step).where(Step.id == step.id).values(attempts=1))
+    s.commit()
+    seen = {}
+
+    def handler(view, session):
+        # The stale first message arrives while attempt 2 runs: dropped, no worker_lost.
+        run_step(str(view.id), 0)
+        with sync_session() as other:
+            row = other.get(Step, view.id)
+            seen["during"] = (row.status, row.attempts, row.error_class)
+        return {"pages": 1}
+
+    register(StepKind.CHECK_PDF, handler)
+    run_step(str(step.id), 1)
+
+    assert seen["during"] == ("running", 2, None)
+    row = reload(s, step.id)
+    assert row.status == "done" and row.attempts == 2 and row.error_class is None
+    assert statuses(bus()) == ["running", "done"]
+
+
+def test_stale_message_for_requeued_step_is_dropped(db_session, bus):
+    """The stale message arrives first: the step is queued with attempts 1, sent was 0."""
+    s = db_session
+    _, step = queued_check_pdf(s)
+    s.execute(update(Step).where(Step.id == step.id).values(attempts=1))
+    s.commit()
+    calls = []
+    register(StepKind.CHECK_PDF, lambda view, session: calls.append(1) or {"pages": 1})
+
+    run_step(str(step.id), 0)
+
+    assert calls == []
+    row = reload(s, step.id)
+    assert row.status == "queued" and row.attempts == 1 and row.worker_name is None
+    assert bus() == []
+
+
+def test_redelivery_of_other_attempt_is_dropped(db_session, bus):
+    """running with attempts != sent + 1 is not this message's attempt: ack and drop."""
+    s = db_session
+    _, step = queued_check_pdf(s)
+    s.execute(update(Step).where(Step.id == step.id).values(status="running", attempts=2))
+    s.commit()
+
+    run_step(str(step.id), 0)
+
+    row = reload(s, step.id)
+    assert row.status == "running" and row.attempts == 2 and row.error_class is None
+    assert bus() == []
+
+
+def test_soft_timeout_inside_publish_propagates(monkeypatch):
+    class Slow:
+        def publish(self, channel, data):
+            raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(events, "get_redis", Slow)
+    with pytest.raises(SoftTimeLimitExceeded):
+        events.publish_event(uuid.uuid4(), {"type": "step"})

@@ -38,14 +38,14 @@ def psycopg_conninfo(database_url: str) -> str:
 
 
 def celery_send() -> Send:
-    """The real `send`: one Celery task per step, carrying only the step id."""
+    """The real `send`: one Celery task per step, carrying the step id and attempt token."""
     from marcus.core.celery_app import celery_app  # lazy: pick.py stays Celery-free
 
-    def send(queue: str, step_id: uuid.UUID, kind: StepKind) -> None:
+    def send(queue: str, step_id: uuid.UUID, kind: StepKind, attempts: int) -> None:
         soft, hard = TIME_LIMITS[kind]
         celery_app.send_task(
             "marcus.run_step",
-            args=[str(step_id)],
+            args=[str(step_id), attempts],
             queue=queue,
             soft_time_limit=soft,
             time_limit=hard,

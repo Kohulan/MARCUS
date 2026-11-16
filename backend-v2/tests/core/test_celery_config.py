@@ -40,14 +40,14 @@ def test_dispatcher_send_uses_celery_app(monkeypatch):
     calls = []
     monkeypatch.setattr(celery_app, "send_task", lambda name, **kw: calls.append((name, kw)))
     step_id = uuid.uuid4()
-    celery_send()("q.segment", step_id, StepKind.SEGMENT_PAGE)
+    celery_send()("q.segment", step_id, StepKind.SEGMENT_PAGE, 1)
 
     soft, hard = TIME_LIMITS[StepKind.SEGMENT_PAGE]
     assert calls == [
         (
             "marcus.run_step",
             {
-                "args": [str(step_id)],
+                "args": [str(step_id), 1],
                 "queue": "q.segment",
                 "soft_time_limit": soft,
                 "time_limit": hard,
