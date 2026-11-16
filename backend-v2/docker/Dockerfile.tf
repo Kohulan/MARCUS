@@ -89,10 +89,11 @@ RUN echo /app/src > /app/.venv/lib/python3.11/site-packages/marcus.pth \
 WORKDIR /app
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MARCUS_DATA_ROOT=/data HOME=/tmp MPLCONFIGDIR=/tmp/matplotlib \
-    PYSTOW_HOME=/opt/pystow TF_CPP_MIN_LOG_LEVEL=2
+    PYSTOW_HOME=/opt/pystow TF_CPP_MIN_LOG_LEVEL=2 MARCUS_WORKER_PROC_ALIVE_TIMEOUT=300
 USER marcus
 # q.segment, ONE process (= SLOTS["q.segment"]): one model per process. Prefork: soft time
-# limits need it. The model loads in the pool process (after the fork), never in the parent.
+# limits need it. The model loads when the pool process starts (after the fork, ~32 s on CPU:
+# hence the 300 s proc-alive timeout), never in the parent; a failed load stops the worker.
 CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment", "-c", "1", \
      "--pool", "prefork", "--include", "marcus.workers.segment", "-n", "segment@%h", \
      "--loglevel", "INFO"]

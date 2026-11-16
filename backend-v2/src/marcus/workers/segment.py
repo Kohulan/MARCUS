@@ -8,6 +8,7 @@ this handler returns, so the crop cannot be named by segment id. Crop arrays are
 import hashlib
 import logging
 import os
+import signal
 import threading
 import time
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Protocol
 
 import numpy as np
+from celery.signals import worker_process_init
 from PIL import Image, ImageDraw
 
 from marcus.core.enums import StepKind
@@ -96,7 +98,10 @@ class DecimerSegmenter:
         from marcus.workers import gpu
 
         # Importing decimer_segmentation builds, loads and warms up the model (module level),
-        # so the GPU budget must be set first. Weights come from PYSTOW_HOME (baked in).
+        # so the thread caps and the GPU budget must be set first. Weights come from
+        # PYSTOW_HOME (baked into the image).
+        settings = get_settings()
+        gpu.limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
         gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
         from decimer_segmentation import segment_chemical_structures
 
@@ -150,6 +155,40 @@ def get_segmenter() -> Segmenter:
             seg.load()
             _segmenter = seg
         return _segmenter
+
+
+@worker_process_init.connect
+def preload_segmenter(**_) -> None:
+    """Load the model when a pool process starts (after the fork), not in the first task: the
+    load (~32 s on CPU) would otherwise count against segment_page's 60 s soft limit.
+
+    A failed load stops the whole worker with a non-zero exit (SIGQUIT to the parent = Celery
+    cold shutdown, exit code 1), so compose restarts it and /ready reports q.segment as
+    unserved. A half-ready worker that keeps taking steps it cannot run must not exist.
+
+    Only in a Celery pool process: the signal can also be sent elsewhere (tests send it to
+    exercise other workers' hooks), and there the parent is not a Celery worker.
+    """
+    if not _in_pool_process():
+        return
+    try:
+        seg = get_segmenter()
+    except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
+        log.exception("segmenter failed to load; stopping the worker")
+        _abort_worker()
+        return
+    log.info("segmenter %s loaded", seg.version)
+
+
+def _in_pool_process() -> bool:
+    from billiard.process import current_process
+
+    return current_process()._name != "MainProcess"
+
+
+def _abort_worker() -> None:
+    os.kill(os.getppid(), signal.SIGQUIT)
+    os._exit(1)
 
 
 def _write_crop(paper_id, array: np.ndarray) -> str:

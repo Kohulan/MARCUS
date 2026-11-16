@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
+    # TensorFlow CPU thread pools in model workers (None = TF default: every core). Applied
+    # before the model loads (marcus.workers.gpu.limit_tf_threads).
+    tf_intra_threads: int | None = Field(None, gt=0)
+    tf_inter_threads: int | None = Field(None, gt=0)
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
 

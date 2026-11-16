@@ -1,8 +1,13 @@
-"""GPU memory budgets for model workers. Must run in the worker process BEFORE any model loads.
+"""TensorFlow runtime limits for model workers. Must run in the worker process BEFORE any model
+loads (TensorFlow refuses both changes once its runtime is initialised).
 
 `limit_tf_memory` gives TensorFlow one logical GPU device capped at `mb` MiB (env
 `MARCUS_GPU_MEM_MB`), so the TF worker cannot take the whole card from the torch workers that
 share it. Without a visible GPU, or without a budget, it does nothing.
+
+`limit_tf_threads` caps TensorFlow's CPU thread pools (settings `tf_intra_threads` /
+`tf_inter_threads`, env `MARCUS_TF_INTRA_THREADS` / `MARCUS_TF_INTER_THREADS`), so one worker on
+CPU does not take every core next to docling.
 """
 
 import logging
@@ -51,3 +56,19 @@ def limit_tf_memory(mb: int | None) -> bool:
     _tf_limited = True
     log.info("TensorFlow limited to %s MiB on %s", mb, gpus[0].name)
     return True
+
+
+def limit_tf_threads(intra: int | None, inter: int | None) -> None:
+    """Set TensorFlow's intra-op / inter-op thread pool sizes; None keeps TF's default."""
+    for name, value in (("intra", intra), ("inter", inter)):
+        if value is not None and value <= 0:
+            raise ValueError(f"TF {name}-op threads must be positive, got {value}")
+    if intra is None and inter is None:
+        return
+    import tensorflow as tf
+
+    if intra is not None:
+        tf.config.threading.set_intra_op_parallelism_threads(intra)
+    if inter is not None:
+        tf.config.threading.set_inter_op_parallelism_threads(inter)
+    log.info("TensorFlow threads: intra-op %s, inter-op %s", intra, inter)

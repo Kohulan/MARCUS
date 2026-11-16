@@ -22,6 +22,18 @@ class FakeTfConfig:
     def set_logical_device_configuration(self, device, configs):
         self.logical = (device, configs)
 
+    class threading:  # noqa: N801 - mirrors tf.config.threading
+        intra = None
+        inter = None
+
+        @classmethod
+        def set_intra_op_parallelism_threads(cls, n):
+            cls.intra = n
+
+        @classmethod
+        def set_inter_op_parallelism_threads(cls, n):
+            cls.inter = n
+
     class LogicalDeviceConfiguration:
         def __init__(self, memory_limit):
             self.memory_limit = memory_limit
@@ -32,6 +44,7 @@ def fake_tf(monkeypatch):
     def install(gpus):
         tf = types.ModuleType("tensorflow")
         tf.config = FakeTfConfig(gpus)
+        tf.config.threading.intra = tf.config.threading.inter = None
         monkeypatch.setitem(sys.modules, "tensorflow", tf)
         return tf
 
@@ -82,3 +95,23 @@ def test_budget_from_env(monkeypatch):
     monkeypatch.setenv("MARCUS_GPU_MEM_MB", "-1")
     with pytest.raises(ValueError):
         gpu.gpu_mem_mb_from_env()
+
+
+def test_thread_caps_applied(fake_tf):
+    tf = fake_tf([])
+    gpu.limit_tf_threads(4, 2)
+    assert (tf.config.threading.intra, tf.config.threading.inter) == (4, 2)
+
+
+def test_thread_caps_none_is_a_noop_and_does_not_import_tensorflow(monkeypatch):
+    monkeypatch.delitem(sys.modules, "tensorflow", raising=False)
+    gpu.limit_tf_threads(None, None)
+    assert "tensorflow" not in sys.modules
+
+
+def test_thread_caps_must_be_positive(fake_tf):
+    fake_tf([])
+    with pytest.raises(ValueError):
+        gpu.limit_tf_threads(0, 2)
+    with pytest.raises(ValueError):
+        gpu.limit_tf_threads(4, -1)

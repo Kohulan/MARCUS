@@ -1,15 +1,20 @@
 import hashlib
+import os
+import signal
 import subprocess
 import sys
 import types
 import uuid
+import weakref
 from pathlib import Path
 
 import numpy as np
 import pytest
+from celery.signals import worker_process_init
 from PIL import Image
 
 from marcus.core.enums import StepKind
+from marcus.core.settings import get_settings
 from marcus.core.storage import page_image_path, segment_crop_path
 from marcus.workers import gpu, segment
 from marcus.workers.runtime import HANDLERS
@@ -143,21 +148,30 @@ def test_decimer_registered_without_importing_tensorflow():
     subprocess.run([sys.executable, "-c", code], check=True)
 
 
-def test_decimer_load_limits_gpu_before_model_import(monkeypatch):
-    """Importing decimer_segmentation builds the model, so the GPU budget must come first."""
-    limits = []
+def test_decimer_load_limits_threads_and_gpu_before_model_import(monkeypatch):
+    """Importing decimer_segmentation builds the model, so TF's thread caps and GPU budget
+    must be set first."""
+    calls = []
+
+    def fake_threads(intra, inter):
+        assert "decimer_segmentation" not in sys.modules  # model not imported yet
+        calls.append(("threads", intra, inter))
 
     def fake_limit(mb):
-        assert "decimer_segmentation" not in sys.modules  # model not imported yet
-        limits.append(mb)
+        assert "decimer_segmentation" not in sys.modules
+        calls.append(("gpu", mb))
         _stub_decimer(monkeypatch, [], [], [])  # the "import" can only succeed after this
 
     monkeypatch.setenv("MARCUS_GPU_MEM_MB", "3072")
+    monkeypatch.setenv("MARCUS_TF_INTRA_THREADS", "4")
+    monkeypatch.setenv("MARCUS_TF_INTER_THREADS", "2")
+    get_settings.cache_clear()
     monkeypatch.delitem(sys.modules, "decimer_segmentation", raising=False)
+    monkeypatch.setattr(gpu, "limit_tf_threads", fake_threads)
     monkeypatch.setattr(gpu, "limit_tf_memory", fake_limit)
     seg = segment.DecimerSegmenter()
     seg.load()
-    assert limits == [3072]
+    assert calls == [("threads", 4, 2), ("gpu", 3072)]
 
 
 def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
@@ -189,3 +203,72 @@ def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
 def test_decimer_segment_before_load_fails():
     with pytest.raises(RuntimeError, match="load"):
         segment.DecimerSegmenter().segment(Path("/nonexistent.png"))
+
+
+# --- model preload at pool process start ----------------------------------------------------
+
+
+def _connected(signal, func) -> bool:
+    for _, ref in signal.receivers:
+        target = ref() if isinstance(ref, weakref.ReferenceType) else ref
+        if target is func:
+            return True
+    return False
+
+
+def test_preload_hook_connected_to_worker_process_init():
+    assert _connected(worker_process_init, segment.preload_segmenter)
+
+
+def test_preload_loads_the_segmenter(monkeypatch):
+    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    stub = StubSegmenter([])
+    aborted = []
+    monkeypatch.setattr(segment, "_segmenter", None)
+    monkeypatch.setattr(segment, "SEGMENTERS", {"decimer": lambda: stub})
+    monkeypatch.delenv("MARCUS_SEGMENTER", raising=False)
+    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    segment.preload_segmenter(sender=None)
+    assert stub.loaded == 1 and segment._segmenter is stub and not aborted
+    segment.get_segmenter()  # later tasks reuse it: no second load
+    assert stub.loaded == 1
+    monkeypatch.setattr(segment, "_segmenter", None)
+
+
+def test_preload_failure_stops_the_worker(monkeypatch):
+    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    aborted = []
+
+    def broken():
+        raise OSError("weights missing")
+
+    monkeypatch.setattr(segment, "get_segmenter", broken)
+    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    segment.preload_segmenter(sender=None)
+    assert aborted == [True]
+
+
+def test_preload_does_nothing_outside_a_pool_process(monkeypatch):
+    """Sending worker_process_init in a plain process (as other tests do) must neither load a
+    model nor signal the parent."""
+    called = []
+    monkeypatch.setattr(segment, "get_segmenter", lambda: called.append("load"))
+    monkeypatch.setattr(segment, "_abort_worker", lambda: called.append("abort"))
+    assert segment._in_pool_process() is False  # pytest runs in billiard's MainProcess
+    segment.preload_segmenter(sender=None)
+    assert called == []
+
+
+def test_abort_worker_cold_stops_parent_and_exits_nonzero(monkeypatch):
+    killed, exits = [], []
+
+    def fake_exit(code):
+        exits.append(code)
+        raise SystemExit(code)
+
+    monkeypatch.setattr(segment.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(segment.os, "_exit", fake_exit)
+    with pytest.raises(SystemExit):
+        segment._abort_worker()
+    assert killed == [(os.getppid(), signal.SIGQUIT)]
+    assert exits == [1]

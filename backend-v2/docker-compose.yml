@@ -178,7 +178,9 @@ services:
       target: runtime
     image: marcus-v2-tf:local
     # segment_page with DECIMER Segmentation (Mask R-CNN, TensorFlow). ONE prefork process
-    # (= q.segment slots): one model per process, loaded after the fork on the first task.
+    # (= q.segment slots): one model per process, loaded when the pool process starts (after the
+    # fork; ~32 s on CPU, hence the long proc-alive timeout). A failed load stops the container
+    # (exit 1) and compose restarts it.
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
               "-n", "segment@%h", "--loglevel", "INFO"]
@@ -186,6 +188,10 @@ services:
       <<: *env
       # GPU budget in MiB for TensorFlow (marcus.workers.gpu); empty = no limit / CPU only.
       MARCUS_GPU_MEM_MB: ${MARCUS_GPU_MEM_MB:-}
+      # TF CPU thread pools: one worker must not take every core next to docling.
+      MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+      MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
   # Test-only (profile "test"): the TF image's `test` target runs the ml-marked segmenter test.
@@ -205,6 +211,9 @@ services:
     cap_drop:
       - ALL
     network_mode: none
+    environment:
+      MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+      MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
     mem_limit: 8g
 
   nginx:

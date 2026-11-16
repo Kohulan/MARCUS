@@ -10,6 +10,8 @@ database stack and no image loads another image's handlers. The result backend i
 the synchronous tools queue only; run_step ignores results.
 """
 
+import os
+
 from celery import Celery
 from kombu import Queue
 
@@ -33,7 +35,9 @@ celery_app.conf.update(
     task_acks_late=True,  # ack after the step finished, so a lost worker means redelivery
     task_reject_on_worker_lost=True,  # requeue when the worker process dies
     broker_connection_retry_on_startup=True,
-    worker_proc_alive_timeout=30,  # pool process start may warm up (tools: JVM ~3.5 s)
+    # A pool process must report "up" within this time or the parent kills it. Its start may
+    # warm up (tools: JVM ~3.5 s; worker-segment loads its model there and sets ~300 s).
+    worker_proc_alive_timeout=float(os.environ.get("MARCUS_WORKER_PROC_ALIVE_TIMEOUT", "30")),
     task_queues=tuple(Queue(name, routing_key=name) for name in [*SLOTS, TOOLS_QUEUE]),
     task_default_queue="q.cpu",
     task_routes={"marcus.tools.*": {"queue": TOOLS_QUEUE}},
