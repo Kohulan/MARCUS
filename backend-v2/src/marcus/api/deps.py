@@ -1,4 +1,5 @@
 import ipaddress
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -7,8 +8,8 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.core.db import get_db
-from marcus.core.enums import OwnerKind, PriorityClass
-from marcus.core.models import Owner
+from marcus.core.enums import OwnerKind, PaperStatus, PriorityClass
+from marcus.core.models import Owner, Paper, Segment
 from marcus.core.settings import get_settings
 from marcus.core.tokens import hash_token, new_token
 
@@ -140,3 +141,47 @@ async def current_owner(
         secure=settings.cookie_secure,
     )
     return owner
+
+
+# --- owned resources -----------------------------------------------------------------------
+
+NOT_FOUND = "not found"
+
+
+def not_found() -> HTTPException:
+    """The one 404 for missing, deleted and other owners' resources (no existence oracle)."""
+    return HTTPException(status_code=404, detail=NOT_FOUND)
+
+
+async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -> Paper:
+    paper = (
+        await db.execute(
+            select(Paper).where(
+                Paper.id == paper_id,
+                Paper.owner_id == owner.id,
+                Paper.status != PaperStatus.DELETED.value,
+            )
+        )
+    ).scalar_one_or_none()
+    if paper is None:
+        raise not_found()
+    return paper
+
+
+async def get_owned_segment(
+    db: AsyncSession, owner: Owner, segment_id: uuid.UUID
+) -> tuple[Segment, Paper]:
+    row = (
+        await db.execute(
+            select(Segment, Paper)
+            .join(Paper, Paper.id == Segment.paper_id)
+            .where(
+                Segment.id == segment_id,
+                Paper.owner_id == owner.id,
+                Paper.status != PaperStatus.DELETED.value,
+            )
+        )
+    ).one_or_none()
+    if row is None:
+        raise not_found()
+    return row[0], row[1]

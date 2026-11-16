@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     trusted_proxies: list[str] = []
     enable_fake_engines: bool = False
     cookie_secure: bool = True
+    sse_ping_interval_s: float = 15.0
 
 
 @lru_cache
