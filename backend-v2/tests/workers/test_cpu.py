@@ -32,23 +32,6 @@ def view(paper_id, page=None):
     return SimpleNamespace(paper_id=paper_id, page=page)
 
 
-def sleepy_lookup(path):
-    time.sleep(30)
-    return "10.1000/never"
-
-
-def sleepy_count(path, max_pages):
-    time.sleep(30)
-
-
-def fixed_lookup(path):
-    return " https://doi.org/10.1000/ABC.123 "
-
-
-def boom_lookup(path):
-    raise RuntimeError("network down")
-
-
 def test_handlers_are_registered():
     from marcus.core.enums import StepKind
 
@@ -91,20 +74,6 @@ def test_adversarial_pdf_times_out_without_hanging_worker(name):
     assert time.monotonic() - start < 10
 
 
-def test_hanging_child_is_killed_on_timeout():
-    start = time.monotonic()
-    with pytest.raises(pdfsafe.ChildTimeout):
-        pdfsafe.run_isolated(sleepy_lookup, ("x",), timeout_s=2, mem_mb=None)
-    assert time.monotonic() - start < 8
-
-
-def test_timeout_maps_to_bad_input(monkeypatch):
-    monkeypatch.setattr(pdfsafe, "_count", sleepy_count)
-    pid = make_paper_with("two_page.pdf")
-    with pytest.raises(BadInput, match="timeout"):
-        pdfsafe.page_count(pdf_path(pid), timeout_s=2)
-
-
 def test_render_page_is_300_dpi():
     pid = make_paper_with("two_page.pdf")
     assert cpu.render_page(view(pid, 1), None) == {}
@@ -126,12 +95,16 @@ def test_render_failure_leaves_no_partial_file():
     assert not pages.exists() or list(pages.iterdir()) == []
 
 
-def test_docling_writes_text_json_atomically(monkeypatch):
+def test_docling_goes_through_isolated_child(monkeypatch):
     pid = make_paper_with("two_page.pdf")
-    monkeypatch.setattr(cpu, "_convert_to_dict", lambda path: {"texts": [{"text": "hi"}]})
+    calls = []
+
+    def fake_run_docling(path, out_dir, timeout_s, mem_mb=32768):
+        calls.append((path, out_dir, timeout_s, mem_mb))
+
+    monkeypatch.setattr(cpu.pdfsafe, "run_docling", fake_run_docling)
     assert cpu.docling(view(pid), None) == {"text_path": "text.json"}
-    assert json.loads((paper_dir(pid) / "text.json").read_text()) == {"texts": [{"text": "hi"}]}
-    assert [p.name for p in paper_dir(pid).iterdir() if p.name.startswith(".")] == []
+    assert calls == [(pdf_path(pid), paper_dir(pid), 280, 32768)]
 
 
 @pytest.mark.ml
@@ -144,23 +117,32 @@ def test_docling_real_conversion():
 
 def test_doi_timeout_returns_none(monkeypatch):
     pid = make_paper_with("two_page.pdf")
-    monkeypatch.setattr(cpu, "_lookup_doi", sleepy_lookup)
+    monkeypatch.setattr(cpu, "DOI_OP", "_sleep")
     monkeypatch.setattr(cpu, "DOI_TOTAL_S", 2)
     start = time.monotonic()
     assert cpu.doi(view(pid), None) == {"doi": None}
-    assert time.monotonic() - start < 10
+    assert time.monotonic() - start < 8
 
 
 def test_doi_error_returns_none(monkeypatch):
     pid = make_paper_with("two_page.pdf")
-    monkeypatch.setattr(cpu, "_lookup_doi", boom_lookup)
+    monkeypatch.setattr(cpu, "DOI_OP", "_fail")
     assert cpu.doi(view(pid), None) == {"doi": None}
 
 
 def test_doi_is_normalised(monkeypatch):
     pid = make_paper_with("two_page.pdf")
-    monkeypatch.setattr(cpu, "_lookup_doi", fixed_lookup)
+    monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: " https://doi.org/10.1000/ABC.123 ")
     assert cpu.doi(view(pid), None) == {"doi": "10.1000/ABC.123"}
+
+
+def test_child_timeouts_are_below_celery_soft_limits():
+    from marcus.core.queues import TIME_LIMITS
+
+    assert cpu.CHECK_TIMEOUT_S < TIME_LIMITS["check_pdf"][0]
+    assert cpu.RENDER_TIMEOUT_S < TIME_LIMITS["render_page"][0]
+    assert cpu.DOCLING_TIMEOUT_S < TIME_LIMITS["docling"][0]
+    assert cpu.DOI_TOTAL_S < TIME_LIMITS["doi"][0]
 
 
 def test_normalise_doi_limits():

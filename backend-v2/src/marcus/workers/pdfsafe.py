@@ -1,22 +1,35 @@
 """Run untrusted-PDF work in a throw-away child process.
 
-PyMuPDF (MuPDF is C code) parses user-supplied files, so a crafted PDF can hang or eat memory.
-Every call here runs in a `spawn`ed child with an address-space limit (RLIMIT_AS) and a wall
-clock timeout; on timeout the child is terminated, then killed. Results and errors come back
-over a pipe as plain data (never a pickled exception object).
+PyMuPDF (C code), docling and pdf2doi all parse user-supplied files, so a crafted PDF can hang
+or eat memory. Every call here runs `python -I -m marcus.workers.pdfsafe_child OP` as a
+subprocess (a plain subprocess, not multiprocessing: Celery prefork workers are daemonic and
+may not start multiprocessing children) in its own session with RLIMIT_AS and RLIMIT_CPU, a
+minimal environment, JSON over stdin/stdout and a capped reply. On timeout the whole process
+group gets TERM, then KILL. Nothing is pickled.
 
-This module imports only the standard library at top level so the child starts fast;
-`marcus.workers.runtime` (celery, sqlalchemy) is imported lazily on the parent side.
+Top-level imports are standard library only; `marcus.workers.runtime` is imported lazily.
 """
 
-import multiprocessing
+import json
 import os
+import resource
+import selectors
+import signal
+import subprocess
+import sys
+import time
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 DEFAULT_MEM_MB = 2048
+# docling imports torch, which maps ~24 GiB of address space (thread stacks, CUDA libs): measured
+# segfault at 8 GiB, "resource unavailable" at 16 GiB, success at 24 GiB. RLIMIT_AS is a
+# virtual limit, so 32 GiB still caps a runaway parse.
+DOCLING_MEM_MB = 32768
+MAX_REPLY_BYTES = 1024 * 1024
+_ENV_KEEP = ("PATH", "HOME", "LANG", "PYTHONHASHSEED", "HF_HOME", "TORCH_HOME",
+             "XDG_CACHE_HOME", "DOCLING_ARTIFACTS_PATH", "OMP_NUM_THREADS")
 
 
 class ChildTimeout(Exception):
@@ -24,101 +37,107 @@ class ChildTimeout(Exception):
 
 
 class ChildFailed(Exception):
-    """The child raised or died. Only a short message travels back, never an exception object."""
+    """The child raised or died. Only a short message travels back."""
 
 
-def _child_main(conn, fn: Callable, args: tuple, mem_mb: int | None) -> None:
-    try:
+def _child_env() -> dict[str, str]:
+    env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
+    env.setdefault("PYTHONHASHSEED", "0")
+    return env
+
+
+def _limits(mem_mb: int | None, cpu_s: int):
+    def apply() -> None:
         if mem_mb:
-            import resource
-
             limit = mem_mb * 2**20
             resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        conn.send(("ok", fn(*args)))
-    except MemoryError:
-        conn.send(("err", "out of memory"))
-    except BaseException as exc:  # noqa: BLE001 - everything becomes a message
-        conn.send(("err", f"{type(exc).__name__}: {str(exc)[:200]}"))
-    finally:
-        conn.close()
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 2))
+
+    return apply
 
 
-def run_isolated(
-    fn: Callable, args: tuple, timeout_s: float, mem_mb: int | None = DEFAULT_MEM_MB
-) -> Any:
-    """Call `fn(*args)` in a spawned child. `fn` must be a picklable module-level function and
-    return picklable plain data. Raises ChildTimeout or ChildFailed."""
-    ctx = multiprocessing.get_context("spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_main, args=(child_conn, fn, args, mem_mb), daemon=True)
-    proc.start()
-    child_conn.close()
-    try:
-        if not parent_conn.poll(timeout_s):
-            raise ChildTimeout()
+def _kill_group(proc: subprocess.Popen) -> None:
+    for sig, wait in ((signal.SIGTERM, 1.0), (signal.SIGKILL, 5.0)):
         try:
-            status, payload = parent_conn.recv()
-        except (EOFError, OSError) as exc:
-            raise ChildFailed(f"child exited with code {proc.exitcode}") from exc
-        if status == "ok":
-            return payload
-        raise ChildFailed(str(payload))
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(2)
-            if proc.is_alive():
-                proc.kill()
-        proc.join(5)
-
-
-def _open_checked(path: str, max_pages: int):
-    import pymupdf
-
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            break
+        try:
+            proc.wait(timeout=wait)
+            break
+        except subprocess.TimeoutExpired:
+            continue
     try:
-        doc = pymupdf.open(path)
-    except Exception as exc:
-        raise ValueError("not a readable PDF") from exc
-    if doc.needs_pass or doc.is_encrypted:
-        raise ValueError("encrypted PDF")
-    if not doc.is_pdf:
-        raise ValueError("not a PDF")
-    n = doc.page_count
-    if n < 1:
-        raise ValueError("PDF has no pages")
-    if n > max_pages:
-        raise ValueError(f"PDF has more than {max_pages} pages")
-    return doc
+        os.killpg(proc.pid, signal.SIGKILL)  # stragglers in the group
+    except (ProcessLookupError, PermissionError):
+        pass
+    proc.wait()
 
 
-def _count(path: str, max_pages: int) -> int:
-    doc = _open_checked(path, max_pages)
+def run_op(op: str, args: list, timeout_s: float, mem_mb: int | None = DEFAULT_MEM_MB) -> Any:
+    """Run a child op with JSON-able args; return its JSON result. Raises ChildTimeout or
+    ChildFailed."""
+    proc = subprocess.Popen(
+        [sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        env=_child_env(),
+        start_new_session=True,
+        preexec_fn=_limits(mem_mb, int(timeout_s) + 5),  # noqa: PLW1509
+    )
     try:
-        return doc.page_count
+        try:
+            proc.stdin.write(json.dumps({"args": args}).encode())
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        data = _read_capped(proc, time.monotonic() + timeout_s)
+        try:
+            proc.wait(timeout=5)  # the reply is complete; a slow exit is cleaned up below
+        except subprocess.TimeoutExpired:
+            pass
+    except ChildTimeout:
+        raise ChildTimeout() from None
     finally:
-        doc.close()
-
-
-def _render(path: str, page: int, out: str, max_pages: int) -> None:
-    import pymupdf
-
-    doc = _open_checked(path, max_pages)
+        _kill_group(proc)
     try:
-        if not 0 <= page < doc.page_count:
-            raise ValueError("page out of range")
-        zoom = 300 / 72
-        pix = doc[page].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-        pix.save(out)
+        reply = json.loads(data)
+    except ValueError:
+        raise ChildFailed(f"child exited with code {proc.returncode}") from None
+    if reply.get("ok"):
+        return reply.get("result")
+    raise ChildFailed(str(reply.get("error", "child failed"))[:200])
+
+
+def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
+    sel = selectors.DefaultSelector()
+    sel.register(proc.stdout, selectors.EVENT_READ)
+    chunks: list[bytes] = []
+    size = 0
+    try:
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ChildTimeout()
+            if not sel.select(left):
+                raise ChildTimeout()
+            chunk = os.read(proc.stdout.fileno(), 65536)
+            if not chunk:
+                return b"".join(chunks)
+            size += len(chunk)
+            if size > MAX_REPLY_BYTES:
+                raise ChildFailed("reply too large")
+            chunks.append(chunk)
     finally:
-        doc.close()
+        sel.close()
 
 
-def _run_pdf(fn: Callable, args: tuple, timeout_s: float, mem_mb: int):
+def _run_pdf(op: str, args: list, timeout_s: float, mem_mb: int | None):
     from marcus.workers.runtime import BadInput
 
     try:
-        return run_isolated(fn, args, timeout_s, mem_mb)
+        return run_op(op, args, timeout_s, mem_mb)
     except ChildTimeout:
         raise BadInput("timeout") from None
     except ChildFailed as exc:
@@ -128,7 +147,7 @@ def _run_pdf(fn: Callable, args: tuple, timeout_s: float, mem_mb: int):
 def page_count(path: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB) -> int:
     from marcus.core.settings import get_settings
 
-    return _run_pdf(_count, (str(path), get_settings().max_pages), timeout_s, mem_mb)
+    return _run_pdf("count", [str(path), get_settings().max_pages], timeout_s, mem_mb)
 
 
 def render_page_png(
@@ -141,7 +160,14 @@ def render_page_png(
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(f".{out.stem}.{uuid.uuid4().hex}.tmp.png")
     try:
-        _run_pdf(_render, (str(path), page, str(tmp), get_settings().max_pages), timeout_s, mem_mb)
+        _run_pdf(
+            "render", [str(path), page, str(tmp), get_settings().max_pages], timeout_s, mem_mb
+        )
         os.replace(tmp, out)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def run_docling(path: Path, out_dir: Path, timeout_s: int, mem_mb: int = DOCLING_MEM_MB) -> None:
+    """Convert in a child; it writes out_dir/text.json (temp + replace)."""
+    _run_pdf("docling", [str(path), str(out_dir)], timeout_s, mem_mb)
