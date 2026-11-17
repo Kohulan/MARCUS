@@ -108,6 +108,8 @@ switch that did not take fails the unit. It is not installed by anything here. O
   shows real client addresses (first field of each access line). `MARCUS_TRUSTED_PROXIES` (the
   API) stays nginx's own address. A bad value stops nginx at start.
 - The Exclusive_Process setter (`nvidia-v100-setup.sh`, above) must be changed before the reboot test.
+- **Wipe the v2 data volumes before deploying c69cdbc** (or anything after it) over an older v2 stack: crops
+  stored before it are already red/blue swapped, and the OCSR handler would swap them a second time.
 - GPU finding to close before the switch (judges/results/2026-11-17-gpu-session.md):
   dcgm-exporter exports no GPU metrics as configured (its DCGM host engine refuses to watch fields
   when not root). (Fixed in D4 fix round 1: worker-segment now keeps its TensorFlow budget,

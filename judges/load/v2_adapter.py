@@ -28,8 +28,9 @@ limits (10 new owners per hour, 6 active papers) are raised on the fake stack an
 Every answer >= 400 is kept (``http_events``) with its ``detail``; ``breaker_503_count`` counts the
 ``503 {"detail": "service unavailable"}`` answers of the rate limiter's open circuit breaker.
 
-Cold OCSR cache (controller ruling R21). v2 caches OCSR by (sha256 of the crop or image, engine, engine version) for
-every real engine, image jobs included, so a repeated fixture or probe image would be served in about 0 ms.
+Cold OCSR cache (controller ruling R21). v2 caches OCSR by (sha256 of the bytes the engine gets: a crop's red/blue
+swapped PNG, an image job's own file; engine; engine version) for every real engine, image jobs included, so a
+repeated fixture or probe image would be served in about 0 ms.
   * ``CacheClear`` empties the cache table on the TEST stack's Postgres between scenarios, arms and repeats:
     ``docker exec <container> psql -U marcus -d marcus -c 'DELETE FROM ocsr_cache'`` (the fs-probe's ``docker exec``
     path; ``DOCKER_HOST`` reaches a remote docker). It refuses production and non-test container names.

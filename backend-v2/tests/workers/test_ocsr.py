@@ -184,7 +184,9 @@ def test_ocsr_marks_cache_hits_and_misses(monkeypatch):
     session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
     miss = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
     assert miss["cached"] is False
-    monkeypatch.setattr(handler, "_cache_get", lambda *a: SimpleNamespace(smiles="CCO", molfile=None))
+    monkeypatch.setattr(
+        handler, "_cache_get", lambda *a: SimpleNamespace(smiles="CCO", molfile=None)
+    )
     hit = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
     assert hit["cached"] is True and hit["ms"] == 0
 
@@ -294,7 +296,7 @@ def test_black_and_white_crop_input_is_the_crop_itself(tmp_path):
     im.putpixel((2, 2), (90, 90, 90))
     im.save(p)
     with Image.open(io.BytesIO(v1_engine_input(p))) as out:
-        assert list(out.convert("RGB").getdata()) == list(im.getdata())
+        assert list(out.convert("RGB").get_flattened_data()) == list(im.get_flattened_data())
 
 
 def test_engine_input_equals_v1_cv2_imwrite_of_the_library_crop(tmp_path):
