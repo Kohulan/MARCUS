@@ -491,6 +491,66 @@ async def test_breaker_closes_after_five_seconds(clock):
     assert len(await limiter.redis.keys("rl:upload:o:*")) == 1
 
 
+class _Pipe:
+    def __init__(self, gate):
+        self.gate = gate
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def incr(self, key):
+        pass
+
+    def expire(self, key, seconds):
+        pass
+
+    async def execute(self):
+        if self.gate is not None:
+            await self.gate.wait()
+        raise redis_exceptions.TimeoutError("Timeout reading from socket")
+
+
+class GatedRedis:
+    """Every call times out; the first one only when `gate` is set (a call still in flight)."""
+
+    def __init__(self):
+        self.gate = asyncio.Event()
+        self.calls = 0
+
+    def pipeline(self, transaction=True):
+        self.calls += 1
+        return _Pipe(self.gate if self.calls == 1 else None)
+
+
+async def test_upload_in_flight_when_the_breaker_opens_then_failing_gets_503(clock):
+    """Review D3b I1: the call started while closed, fails after the breaker opened: refused."""
+    redis = GatedRedis()
+    limiter = security.RateLimiter(redis)
+    upload = asyncio.create_task(limiter.hit("upload", "o", fail_open=False))
+    while redis.calls == 0:  # the upload call is now waiting on Redis
+        await asyncio.sleep(0)
+    for _ in range(security.BREAKER_FAILURES):  # other requests' calls open the breaker
+        assert await limiter.hit("ip", "k", fail_open=True) is None
+    assert limiter._is_open()
+    redis.gate.set()  # the in-flight upload call now fails too
+    with pytest.raises(security.RateLimitUnavailable):
+        await upload
+    # an in-flight ip call failing while open still fails open
+    redis2 = GatedRedis()
+    limiter.redis = redis2
+    clock[0] += security.BREAKER_OPEN_S  # closed again
+    ip = asyncio.create_task(limiter.hit("ip", "k2", fail_open=True))
+    while redis2.calls == 0:
+        await asyncio.sleep(0)
+    for _ in range(security.BREAKER_FAILURES):
+        assert await limiter.hit("tools", "o", fail_open=True) is None
+    redis2.gate.set()
+    assert await ip is None
+
+
 async def test_uploads_get_503_only_while_the_breaker_is_open(app, clock):
     slow = slow_redis()
     app.state.rate_limiter.redis = slow

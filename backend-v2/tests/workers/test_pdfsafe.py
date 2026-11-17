@@ -173,3 +173,22 @@ def test_run_op_cpu_limit_has_headroom_for_threaded_ops(monkeypatch):
     with pytest.raises(Boom):
         pdfsafe.run_op("count", [], 15)
     assert seen["argv"][-2] == "20"
+
+
+def test_cpu_limit_kill_through_run_pdf_stays_bad_input(monkeypatch):
+    """Review D3b M3: a child killed by RLIMIT_CPU (SIGXCPU, no reply) is final bad input, never
+    a retried timeout. run_op's CPU limit is always above its wall timeout, so the child's
+    cpu_s argument is cut to 1 s here; the wall timeout (20 s) cannot fire first."""
+    real_popen = pdfsafe.subprocess.Popen
+
+    def popen(argv, **kw):
+        assert argv[3] == "marcus.workers.pdfsafe_child"
+        argv = [*argv[:6], "1", *argv[7:]]  # cpu_s
+        return real_popen(argv, **kw)
+
+    monkeypatch.setattr(pdfsafe.subprocess, "Popen", popen)
+    start = time.monotonic()
+    with pytest.raises(BadInput, match=r"child exited with code -(24|9)") as info:
+        pdfsafe._run_pdf("_spin", [], 20, None)
+    assert not isinstance(info.value, StepTimeout)
+    assert time.monotonic() - start < 15

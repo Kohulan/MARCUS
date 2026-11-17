@@ -192,7 +192,8 @@ class RateLimiter:
     A circuit breaker, shared by all scopes: BREAKER_FAILURES Redis failures within the last
     BREAKER_WINDOW_S (a sliding window; a success in between does not reset it) open it. While
     open, Redis is skipped for BREAKER_OPEN_S and every hit is refused per scope: uploads fail
-    closed (503), ip and tools fail open. When it closes, the failure count starts from zero.
+    closed (503), ip and tools fail open; that includes a call already in flight when it
+    opened and failing afterwards. When it closes, the failure count starts from zero.
     A failed call that leaves the breaker closed is let through in every scope, so one slow
     Redis call never refuses uploads.
     """
@@ -245,7 +246,10 @@ class RateLimiter:
                 pipe.expire(rkey, WINDOW_S)
                 count, _ = await pipe.execute()
         except (RedisError, OSError) as exc:
-            refuse = self._record_failure() and not fail_open
+            # A call that was in flight when the breaker opened is refused like any hit while
+            # open; it is not counted (the count restarts when the breaker closes).
+            opened = self._is_open() or self._record_failure()
+            refuse = opened and not fail_open
             self._warn(scope, exc, not refuse)
             if refuse:
                 raise RateLimitUnavailable(scope) from exc
