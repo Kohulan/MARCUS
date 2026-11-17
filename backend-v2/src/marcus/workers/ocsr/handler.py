@@ -80,6 +80,12 @@ def _input_image(step, session) -> tuple[Path, bool]:
     return segment_crop_path(row.paper_id, row.image_sha256), True
 
 
+def _engine_input(image: Path, is_crop: bool) -> bytes:
+    """The bytes the engine reads (and the OCSR cache key hashes): a crop's v1 red/blue-swapped
+    PNG, an image job's own file. Dropping the swap would be a change here only."""
+    return v1_engine_input(image) if is_crop else image.read_bytes()
+
+
 def _cache_get(session, sha: str, engine: str, version: str):
     """(smiles, molfile) from ocsr_cache, or None. Ends its read transaction."""
     if session is None:
@@ -133,7 +139,7 @@ def ocsr(step, session) -> dict:
     image, is_crop = _input_image(step, session)
     if not image.is_file():
         raise BadInput("input image is missing")
-    data = v1_engine_input(image) if is_crop else image.read_bytes()
+    data = _engine_input(image, is_crop)
     use_cache = name is not Engine.FAKE
     if use_cache:
         sha = hashlib.sha256(data).hexdigest()  # the engine's input, not the stored file
@@ -149,21 +155,19 @@ def ocsr(step, session) -> dict:
                 "engine_version": version,
             }
     engine = get_engine(name)
-    if is_crop:
-        # /tmp is a tmpfs in every worker container; the engine reads the file with its own reader
-        fd, tmp = tempfile.mkstemp(suffix=".png", prefix="ocsr-input-")
-        try:
+    tmp = None  # a crop's engine input is written to a temp file; an image job's is its file
+    try:
+        if is_crop:
+            # /tmp is a tmpfs in every worker container; the engine reads the file itself
+            fd, tmp = tempfile.mkstemp(suffix=".png", prefix="ocsr-input-")
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
-            start = time.monotonic()
-            result = engine.predict(Path(tmp))
-            ms = int((time.monotonic() - start) * 1000)
-        finally:
-            os.unlink(tmp)
-    else:
         start = time.monotonic()
-        result = engine.predict(image)
+        result = engine.predict(Path(tmp) if tmp else image)
         ms = int((time.monotonic() - start) * 1000)
+    finally:
+        if tmp:
+            os.unlink(tmp)
     if use_cache:
         _cache_put(session, sha, name.value, engine.version, result.smiles, result.molfile)
     return {
