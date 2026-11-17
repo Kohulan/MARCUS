@@ -1,0 +1,11 @@
+{
+  "decided": "2026-11-17",
+  "seed_key": "6b4eb402",
+  "choice": "Remix A - Field Sheet",
+  "source": "owner remix of directions 4 (Specimen Sheet) and 5 (Clean Standard)",
+  "canvas": "https://claude.ai/artifact/XnHN4XgbKyB6ggUfLKTkRC",
+  "board": "project/RemixA.dc.html",
+  "build_path": "code-led (no image generation available)",
+  "palette": {"paper": "#FAFAF7", "ink": "#15241B", "green": "#1E4D33", "accepted": "#2D7A46", "to_check": "#9A5B0C", "rejected": "#B23A2A", "line": "#DCE3DA", "muted": "#55675A"},
+  "fonts": {"headings": "Bricolage Grotesque", "text": "Hanken Grotesk", "smiles": "JetBrains Mono", "wordmark": "Gmarket Sans"}
+}
