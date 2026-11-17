@@ -93,7 +93,7 @@ def _seed(s: Session, owner_id, engine: Engine, ocsr: bool, write_files: bool) -
     finish(s, check, {"pages": 1})
     (render,) = steps_of(s, paper.id, "render_page")
     (seg_step,) = finish(s, render, {})
-    ocsr_steps = finish(s, seg_step, {"segments": SEGS})
+    ocsr_steps = finish(s, seg_step, {"segments": SEGS, "seg_version": "segv-test"})
     if ocsr:
         for st in ocsr_steps:
             finish(s, st, ocsr_result())

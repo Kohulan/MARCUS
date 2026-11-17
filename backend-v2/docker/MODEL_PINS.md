@@ -33,6 +33,13 @@ Deviations: `typing-extensions` stays at the uv.lock version 4.16.0 (pydantic ne
 `numba` (never imported by the package) and `opencv-python` (the headless build of the same version
 provides `cv2`; decimer declares `opencv-python` too).
 
+Segmentation cache version: `MARCUS_SEG_VERSION` in `docker-compose.yml` (anchor `x-seg-version`,
+set on api, worker-cpu and worker-segment) is the same decimer_segmentation commit
+`d0045d9ef4b29a2a8d865eae55399ba1b14481bf` (= `DecimerSegmenter.version`). The planner stores a
+paper's segmentation under `<segmenter version>|dpi300` and reuses it for the same PDF bytes only
+while `MARCUS_SEG_VERSION` names the running segmenter: change it together with the pin above
+(`tests/deploy/test_compose_config.py` checks they match). Unset = the cache is never used.
+
 Runtime difference from v1 (same weights, same calls): v1 loads both DECIMER OCSR models when
 `DECIMER` is imported; v2 loads the hand-drawn model on its first `decimer-hand` request
 (`marcus.workers.ocsr.decimer`).

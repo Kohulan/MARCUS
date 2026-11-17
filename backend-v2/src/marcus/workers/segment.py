@@ -203,7 +203,8 @@ def segment_page(step, session) -> dict:
     page_png = page_image_path(step.paper_id, step.page)
     if not page_png.is_file():
         raise BadInput("page image is missing")
-    crops = get_segmenter().segment(page_png)
+    segmenter = get_segmenter()
+    crops = segmenter.segment(page_png)
     segments = []
     for idx, (array, bbox) in enumerate(crops):
         if array.ndim < 2 or array.shape[0] == 0 or array.shape[1] == 0:
@@ -215,7 +216,9 @@ def segment_page(step, session) -> dict:
                 "image_sha256": _write_crop(step.paper_id, array),
             }
         )
-    return {"segments": segments}
+    # seg_version: the planner caches a paper's segmentation only when every page reports the
+    # same one (marcus.core.pipeline, seg_cache).
+    return {"segments": segments, "seg_version": segmenter.version}
 
 
 register(StepKind.SEGMENT_PAGE, segment_page)

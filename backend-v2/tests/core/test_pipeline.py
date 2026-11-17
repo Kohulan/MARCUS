@@ -20,6 +20,7 @@ SEGS = [
     {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64},
     {"idx": 1, "bbox": [5, 5, 50, 60], "image_sha256": "1" * 64},
 ]
+SEG_V = "segv-test"
 OCSR = {"smiles": "CCO", "molfile": None, "valid": True, "ms": 12, "engine_version": "2.7"}
 
 
@@ -92,7 +93,7 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
     to_processing(s, paper, pages=3)
     render_p2 = steps(s, paper, "render_page")[2]
     (seg_step,) = finish(s, render_p2, {})
-    new = finish(s, seg_step, {"segments": SEGS})
+    new = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
 
     segs = list(s.execute(select(Segment).order_by(Segment.idx)).scalars())
     assert [(g.paper_id, g.page, g.idx, g.bbox, g.image_sha256) for g in segs] == [
@@ -117,7 +118,7 @@ def test_ocsr_result_writes_prediction(db_session):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, _ = finish(s, seg_step, {"segments": SEGS})
+    ocsr1, _ = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
     assert finish(s, ocsr1, OCSR) == []
     (pred,) = s.execute(select(Prediction)).scalars()
     assert (pred.segment_id, pred.image_job_id, pred.engine) == (ocsr1.segment_id, None, "decimer")
@@ -151,7 +152,7 @@ def test_paper_done_when_last_step_finishes(db_session):
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
     s.refresh(paper)
     assert paper.status == "processing"
-    finish(s, seg_step, {"segments": SEGS})
+    finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
     s.refresh(paper)
     assert paper.status == "done"
 
@@ -166,7 +167,7 @@ def test_paper_done_when_some_pages_fail(db_session):
     run(s, r1)
     fail_step(s, r1.id, ErrorClass.BAD_INPUT, "broken page", retryable=False)
     (seg_step,) = finish(s, r2, {})
-    finish(s, seg_step, {"segments": []})
+    finish(s, seg_step, {"segments": [], "seg_version": SEG_V})
     s.refresh(paper)
     assert paper.status == "done"
 
@@ -262,7 +263,7 @@ def test_delete_while_running_cancels_and_drops_late_result(db_session):
         "doi": "cancelled",
     }
 
-    assert complete_step(s, seg_step.id, {"segments": SEGS}) == []
+    assert complete_step(s, seg_step.id, {"segments": SEGS, "seg_version": SEG_V}) == []
     s.refresh(seg_step)
     s.refresh(paper)
     assert seg_step.status == "cancelled"
@@ -315,7 +316,7 @@ def _done_paper_with_segment(s):
     finish(s, steps(s, paper, "doi")[0], {"doi": None})
     finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    finish(s, seg_step, {"segments": SEGS})
+    finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
     s.refresh(paper)
     assert paper.status == "done"
     seg = s.execute(select(Segment).where(Segment.idx == 1)).scalar_one()
@@ -356,7 +357,7 @@ def test_concurrent_last_two_steps_mark_paper_done(db_session):
     paper = make_paper(s, ocsr_mode="off")
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    finish(s, seg_step, {"segments": []})
+    finish(s, seg_step, {"segments": [], "seg_version": SEG_V})
     last = [run(s, st) for st in steps(s, paper, "doi") + steps(s, paper, "docling")]
     s.commit()
 
@@ -403,17 +404,23 @@ GOOD_SEG = {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64}
 @pytest.mark.parametrize(
     "result",
     [
-        {"segments": [GOOD_SEG, {"idx": 1, "bbox": [0, 0, 1], "image_sha256": "1" * 64}]},
-        {"segments": [GOOD_SEG, {**GOOD_SEG}]},  # duplicate idx
-        {"segments": [{**GOOD_SEG, "idx": 1000}]},
-        {"segments": [{**GOOD_SEG, "idx": True}]},
-        {"segments": [{**GOOD_SEG, "idx": "0"}]},
-        {"segments": [{**GOOD_SEG, "bbox": [0, 0, 1.5, 2]}]},
-        {"segments": [{**GOOD_SEG, "bbox": [0, -1, 1, 2]}]},
-        {"segments": [{**GOOD_SEG, "image_sha256": "0" * 65}]},
-        {"segments": [{**GOOD_SEG, "image_sha256": "G" * 64}]},
-        {"segments": [{"idx": 0, "bbox": [0, 0, 1, 1]}]},
-        {"segments": "nope"},
+        {
+            "segments": [GOOD_SEG, {"idx": 1, "bbox": [0, 0, 1], "image_sha256": "1" * 64}],
+            "seg_version": SEG_V,
+        },
+        {"segments": [GOOD_SEG, {**GOOD_SEG}], "seg_version": SEG_V},  # duplicate idx
+        {"segments": [{**GOOD_SEG, "idx": 1000}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "idx": True}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "idx": "0"}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "bbox": [0, 0, 1.5, 2]}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "bbox": [0, -1, 1, 2]}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "image_sha256": "0" * 65}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "image_sha256": "G" * 64}], "seg_version": SEG_V},
+        {"segments": [{"idx": 0, "bbox": [0, 0, 1, 1]}], "seg_version": SEG_V},
+        {"segments": "nope", "seg_version": SEG_V},
+        {"segments": [GOOD_SEG]},  # no seg_version
+        {"segments": [GOOD_SEG], "seg_version": ""},
+        {"segments": [GOOD_SEG], "seg_version": "v" * 201},
         {},
         None,
     ],
@@ -458,7 +465,7 @@ def test_malformed_ocsr_result_changes_nothing(db_session, bad):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, _ = finish(s, seg_step, {"segments": SEGS})
+    ocsr1, _ = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
     run(s, ocsr1)
     s.commit()
     with pytest.raises(BadResult):

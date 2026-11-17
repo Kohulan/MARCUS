@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     torch_threads: int = Field(4, gt=0)
     # MolScribe's torch device. v1 forces CPU; "cuda" only after a parity check on GPU.
     molscribe_device: Literal["cpu", "cuda"] = "cpu"
+    # Segmenter version whose cached segmentation (seg_cache) new papers may reuse: the
+    # pinned decimer_segmentation commit (compose sets it from docker/MODEL_PINS.md; the fake
+    # stack sets the fake segmenter's version). Empty = never use the segmentation cache.
+    seg_version: str = Field("", max_length=200)
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
 

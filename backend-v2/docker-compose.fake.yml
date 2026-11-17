@@ -28,10 +28,16 @@ services:
   api:
     environment:
       MARCUS_ENABLE_FAKE_ENGINES: "1"
+      # The fake segmenter's version (FakeSegmenter.version): the segmentation cache key.
+      MARCUS_SEG_VERSION: fake-1
       MARCUS_EXPECTED_QUEUES: q.cpu,q.tools,q.segment,q.fake
       MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
+
+  worker-cpu:
+    environment:
+      MARCUS_SEG_VERSION: fake-1
 
   worker-fake-segment:
     image: marcus-v2-api:local
@@ -63,6 +69,7 @@ services:
       MARCUS_DATA_ROOT: /data
       MARCUS_ENABLE_FAKE_ENGINES: "1"
       MARCUS_SEGMENTER: fake
+      MARCUS_SEG_VERSION: fake-1
       MARCUS_FAKE_SEGMENTS_PER_PAGE: "2"
       MARCUS_FAKE_SEGMENT_DELAY_S: "2"
 

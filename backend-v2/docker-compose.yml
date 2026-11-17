@@ -56,6 +56,13 @@ x-env: &env
   MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
   MARCUS_DATA_ROOT: /data
 
+# Segmentation cache version (marcus.core.pipeline, seg_cache): the decimer_segmentation commit
+# pinned in docker/Dockerfile.tf (docker/MODEL_PINS.md). Set where the planner runs: api,
+# worker-cpu (pages rendered -> cached segments used) and worker-segment. Change it together
+# with the Dockerfile pin (tests/deploy/test_compose_config.py checks they match).
+x-seg-version: &seg-version
+  MARCUS_SEG_VERSION: d0045d9ef4b29a2a8d865eae55399ba1b14481bf
+
 x-api-image: &api-image
   build:
     context: .
@@ -171,7 +178,7 @@ services:
       - --graceful-timeout=30
       - --access-logfile=-
     environment:
-      <<: *env
+      <<: [*env, *seg-version]
       MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
       MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe}
       MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
@@ -203,7 +210,7 @@ services:
               "-c", "4", "--pool", "prefork", "--include", "marcus.workers.cpu",
               "-B", "--schedule", "/tmp/celerybeat-schedule", "-n", "cpu@%h", "--loglevel", "INFO"]
     environment:
-      <<: *env
+      <<: [*env, *seg-version]
     # PDF parsing children have RLIMIT_AS 32 GiB (address space, not memory: docling/torch
     # reserve ~24 GiB virtual). This limit is what bounds their real memory (RSS).
     mem_limit: 12g
@@ -233,7 +240,7 @@ services:
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
               "-n", "segment@%h", "--loglevel", "INFO"]
     environment:
-      <<: *env
+      <<: [*env, *seg-version]
       # GPU budget in MiB for TensorFlow (marcus.workers.gpu), set per service; empty = no
       # limit / CPU only.
       MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-}

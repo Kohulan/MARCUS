@@ -113,6 +113,7 @@ class Segment(Base):
     __table_args__ = (
         UniqueConstraint("paper_id", "page", "idx", name="uq_segments_paper_page_idx"),
         CheckConstraint("cardinality(bbox) = 4", name="ck_segments_bbox_len"),
+        Index("ix_segments_image_sha256", "image_sha256"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -159,6 +160,8 @@ class Step(Base):
     started_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
     worker_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The model version the result came from (segment_page: the segmenter version).
+    model_version: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Prediction(Base):

@@ -8,7 +8,9 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
-COMPOSE = Path(__file__).resolve().parents[2] / "docker-compose.yml"
+ROOT = Path(__file__).resolve().parents[2]
+COMPOSE = ROOT / "docker-compose.yml"
+FAKE = ROOT / "docker-compose.fake.yml"
 
 
 @pytest.fixture(scope="module")
@@ -45,3 +47,27 @@ def test_only_nginx_publishes_a_port(compose):
     published = {name for name, svc in compose["services"].items() if svc.get("ports")}
     assert published == {"nginx"}
     assert compose["services"]["nginx"]["ports"] == ["127.0.0.1:18090:8080"]
+
+
+SEG_VERSION_SERVICES = ("api", "worker-cpu", "worker-segment")
+
+
+def test_seg_version_is_the_pinned_segmenter_commit(compose):
+    """The segmentation cache key must name the segmenter that really runs: the commit pinned in
+    Dockerfile.tf, which is also DecimerSegmenter.version."""
+    from marcus.workers.segment import DECIMER_SEGMENTATION_COMMIT
+
+    dockerfile = (ROOT / "docker" / "Dockerfile.tf").read_text()
+    assert f"DECIMER-Image-Segmentation.git@{DECIMER_SEGMENTATION_COMMIT}" in dockerfile
+    for name in SEG_VERSION_SERVICES:
+        env = compose["services"][name]["environment"]
+        assert env["MARCUS_SEG_VERSION"] == DECIMER_SEGMENTATION_COMMIT, name
+
+
+def test_fake_stack_seg_version_is_the_fake_segmenter():
+    from marcus.workers.segment import FakeSegmenter
+
+    fake = yaml.safe_load(FAKE.read_text())
+    for name in ("api", "worker-cpu", "worker-fake-segment"):
+        env = fake["services"][name]["environment"]
+        assert env["MARCUS_SEG_VERSION"] == FakeSegmenter.version, name

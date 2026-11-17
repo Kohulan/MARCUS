@@ -30,6 +30,8 @@ def _settings_env(tmp_path, monkeypatch):
     from marcus.core.settings import get_settings
 
     monkeypatch.setenv("MARCUS_DATA_ROOT", str(tmp_path))
+    # Tests that use the segmentation cache set it themselves (all test PDFs share bytes).
+    monkeypatch.delenv("MARCUS_SEG_VERSION", raising=False)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

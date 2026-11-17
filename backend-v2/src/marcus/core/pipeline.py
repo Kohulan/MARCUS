@@ -4,9 +4,19 @@ Every function takes a sync SQLAlchemy Session and never commits: the caller own
 transaction. Steps are created only when their inputs exist: completing a step creates its
 successors. Functions that change a paper lock its row first (SELECT ... FOR UPDATE), so two
 workers finishing the last two steps of one paper cannot both miss the `done` transition.
+
+Segmentation cache (spec §7): when the last page of a paper is segmented and every page was
+segmented successfully by one segmenter version, the planner stores the paper's segments under
+(pdf_sha256, seg_cache_key(version)). A later paper with the same PDF bytes, while the
+configured `seg_version` matches, gets each page's segments from that row when the page is
+rendered (no segment_page step): new Segment, Curation and ocsr rows under the new paper, and
+crop files copied by content hash from any live paper that has them. Of that other paper
+only its id is used, to find the file; its rows (ids, curation, predictions, names) are never
+copied. A page whose crops cannot all be found falls back to a normal segment_page step.
 """
 
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -14,6 +24,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from marcus.core import storage
@@ -24,11 +35,14 @@ from marcus.core.models import (
     Owner,
     Paper,
     Prediction,
+    SegCache,
     Segment,
     Step,
 )
 from marcus.core.queues import queue_for
 from marcus.core.settings import get_settings
+
+log = logging.getLogger(__name__)
 
 DOCLING_SEQ = 100_000
 DOI_SEQ = 100_001
@@ -40,6 +54,14 @@ _FINISHED = (StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLE
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+MAX_VERSION_CHARS = 200
+RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of the cache key
+CROP_SOURCES_TRIED = 20  # live papers tried per crop on a cache hit
+
+
+def seg_cache_key(seg_version: str) -> str:
+    """seg_cache.seg_version: the segmenter version plus the fixed render settings."""
+    return f"{seg_version}|dpi{RENDER_DPI}"
 
 
 class BadResult(ValueError):
@@ -253,8 +275,8 @@ def _check_pdf_result(result: dict) -> None:
         raise BadResult(f"check_pdf: 'pages' must be an int in 1..{get_settings().max_pages}")
 
 
-def _check_segment_page_result(result: dict) -> None:
-    segments = result.get("segments")
+def _check_segments(segments: object) -> None:
+    """A list of {idx, bbox, image_sha256} with unique idx (one page's segments)."""
     if not isinstance(segments, list):
         raise BadResult("segment_page: 'segments' must be a list")
     seen: set[int] = set()
@@ -271,6 +293,16 @@ def _check_segment_page_result(result: dict) -> None:
             raise BadResult("segment_page: 'bbox' must be 4 non-negative ints")
         if not isinstance(sha, str) or not _SHA256_HEX.fullmatch(sha):
             raise BadResult("segment_page: 'image_sha256' must be 64 lowercase hex characters")
+
+
+def _check_segment_page_result(result: dict) -> None:
+    _check_segments(result.get("segments"))
+    version = result.get("seg_version")
+    if not _is_text(version) or not version or len(version) > MAX_VERSION_CHARS:
+        raise BadResult(
+            f"segment_page: 'seg_version' must be a non-empty string of at most "
+            f"{MAX_VERSION_CHARS} characters"
+        )
 
 
 def _check_ocsr_result(result: dict) -> None:
@@ -329,19 +361,23 @@ def _after_check_pdf(session: Session, paper: Paper, step: Step, result: dict) -
 
 
 def _after_render_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    cached = _cached_page(session, paper, step.page)
+    if cached is not None:
+        return _add_segments(session, paper, step.page, cached)
     return [_new_step(paper, StepKind.SEGMENT_PAGE, step.page, page=step.page)]
 
 
-def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) -> list[Step]:
+    """New Segment + Curation rows for one page; returns its ocsr steps (ocsr_mode auto)."""
     segments = [
         Segment(
             paper_id=paper.id,
-            page=step.page,
+            page=page,
             idx=item["idx"],
             bbox=list(item["bbox"]),
             image_sha256=item["image_sha256"],
         )
-        for item in result["segments"]
+        for item in items
     ]
     session.add_all(segments)
     session.flush()  # assigns segment ids
@@ -359,6 +395,142 @@ def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict
         )
         for seg in segments
     ]
+
+
+def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    step.model_version = result["seg_version"]
+    new = _add_segments(session, paper, step.page, result["segments"])
+    _store_seg_cache(session, paper, result["seg_version"])
+    return new
+
+
+# --- segmentation cache ----------------------------------------------------------------------
+
+
+def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
+    """Cache the paper's segmentation once every page has a done segment_page step from this
+    one segmenter version. Any page without one (failed render or segmentation, still running,
+    or served from the cache) means no row: a partial result is never cached."""
+    if not paper.pages:
+        return
+    session.flush()
+    rows = session.execute(
+        select(Step.page, Step.model_version).where(
+            Step.paper_id == paper.id,
+            Step.kind == StepKind.SEGMENT_PAGE.value,
+            Step.status == StepStatus.DONE.value,
+        )
+    ).all()
+    versions = {r.page: r.model_version for r in rows}
+    if set(versions) != set(range(paper.pages)) or set(versions.values()) != {seg_version}:
+        return
+    segments = session.execute(
+        select(Segment.page, Segment.idx, Segment.bbox, Segment.image_sha256)
+        .where(Segment.paper_id == paper.id)
+        .order_by(Segment.page, Segment.idx)
+    ).all()
+    payload = {
+        "pages": paper.pages,
+        "segments": [
+            {"page": g.page, "idx": g.idx, "bbox": list(g.bbox), "image_sha256": g.image_sha256}
+            for g in segments
+        ],
+    }
+    session.execute(
+        pg_insert(SegCache)
+        .values(
+            pdf_sha256=paper.pdf_sha256, seg_version=seg_cache_key(seg_version), payload=payload
+        )
+        .on_conflict_do_nothing(index_elements=["pdf_sha256", "seg_version"])
+    )
+
+
+def _cached_page(session: Session, paper: Paper, page: int) -> list[dict] | None:
+    """The page's cached segments with every crop present in this paper's crop dir, or None
+    (no usable cache row for the configured segmenter version, or a crop not found)."""
+    version = get_settings().seg_version
+    if not version:
+        return None
+    payload = session.execute(
+        select(SegCache.payload).where(
+            SegCache.pdf_sha256 == paper.pdf_sha256,
+            SegCache.seg_version == seg_cache_key(version),
+        )
+    ).scalar_one_or_none()
+    if payload is None:
+        return None
+    try:
+        items = _page_items(payload, paper.pages, page)
+    except BadResult as exc:
+        log.warning("paper %s: seg_cache row ignored: %s", paper.id, exc)
+        return None
+    for item in items:
+        if not _copy_crop(session, paper.id, item["image_sha256"]):
+            log.info("paper %s page %d: cached crop not found; segmenting", paper.id, page)
+            return None
+    return items
+
+
+def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
+    """Validate a whole seg_cache payload (it is data: checked like worker results, every page)
+    and return one page's segments as {idx, bbox, image_sha256}."""
+    if not isinstance(payload, dict) or not _is_int(pages, 1) or payload.get("pages") != pages:
+        raise BadResult("page count differs")
+    segments = payload.get("segments")
+    if not isinstance(segments, list):
+        raise BadResult("'segments' must be a list")
+    by_page: dict[int, list[dict]] = {}
+    for item in segments:
+        if not isinstance(item, dict) or not _is_int(item.get("page"), 0, pages - 1):
+            raise BadResult("each segment needs a valid 'page'")
+        by_page.setdefault(item["page"], []).append(
+            {
+                "idx": item.get("idx"),
+                "bbox": item.get("bbox"),
+                "image_sha256": item.get("image_sha256"),
+            }
+        )
+    for items in by_page.values():
+        _check_segments(items)
+    return by_page.get(page, [])
+
+
+def _copy_crop(session: Session, paper_id: uuid.UUID, sha: str) -> bool:
+    """Put the crop with content hash `sha` into this paper's crop dir.
+
+    Sources are other live (not deleted) papers with a segment of that hash; only the file's
+    bytes are used, and only if they hash to `sha`. True if the crop is in place.
+    """
+    dest = storage.segment_crop_path(paper_id, sha)
+    if dest.is_file():
+        return True
+    sources = session.execute(
+        select(Segment.paper_id)
+        .join(Paper, Paper.id == Segment.paper_id)
+        .where(
+            Segment.image_sha256 == sha,
+            Segment.paper_id != paper_id,
+            Paper.status != PaperStatus.DELETED.value,
+        )
+        .distinct()
+        .limit(CROP_SOURCES_TRIED)
+    ).scalars()
+    for source_paper in sources:
+        try:
+            data = storage.segment_crop_path(source_paper, sha).read_bytes()
+        except OSError:
+            continue  # gone (deleted or purged meanwhile)
+        if hashlib.sha256(data).hexdigest() != sha:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+        try:
+            tmp.write_bytes(data)
+            os.replace(tmp, dest)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return True
+    return False
 
 
 def _prediction(step: Step, result: dict) -> Prediction:

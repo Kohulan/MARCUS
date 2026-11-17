@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from types import SimpleNamespace
 
@@ -29,12 +30,24 @@ class StubEngine:
 
 
 class FakeSession:
+    """Answers the segment lookup with `seg`; the ocsr_cache lookup misses and its write is
+    recorded (the cache itself is tested against the database in tests/core/test_caches.py)."""
+
     def __init__(self, seg):
         self.seg = seg
         self.rolled_back = 0
+        self.writes = []
+        self.commits = 0
 
-    def execute(self, *a, **k):
+    def execute(self, stmt, *a, **k):
+        if "ocsr_cache" in str(stmt):
+            if stmt.is_insert:
+                self.writes.append(stmt.compile().params)
+            return SimpleNamespace(one_or_none=lambda: None)
         return SimpleNamespace(one_or_none=lambda: self.seg, scalar_one_or_none=lambda: self.seg)
+
+    def commit(self):
+        self.commits += 1
 
     def get(self, *a, **k):
         return self.seg
@@ -102,6 +115,15 @@ def test_ocsr_paper_step_reads_crop_by_sha(monkeypatch):
     step = view(pid, segment_id=uuid.uuid4(), engine="decimer")
     assert ocsr(step, session)["valid"] is True
     assert session.rolled_back >= 1
+    # the cache key is the hash of the crop's bytes, written in its own committed transaction
+    (written,) = session.writes
+    assert written["image_sha256"] == hashlib.sha256(crop.read_bytes()).hexdigest()
+    assert (written["engine"], written["engine_version"], written["smiles"]) == (
+        "decimer",
+        "stub-9",
+        "CCO",
+    )
+    assert session.commits == 1
 
 
 def test_ocsr_missing_segment_is_bad_input(monkeypatch):

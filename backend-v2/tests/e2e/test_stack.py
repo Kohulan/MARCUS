@@ -11,6 +11,12 @@ test is skipped with a message saying so.
 Values mirror docker-compose.fake.yml: 2 fake segments per page, segmentation 2 s per page,
 fake OCSR 1 s per segment.
 
+Segmentation cache: a PDF whose bytes were segmented before is not segmented again (its
+segments come from seg_cache). Every upload therefore appends a fresh nonce after the PDF's
+end (readers ignore trailing bytes), so each test really segments, unless it asks for the
+same bytes on purpose (the cache test). The fake OCSR results are cached too (the fake
+segmenter draws the same crops on every page size); no test here depends on OCSR timing.
+
 Timing source: the API exposes no step timestamps, so the fairness numbers come from the
 paper's server-sent events (arrival time on this host's clock) measured against the paper's
 `created_at` from `GET /papers/{id}` (the stack runs on the same host, so one clock).
@@ -22,6 +28,7 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -84,9 +91,13 @@ class Owner:
         self.client.cookies.clear()
         self.client.headers["Cookie"] = raw.split(";", 1)[0]
 
-    def upload(self, name: str) -> tuple[str, float]:
-        """Upload a fixture with the fake engine; (paper_id, client time before sending)."""
-        data = (PDFS / name).read_bytes()
+    def upload(self, name: str, nonce: str | None = None) -> tuple[str, float]:
+        """Upload a fixture with the fake engine; (paper_id, client time before sending).
+
+        A nonce (fresh unless given) is appended after the PDF so the bytes are new to the
+        segmentation cache."""
+        nonce = nonce or uuid.uuid4().hex
+        data = (PDFS / name).read_bytes() + f"\n% e2e nonce {nonce}\n".encode()
         sent = time.time()
         r = self.client.post(
             "/api/v2/papers",
@@ -149,6 +160,16 @@ def _docker_container(service: str) -> str | None:
     return out[0] if out else None
 
 
+def _psql(sql: str) -> str:
+    """One query on the stack's Postgres (docker exec), tab-separated rows."""
+    container = _docker_container("postgres")
+    assert container, f"no postgres container in compose project {PROJECT}"
+    return subprocess.run(
+        ["docker", "exec", container, "psql", "-U", "marcus", "-d", "marcus", "-At", "-c", sql],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()  # fmt: skip
+
+
 # --- tests ---------------------------------------------------------------------------------
 
 
@@ -187,6 +208,51 @@ def test_upload_to_done_with_fake_engines():
             assert seg["predictions"][0]["engine"] == "fake"
         r = owner.client.get(f"/api/v2/segments/{segments[0]['id']}/image")
         assert r.status_code == 200 and r.content.startswith(b"\x89PNG")
+    finally:
+        owner.close()
+
+
+def test_same_pdf_twice_second_paper_from_segmentation_cache():
+    if shutil.which("docker") is None:
+        pytest.skip("docker CLI not available: cannot read step kinds from Postgres")
+    owner = Owner()
+    nonce = uuid.uuid4().hex  # the same bytes twice, new to the cache
+    try:
+        first_id, _ = owner.upload("two_page.pdf", nonce=nonce)
+        first = owner.wait_terminal(first_id, timeout_s=300)
+        assert first["status"] == "done", first
+        second_id, _ = owner.upload("two_page.pdf", nonce=nonce)
+        second = owner.wait_terminal(second_id, timeout_s=300)
+        assert second["status"] == "done", second
+        assert first_id != second_id
+
+        def kinds(paper_id: str) -> dict[str, int]:
+            assert uuid.UUID(paper_id)  # only a server-made uuid goes into the SQL
+            rows = _psql(
+                f"SELECT kind, count(*) FROM steps WHERE paper_id = '{paper_id}' GROUP BY kind"
+            )
+            return {k: int(n) for k, n in (line.split("|") for line in rows.splitlines())}
+
+        assert kinds(first_id).get("segment_page") == 2
+        second_kinds = kinds(second_id)
+        assert "segment_page" not in second_kinds, second_kinds
+        assert second_kinds["render_page"] == 2
+        assert second_kinds["ocsr"] == 2 * SEGMENTS_PER_PAGE
+
+        def crops(paper) -> dict:
+            """(page, idx, bbox) -> crop PNG bytes, read through the API."""
+            out = {}
+            for seg in paper["segments"]:
+                r = owner.client.get(f"/api/v2/segments/{seg['id']}/image")
+                assert r.status_code == 200 and r.content.startswith(b"\x89PNG")
+                out[(seg["page"], seg["idx"], tuple(seg["bbox"]))] = r.content
+            return out
+
+        assert len(second["segments"]) == len(first["segments"]) == 2 * SEGMENTS_PER_PAGE
+        assert crops(second) == crops(first)
+        assert not {s["id"] for s in first["segments"]} & {s["id"] for s in second["segments"]}
+        for seg in second["segments"]:
+            assert seg["predictions"], f"segment {seg['id']} has no prediction"
     finally:
         owner.close()
 

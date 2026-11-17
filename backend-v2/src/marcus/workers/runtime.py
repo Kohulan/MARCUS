@@ -15,7 +15,8 @@ attempt, so a stale duplicate message can never touch a newer attempt.
    Step (plain column reads only, no lazy loads). `session` is a fresh Session for short
    reads: a handler that reads must end its read (`session.rollback()`) before long work,
    must never write or commit (its result is the returned dict), and the runtime closes
-   the session afterwards.
+   the session afterwards. One exception: the ocsr handler stores its cache row
+   (`ocsr_cache`, no step or paper state) in its own short transaction.
 3. Finish. Under the planner's lock order (parent row, then step row) the runtime checks
    that the step is still `running` with the attempt number this delivery set (attempt
    fence). If not, a newer delivery or the watchdog owns the step and this result or

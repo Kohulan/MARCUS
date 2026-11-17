@@ -55,6 +55,7 @@ def test_segment_page_saves_crops_and_returns_bboxes(monkeypatch):
     ]
     monkeypatch.setattr(segment, "get_segmenter", lambda: StubSegmenter(crops))
     out = segment.segment_page(view(pid, page=2), None)
+    assert out["seg_version"] == "stub-1"  # the segmenter's version, for the seg cache
     assert [s["idx"] for s in out["segments"]] == [0, 1]
     assert out["segments"][0]["bbox"] == [5, 6, 35, 26]
     for s in out["segments"]:
