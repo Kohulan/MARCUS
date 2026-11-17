@@ -20,6 +20,7 @@ import math
 import re
 import time
 import uuid
+from collections import deque
 
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -63,8 +64,12 @@ _PAPER_PATH = re.compile(
 WINDOW_S = 60
 EXEMPT = ("GET", "/api/v2/health")
 RATE_LIMITED = "rate limited"
-REDIS_TIMEOUT_S = 0.5  # a hung Redis must not stall every request
-BREAKER_OPEN_S = 5.0  # after a Redis failure, skip Redis this long (no 0.5 s wait per request)
+# Circuit breaker (sliding window): BREAKER_FAILURES failed Redis calls (error or slower than
+# settings.rate_limit_redis_timeout_s) within BREAKER_WINDOW_S open it; while open Redis is
+# skipped for BREAKER_OPEN_S (no timeout wait per request). One slow call never opens it.
+BREAKER_FAILURES = 3
+BREAKER_WINDOW_S = 5.0
+BREAKER_OPEN_S = 5.0
 WARN_EVERY_S = 60.0
 
 API_PREFIX = "/api/v2"
@@ -170,10 +175,10 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 
 def limiter_redis() -> aioredis.Redis:
+    settings = get_settings()
+    timeout = settings.rate_limit_redis_timeout_s  # a hung Redis must not stall every request
     return aioredis.Redis.from_url(
-        get_settings().redis_url,
-        socket_connect_timeout=REDIS_TIMEOUT_S,
-        socket_timeout=REDIS_TIMEOUT_S,
+        settings.redis_url, socket_connect_timeout=timeout, socket_timeout=timeout
     )
 
 
@@ -184,14 +189,34 @@ class RateLimitUnavailable(Exception):
 class RateLimiter:
     """Fixed one-minute windows in Redis: key `rl:{scope}:{key}:{window}`.
 
-    A circuit breaker: after a Redis failure, Redis is skipped for BREAKER_OPEN_S and every
-    hit is treated as a failure (fail open or closed per scope, as with Redis down).
+    A circuit breaker, shared by all scopes: BREAKER_FAILURES Redis failures within the last
+    BREAKER_WINDOW_S (a sliding window; a success in between does not reset it) open it. While
+    open, Redis is skipped for BREAKER_OPEN_S and every hit is refused per scope: uploads fail
+    closed (503), ip and tools fail open. When it closes, the failure count starts from zero.
+    A failed call that leaves the breaker closed is let through in every scope, so one slow
+    Redis call never refuses uploads.
     """
 
     def __init__(self, redis: aioredis.Redis) -> None:
         self.redis = redis
         self._last_warning: dict[str, float] = {}
         self._open_until = 0.0
+        self._failures: deque[float] = deque()  # monotonic times of recent Redis failures
+
+    def _is_open(self) -> bool:
+        return _monotonic() < self._open_until
+
+    def _record_failure(self) -> bool:
+        """Count one Redis failure; True if the breaker is now open."""
+        now = _monotonic()
+        self._failures.append(now)
+        while now - self._failures[0] > BREAKER_WINDOW_S:
+            self._failures.popleft()
+        if len(self._failures) >= BREAKER_FAILURES:
+            self._open_until = now + BREAKER_OPEN_S
+            self._failures.clear()
+            return True
+        return False
 
     @staticmethod
     def limit_for(scope: str, settings: Settings) -> int:
@@ -204,9 +229,10 @@ class RateLimiter:
     async def hit(self, scope: str, key: str, *, fail_open: bool) -> int | None:
         """Count one request. Returns Retry-After seconds when over the limit, else None.
 
-        Redis down: None (fail open) or RateLimitUnavailable (fail closed).
+        Breaker open: None (fail open) or RateLimitUnavailable (fail closed). A Redis failure
+        that does not open the breaker: None.
         """
-        if _monotonic() < self._open_until:
+        if self._is_open():
             if fail_open:
                 return None
             raise RateLimitUnavailable(scope)
@@ -219,11 +245,11 @@ class RateLimiter:
                 pipe.expire(rkey, WINDOW_S)
                 count, _ = await pipe.execute()
         except (RedisError, OSError) as exc:
-            self._open_until = _monotonic() + BREAKER_OPEN_S
-            self._warn(scope, exc, fail_open)
-            if fail_open:
-                return None
-            raise RateLimitUnavailable(scope) from exc
+            refuse = self._record_failure() and not fail_open
+            self._warn(scope, exc, not refuse)
+            if refuse:
+                raise RateLimitUnavailable(scope) from exc
+            return None
         if count <= self.limit_for(scope, get_settings()):
             return None
         return max(1, math.ceil((window + 1) * WINDOW_S - now))
@@ -274,7 +300,8 @@ async def _owner_limit(request: Request, owner: Owner, scope: str, fail_open: bo
 
 
 async def upload_limit(request: Request, owner: Owner = Depends(current_owner)) -> None:
-    """10 uploads (papers + images) per owner per minute; fails closed without Redis."""
+    """10 uploads (papers + images) per owner per minute; fails closed while the breaker is
+    open."""
     await _owner_limit(request, owner, "upload", fail_open=False)
 
 

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     rate_limit_upload_per_min: int = 10  # per owner: POST /papers and POST /images together
     rate_limit_tools_per_min: int = 60  # per owner: every /tools/* call
     rate_limit_ip_per_min: int = 300  # per client IP: every route except GET /api/v2/health
+    # per-call Redis timeout of the rate limiter (connect and read); a slower call is a failure
+    # and 3 failures in 5 s open its breaker (marcus.api.security)
+    rate_limit_redis_timeout_s: float = Field(1.0, gt=0)
     cors_origins: list[str] = []
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False

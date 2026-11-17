@@ -41,6 +41,7 @@ SECURITY_HEADERS = {
 REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 100
 FIXED_NOW = 1_800_000_030.0  # 30 s into a window: Retry-After is 30
+_REAL_LIMITER_REDIS = security.limiter_redis  # before conftest swaps in fakeredis
 
 
 # Every route the app serves. A new route must be added here on purpose.
@@ -374,6 +375,9 @@ async def test_upload_fails_closed_and_others_fail_open_when_redis_is_down(app, 
     caplog.set_level(logging.WARNING, logger="marcus.api.security")
     try:
         async with client(app) as c:
+            # three failed Redis calls (ip scope, fail open) open the breaker
+            for _ in range(security.BREAKER_FAILURES):
+                assert (await c.get("/api/v2/nope")).status_code == 404
             r = await c.post("/api/v2/papers", files={"file": ("x.pdf", PNG, "application/pdf")})
             assert r.status_code == 503
             assert_security_headers(r)
@@ -391,54 +395,131 @@ async def test_upload_fails_closed_and_others_fail_open_when_redis_is_down(app, 
 
 
 class DeadRedis:
-    """Counts how often the limiter reaches for Redis; every call fails."""
+    """Counts how often the limiter reaches for Redis; every call fails (a refused connection,
+    or a call slower than the socket timeout)."""
 
-    def __init__(self):
+    def __init__(self, exc=redis_exceptions.ConnectionError("down")):
         self.calls = 0
+        self.exc = exc
 
     def pipeline(self, transaction=True):
         self.calls += 1
-        raise redis_exceptions.ConnectionError("down")
+        raise self.exc
 
 
-async def test_circuit_breaker_skips_redis_for_five_seconds(monkeypatch):
-    clock = [1000.0]
-    monkeypatch.setattr(security, "_monotonic", lambda: clock[0])
-    dead = DeadRedis()
-    limiter = security.RateLimiter(dead)
+def slow_redis() -> DeadRedis:
+    """What redis-py raises when one call takes longer than socket_timeout."""
+    return DeadRedis(redis_exceptions.TimeoutError("Timeout reading from socket"))
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(security, "_monotonic", lambda: now[0])
+    return now
+
+
+def test_breaker_constants():
+    assert security.BREAKER_FAILURES == 3
+    assert security.BREAKER_WINDOW_S == 5.0
+    assert security.BREAKER_OPEN_S == 5.0
+
+
+async def test_one_or_two_slow_calls_do_not_open_the_breaker(clock):
+    slow = slow_redis()
+    limiter = security.RateLimiter(slow)
+    # 1st slow call: the upload itself is let through (breaker closed), nothing is skipped
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert slow.calls == 1
+    clock[0] += 1.0
+    assert await limiter.hit("ip", "k", fail_open=True) is None  # 2nd slow call
+    assert slow.calls == 2
+    clock[0] += 1.0
+    limiter.redis = fakeredis.aioredis.FakeRedis()  # Redis answers again: still closed
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert len(await limiter.redis.keys("rl:upload:o:*")) == 1
+
+
+async def test_three_slow_calls_in_five_seconds_open_the_breaker(clock):
+    slow = slow_redis()
+    limiter = security.RateLimiter(slow)
     assert await limiter.hit("ip", "k", fail_open=True) is None
-    assert dead.calls == 1
-    clock[0] += 4.9  # circuit open: Redis is not touched, behaviour per scope stays
+    clock[0] += 2.0
+    assert await limiter.hit("tools", "o", fail_open=True) is None
+    clock[0] += 3.0  # 3rd failure exactly 5.0 s after the 1st: within the window, opens
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
+    assert slow.calls == 3
+    # open: Redis is not touched; uploads fail closed, ip and tools fail open
+    clock[0] += 4.9
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
     assert await limiter.hit("ip", "k", fail_open=True) is None
     assert await limiter.hit("tools", "o", fail_open=True) is None
-    with pytest.raises(security.RateLimitUnavailable):
-        await limiter.hit("upload", "o", fail_open=False)
-    assert dead.calls == 1
-    clock[0] += 0.2  # 5.1 s after the failure: one new try (fails again, circuit re-opens)
-    assert await limiter.hit("ip", "k", fail_open=True) is None
-    assert dead.calls == 2
-    with pytest.raises(security.RateLimitUnavailable):
-        await limiter.hit("upload", "o", fail_open=False)
-    assert dead.calls == 2
-    clock[0] += 5.1  # Redis is back: counting resumes
-    limiter.redis = fakeredis.aioredis.FakeRedis()
-    assert await limiter.hit("upload", "o", fail_open=False) is None
-    keys = await limiter.redis.keys("rl:upload:o:*")
-    assert len(keys) == 1
+    assert slow.calls == 3
 
 
-async def test_upload_503_while_circuit_is_open(app, monkeypatch):
-    clock = [1000.0]
-    monkeypatch.setattr(security, "_monotonic", lambda: clock[0])
+async def test_failures_spread_over_more_than_five_seconds_do_not_open_it(clock):
+    """Sliding window: only failures in the last 5 s count (a success does not reset them)."""
+    slow = slow_redis()
+    limiter = security.RateLimiter(slow)
+    for t in (0.0, 4.0, 9.5, 14.0):  # never 3 failures within 5 s
+        clock[0] = 1000.0 + t
+        assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert slow.calls == 4
+    clock[0] = 1000.0 + 14.5  # with 9.5 and 14.0: three in 5 s
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
+
+
+async def test_breaker_closes_after_five_seconds(clock):
     dead = DeadRedis()
-    app.state.rate_limiter.redis = dead
+    limiter = security.RateLimiter(dead)
+    for _ in range(3):
+        assert await limiter.hit("ip", "k", fail_open=True) is None
+    opened_at = clock[0]
+    clock[0] = opened_at + 4.99
+    with pytest.raises(security.RateLimitUnavailable):
+        await limiter.hit("upload", "o", fail_open=False)
+    assert dead.calls == 3
+    clock[0] = opened_at + 5.0  # closed: Redis is tried again; one failure does not re-open
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert dead.calls == 4
+    limiter.redis = fakeredis.aioredis.FakeRedis()  # Redis is back: counting resumes
+    assert await limiter.hit("upload", "o", fail_open=False) is None
+    assert len(await limiter.redis.keys("rl:upload:o:*")) == 1
+
+
+async def test_uploads_get_503_only_while_the_breaker_is_open(app, clock):
+    slow = slow_redis()
+    app.state.rate_limiter.redis = slow
+    upload = {"files": {"file": ("x.pdf", PNG, "application/pdf")}}
     async with client(app) as c:
-        assert (await c.get("/api/v2/nope")).status_code == 404  # opens the circuit
-        calls = dead.calls
-        r = await c.post("/api/v2/papers", files={"file": ("x.pdf", PNG, "application/pdf")})
-        assert r.status_code == 503
+        # ip call (1st failure) + upload call (2nd failure): breaker closed, upload goes on
+        assert (await c.post("/api/v2/papers", **upload)).status_code == 415
+        assert slow.calls == 2
+        # ip call is the 3rd failure: the breaker opens and this upload is refused
+        r = await c.post("/api/v2/papers", **upload)
+        assert r.status_code == 503 and r.json() == {"detail": "service unavailable"}
+        assert slow.calls == 3
+        clock[0] += 4.9  # still open: refused without touching Redis; tools fail open
+        assert (await c.post("/api/v2/images", files={"file": ("x.png", PNG, "image/png")})
+                ).status_code == 503
         assert (await c.post("/api/v2/tools/depict", json={})).status_code == 422
-    assert dead.calls == calls
+        assert slow.calls == 3
+        clock[0] += 0.2  # closed again (Redis still slow): one failure does not refuse
+        assert (await c.post("/api/v2/papers", **upload)).status_code == 415
+        assert slow.calls == 5
+
+
+def test_redis_timeout_is_a_setting_with_default_one_second(monkeypatch):
+    assert Settings().rate_limit_redis_timeout_s == 1.0
+    kwargs = _REAL_LIMITER_REDIS().connection_pool.connection_kwargs
+    assert kwargs["socket_timeout"] == 1.0 and kwargs["socket_connect_timeout"] == 1.0
+    env(monkeypatch, rate_limit_redis_timeout_s="2.5")
+    kwargs = _REAL_LIMITER_REDIS().connection_pool.connection_kwargs
+    assert kwargs["socket_timeout"] == 2.5 and kwargs["socket_connect_timeout"] == 2.5
 
 
 # --- client IP ------------------------------------------------------------------------------
