@@ -199,6 +199,55 @@ def test_paper_failed_when_all_pages_fail(db_session):
     assert paper.error
 
 
+def test_paper_failed_when_segmentation_fails_on_every_page(db_session):
+    """Spec §8: a paper is failed if all pages fail; a page whose segmentation failed is a
+    failed page (not `done` with zero structures)."""
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    for r in steps(s, paper, "render_page"):
+        (seg_step,) = finish(s, r, {})
+        run(s, seg_step)
+        fail_step(s, seg_step.id, ErrorClass.ENGINE_ERROR, "segmenter crashed", retryable=False)
+    s.refresh(paper)
+    assert paper.status == "failed"
+    assert paper.error == "all pages failed (render or segmentation)"
+
+
+def test_paper_failed_when_pages_fail_by_render_and_by_segmentation(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    r1, r2 = steps(s, paper, "render_page")
+    run(s, r1)
+    fail_step(s, r1.id, ErrorClass.BAD_INPUT, "broken page", retryable=False)
+    (seg_step,) = finish(s, r2, {})
+    run(s, seg_step)
+    fail_step(s, seg_step.id, ErrorClass.WORKER_LOST, "lost", retryable=False)
+    s.refresh(paper)
+    assert paper.status == "failed" and paper.error
+
+
+def test_paper_done_when_one_page_segments(db_session):
+    s = db_session
+    paper = make_paper(s, ocsr_mode="off")
+    to_processing(s, paper, pages=2)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    r1, r2 = steps(s, paper, "render_page")
+    (seg1,) = finish(s, r1, {})
+    run(s, seg1)
+    fail_step(s, seg1.id, ErrorClass.ENGINE_ERROR, "segmenter crashed", retryable=False)
+    (seg2,) = finish(s, r2, {})
+    finish(s, seg2, {"segments": [], "seg_version": SEG_V})  # a page with no structures is ok
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
 def test_paper_failed_when_check_pdf_fails(db_session):
     s = db_session
     paper = make_paper(s)

@@ -229,7 +229,11 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
-    """If no step of the paper is still active, close the paper as done or failed."""
+    """If no step of the paper is still active, close the paper as done or failed.
+
+    Failed (spec §8): check_pdf failed, or every page failed, a page being failed when its
+    render_page or its segment_page step failed for good. Otherwise done, failed steps and all.
+    """
     if paper.status not in (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value):
         return
     session.flush()
@@ -241,19 +245,40 @@ def _finish_check(session: Session, paper: Paper) -> None:
     if active:
         return
     rows = session.execute(
-        select(Step.kind, Step.status, Step.error).where(
+        select(Step.kind, Step.status, Step.error, Step.page).where(
             Step.paper_id == paper.id,
-            Step.kind.in_([StepKind.CHECK_PDF.value, StepKind.RENDER_PAGE.value]),
+            Step.kind.in_(
+                [
+                    StepKind.CHECK_PDF.value,
+                    StepKind.RENDER_PAGE.value,
+                    StepKind.SEGMENT_PAGE.value,
+                ]
+            ),
         )
     ).all()
+    failed = StepStatus.FAILED.value
     check = [r for r in rows if r.kind == StepKind.CHECK_PDF.value]
     renders = [r for r in rows if r.kind == StepKind.RENDER_PAGE.value]
-    if any(r.status == StepStatus.FAILED.value for r in check):
+    # A page fails when its render failed or its segmentation failed (a page served from the
+    # segmentation cache has no segment_page step and counts as segmented).
+    segmented = {
+        r.page for r in rows if r.kind == StepKind.SEGMENT_PAGE.value and r.status != failed
+    }
+    seg_failed = {
+        r.page for r in rows if r.kind == StepKind.SEGMENT_PAGE.value and r.status == failed
+    }
+    page_failed = [
+        r.status == failed or (r.page in seg_failed and r.page not in segmented) for r in renders
+    ]
+    if any(r.status == failed for r in check):
         paper.status = PaperStatus.FAILED.value
-        paper.error = next(r.error for r in check if r.status == StepStatus.FAILED.value)
-    elif renders and all(r.status == StepStatus.FAILED.value for r in renders):
+        paper.error = next(r.error for r in check if r.status == failed)
+    elif renders and all(r.status == failed for r in renders):
         paper.status = PaperStatus.FAILED.value
         paper.error = "all pages failed to render"
+    elif renders and all(page_failed):
+        paper.status = PaperStatus.FAILED.value
+        paper.error = "all pages failed (render or segmentation)"
     else:
         paper.status = PaperStatus.DONE.value
 
