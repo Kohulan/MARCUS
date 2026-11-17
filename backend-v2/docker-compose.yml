@@ -6,8 +6,11 @@
 # With fake segment/OCSR workers (fast end-to-end and fairness tests):
 #   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 #
-# Only nginx publishes a port (127.0.0.1:18090). API, Postgres and Redis stay on the internal
-# network. nginx has a fixed address outside the dynamic pool (ip_range); MARCUS_TRUSTED_PROXIES
+# Only nginx publishes a port (127.0.0.1:18090). Networks: `internal` (internal: true, no route
+# out) carries everything; only nginx (its published port needs a non-internal network) and
+# worker-cpu (the DOI lookups, spec: the only internet access) also join `egress`. API, Postgres,
+# Redis, metrics and the model workers have no internet access at all.
+# nginx has a fixed address outside the dynamic pool (ip_range); MARCUS_TRUSTED_PROXIES
 # is exactly that address (never the bridge CIDR), so only nginx may name the client IP and
 # request id.
 #
@@ -229,6 +232,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile.cpu
     image: marcus-v2-cpu:local
+    # egress: pdf2doi's DOI lookups (5 s per call, 15 s per paper) are the stack's only internet
+    # access.
+    networks:
+      - internal
+      - egress
     # Exactly ONE replica: it runs Celery beat (-B), and a second beat would schedule every
     # task twice (never scale this; no other service passes -B).
     # 5 processes = SLOTS["q.cpu"] (4: check_pdf, render_page, docling, doi, filled by the
@@ -378,9 +386,11 @@ services:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "127.0.0.1:18090:8080"
+    # egress: a published port needs a non-internal network.
     networks:
       internal:
         ipv4_address: 172.30.0.10
+      egress: {}
     depends_on:
       api:
         condition: service_healthy
@@ -392,6 +402,9 @@ services:
 
 networks:
   internal:
+    # No route out of the host: only nginx and worker-cpu also join `egress`
+    # (tests/deploy/test_compose_config.py).
+    internal: true
     ipam:
       config:
         # Docker hands containers the lowest free address of ip_range only; nginx's fixed
@@ -399,6 +412,7 @@ networks:
         # the trusted proxy, or keep nginx from starting).
         - subnet: 172.30.0.0/24
           ip_range: 172.30.0.128/25
+  egress: {}
 
 volumes:
   data:

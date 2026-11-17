@@ -15,6 +15,21 @@ nginx re-resolves `api` every second (Docker DNS) and retries idempotent request
 ...) on a connection error or timeout, never uploads. `python ops/check_api_recreate.py [-f ...]`
 recreates the api container and reports the longest stretch of 5xx answers through nginx.
 
+### Networks
+
+`internal` is an internal Docker network (no route out of the host); every service is on it.
+Only `nginx` (its published port needs a non-internal network) and `worker-cpu` (the DOI
+lookups, the only internet access the spec allows) also join `egress`. nginx keeps the fixed
+address 172.30.0.10 outside the dynamic pool (`MARCUS_TRUSTED_PROXIES`). With the monitoring
+override, Grafana publishes 127.0.0.1:13000 through its own `grafana-edge` network, which does no
+masquerading (no route out either).
+
+### nginx and api restarts
+
+nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,
+...) on a connection error or timeout, never uploads. `python ops/check_api_recreate.py [-f ...]`
+recreates the api container and reports the longest stretch of 5xx answers through nginx.
+
 ## Test
 
 ```bash

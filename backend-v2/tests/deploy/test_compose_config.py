@@ -1,8 +1,15 @@
-"""Static checks on docker-compose.yml (no Docker needed)."""
+"""Static checks on the compose files, nginx.conf, Prometheus and systemd configs.
+
+Most tests read the YAML directly. The merged-override tests run `docker compose config` (the
+Docker CLI only, no daemon) and are skipped where it is missing.
+"""
 
 import ipaddress
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -17,6 +24,32 @@ FAKE = ROOT / "docker-compose.fake.yml"
 @pytest.fixture(scope="module")
 def compose() -> dict:
     return yaml.safe_load(COMPOSE.read_text())
+
+
+def _compose_config(*files: str) -> dict:
+    """`docker compose config` of these files, as JSON, independent of the local .env: an empty
+    env file, dummy passwords, nothing else from the caller's environment."""
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("docker CLI not available")
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "POSTGRES_PASSWORD": "test",
+        "REDIS_PASSWORD": "test",
+    }
+    args = [docker, "compose", "--project-directory", str(ROOT), "--env-file", os.devnull]
+    for name in files:
+        args += ["-f", str(ROOT / name)]
+    args += ["config", "--format", "json"]
+    try:
+        out = subprocess.run(args, env=env, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        pytest.skip(f"docker compose not usable: {exc}")
+    if out.returncode != 0 and "is not a docker command" in out.stderr:
+        pytest.skip("docker compose plugin not available")
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
 
 
 def _nginx_address(compose) -> ipaddress.IPv4Address:
@@ -183,6 +216,63 @@ def test_dashboard_never_rates_windowed_series():
             if "marcus_" in e and not e.startswith("marcus_dispatcher"):
                 assert "rate(" not in e and "increase(" not in e, e
     assert "marcus_step_failures_total" not in json.dumps(dash)
+
+
+# --- networks: internal-only, egress for nginx and worker-cpu ---------------------------------
+
+EGRESS_SERVICES = {"nginx", "worker-cpu"}  # nginx: published port; worker-cpu: DOI lookups
+
+
+def _non_internal_members(config: dict) -> set[str]:
+    """Services attached to any network that is not `internal: true` (incl. the default one)."""
+    networks = config.get("networks", {})
+    members = set()
+    for name, svc in config["services"].items():
+        if svc.get("network_mode") == "none":
+            continue
+        joined = svc.get("networks") or {"default": None}
+        for net in joined:
+            if not networks.get(net, {}).get("internal", False):
+                members.add(name)
+    return members
+
+
+def test_internal_network_is_internal_and_egress_is_not(compose):
+    nets = compose["networks"]
+    assert nets["internal"]["internal"] is True
+    assert not nets["egress"].get("internal", False)
+    # the reserved nginx address and the dynamic pool stay as they were
+    (ipam,) = nets["internal"]["ipam"]["config"]
+    assert ipam == {"subnet": "172.30.0.0/24", "ip_range": "172.30.0.128/25"}
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        ("docker-compose.yml",),
+        ("docker-compose.yml", "docker-compose.fake.yml"),
+    ],
+    ids=["base", "fake"],
+)
+def test_only_nginx_and_worker_cpu_leave_the_internal_network(files):
+    config = _compose_config(*files)
+    assert _non_internal_members(config) == EGRESS_SERVICES
+    for name in EGRESS_SERVICES:
+        assert set(config["services"][name]["networks"]) == {"internal", "egress"}, name
+    nginx = config["services"]["nginx"]["networks"]["internal"]
+    assert nginx["ipv4_address"] == "172.30.0.10"
+    published = {name for name, svc in config["services"].items() if svc.get("ports")}
+    assert published == {"nginx"}
+
+
+def test_monitoring_keeps_prometheus_internal_and_grafana_without_egress():
+    """Grafana publishes a loopback port, which needs a non-internal network; its own edge
+    network does no masquerading, so it has no route out. Prometheus stays internal-only."""
+    mon = yaml.safe_load(MONITORING.read_text())
+    assert mon["services"]["prometheus"]["networks"] == ["internal"]
+    assert set(mon["services"]["grafana"]["networks"]) == {"internal", "grafana-edge"}
+    edge = mon["networks"]["grafana-edge"]
+    assert edge["driver_opts"]["com.docker.network.bridge.enable_ip_masquerade"] == "false"
 
 
 # --- nginx: re-resolve the api quickly, retry idempotent requests ------------------------------

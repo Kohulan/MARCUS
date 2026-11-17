@@ -4,7 +4,7 @@
 #     -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #   (add -f docker-compose.fake.yml before this one for the fake stack)
 #
-# Prometheus scrapes metrics:9100 every 15 s and publishes nothing. Grafana is reachable on
+# Prometheus scrapes metrics:9100 every 15 s, internal network only, and publishes nothing. Grafana is reachable on
 # 127.0.0.1:13000 only (anonymous access off, admin password from the environment); the
 # dashboard ops/grafana/marcus.json and the data source are provisioned from files.
 
@@ -45,14 +45,22 @@ services:
       - grafanadata:/var/lib/grafana
       - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./ops/grafana/marcus.json:/var/lib/grafana/dashboards/marcus.json:ro
+    # The published port needs a non-internal network: grafana-edge, which does no masquerading,
+    # so Grafana has no route to the internet either.
     networks:
       - internal
+      - grafana-edge
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     depends_on:
       - prometheus
+
+networks:
+  grafana-edge:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
 
 volumes:
   promdata:
