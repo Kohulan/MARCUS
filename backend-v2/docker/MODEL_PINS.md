@@ -66,8 +66,10 @@ is the v1 one.
 - `cpu` (default, the image built and tested in B3): `torch==2.10.0+cpu`, `torchvision==0.25.0+cpu`
   from `download.pytorch.org/whl/cpu`; no CUDA libraries. `marcus-v2-torch:local` is this build.
 - `cu128`: the build v1 runs (`torch.__version__` `2.10.0+cu128`, `torch.version.cuda` `12.8` in
-  `marcus-backend:latest`), from `download.pytorch.org/whl/cu128`, plus the CUDA wheels at the v1
-  versions: nvidia-cublas-cu12 12.8.4.1, nvidia-cuda-cupti-cu12 12.8.90, nvidia-cuda-nvrtc-cu12
+  `marcus-backend:latest`). Installed as v1 did, from PyPI (`torch==2.10.0`, `torchvision==0.25.0`,
+  `--no-deps`; the default PyPI wheel is the CUDA 12.8 build, and v1's torch has no
+  `direct_url.json`, i.e. it came from PyPI), plus the CUDA wheels at the v1 versions, checked by
+  the dependency check: nvidia-cublas-cu12 12.8.4.1, nvidia-cuda-cupti-cu12 12.8.90, nvidia-cuda-nvrtc-cu12
   12.8.93, nvidia-cuda-runtime-cu12 12.8.90, nvidia-cudnn-cu12 9.10.2.21, nvidia-cufft-cu12
   11.3.3.83, nvidia-cufile-cu12 1.13.1.3, nvidia-curand-cu12 10.3.9.90, nvidia-cusolver-cu12
   11.7.3.90, nvidia-cusparse-cu12 12.5.8.93, nvidia-cusparselt-cu12 0.7.1, nvidia-nccl-cu12 2.27.5,
@@ -93,10 +95,19 @@ Runtime differences from v1 (same weights, same library calls):
   (`marcus.workers.ocsr.torch_common.serial_graph_conversion`). MolNexTR's own `num_workers <= 1`
   branch would do the same but raises `NameError: itertools` at the pinned commit (never imported
   in `MolNexTR/chemical.py`).
-- torch CPU threads are capped (`MARCUS_TORCH_THREADS`, compose default 4, inter-op 1); v1 used
-  torch's default (every core).
+- torch CPU threads are capped (`MARCUS_TORCH_THREADS`, default 4 in settings and compose, inter-op
+  1); v1 used torch's default (every core).
 - An empty molfile (v1 returns `""` when the graph could not be converted) is stored as no molfile.
 
-Kept from v1 as is (library behaviour): `MolNexTR.get_predictions` re-creates the model on CPU and
-retries once when a prediction raises; MolNexTR logs `name 'rdFMCS' is not defined` for some
+- MolNexTR is called one level below v1's `get_predictions`:
+  `MolNexTRSingleton.get_instance().predict_final_results(path, return_atoms_bonds=False)`, reading
+  `predicted_smiles` / `predicted_molfile` (`get_predictions` only filters those keys, so the output
+  is byte-identical). `get_predictions` wraps the prediction in `except Exception`: it resets the
+  singleton, loads the model again (re-detecting the hardware, so on CUDA again when visible) and
+  predicts again. That would swallow Celery's soft time limit (a step at 30 s would reload and run
+  into the 45 s hard kill) and, on a GPU, hold two models or fall back to CPU for good. In v2 an
+  error reaches the step, which is retried once. If the singleton's own model setup falls back to
+  CPU ("CPU (fallback)") while CUDA is visible, the load is refused and the worker stops.
+
+Kept from v1 as is (library behaviour): MolNexTR logs `name 'rdFMCS' is not defined` for some
 structures (an unimported name in an exception path of its post-processing; output unchanged).

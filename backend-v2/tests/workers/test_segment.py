@@ -185,6 +185,8 @@ def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
     _stub_decimer(
         monkeypatch, [rgba], [(np.int64(3), np.int64(2), np.int64(8), np.int64(9))], calls
     )
+    # thread caps default to 4/2 (settings): no TensorFlow here to apply them to
+    monkeypatch.setattr(gpu, "limit_tf_threads", lambda intra, inter: None)
     seg = segment.DecimerSegmenter()
     seg.load()
     crops = seg.segment(page)

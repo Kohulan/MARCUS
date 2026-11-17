@@ -10,6 +10,9 @@ the model packages at import time.
   (`_convert_graph_to_smiles`) in-process instead, in the same order. (A pool cannot even start
   there: "daemonic processes are not allowed to have children". MolNexTR's own
   `num_workers <= 1` branch would do the same as this function but fails with a NameError.)
+  In-process, the conversion now runs inside the step's time limit, so a soft time limit can
+  interrupt it like any other part of the prediction (theoretical: it takes milliseconds per
+  structure).
 - `warm_up`: one prediction on a small RDKit drawing when the model loads.
 """
 

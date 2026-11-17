@@ -36,13 +36,14 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
-    # TensorFlow CPU thread pools in model workers (None = TF default: every core). Applied
-    # before the model loads (marcus.workers.gpu.limit_tf_threads).
-    tf_intra_threads: int | None = Field(None, gt=0)
-    tf_inter_threads: int | None = Field(None, gt=0)
-    # torch CPU threads in the torch OCSR workers (None = torch default: every core); applied
-    # before the model loads (marcus.workers.gpu.limit_torch_threads), inter-op threads = 1.
-    torch_threads: int | None = Field(None, gt=0)
+    # TensorFlow CPU thread pools in model workers, applied before the model loads
+    # (marcus.workers.gpu.limit_tf_threads). Defaults = the compose defaults, so an image run
+    # outside compose is capped too.
+    tf_intra_threads: int = Field(4, gt=0)
+    tf_inter_threads: int = Field(2, gt=0)
+    # torch CPU threads in the torch OCSR workers, applied before the model loads
+    # (marcus.workers.gpu.limit_torch_threads), inter-op threads = 1. Default = compose default.
+    torch_threads: int = Field(4, gt=0)
     # MolScribe's torch device. v1 forces CPU; "cuda" only after a parity check on GPU.
     molscribe_device: Literal["cpu", "cuda"] = "cpu"
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.

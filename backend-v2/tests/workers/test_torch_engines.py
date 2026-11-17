@@ -36,6 +36,7 @@ def stubs(monkeypatch, tmp_path):
     pystow.join = lambda key, name=None, ensure_exists=True: home / key / name
     torch = types.ModuleType("torch")
     torch.device = lambda name: f"device:{name}"
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
     modules = {"pystow": pystow, "torch": torch}
 
     def convert_one(coords, symbols, edges, image=None):
@@ -54,28 +55,38 @@ def stubs(monkeypatch, tmp_path):
     model = types.ModuleType("MolNexTR.model")
     model.convert_graph_to_smiles = mn_convert
 
+    class MnModel:
+        """MolNexTR.model.molnextr: what the singleton holds."""
+
+        error = None
+
+        def predict_final_results(self, path, return_atoms_bonds=False, return_confidence=False):
+            calls.append(("mn_predict", path, return_atoms_bonds))
+            if MnModel.error is not None:
+                raise MnModel.error
+            # the library calls model.convert_graph_to_smiles (bound in MolNexTR.model)
+            smi, mol, _ = model.convert_graph_to_smiles(["g"], ["s"], ["e"], images=["img"])
+            return {
+                "predicted_smiles": smi[0],
+                "predicted_molfile": mol[0] if "empty" not in path else "",
+            }
+
     class Singleton:
         instance = None
+        device_name = "CPU"
 
         @classmethod
         def get_instance(cls):
             calls.append("mn_init")
-            cls.instance = object()
+            cls.instance = MnModel()
             return cls.instance
 
         @classmethod
         def get_device(cls):
-            return "cpu", "CPU"
+            return "cpu", cls.device_name
 
-    def get_predictions(path, atoms_bonds=False, smiles=True, predicted_molfile=False):
-        calls.append(("mn_predict", path, atoms_bonds, smiles, predicted_molfile))
-        # the library calls model.convert_graph_to_smiles (bound in MolNexTR.model)
-        smi, mol, _ = model.convert_graph_to_smiles(["g"], ["s"], ["e"], images=["img"])
-        return {
-            "predicted_smiles": smi[0],
-            "predicted_molfile": mol[0] if "empty" not in path else "",
-            "device_info": "CPU",
-        }
+    def get_predictions(*args, **kwargs):
+        raise AssertionError("get_predictions (reload on error) must not be used")
 
     mn = types.ModuleType("MolNexTR.molnextr")
     mn.MolNexTRSingleton = Singleton
@@ -120,7 +131,7 @@ def stubs(monkeypatch, tmp_path):
 
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
-    monkeypatch.setattr(molnextr, "_get_predictions", None)
+    monkeypatch.setattr(molnextr, "_model", None)
     monkeypatch.setattr(gpu, "prepare_torch", lambda: calls.append("prepare_torch"))
     monkeypatch.setattr(torch_common, "warm_up", lambda name, fn: calls.append(("warm", fn("w"))))
     monkeypatch.setattr(molnextr, "warm_up", torch_common.warm_up)
@@ -136,7 +147,14 @@ def stubs(monkeypatch, tmp_path):
         return path
 
     return types.SimpleNamespace(
-        calls=calls, bake=bake, model=model, interface=interface, chemical=chemical
+        calls=calls,
+        bake=bake,
+        model=model,
+        interface=interface,
+        chemical=chemical,
+        torch=torch,
+        singleton=Singleton,
+        mn_model=MnModel,
     )
 
 
@@ -166,6 +184,16 @@ def test_torch_engine_modules_do_not_import_torch():
         "assert not bad, bad"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_thread_settings_default_to_the_compose_caps(monkeypatch):
+    """An image run outside compose is capped too (torch 4; TF intra 4 / inter 2)."""
+    from marcus.core.settings import Settings
+
+    for var in ("MARCUS_TORCH_THREADS", "MARCUS_TF_INTRA_THREADS", "MARCUS_TF_INTER_THREADS"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings()
+    assert (s.torch_threads, s.tf_intra_threads, s.tf_inter_threads) == (4, 4, 2)
 
 
 def test_molscribe_device_setting(monkeypatch):
@@ -200,10 +228,8 @@ def test_molnextr_load_and_predict_like_v1(stubs):
     stubs.calls.clear()
     result = engine.predict("/data/crop.png")
     assert result == OcsrResult("smiles-g", "molblock-g")
-    assert stubs.calls == [
-        ("mn_predict", "/data/crop.png", False, True, True),  # v1's data_type="both"
-        ("convert", "g", True),
-    ]
+    # the call inside v1's get_predictions, without its reload-on-error wrapper
+    assert stubs.calls == [("mn_predict", "/data/crop.png", False), ("convert", "g", True)]
     engine.load()  # once per process
     assert stubs.calls.count("mn_init") == 0
 
@@ -220,7 +246,52 @@ def test_molnextr_missing_checkpoint_fails_before_the_library_loads(stubs):
     with pytest.raises(RuntimeError, match="checkpoint missing"):
         engine.load()
     assert "mn_init" not in stubs.calls
-    assert molnextr._get_predictions is None
+    assert molnextr._model is None
+
+
+@pytest.mark.parametrize("error", [ValueError("bad graph"), "soft"])
+def test_molnextr_prediction_errors_reach_the_step_without_a_reload(stubs, error):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    stubs.bake("molnextr", "molnextr_best.pth")
+    engine = molnextr.MolnextrEngine()
+    engine.load()
+    exc = SoftTimeLimitExceeded() if error == "soft" else error
+    stubs.mn_model.error = exc
+    stubs.calls.clear()
+    with pytest.raises(type(exc)):
+        engine.predict("/data/crop.png")
+    assert stubs.calls == [("mn_predict", "/data/crop.png", False)]  # no reload, no second try
+    assert "mn_init" not in stubs.calls
+
+
+def test_molnextr_cpu_fallback_with_cuda_visible_is_refused(stubs, monkeypatch):
+    stubs.bake("molnextr", "molnextr_best.pth")
+    monkeypatch.setattr(stubs.singleton, "device_name", "CPU (fallback)")
+    stubs.torch.cuda.is_available = lambda: True
+    with pytest.raises(RuntimeError, match="fell back to CPU"):
+        molnextr.MolnextrEngine().load()
+    assert molnextr._model is None
+
+
+def test_molnextr_cpu_fallback_aborts_the_worker_at_preload(stubs, monkeypatch):
+    stubs.bake("molnextr", "molnextr_best.pth")
+    monkeypatch.setattr(stubs.singleton, "device_name", "CPU (fallback)")
+    stubs.torch.cuda.is_available = lambda: True
+    monkeypatch.setenv("MARCUS_OCSR_ENGINES", "molnextr")
+    ocsr.register_configured_engines()
+    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    aborted = []
+    monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
+    base.preload_engines(sender=None)
+    assert aborted == [True]
+
+
+def test_molnextr_cpu_without_cuda_is_fine(stubs):
+    stubs.bake("molnextr", "molnextr_best.pth")
+    engine = molnextr.MolnextrEngine()
+    engine.load()  # device "CPU", no CUDA: v1's normal CPU case
+    assert molnextr._model is not None
 
 
 def test_molnextr_predict_before_load_fails(stubs):
