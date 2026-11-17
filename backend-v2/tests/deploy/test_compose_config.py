@@ -697,3 +697,78 @@ def test_real_ip_switch_is_wired_in_compose_and_documented(compose):
     assert re.search(r"^\s{4}include /tmp/nginx/real_ip\.conf;", conf, re.M)
     readme = (ROOT / "README.md").read_text()
     assert "MARCUS_REAL_IP_FROM" in readme
+
+
+# --- request body sizes: only the two upload routes take 21 MB (re-review N2) ------------------
+
+
+@pytest.fixture(scope="module")
+def nginx_url():
+    """The production nginx (config and entrypoint script) on a loopback port, no API behind
+    it: a request nginx lets through ends as 502, one it refuses for its size as 413."""
+    docker = _docker_or_skip()
+    name = f"marcus-bodysize-test-{os.getpid()}"
+    args = [
+        docker, "run", "-d", "--name", name, "--read-only", "--tmpfs", "/tmp",
+        "-p", "127.0.0.1::8080", "--add-host", "api:127.0.0.1",
+        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
+        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+        NGINX_IMAGE,
+    ]  # fmt: skip
+    started = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    assert started.returncode == 0, started.stderr
+    try:
+        port = subprocess.run(
+            [docker, "port", name, "8080/tcp"], capture_output=True, text=True, timeout=30
+        ).stdout.strip().rsplit(":", 1)[1]
+        url = f"http://127.0.0.1:{port}"
+        httpx = pytest.importorskip("httpx")
+        for _ in range(50):
+            try:
+                httpx.get(f"{url}/x", timeout=1)
+                break
+            except httpx.HTTPError:
+                subprocess.run(["sleep", "0.1"])
+        yield url
+    finally:
+        subprocess.run([docker, "rm", "-f", name], capture_output=True, timeout=60)
+
+
+def _send(url: str, method: str, path: str, size: int) -> int | str:
+    import httpx
+
+    body = b"%PDF-1.4\n" + b"0" * (size - 9)
+    headers = {"Content-Type": "application/pdf"}
+    try:
+        return httpx.request(method, url + path, content=body, headers=headers, timeout=30).status_code
+    except httpx.HTTPError as exc:
+        return f"no answer: {type(exc).__name__}"
+
+
+MB2 = 2 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/v2/papers/"),  # trailing slash: not the upload route
+        ("POST", "/api/v2/images/"),
+        ("PUT", "/api/v2/segments/00000000-0000-0000-0000-000000000000/curation"),
+        ("POST", "/api/v2/tools/mcs"),
+    ],
+)
+def test_big_bodies_only_on_the_upload_routes(nginx_url, method, path):
+    assert _send(nginx_url, method, path, MB2) == 413
+
+
+@pytest.mark.parametrize("path", ["/api/v2/papers", "/api/v2/images"])
+def test_uploads_still_take_20_mb(nginx_url, path):
+    assert _send(nginx_url, "POST", path, 20 * 1024 * 1024) == 502  # through to the (absent) API
+    assert _send(nginx_url, "POST", path, 22 * 1024 * 1024) == 413
+
+
+def test_upload_locations_are_exact(compose):
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    assert re.search(r"location = /api/v2/papers \{[^}]*client_max_body_size 21m;", conf)
+    assert re.search(r"location = /api/v2/images \{[^}]*client_max_body_size 21m;", conf)
+    assert re.search(r"location /api/v2/ \{[^}]*client_max_body_size 1m;", conf)
