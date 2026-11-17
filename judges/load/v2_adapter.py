@@ -28,8 +28,9 @@ limits (10 new owners per hour, 6 active papers) are raised on the fake stack an
 Every answer >= 400 is kept (``http_events``) with its ``detail``; ``breaker_503_count`` counts the
 ``503 {"detail": "service unavailable"}`` answers of the rate limiter's open circuit breaker.
 
-Cold OCSR cache (controller ruling R21). v2 caches OCSR by (sha256 of the crop or image, engine, engine version) for
-every real engine, image jobs included, so a repeated fixture or probe image would be served in about 0 ms.
+Cold OCSR cache (controller ruling R21). v2 caches OCSR by (sha256 of the bytes the engine gets: a crop's red/blue
+swapped PNG, an image job's own file; engine; engine version) for every real engine, image jobs included, so a
+repeated fixture or probe image would be served in about 0 ms.
   * ``CacheClear`` empties the cache table on the TEST stack's Postgres between scenarios, arms and repeats:
     ``docker exec <container> psql -U marcus -d marcus -c 'DELETE FROM ocsr_cache'`` (the fs-probe's ``docker exec``
     path; ``DOCKER_HOST`` reaches a remote docker). It refuses production and non-test container names.
@@ -56,7 +57,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import client_v2, target  # noqa: E402
+from common import client_v1, client_v2, target  # noqa: E402
 
 API = client_v2.API
 POLL_S = 0.25  # image job polling; GET /images/{id} counts against the per-IP limit (300/min outside the fake stack)
@@ -257,7 +258,7 @@ def _note(r: httpx.Response) -> None:
 
 def _client(base_url: str) -> httpx.Client:
     # no keep-alive, as client_v1/client_v2 (and the nginx in front of production) do
-    return httpx.Client(base_url=target._check(base_url), limits=httpx.Limits(max_keepalive_connections=0))
+    return client_v1.no_keepalive_client(target._check(base_url))
 
 
 class Owner:

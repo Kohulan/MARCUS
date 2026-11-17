@@ -17,8 +17,8 @@ from typing import Protocol
 from celery.signals import worker_process_init
 
 from marcus.core.enums import Engine
-from marcus.core.settings import get_settings
-from marcus.workers.runtime import abort_worker, in_pool_process
+from marcus.core.settings import fake_enabled
+from marcus.workers.runtime import preload_on_worker_init
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ FACTORIES["fake"] = _fake_factory
 
 def _checked_key(name: Engine | str) -> str:
     key = str(Engine(name))
-    if key == Engine.FAKE and not get_settings().enable_fake_engines:
+    if key == Engine.FAKE and not fake_enabled():
         raise RuntimeError("fake engine is disabled (MARCUS_ENABLE_FAKE_ENGINES is not set)")
     return key
 
@@ -135,15 +135,10 @@ def preload_engines(**_) -> None:
     A failed load stops the whole worker with a non-zero exit (runtime.abort_worker): compose
     restarts it and /ready reports the queue as unserved. Only in a Celery pool process.
     """
-    if not in_pool_process():
-        return
+    preload_on_worker_init(_load_preload_engines, "OCSR engines")
+
+
+def _load_preload_engines() -> None:
     for name in configured_engines():
-        if name not in PRELOAD:
-            continue
-        try:
-            engine = get_engine(name)
-        except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
-            log.exception("OCSR engine %s failed to load; stopping the worker", name)
-            abort_worker()
-            return
-        log.info("preloaded OCSR engine %s %s", name, engine.version)
+        if name in PRELOAD:
+            log.info("preloaded OCSR engine %s %s", name, get_engine(name).version)

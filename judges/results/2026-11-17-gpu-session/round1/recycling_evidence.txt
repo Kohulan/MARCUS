@@ -1,0 +1,32 @@
+# Segment worker process recycling: evidence (D4 fix round 1, jarvis V100, 2026-11-17)
+
+Fix: 188eecd, `--max-tasks-per-child 200` on worker-segment (backend-v2/docker-compose.yml and the tf image CMD),
+pinned by tests/deploy/test_compose_config.py::test_segment_worker_recycles_its_process.
+
+## Before the fix (segment budget 2048 MiB, no recycling)
+
+- In the stack (first round-1 run, logs v2_r1a_gpu_checks.log / run_logs_excerpt.txt): 390 segment_page steps done,
+  then from 16:42:18Z every segment_page step failed twice with engine_error (TensorFlow ResourceExhausted / OOM,
+  "Failed copying input tensor ... to GPU"); 9 failed steps until the run was stopped; 14 OOM lines in the worker log.
+- Stand-alone probe (seg_leak_2048_final.log, probe seg_gpu_leak.py, 44 pages x 12, budget 2048 MiB):
+  allocator in use 281 / 583 / 899 / 1214 / 1527 MiB at pages 1 / 100 / 200 / 300 / 400 (about 3.1 MiB per page);
+  413 pages ok, first ResourceExhaustedError at page 394.
+
+## After the fix (final round-1 run, run_v2_gpu_r1b.sh, 17:00-18:18Z)
+
+Queried on the test stack before it was removed (psql in marcus-v2-test-postgres-1):
+
+- `select status, count(*) from steps where kind='segment_page' group by 1` at 17:58Z (start of the 2-slot phase):
+  done 425 -> 425 pages through the 1-slot worker (S1-S5, fixture accuracy, gold set, robustness).
+- Same query at 17:39Z (after S4): done 230, with 2 "segmenter ... loaded" lines in the 1-slot worker's log
+  (initial load + 1 recycle at 200 pages).
+- At the end (18:20Z), all kinds:
+    check_pdf    done 109, failed 3 (adversarial PDFs)
+    docling      done 108, failed 1 (adversarial 200-inch page)
+    doi          done 109
+    ocsr         done 3523
+    render_page  done 541, failed 1 (adversarial 200-inch page)
+    segment_page done 541, failed 0
+  max(attempts) = 1 for every kind (no retry anywhere).
+- `docker logs marcus-v2-test-worker-segment-1 | grep -ciE "ResourceExhausted|OOM"` -> 0.
+- v2_r1b_failed_steps.txt: only the 5 adversarial failures listed above.

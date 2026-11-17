@@ -42,6 +42,8 @@ from marcus.api.deps import (
     owner_cookie_header,
     rate_key_for_ip,
 )
+from marcus.api.redisutil import incr_with_ttl
+from marcus.core import storage
 from marcus.core.logging import log_context
 from marcus.core.models import Owner
 from marcus.core.settings import Settings, get_settings
@@ -145,7 +147,9 @@ class SecurityMiddleware:
                 await self.app(scope, receive, send_with_headers)
             except Exception:
                 # %r: the path is client-chosen and may hold newlines (log forging)
-                log.exception("unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"])
+                log.exception(
+                    "unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"]
+                )
                 if started:
                     raise  # the response is already on the wire; the server drops the connection
                 response = JSONResponse(
@@ -155,7 +159,8 @@ class SecurityMiddleware:
 
 
 def _add_owner_cookie(scope: Scope, headers: MutableHeaders) -> None:
-    """The one place a new owner's cookie is set: on any response (error, file, stream)."""
+    """The one place the owner cookie is set (new or renewed): on any response (error, file,
+    stream)."""
     token = scope.get("state", {}).get(NEW_OWNER_TOKEN)
     if not token:
         return
@@ -241,10 +246,7 @@ class RateLimiter:
         window = int(now) // WINDOW_S
         rkey = f"rl:{scope}:{key}:{window}"
         try:
-            async with self.redis.pipeline(transaction=True) as pipe:
-                pipe.incr(rkey)
-                pipe.expire(rkey, WINDOW_S)
-                count, _ = await pipe.execute()
+            count = await incr_with_ttl(self.redis, rkey, WINDOW_S, first_only=True)
         except (RedisError, OSError) as exc:
             # A call that was in flight when the breaker opened is refused like any hit while
             # open; it is not counted (the count restarts when the breaker closes).
@@ -304,8 +306,12 @@ async def _owner_limit(request: Request, owner: Owner, scope: str, fail_open: bo
 
 
 async def upload_limit(request: Request, owner: Owner = Depends(current_owner)) -> None:
-    """10 uploads (papers + images) per owner per minute; fails closed while the breaker is
-    open."""
+    """503 while the data volume is below its free-space floor (new work only: accepted papers
+    go on); then 10 uploads (papers + images) per owner per minute, failing closed while the
+    breaker is open."""
+    if storage.disk_is_full():
+        log.warning("upload refused: data volume below its free-space floor")
+        raise HTTPException(status_code=503, detail="storage is full, try again later")
     await _owner_limit(request, owner, "upload", fail_open=False)
 
 

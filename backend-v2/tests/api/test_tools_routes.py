@@ -144,3 +144,61 @@ def test_result_is_released_even_on_timeout(monkeypatch):
     with pytest.raises(CeleryTimeout):
         tools_route._send_and_wait("marcus.tools.compare", {}, 0.1)
     assert events == ["forget", ("cancel", "abc")]
+
+
+def test_tool_task_expires_with_the_wait(monkeypatch):
+    """Review I5: a call the API gave up on must not still run later in q.tools."""
+    seen = {}
+
+    class Done:
+        id = "x"
+
+        def get(self, timeout=None, **kw):
+            return {"ok": True, "result": 1}
+
+        def forget(self):
+            pass
+
+    def send_task(name, **kw):
+        seen.update(kw)
+        return Done()
+
+    monkeypatch.setattr(tools_route.celery_app, "send_task", send_task)
+    tools_route._send_and_wait("marcus.tools.compare", {}, 7)
+    assert seen["expires"] == 7 and seen["queue"] == tools_route.TOOLS_QUEUE
+
+
+async def test_tool_waits_have_their_own_bounded_thread_budget(monkeypatch):
+    """Review I5: waiting tool calls hold at most MAX_TOOL_WAITS threads of their own; above
+    that the call gets 503 at once, and file responses keep the default thread pool."""
+    import asyncio
+    import threading
+
+    import anyio
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(tools_route, "MAX_TOOL_WAITS", 2)
+    monkeypatch.setattr(tools_route, "_tool_waits", None)
+    release = threading.Event()
+    started = []
+
+    def blocking(name, kwargs, timeout):
+        started.append(name)
+        release.wait(5)
+        return "<svg/>"
+
+    monkeypatch.setattr(tools_route, "run_tool", blocking)
+    default = anyio.to_thread.current_default_thread_limiter()
+    held = [asyncio.ensure_future(tools_route.call_tool("marcus.tools.depict", {})) for _ in range(2)]
+    for _ in range(100):
+        if len(started) == 2:
+            break
+        await asyncio.sleep(0.02)
+    assert len(started) == 2
+    assert default.borrowed_tokens == 0  # the default pool is untouched
+    with pytest.raises(HTTPException) as info:
+        await tools_route.call_tool("marcus.tools.depict", {})
+    assert info.value.status_code == 503 and info.value.detail == "tools busy, try again"
+    release.set()
+    assert await asyncio.gather(*held) == ["<svg/>", "<svg/>"]
+    assert await tools_route.call_tool("marcus.tools.depict", {}) == "<svg/>"

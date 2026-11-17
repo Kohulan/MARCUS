@@ -33,12 +33,12 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common import client_v1, client_v2, remote  # noqa: E402
+from common.client_v1 import now_iso  # noqa: E402
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MIN_FREE_MIB = 3 * 1024
@@ -55,10 +55,6 @@ def is_jarvis_url(url: str) -> bool:
     import httpx
 
     return httpx.URL(url).port == 29000
-
-
-def _utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 PROD_MODES = ("running", "stopped")
@@ -126,7 +122,7 @@ class Guard:
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
                 time.sleep(2.0)
-        ev = {"t": _utc(), "scenario": self.scenario, "when": when}
+        ev = {"t": now_iso("seconds"), "scenario": self.scenario, "when": when}
         if sample is None:
             ev.update(ok=False, reason=f"guard check could not run: {err}")
         else:
@@ -159,7 +155,7 @@ class Guard:
         self.cancelled = cancelled
         RESULTS.mkdir(exist_ok=True)
         with open(RESULTS / "guard_events.jsonl", "a") as f:
-            f.write(json.dumps({"t": _utc(), "scenario": self.scenario, "event": "TRIPPED", "reason": reason,
+            f.write(json.dumps({"t": now_iso("seconds"), "scenario": self.scenario, "event": "TRIPPED", "reason": reason,
                                 "http_clients_closed": closed, "cancelled": cancelled}) + "\n")
         print(f"[guard] TRIPPED during {self.scenario}: {reason} (closed {closed} http clients)", file=sys.stderr, flush=True)
 
@@ -228,7 +224,7 @@ def ledger_add(name: str, seconds: float):
         except Exception:
             d = {"total_s": 0.0, "entries": []}
         d["total_s"] = round(d["total_s"] + seconds, 1)
-        d["entries"].append({"t": _utc(), "scenario": name, "seconds": round(seconds, 1)})
+        d["entries"].append({"t": now_iso("seconds"), "scenario": name, "seconds": round(seconds, 1)})
         _LEDGER.write_text(json.dumps(d, indent=1))
 
 

@@ -99,11 +99,34 @@ switch that did not take fails the unit. It is not installed by anything here. O
   21 MiB, v1's at 10 MB), whether it buffers responses (SSE at `/api/v2/papers/{id}/events` needs
   buffering off or `X-Accel-Buffering: no` honoured), and where TLS ends (the owner cookie is
   `Secure`; the browser must see https).
+- **Client addresses behind the outer proxy (nginx `real_ip`, off by default).** Without it every
+  user is the proxy's address: one per-IP budget for the world (rate limit, new owners, active
+  papers, nginx `limit_conn`). Once the proxy is read: put the address(es) nginx sees it connect
+  from (every proxy hop in front of nginx, e.g. a proxy on jarvis and 141.35.136.10;
+  comma-separated single addresses, no names, no ranges) in `.env` as `MARCUS_REAL_IP_FROM=...`,
+  run `docker compose -p marcus-v2 ... up -d nginx`, and check that `docker compose logs nginx`
+  shows real client addresses (first field of each access line). `MARCUS_TRUSTED_PROXIES` (the
+  API) stays nginx's own address. A bad value stops nginx at start.
 - The Exclusive_Process setter (`nvidia-v100-setup.sh`, above) must be changed before the reboot test.
+- **Wipe the v2 data volumes before deploying c69cdbc** (or anything after it) over an older v2 stack: crops
+  stored before it are already red/blue swapped, and the OCSR handler would swap them a second time.
 - GPU finding to close before the switch (judges/results/2026-11-17-gpu-session.md):
   dcgm-exporter exports no GPU metrics as configured (its DCGM host engine refuses to watch fields
   when not root). (Fixed in D4 fix round 1: worker-segment now keeps its TensorFlow budget,
   measured at 2048 MiB; MolScribe runs on cuda.)
+
+### Decisions from the D4 GPU session (owner, 2026-11-17)
+
+- **One GPU slot each** for segmentation (q.segment) and DECIMER OCSR (q.decimer). The Throughput gate (two papers
+  at once faster than one after the other) stays FAIL as a known limit: 0.99× at 1 slot; 2 slots measured 1.02×,
+  about the size of the 1-slot run-to-run spread (judges/results/2026-11-17-gpu-session.md).
+- **Crops are stored in true colour** (what `GET /segments/{id}/image` serves). v1 saved crops with red and blue
+  swapped (`cv2.imwrite` of an RGB array) and its engines read them that way, so for v1-identical accuracy the OCSR
+  handler gives every engine that swapped image (`marcus.workers.ocsr.handler.v1_engine_input`; segment crops only,
+  never image jobs). A crop downloaded and resubmitted as an image job is NOT swapped, so on a coloured structure
+  it can get a different SMILES than the segment did.
+- The segment worker replaces its process every 200 pages (`--max-tasks-per-child 200`): the segmentation library
+  leaks about 3 MiB of GPU memory per page.
 
 ### nginx and api restarts
 

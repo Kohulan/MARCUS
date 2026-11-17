@@ -1,0 +1,1073 @@
+{
+ "scenario": "S1",
+ "target": "jarvis",
+ "client": "v2",
+ "base_url": "http://127.0.0.1:18090",
+ "build": "v2-0683931-r1",
+ "started_at": "2026-11-17T15:46:54+00:00",
+ "config": {
+  "target": "jarvis",
+  "client": "v2",
+  "base_url": "http://127.0.0.1:18090",
+  "scenarios": [
+   "S1"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "depict_period_s": 2.0,
+  "prod_stopped": true,
+  "cache_pg_container": "marcus-v2-test-postgres-1",
+  "allow_warm_cache": false,
+  "tag": "d4r1"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   2.3,
+   3.95,
+   3.15
+  ],
+  "end": [
+   3.67,
+   3.98,
+   3.25
+  ]
+ },
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected": 15,
+  "engines": {
+   "decimer": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "decimer",
+      "wall_ms": 31454.1,
+      "segment_ms": 9993.8,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": null,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 2001.5,
+       "p50": 5285.5,
+       "p95": 10767.2,
+       "max": 11807.7,
+       "mean": 5877.3
+      },
+      "segment_compute_ms": 8944.6,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "ocsr_compute_ms": {
+       "n": 15,
+       "min": 408,
+       "p50": 1043.0,
+       "p95": 2030.9,
+       "max": 2341,
+       "mean": 1168.0
+      },
+      "v2_paper_id": "c99e6ba4-8880-4fbd-b5ac-0beec8fa6946",
+      "events_mode": "sse",
+      "timings_ms": {
+       "upload": 56.6,
+       "render_pages": 823.6
+      },
+      "first_segment_start_s": 1.0,
+      "first_smiles_s": 5.0,
+      "ocsr_done_s": 21.8,
+      "fixture_recall_skeleton": 0.867,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 2001.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1868,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 2997.3
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 2598.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 509,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4959.3
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 3127.4,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 443,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 5557.9
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 3575.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1898,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6084.6
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 4639.7,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 971,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 8066.8
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 5285.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 560,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 9131.5
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 4390.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 649,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 9761.9
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 4879.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 408,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 10487.1
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 6011.9,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1043,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 10976.0
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 5305.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1444,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 12110.7
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 6637.9,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1246,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 13639.0
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 9057.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 2341,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 14961.4
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 8519.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1032,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 17389.8
+       },
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 10321.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1718,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 18507.5
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 11807.7,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1390,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 20314.1
+       }
+      ],
+      "http_log": [
+       {
+        "step": "upload",
+        "method": "POST",
+        "path": "/api/v2/papers",
+        "status": 202,
+        "t_ms": 110.7,
+        "ms": 56.6
+       },
+       {
+        "step": "paper",
+        "method": "GET",
+        "path": "/api/v2/papers/c99e6ba4-8880-4fbd-b5ac-0beec8fa6946",
+        "status": 200,
+        "t_ms": 31326.2,
+        "ms": 104.0
+       },
+       {
+        "step": "steps",
+        "method": "GET",
+        "path": "/api/v2/papers/c99e6ba4-8880-4fbd-b5ac-0beec8fa6946/steps",
+        "status": 200,
+        "t_ms": 31430.4,
+        "ms": 23.1
+       }
+      ],
+      "timing": {
+       "valid": true,
+       "ocsr_cache_hits": 0,
+       "failed_steps": 0,
+       "reasons": []
+      }
+     }
+    ],
+    "warmup": {
+     "ms": 10274.6,
+     "status": 200
+    }
+   },
+   "molnextr": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "molnextr",
+      "wall_ms": 29468.6,
+      "segment_ms": 8454.8,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": null,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 1473.3,
+       "p50": 2816.0,
+       "p95": 5809.3,
+       "max": 6454.5,
+       "mean": 3286.0
+      },
+      "segment_compute_ms": 7659.5,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "ocsr_compute_ms": {
+       "n": 15,
+       "min": 228,
+       "p50": 679.0,
+       "p95": 1470.0,
+       "max": 1554,
+       "mean": 759.3
+      },
+      "v2_paper_id": "4e8adc9a-8d66-4c16-86ff-6ed738460e09",
+      "events_mode": "sse",
+      "timings_ms": {
+       "upload": 51.2,
+       "render_pages": 879.5
+      },
+      "first_segment_start_s": 0.8,
+      "first_smiles_s": 3.8,
+      "ocsr_done_s": 14.9,
+      "fixture_recall_skeleton": 0.933,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 1473.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1348,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 2384.5
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 1817.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 300,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 3797.0
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 2136.4,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 264,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4145.7
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 2197.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1434,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4473.6
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 2816.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 536,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 5992.1
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 3165.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 263,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6615.7
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 2286.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 410,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6956.2
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 2607.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 228,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 7438.9
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 3288.9,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 608,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 7752.1
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 2671.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 995,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 8435.3
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 3435.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 679,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 9511.3
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 5082.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1554,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 10280.6
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 4326.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 769,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 11924.7
+       },
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 5532.8,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1132,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 12779.8
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 6454.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 869,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 13969.4
+       }
+      ],
+      "http_log": [
+       {
+        "step": "upload",
+        "method": "POST",
+        "path": "/api/v2/papers",
+        "status": 202,
+        "t_ms": 11.5,
+        "ms": 51.1
+       },
+       {
+        "step": "paper",
+        "method": "GET",
+        "path": "/api/v2/papers/4e8adc9a-8d66-4c16-86ff-6ed738460e09",
+        "status": 200,
+        "t_ms": 29380.6,
+        "ms": 66.7
+       },
+       {
+        "step": "steps",
+        "method": "GET",
+        "path": "/api/v2/papers/4e8adc9a-8d66-4c16-86ff-6ed738460e09/steps",
+        "status": 200,
+        "t_ms": 29447.8,
+        "ms": 19.9
+       }
+      ],
+      "timing": {
+       "valid": true,
+       "ocsr_cache_hits": 0,
+       "failed_steps": 0,
+       "reasons": []
+      }
+     }
+    ],
+    "warmup": {
+     "ms": 901.6,
+     "status": 200
+    }
+   },
+   "molscribe": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "molscribe",
+      "wall_ms": 29782.6,
+      "segment_ms": 8527.7,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": null,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 1520.0,
+       "p50": 3140.3,
+       "p95": 6539.4,
+       "max": 7263.5,
+       "mean": 3642.2
+      },
+      "segment_compute_ms": 7834.1,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "ocsr_compute_ms": {
+       "n": 15,
+       "min": 241,
+       "p50": 751.0,
+       "p95": 1455.1,
+       "max": 1558,
+       "mean": 796.0
+      },
+      "v2_paper_id": "36b28ae8-e120-40f0-b7f8-2abff779d6ae",
+      "events_mode": "sse",
+      "timings_ms": {
+       "upload": 31.9,
+       "render_pages": 772.7
+      },
+      "first_segment_start_s": 0.7,
+      "first_smiles_s": 4.0,
+      "ocsr_done_s": 15.8,
+      "fixture_recall_skeleton": 0.933,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 1520.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1395,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 2575.0
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 1878.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 310,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4040.9
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 2237.2,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 276,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4432.8
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 2296.7,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1411,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4790.9
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 2964.8,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 587,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6282.7
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 3324.4,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 292,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6948.6
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 2560.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 438,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 7321.0
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 2888.8,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 241,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 7843.4
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 3611.7,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 620,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 8174.0
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 3140.3,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1177,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 8875.4
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 4020.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 810,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 10114.7
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 5697.9,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1558,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 11044.3
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 4999.1,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 751,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 12701.1
+       },
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 6229.1,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1134,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 13558.0
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 7263.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 940,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 14787.4
+       }
+      ],
+      "http_log": [
+       {
+        "step": "upload",
+        "method": "POST",
+        "path": "/api/v2/papers",
+        "status": 202,
+        "t_ms": 34.0,
+        "ms": 31.9
+       },
+       {
+        "step": "paper",
+        "method": "GET",
+        "path": "/api/v2/papers/36b28ae8-e120-40f0-b7f8-2abff779d6ae",
+        "status": 200,
+        "t_ms": 29740.9,
+        "ms": 25.4
+       },
+       {
+        "step": "steps",
+        "method": "GET",
+        "path": "/api/v2/papers/36b28ae8-e120-40f0-b7f8-2abff779d6ae/steps",
+        "status": 200,
+        "t_ms": 29766.9,
+        "ms": 14.9
+       }
+      ],
+      "timing": {
+       "valid": true,
+       "ocsr_cache_hits": 0,
+       "failed_steps": 0,
+       "reasons": []
+      }
+     }
+    ],
+    "warmup": {
+     "ms": 889.1,
+     "status": 200
+    }
+   }
+  }
+ },
+ "summary": {
+  "decimer": [
+   {
+    "wall_s": 31.5,
+    "segment_s": 10.0,
+    "ocsr_p50_ms": 5285.5,
+    "ocsr_p95_ms": 10767.2,
+    "segments": 15,
+    "recall_skel": 0.867,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 15,
+    "backend_crash": null,
+    "segment_compute_s": 8.9,
+    "ocsr_compute_p50_ms": 1043.0,
+    "ocsr_cache_hits": 0,
+    "first_segment_start_s": 1.0,
+    "first_smiles_s": 5.0,
+    "ocsr_done_s": 21.8,
+    "fatal_error": null,
+    "failed_steps": [],
+    "timing_valid": true
+   }
+  ],
+  "molnextr": [
+   {
+    "wall_s": 29.5,
+    "segment_s": 8.5,
+    "ocsr_p50_ms": 2816.0,
+    "ocsr_p95_ms": 5809.3,
+    "segments": 15,
+    "recall_skel": 0.933,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 15,
+    "backend_crash": null,
+    "segment_compute_s": 7.7,
+    "ocsr_compute_p50_ms": 679.0,
+    "ocsr_cache_hits": 0,
+    "first_segment_start_s": 0.8,
+    "first_smiles_s": 3.8,
+    "ocsr_done_s": 14.9,
+    "fatal_error": null,
+    "failed_steps": [],
+    "timing_valid": true
+   }
+  ],
+  "molscribe": [
+   {
+    "wall_s": 29.8,
+    "segment_s": 8.5,
+    "ocsr_p50_ms": 3140.3,
+    "ocsr_p95_ms": 6539.4,
+    "segments": 15,
+    "recall_skel": 0.933,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 15,
+    "backend_crash": null,
+    "segment_compute_s": 7.8,
+    "ocsr_compute_p50_ms": 751.0,
+    "ocsr_cache_hits": 0,
+    "first_segment_start_s": 0.7,
+    "first_smiles_s": 4.0,
+    "ocsr_done_s": 15.8,
+    "fatal_error": null,
+    "failed_steps": [],
+    "timing_valid": true
+   }
+  ],
+  "timing_valid_all": true,
+  "ocsr_cache_hits_total": 0,
+  "failed_steps_by_kind": {},
+  "v2_breaker_503": 0,
+  "host_load": {
+   "start": [
+    2.3,
+    3.95,
+    3.15
+   ],
+   "end": [
+    3.67,
+    3.98,
+    3.25
+   ]
+  }
+ },
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 4,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 23911,
+  "max_gpu_used_mib": 8584,
+  "events": [
+   {
+    "t": "2026-11-17T15:46:54+00:00",
+    "scenario": "S1",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 23947,
+    "gpu_used_mib": 8548,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:47:24+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 23923,
+    "gpu_used_mib": 8572,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 16,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:47:54+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 23917,
+    "gpu_used_mib": 8578,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:48:24+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 23911,
+    "gpu_used_mib": 8584,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:48:37+00:00",
+    "scenario": "S1",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 23911,
+    "gpu_used_mib": 8584,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T15:48:37+00:00",
+ "duration_s": 103.5,
+ "v2_http_errors": {
+  "n": 0,
+  "by_status": {},
+  "events": []
+ },
+ "v2_breaker_503": {
+  "adapter_calls": 0,
+  "paper_runs_503": 0,
+  "paper_runs_503_detail": []
+ },
+ "v2_created": {
+  "papers": [
+   "c99e6ba4-8880-4fbd-b5ac-0beec8fa6946",
+   "4e8adc9a-8d66-4c16-86ff-6ed738460e09",
+   "36b28ae8-e120-40f0-b7f8-2abff779d6ae"
+  ],
+  "image_jobs": [
+   "414ab8cd-d7af-4c77-b2ed-93f863d0f2e2",
+   "ee425046-5a21-4a77-9de1-075ae9595040",
+   "5f342507-6950-498e-a142-be00c63d58f4"
+  ]
+ },
+ "ocsr_cache": {
+  "cleared": [
+   {
+    "label": "before S1",
+    "deleted": 0,
+    "t": 1794930414.471619
+   },
+   {
+    "label": "S1 decimer run 0",
+    "deleted": 1,
+    "t": 1794930425.0235357
+   },
+   {
+    "label": "S1 molnextr run 0",
+    "deleted": 16,
+    "t": 1794930457.5092323
+   },
+   {
+    "label": "S1 molscribe run 0",
+    "deleted": 16,
+    "t": 1794930488.016686
+   }
+  ],
+  "allow_warm_cache": false,
+  "container": "marcus-v2-test-postgres-1"
+ },
+ "validity": {
+  "timings": 3,
+  "all_valid": true,
+  "ocsr_cache_hits": 0,
+  "failed_steps_by_kind": {}
+ }
+}

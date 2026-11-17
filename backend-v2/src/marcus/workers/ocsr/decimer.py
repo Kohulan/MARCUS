@@ -32,9 +32,9 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 
 from marcus.core.enums import Engine
-from marcus.core.settings import get_settings
 from marcus.workers import runtime
 from marcus.workers.ocsr.base import OcsrResult, register_engine
+from marcus.workers.ocsr.torch_common import warm_up
 
 log = logging.getLogger(__name__)
 
@@ -88,32 +88,24 @@ def _import_decimer() -> None:
             return
         from marcus.workers import gpu
 
-        settings = get_settings()
-        gpu.limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
-        budget = gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
+        budget = gpu.prepare_tf()
 
         import tensorflow as tf
 
         real_load = tf.saved_model.load
-        real_growth = tf.config.experimental.set_memory_growth
 
         def load(export_dir, *args, **kwargs):
             if os.path.basename(os.path.normpath(str(export_dir))) == HAND_MODEL_DIR:
                 return LazySavedModel(lambda p: real_load(p, *args, **kwargs), str(export_dir))
             return real_load(export_dir, *args, **kwargs)
 
-        def no_growth(device, enable):
-            log.info("GPU memory budget set: skipping decimer's set_memory_growth(%s)", enable)
-
         start = time.monotonic()
         tf.saved_model.load = load
-        if budget:
-            tf.config.experimental.set_memory_growth = no_growth
         try:
-            import DECIMER.decimer as module
+            with gpu.skip_memory_growth(budget, "decimer"):
+                import DECIMER.decimer as module
         finally:
             tf.saved_model.load = real_load
-            tf.config.experimental.set_memory_growth = real_growth
         if not isinstance(module.DECIMER_Hand_drawn, LazySavedModel):
             raise RuntimeError("decimer loaded the hand-drawn model eagerly (library changed?)")
         _predict = module.predict_SMILES
@@ -138,21 +130,8 @@ def _warm_up() -> None:
     global _warmed_up
     if _warmed_up:
         return
-    import tempfile
-
-    from rdkit import Chem
-    from rdkit.Chem.Draw import rdMolDraw2D
-
-    drawer = rdMolDraw2D.MolDraw2DCairo(300, 300)
-    drawer.DrawMolecule(Chem.MolFromSmiles("CC(=O)Oc1ccccc1C(=O)O"))
-    drawer.FinishDrawing()
-    start = time.monotonic()
-    with tempfile.NamedTemporaryFile(suffix=".png") as f:
-        f.write(drawer.GetDrawingText())
-        f.flush()
-        smiles = _predict(f.name, confidence=False, hand_drawn=False)
+    warm_up("decimer", lambda path: _predict(path, confidence=False, hand_drawn=False))
     _warmed_up = True
-    log.info("decimer warm-up in %.1f s (%s)", time.monotonic() - start, smiles)
 
 
 class DecimerEngine:

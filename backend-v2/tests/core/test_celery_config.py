@@ -1,7 +1,7 @@
 import uuid
 
 from marcus.core.enums import StepKind
-from marcus.core.queues import SLOTS, TIME_LIMITS
+from marcus.core.queues import QUEUE_WAIT_S, SLOTS, TIME_LIMITS
 from marcus.core.settings import get_settings
 
 
@@ -51,6 +51,7 @@ def test_dispatcher_send_uses_celery_app(monkeypatch):
                 "queue": "q.segment",
                 "soft_time_limit": soft,
                 "time_limit": hard,
+                "expires": QUEUE_WAIT_S["q.segment"],  # unserved messages expire (review I2)
             },
         )
     ]

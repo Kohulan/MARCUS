@@ -13,7 +13,7 @@ the model packages at import time.
   In-process, the conversion now runs inside the step's time limit, so a soft time limit can
   interrupt it like any other part of the prediction (theoretical: it takes milliseconds per
   structure).
-- `warm_up`: one prediction on a small RDKit drawing when the model loads.
+- `warm_up`: one prediction on a small RDKit drawing when the model loads (DECIMER uses it too).
 """
 
 import itertools

@@ -1,0 +1,210 @@
+{
+ "kind": "fixture_accuracy",
+ "client": "v1",
+ "target": "jarvis",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T15:31:17+00:00",
+ "config": {
+  "client": "v1",
+  "target": "jarvis",
+  "base_url": "http://127.0.0.1:19000",
+  "sizes": [
+   190
+  ],
+  "engines": [
+   "molnextr"
+  ],
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "tag": "v1-asshipped-r1-190-molnextr"
+ },
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "runs": [
+  {
+   "fixture": "synth_190",
+   "engine": "molnextr",
+   "wall_s": 81.6,
+   "duration_s": 81.6,
+   "fatal_error": "RemoteProtocolError: Server disconnected without sending a response.",
+   "aborted": false,
+   "backend_crash": true,
+   "page_errors": [
+    {
+     "page": 9,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 13,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 15,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 19,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 16,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 17,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 22,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    }
+   ],
+   "failed_steps": null,
+   "ocsr_cache_hits": null,
+   "cache_cleared_rows": null,
+   "segments_listed": null,
+   "v2_paper_id": null,
+   "engine_versions": [],
+   "n_seg_errors": 0,
+   "expected": 190,
+   "segments": 0,
+   "valid_smiles": 0,
+   "exact": 0,
+   "exact_rate": 0.0,
+   "skeleton": 0,
+   "skeleton_rate": 0.0,
+   "lost_pages": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+   ],
+   "exact_slots": [],
+   "seg_rows": [],
+   "timing_valid": true
+  }
+ ],
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 3,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16801,
+  "max_gpu_used_mib": 15694,
+  "events": [
+   {
+    "t": "2026-11-17T15:31:17+00:00",
+    "scenario": "ACC",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:31:47+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:32:17+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 3,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:32:39+00:00",
+    "scenario": "ACC",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 32495,
+    "gpu_used_mib": 0,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T15:32:39+00:00",
+ "summary": {
+  "synth_190/molnextr": {
+   "exact": 0,
+   "expected": 190,
+   "skeleton": 0,
+   "segments": 0,
+   "lost_pages": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+   ],
+   "fatal": "RemoteProtocolError: Server disconnected without sending a response."
+  }
+ }
+}

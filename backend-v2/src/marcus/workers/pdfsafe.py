@@ -44,6 +44,12 @@ class ChildFailed(Exception):
     """The child raised or died. Only a short message travels back."""
 
 
+class ChildKilled(ChildFailed):
+    """The child was SIGKILLed from outside before it answered: the container's OOM killer (or
+    an operator), never its own limits (RLIMIT_AS raises MemoryError, RLIMIT_CPU sends SIGXCPU
+    and the wall timeout is ChildTimeout). Says nothing about the PDF."""
+
+
 def _child_env(threads: int | None = None) -> dict[str, str]:
     env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
     env.setdefault("PYTHONHASHSEED", "0")
@@ -116,6 +122,8 @@ def run_op(
     try:
         reply = json.loads(data)
     except ValueError:
+        if proc.returncode == -signal.SIGKILL:
+            raise ChildKilled("child killed by SIGKILL (out of memory?)") from None
         raise ChildFailed(f"child exited with code {proc.returncode}") from None
     if reply.get("ok"):
         return reply.get("result")
@@ -148,14 +156,18 @@ def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
 def _run_pdf(
     op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None
 ):
-    """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child that
-    failed (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final bad input."""
-    from marcus.workers.runtime import BadInput, StepTimeout
+    """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child killed
+    from outside (SIGKILL: the container's OOM killer) is a retryable lost worker (WorkerLost);
+    a child that failed otherwise (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final
+    bad input."""
+    from marcus.workers.runtime import BadInput, StepTimeout, WorkerLost
 
     try:
         return run_op(op, args, timeout_s, mem_mb, threads)
     except ChildTimeout:
         raise StepTimeout("timeout") from None
+    except ChildKilled as exc:
+        raise WorkerLost(str(exc)[:200]) from None
     except ChildFailed as exc:
         raise BadInput(str(exc)[:200]) from None
 
@@ -169,15 +181,24 @@ def page_count(path: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB) -> int:
 def render_page_png(
     path: Path, page: int, out: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB
 ) -> None:
-    """Render one page at 300 DPI to `out`; a killed render never leaves a half PNG."""
+    """Render one page at 300 DPI to `out`; a killed render never leaves a half PNG. A page
+    above Settings.max_page_pixels is refused before rendering, one whose PNG is above
+    Settings.max_page_png_bytes before writing (BadInput)."""
     from marcus.core.settings import get_settings
 
+    settings = get_settings()
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(f".{out.stem}.{uuid.uuid4().hex}.tmp.png")
     try:
         _run_pdf(
-            "render", [str(path), page, str(tmp), get_settings().max_pages], timeout_s, mem_mb
+            "render",
+            [
+                str(path), page, str(tmp), settings.max_pages, settings.max_page_pixels,
+                settings.max_page_png_bytes,
+            ],
+            timeout_s,
+            mem_mb,
         )
         os.replace(tmp, out)
     finally:

@@ -28,7 +28,15 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from marcus.core import storage
-from marcus.core.enums import Engine, ErrorClass, PaperStatus, StepKind, StepStatus
+from marcus.core.enums import (
+    FINISHED_STEPS,
+    Engine,
+    ErrorClass,
+    ImageJobStatus,
+    PaperStatus,
+    StepKind,
+    StepStatus,
+)
 from marcus.core.models import (
     Curation,
     ImageJob,
@@ -40,7 +48,7 @@ from marcus.core.models import (
     Step,
 )
 from marcus.core.queues import queue_for
-from marcus.core.settings import get_settings
+from marcus.core.settings import fake_enabled, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +57,6 @@ DOI_SEQ = 100_001
 MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
-_FINISHED = (StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value)
 
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
@@ -59,9 +66,14 @@ RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of th
 CROP_SOURCES_TRIED = 20  # live papers tried per crop on a cache hit
 
 
+CROP_FORMAT = "rgb"  # stored crops are true-colour RGB PNGs (D4 fix round 2); part of the key
+
+
 def seg_cache_key(seg_version: str) -> str:
-    """seg_cache.seg_version: the segmenter version plus the fixed render settings."""
-    return f"{seg_version}|dpi{RENDER_DPI}"
+    """seg_cache.seg_version: the segmenter version plus the fixed render settings and the crop
+    format, so cached segmentations from an older crop format are never reused (and retention
+    purges them)."""
+    return f"{seg_version}|dpi{RENDER_DPI}|{CROP_FORMAT}"
 
 
 class BadResult(ValueError):
@@ -80,12 +92,34 @@ def start_paper(
     engine: Engine,
     ocsr_mode: str,
 ) -> Paper:
-    """Store the PDF and create the paper plus its check_pdf step. Caller commits."""
+    """Create the paper plus its check_pdf step, then store the PDF. Caller commits.
+
+    The API runs the two halves itself (new_paper, then store_pdf in a thread) so the hash and
+    the file write do not block its event loop."""
+    paper = new_paper(
+        session, owner, hashlib.sha256(data).hexdigest(), len(data), display_name, engine,
+        ocsr_mode,
+    )  # fmt: skip
+    store_pdf(paper.id, data)
+    return paper
+
+
+def new_paper(
+    session: Session,
+    owner: Owner,
+    pdf_sha256: str,
+    size: int,
+    display_name: str,
+    engine: Engine,
+    ocsr_mode: str,
+) -> Paper:
+    """The paper row and its check_pdf step (flushed: the paper has its id). Its PDF must be
+    stored (store_pdf) before the commit."""
     paper = Paper(
         owner_id=owner.id,
         display_name=display_name,
-        pdf_sha256=hashlib.sha256(data).hexdigest(),
-        bytes=len(data),
+        pdf_sha256=pdf_sha256,
+        bytes=size,
         engine=Engine(engine).value,
         ocsr_mode=ocsr_mode,
         status=PaperStatus.CHECKING.value,
@@ -93,13 +127,6 @@ def start_paper(
     )
     session.add(paper)
     session.flush()  # assigns paper.id
-
-    path = storage.pdf_path(paper.id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(data)
-
     session.add(
         Step(
             paper_id=paper.id,
@@ -113,30 +140,48 @@ def start_paper(
     return paper
 
 
+def store_pdf(paper_id: uuid.UUID, data: bytes) -> None:
+    """Write a new paper's PDF (owner-only mode; refuses to overwrite an existing file)."""
+    path = storage.pdf_path(paper_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+
+
 def start_image_job(
     session: Session, owner: Owner, png: bytes, display_name: str, engine: Engine
 ) -> ImageJob:
-    """Store the normalised PNG and create the image job plus its ocsr step. Caller commits."""
+    """Create the image job plus its ocsr step, then store the normalised PNG. Caller commits.
+
+    The API runs the two halves itself (new_image_job, then store_image in a thread)."""
+    job = new_image_job(session, owner, hashlib.sha256(png).hexdigest(), display_name, engine)
+    store_image(job.id, png)
+    return job
+
+
+def store_image(job_id: uuid.UUID, png: bytes) -> None:
+    """Write a new image job's PNG (owner-only mode). The temp name `<id>.png.tmp` is the one
+    retention sweeps after a crash (one writer per new job)."""
+    storage.write_atomic(storage.image_job_path(job_id), png, 0o600, unique=False)
+
+
+def new_image_job(
+    session: Session, owner: Owner, image_sha256: str, display_name: str, engine: Engine
+) -> ImageJob:
+    """The image job row and its ocsr step (flushed: the job has its id). Its PNG must be
+    stored (store_image) before the commit."""
     engine = Engine(engine)
     job = ImageJob(
         owner_id=owner.id,
         display_name=display_name,
-        image_sha256=hashlib.sha256(png).hexdigest(),
+        image_sha256=image_sha256,
         engine=engine.value,
-        status="queued",
+        status=ImageJobStatus.QUEUED.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
     )
     session.add(job)
     session.flush()  # assigns job.id
-
-    path = storage.image_job_path(job.id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(png)
-    os.replace(tmp, path)
-
     session.add(
         Step(
             image_job_id=job.id,
@@ -174,31 +219,34 @@ def _ocsr_seq(page: int, idx: int) -> int:
     return page * 1000 + idx
 
 
-def _lock_paper(session: Session, paper_id: uuid.UUID) -> Paper | None:
+def _lock(session: Session, model, row_id: uuid.UUID):
+    """SELECT ... FOR UPDATE of one row (fresh attributes), or None."""
     return session.execute(
-        select(Paper)
-        .where(Paper.id == paper_id)
+        select(model)
+        .where(model.id == row_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
 
 
-def _lock_image_job(session: Session, job_id: uuid.UUID) -> ImageJob | None:
-    return session.execute(
-        select(ImageJob)
-        .where(ImageJob.id == job_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
+def lock_parent(
+    session: Session, paper_id: uuid.UUID | None, image_job_id: uuid.UUID | None
+) -> Paper | ImageJob | None:
+    """Lock a step's parent row: its paper, else its image job. None when the row is gone.
+
+    The first half of the lock order every writer of step state keeps: parent row, then step
+    row (the planner here, the runtime's attempt fence, the watchdog)."""
+    if paper_id is not None:
+        return _lock(session, Paper, paper_id)
+    return _lock(session, ImageJob, image_job_id)
 
 
-def _lock_step(session: Session, step_id: uuid.UUID) -> Step | None:
-    return session.execute(
-        select(Step)
-        .where(Step.id == step_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
+def parent_gone(parent: Paper | ImageJob | None) -> bool:
+    """The parent row is missing or deleted: its steps must not change."""
+    return parent is None or parent.status in (
+        PaperStatus.DELETED.value,
+        ImageJobStatus.DELETED.value,
+    )
 
 
 def _load_for_change(session: Session, step_id: uuid.UUID):
@@ -208,28 +256,27 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
     already finished (done/failed/cancelled), or its parent is deleted.
     Lock order is always parent row, then step row.
     """
-    parent = session.execute(
+    ids = session.execute(
         select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
     ).one_or_none()
-    if parent is None:
+    if ids is None:
         return None
-    paper = job = None
-    if parent.paper_id is not None:
-        paper = _lock_paper(session, parent.paper_id)
-        if paper is None or paper.status == PaperStatus.DELETED.value:
-            return None
-    else:
-        job = _lock_image_job(session, parent.image_job_id)
-        if job is None or job.status == "deleted":
-            return None
-    step = _lock_step(session, step_id)
-    if step is None or step.status in _FINISHED:
+    parent = lock_parent(session, ids.paper_id, ids.image_job_id)
+    if parent_gone(parent):
+        return None
+    paper, job = (parent, None) if ids.paper_id is not None else (None, parent)
+    step = _lock(session, Step, step_id)
+    if step is None or step.status in FINISHED_STEPS:
         return None
     return step, paper, job
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
-    """If no step of the paper is still active, close the paper as done or failed."""
+    """If no step of the paper is still active, close the paper as done or failed.
+
+    Failed (spec §8): check_pdf failed, or every page failed, a page being failed when its
+    render_page or its segment_page step failed for good. Otherwise done, failed steps and all.
+    """
     if paper.status not in (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value):
         return
     session.flush()
@@ -241,19 +288,40 @@ def _finish_check(session: Session, paper: Paper) -> None:
     if active:
         return
     rows = session.execute(
-        select(Step.kind, Step.status, Step.error).where(
+        select(Step.kind, Step.status, Step.error, Step.page).where(
             Step.paper_id == paper.id,
-            Step.kind.in_([StepKind.CHECK_PDF.value, StepKind.RENDER_PAGE.value]),
+            Step.kind.in_(
+                [
+                    StepKind.CHECK_PDF.value,
+                    StepKind.RENDER_PAGE.value,
+                    StepKind.SEGMENT_PAGE.value,
+                ]
+            ),
         )
     ).all()
+    failed = StepStatus.FAILED.value
     check = [r for r in rows if r.kind == StepKind.CHECK_PDF.value]
     renders = [r for r in rows if r.kind == StepKind.RENDER_PAGE.value]
-    if any(r.status == StepStatus.FAILED.value for r in check):
+    # A page fails when its render failed or its segmentation failed (a page served from the
+    # segmentation cache has no segment_page step and counts as segmented).
+    segmented = {
+        r.page for r in rows if r.kind == StepKind.SEGMENT_PAGE.value and r.status != failed
+    }
+    seg_failed = {
+        r.page for r in rows if r.kind == StepKind.SEGMENT_PAGE.value and r.status == failed
+    }
+    page_failed = [
+        r.status == failed or (r.page in seg_failed and r.page not in segmented) for r in renders
+    ]
+    if any(r.status == failed for r in check):
         paper.status = PaperStatus.FAILED.value
-        paper.error = next(r.error for r in check if r.status == StepStatus.FAILED.value)
-    elif renders and all(r.status == StepStatus.FAILED.value for r in renders):
+        paper.error = next(r.error for r in check if r.status == failed)
+    elif renders and all(r.status == failed for r in renders):
         paper.status = PaperStatus.FAILED.value
         paper.error = "all pages failed to render"
+    elif renders and all(page_failed):
+        paper.status = PaperStatus.FAILED.value
+        paper.error = "all pages failed (render or segmentation)"
     else:
         paper.status = PaperStatus.DONE.value
 
@@ -416,13 +484,16 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
     if not paper.pages:
         return
     session.flush()
-    rows = session.execute(
-        select(Step.page, Step.model_version).where(
-            Step.paper_id == paper.id,
-            Step.kind == StepKind.SEGMENT_PAGE.value,
-            Step.status == StepStatus.DONE.value,
-        )
-    ).all()
+    done = (
+        Step.paper_id == paper.id,
+        Step.kind == StepKind.SEGMENT_PAGE.value,
+        Step.status == StepStatus.DONE.value,
+    )
+    # Cheap first: pages segmented so far. Only the paper's last page reads the rows.
+    pages_done = session.execute(select(func.count(Step.page.distinct())).where(*done))
+    if pages_done.scalar_one() != paper.pages:
+        return
+    rows = session.execute(select(Step.page, Step.model_version).where(*done)).all()
     versions = {r.page: r.model_version for r in rows}
     if set(versions) != set(range(paper.pages)) or set(versions.values()) != {seg_version}:
         return
@@ -524,13 +595,7 @@ def _copy_crop(session: Session, paper_id: uuid.UUID, sha: str) -> bool:
             continue  # gone (deleted or purged meanwhile)
         if hashlib.sha256(data).hexdigest() != sha:
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
-        try:
-            tmp.write_bytes(data)
-            os.replace(tmp, dest)
-        finally:
-            tmp.unlink(missing_ok=True)
+        storage.write_atomic(dest, data)
         return True
     return False
 
@@ -599,7 +664,7 @@ def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[St
 
     if job is not None:
         session.add(_prediction(step, result))
-        job.status = "done"
+        job.status = ImageJobStatus.DONE.value
         job.error = None
         session.flush()
         return []
@@ -637,21 +702,23 @@ def fail_step(
         step.status = StepStatus.FAILED.value
         step.finished_at = _now()
         if job is not None:
-            job.status = "failed"
+            job.status = ImageJobStatus.FAILED.value
             job.error = error
     if paper is not None:
         _finish_check(session, paper)
     session.flush()
 
 
-def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
+def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = True) -> None:
     """Cancel all active steps, mark the paper deleted and remove its files. Caller commits.
 
     A running step's late result is dropped by complete_step / fail_step. A file that cannot
     be removed (any OSError) is logged and does not abort the transaction: the paper is
     deleted either way, and the retention purge's orphan sweep removes the leftovers later.
+    `remove_files=False`: the caller runs remove_paper_files itself (the API: after its commit,
+    in a thread).
     """
-    paper = _lock_paper(session, paper_id)
+    paper = _lock(session, Paper, paper_id)
     if paper is None:
         raise ValueError("paper not found")
     session.execute(
@@ -662,6 +729,12 @@ def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
     )
     paper.status = PaperStatus.DELETED.value
     session.flush()
+    if remove_files:
+        remove_paper_files(paper_id)
+
+
+def remove_paper_files(paper_id: uuid.UUID) -> None:
+    """Remove a deleted paper's directory; an OSError is logged, not raised (retention retries)."""
     try:
         shutil.rmtree(storage.paper_dir(paper_id))
     except FileNotFoundError:
@@ -669,7 +742,9 @@ def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
     except OSError as exc:
         log.warning(
             "paper %s: files not removed (%s: %s); the retention sweep retries",
-            paper_id, type(exc).__name__, exc,
+            paper_id,
+            type(exc).__name__,
+            exc,
         )
 
 
@@ -679,12 +754,12 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
     engine = Engine(engine)
-    if engine == Engine.FAKE and not get_settings().enable_fake_engines:
+    if engine == Engine.FAKE and not fake_enabled():
         raise ValueError("engine 'fake' is disabled")
     segment = session.get(Segment, segment_id)
     if segment is None:
         raise ValueError("segment not found")
-    paper = _lock_paper(session, segment.paper_id)
+    paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
     step = _new_step(

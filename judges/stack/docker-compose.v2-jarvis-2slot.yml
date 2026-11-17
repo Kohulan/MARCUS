@@ -25,7 +25,7 @@ services:
   worker-segment:
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
               "-c", "2", "--pool", "prefork", "--include", "marcus.workers.segment",
-              "-n", "segment@%h", "--loglevel", "INFO"]
+              "--max-tasks-per-child", "200", "-n", "segment@%h", "--loglevel", "INFO"]
 
   worker-decimer:
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.decimer",

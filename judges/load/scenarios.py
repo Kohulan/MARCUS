@@ -52,7 +52,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -66,7 +66,7 @@ import httpx  # noqa: E402
 import make_fixtures  # noqa: E402
 import v2_adapter  # noqa: E402
 from common import client_v1, client_v2, remote, target  # noqa: E402
-from common.client_v1 import run_paper  # noqa: E402
+from common.client_v1 import now_iso, run_paper  # noqa: E402
 from guard_jarvis import Guard, GuardTripped, is_jarvis_url  # noqa: E402
 
 RESULTS = HERE / "results"
@@ -93,10 +93,6 @@ def stats(xs) -> dict:
         return {"n": 0}
     return {"n": len(xs), "min": round(min(xs), 1), "p50": pct(xs, 50), "p95": pct(xs, 95), "max": round(max(xs), 1),
             "mean": round(sum(xs) / len(xs), 1)}
-
-
-def utc():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def seg_stats(rec: dict) -> dict:
@@ -279,7 +275,7 @@ class Probe:
 
 
 def health_call(base_url):
-    c = httpx.Client(base_url=base_url, limits=httpx.Limits(max_keepalive_connections=0))  # new connection per call, like nginx -> backend
+    c = client_v1.no_keepalive_client(base_url)  # new connection per call, like nginx -> backend
 
     def call(timeout):
         return c.get("/health", timeout=timeout).status_code
@@ -288,7 +284,7 @@ def health_call(base_url):
 
 
 def heartbeat_call(base_url, sid):
-    c = httpx.Client(base_url=base_url, limits=httpx.Limits(max_keepalive_connections=0))  # new connection per call, like nginx -> backend
+    c = client_v1.no_keepalive_client(base_url)  # new connection per call, like nginx -> backend
 
     def call(timeout):  # own rate-limit bucket via X-Session-ID (see module doc)
         return c.post(f"/session/heartbeat/{sid}", headers={"X-Session-ID": sid}, timeout=timeout).status_code
@@ -297,7 +293,7 @@ def heartbeat_call(base_url, sid):
 
 
 def script_call(base_url, sid, png, engine="decimer"):
-    c = httpx.Client(base_url=base_url, limits=httpx.Limits(max_keepalive_connections=0))  # new connection per call, like nginx -> backend
+    c = client_v1.no_keepalive_client(base_url)  # new connection per call, like nginx -> backend
 
     def call(timeout):
         r = c.post("/latest/ocsr/generate_smiles", headers={"X-Session-ID": sid},
@@ -416,7 +412,8 @@ def scenario_validity(results) -> dict:
         if isinstance(t, dict) and "valid" in t:  # each timed run/arm has one verdict carrying its own hit count
             verdicts.append(t["valid"])
             hits += t.get("ocsr_cache_hits") or 0
-        for f in d.get("failed_steps") or [] if isinstance(d.get("failed_steps"), list) else []:
+        fs = d.get("failed_steps")
+        for f in fs if isinstance(fs, list) else []:
             if isinstance(f, dict):
                 k = f"{f.get('kind')}:{f.get('status')}:{f.get('error_class')}"
                 failed[k] = failed.get(k, 0) + 1
@@ -430,18 +427,12 @@ def breaker_503s(res) -> dict:
     """503 'service unavailable' answers (rate limiter circuit breaker open): adapter calls + paper uploads."""
     papers = []
 
-    def walk(x):
-        if isinstance(x, dict):
-            fe = x.get("fatal_error")
-            if isinstance(fe, str) and fe.startswith("HTTP 503"):
-                papers.append(fe)
-            for v in x.values():
-                walk(v)
-        elif isinstance(x, list):
-            for v in x:
-                walk(v)
+    def fn(d):
+        fe = d.get("fatal_error")
+        if isinstance(fe, str) and fe.startswith("HTTP 503"):
+            papers.append(fe)
 
-    walk(res.get("results"))
+    _walk(res.get("results"), fn)
     return {"paper_runs_503": len(papers), "paper_runs_503_detail": sorted(set(papers))}
 
 
@@ -1000,7 +991,7 @@ def main(argv=None) -> int:
             rc = rc or 2
             break
         res = {"scenario": name, "target": a.target, "client": a.client, "base_url": base_url, "build": API.BUILD,
-               "started_at": utc(), "config": {k: v for k, v in vars(a).items() if k != "s1_reference"},
+               "started_at": now_iso("seconds"), "config": {k: v for k, v in vars(a).items() if k != "s1_reference"},
                "stopped_early": False, "host_load": {"start": host_load()}}
         t0 = time.time()
         a.s1_reference = load_s1_reference(a.target, RESULTS, a.client)  # picks up an S1 file written earlier in this run
@@ -1010,7 +1001,7 @@ def main(argv=None) -> int:
             client_v2.created_papers(clear=True)
             v2_adapter.created_image_jobs(clear=True)
         n_clears = len(CACHE.log) if CACHE else 0
-        print(f"[{utc()}] {name} on {a.target} ({a.client}) ...", flush=True)
+        print(f"[{now_iso('seconds')}] {name} on {a.target} ({a.client}) ...", flush=True)
         try:
             with Guard(base_url, name, enabled=guard_enabled(a.target, base_url),
                        prod_expected="stopped" if a.prod_stopped else "running",
@@ -1030,7 +1021,7 @@ def main(argv=None) -> int:
             res["guard_refused"] = str(e)
             res["stopped_early"] = True
             rc = 3
-        res["finished_at"] = utc()
+        res["finished_at"] = now_iso("seconds")
         res["duration_s"] = round(time.time() - t0, 1)
         res["host_load"]["end"] = host_load()
         if a.client == "v2":
@@ -1051,7 +1042,7 @@ def main(argv=None) -> int:
                 res["summary"]["host_load"] = res["host_load"]
         fn = result_path(RESULTS, a.target, a.client, name, a.tag)
         fn.write_text(json.dumps(res, indent=1))
-        print(f"[{utc()}] {name} done in {res['duration_s']} s -> {fn.name}", flush=True)
+        print(f"[{now_iso('seconds')}] {name} done in {res['duration_s']} s -> {fn.name}", flush=True)
         print(json.dumps(res.get("summary"), indent=1)[:3000], flush=True)
         if res["stopped_early"]:
             print(f"STOPPED EARLY: {res.get('guard', {}).get('trip_reason') or res.get('guard_refused')}", flush=True)

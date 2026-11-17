@@ -20,6 +20,8 @@ worker-cpu was down at 03:00 is not caught up; the next day's run purges everyth
 import logging
 import os
 import sys
+import threading
+from collections.abc import Callable
 
 from celery import Celery
 from celery.schedules import crontab
@@ -29,6 +31,8 @@ from kombu import Queue
 from marcus.core.logging import configure_logging
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
 from marcus.core.settings import get_settings
+
+log = logging.getLogger(__name__)
 
 _redis_url = get_settings().redis_url
 
@@ -70,13 +74,68 @@ celery_app.conf.update(
 )
 
 
+def live_queue_names(timeout: float) -> set[str]:
+    """Names of the queues that at least one live worker consumes (a blocking broker broadcast;
+    `timeout` bounds only the reply collection, callers bound the whole call)."""
+    replies = celery_app.control.inspect(timeout=timeout).active_queues() or {}
+    return {q["name"] for queues in replies.values() for q in (queues or []) if q.get("name")}
+
+
+class LiveQueuesProbe:
+    """The consumer check shared by GET /ready (marcus.api.routes.health) and the dispatcher's
+    watchdog: `inspect()` (default: live_queue_names(timeout)) in a daemon thread, waited for at
+    most `budget` seconds.
+
+    `timeout` bounds only the reply collection: kombu publishes the broadcast with retry, and
+    `Connection.ensure` retries for ever if the broker drops between a PING and the publish. So
+    a broadcast that overruns is abandoned and the answer is None (unknown); while it still
+    hangs no second one starts (at most one such thread per probe), and being a daemon it never
+    holds up the process's exit. A broadcast that fails is None as well."""
+
+    def __init__(
+        self, timeout: float, label: str, inspect: Callable[[], set[str]] | None = None
+    ) -> None:
+        self.timeout = timeout
+        self.label = label
+        self._inspect = inspect
+        self._running: threading.Thread | None = None
+        self._lock = threading.Lock()
+
+    def get(self, budget: float) -> set[str] | None:
+        out: dict = {}
+
+        def broadcast() -> None:
+            try:
+                live = self._inspect() if self._inspect else live_queue_names(self.timeout)
+                out["live"] = set(live)
+            except Exception as exc:  # noqa: BLE001
+                out["error"] = type(exc).__name__
+
+        with self._lock:
+            if self._running is not None and self._running.is_alive():
+                log.warning("%s: consumer check still hangs; no answer", self.label)
+                return None
+            thread = self._running = threading.Thread(target=broadcast, name="inspect", daemon=True)
+            thread.start()
+        thread.join(budget)
+        if "live" not in out:
+            log.warning(
+                "%s: consumer check gave no answer: %s", self.label, out.get("error", "timeout")
+            )
+            return None
+        return out["live"]
+
+
 @beat_init.connect
 def _log_beat_schedule(sender=None, **_) -> None:
     """Name every scheduled task when beat starts, so the logs show that (and where) beat runs."""
     for name, entry in sorted(celery_app.conf.beat_schedule.items()):
         logging.getLogger(__name__).info(
             "beat schedule: %s -> %s %s (UTC) %s",
-            name, entry["task"], entry["schedule"], entry.get("options", {}),
+            name,
+            entry["task"],
+            entry["schedule"],
+            entry.get("options", {}),
         )
 
 

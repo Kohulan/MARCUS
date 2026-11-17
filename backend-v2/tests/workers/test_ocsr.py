@@ -1,4 +1,5 @@
 import hashlib
+import io
 import uuid
 from types import SimpleNamespace
 
@@ -115,9 +116,12 @@ def test_ocsr_paper_step_reads_crop_by_sha(monkeypatch):
     step = view(pid, segment_id=uuid.uuid4(), engine="decimer")
     assert ocsr(step, session)["valid"] is True
     assert session.rolled_back >= 1
-    # the cache key is the hash of the crop's bytes, written in its own committed transaction
+    # the cache key is the hash of the ENGINE's input (the v1-swapped crop), written in its own
+    # committed transaction
+    from marcus.workers.ocsr.handler import v1_engine_input
+
     (written,) = session.writes
-    assert written["image_sha256"] == hashlib.sha256(crop.read_bytes()).hexdigest()
+    assert written["image_sha256"] == hashlib.sha256(v1_engine_input(crop)).hexdigest()
     assert (written["engine"], written["engine_version"], written["smiles"]) == (
         "decimer",
         "stub-9",
@@ -180,6 +184,141 @@ def test_ocsr_marks_cache_hits_and_misses(monkeypatch):
     session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
     miss = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
     assert miss["cached"] is False
-    monkeypatch.setattr(handler, "_cache_get", lambda *a: SimpleNamespace(smiles="CCO", molfile=None))
+    monkeypatch.setattr(
+        handler, "_cache_get", lambda *a: SimpleNamespace(smiles="CCO", molfile=None)
+    )
     hit = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
     assert hit["cached"] is True and hit["ms"] == 0
+
+
+# --- engine input: true-colour stored crop, v1's swapped pixels for the engine (D4 fix round 2) ---
+
+RED, BLUE, BLACK, WHITE = (255, 0, 0), (0, 0, 255), (0, 0, 0), (255, 255, 255)
+
+
+def coloured_image(path):
+    """A 4x4 RGB PNG: red (an O label), blue (an N label), black (a bond), white elsewhere."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    im = Image.new("RGB", (4, 4), WHITE)
+    im.putpixel((0, 0), RED)
+    im.putpixel((1, 1), BLUE)
+    im.putpixel((2, 2), BLACK)
+    im.save(path)
+    return path
+
+
+class PixelEngine:
+    """Records the pixels of the file it is given, as each real engine reads its file itself."""
+
+    version = "pix-1"
+
+    def __init__(self, name):
+        self.name = Engine(name)
+        self.seen, self.paths = [], []
+
+    def load(self):
+        pass
+
+    def predict(self, image):
+        self.paths.append(image)
+        with Image.open(image) as im:
+            rgb = im.convert("RGB")
+            self.seen.append([rgb.getpixel(xy) for xy in ((0, 0), (1, 1), (2, 2), (3, 3))])
+        return OcsrResult("CCO", None)
+
+
+def crop_step(monkeypatch, engine_name):
+    pid, sha = uuid.uuid4(), "cd" * 32
+    crop = coloured_image(segment_crop_path(pid, sha))
+    eng = PixelEngine(engine_name)
+    monkeypatch.setitem(base.FACTORIES, engine_name, lambda: eng)
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
+    return crop, eng, session, view(pid, segment_id=uuid.uuid4(), engine=engine_name)
+
+
+@pytest.mark.parametrize("engine_name", ["decimer", "decimer-hand", "molnextr", "molscribe"])
+def test_every_engine_gets_v1_swapped_pixels_for_a_crop(monkeypatch, engine_name):
+    """All four engines convert to grey with unequal channel weights, so each must get v1's input:
+    red and blue swapped (v1's cv2.imwrite of the RGB crop). The stored crop stays true colour."""
+    from marcus.workers.ocsr.handler import ocsr
+
+    crop, eng, session, step = crop_step(monkeypatch, engine_name)
+    before = crop.read_bytes()
+    out = ocsr(step, session)
+
+    assert out["smiles"] == "CCO" and out["cached"] is False
+    assert eng.seen == [[BLUE, RED, BLACK, WHITE]]  # red label arrives blue, blue arrives red
+    assert crop.read_bytes() == before  # the file users see is untouched
+    assert eng.paths[0] != crop and not eng.paths[0].exists()  # a temporary file, removed after
+
+
+def test_image_job_reaches_the_engine_unswapped(monkeypatch):
+    """A user's own image is never swapped (v1's image path has no swap), and its cache key is the
+    file's own hash."""
+    from marcus.workers.ocsr.handler import ocsr
+
+    job = uuid.uuid4()
+    path = coloured_image(image_job_path(job))
+    eng = PixelEngine("molscribe")
+    monkeypatch.setitem(base.FACTORIES, "molscribe", lambda: eng)
+    session = FakeSession(None)
+    ocsr(view(image_job_id=job, engine="molscribe"), session)
+    assert eng.seen == [[RED, BLUE, BLACK, WHITE]]
+    assert eng.paths == [path]
+    (written,) = session.writes
+    assert written["image_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_crop_and_image_job_with_the_same_bytes_get_different_cache_keys(monkeypatch):
+    """A user who downloads a coloured crop and uploads it as an image job must not get the crop's
+    cached answer: the engine inputs differ, so the keys differ."""
+    from marcus.workers.ocsr.handler import ocsr
+
+    crop, _, crop_session, step = crop_step(monkeypatch, "molnextr")
+    ocsr(step, crop_session)
+    job = uuid.uuid4()
+    p = image_job_path(job)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(crop.read_bytes())  # identical stored bytes
+    job_session = FakeSession(None)
+    ocsr(view(image_job_id=job, engine="molnextr"), job_session)
+    (crop_key,), (job_key,) = crop_session.writes, job_session.writes
+    assert crop_key["image_sha256"] != job_key["image_sha256"]
+    assert job_key["image_sha256"] == hashlib.sha256(crop.read_bytes()).hexdigest()
+
+
+def test_black_and_white_crop_input_is_the_crop_itself(tmp_path):
+    """Grey pixels have R == B, so the swap changes nothing (186 of 190 synth_190 crops)."""
+    from marcus.workers.ocsr.handler import v1_engine_input
+
+    p = tmp_path / "bw.png"
+    im = Image.new("RGB", (5, 5), WHITE)
+    im.putpixel((2, 2), (90, 90, 90))
+    im.save(p)
+    with Image.open(io.BytesIO(v1_engine_input(p))) as out:
+        assert list(out.convert("RGB").get_flattened_data()) == list(im.get_flattened_data())
+
+
+def test_engine_input_equals_v1_cv2_imwrite_of_the_library_crop(tmp_path):
+    """Ties the helper to v1's real call: decimer_segmentation returns the crop as R, G, B, A (alpha
+    255); v1 saves it with cv2.imwrite (backend/app/modules/decimer_segmentation_wrapper.py:147),
+    which takes it as B, G, R, A. The helper's output, from v2's true-colour file, must decode to
+    the same RGB pixels as that v1 file."""
+    cv2 = pytest.importorskip("cv2")
+    import numpy as np
+
+    from marcus.workers.ocsr.handler import v1_engine_input
+
+    rng = np.random.default_rng(7)
+    rgba = np.full((6, 9, 4), 255, np.uint8)
+    rgba[..., :3] = rng.integers(0, 256, size=(6, 9, 3), dtype=np.uint8)
+    rgba[0, 0, :3], rgba[1, 1, :3] = RED, BLUE
+    v1_file = tmp_path / "v1_page_0_0_segmented.png"
+    assert cv2.imwrite(str(v1_file), rgba)  # exactly v1's call on the library's array
+    v2_file = tmp_path / "v2_crop.png"
+    Image.fromarray(np.ascontiguousarray(rgba[:, :, :3])).save(v2_file)  # v2: true colour
+
+    with Image.open(v1_file) as a, Image.open(io.BytesIO(v1_engine_input(v2_file))) as b:
+        v1_px, v2_px = np.asarray(a.convert("RGB")), np.asarray(b.convert("RGB"))
+    assert np.array_equal(v1_px, v2_px)
+    assert tuple(v1_px[0, 0]) == BLUE  # v1's file really is swapped

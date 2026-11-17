@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session
 
 from marcus.core import storage
 from marcus.core.celery_app import celery_app
-from marcus.core.enums import Engine, PaperStatus, StepStatus
+from marcus.core.enums import Engine, ImageJobStatus, PaperStatus, StepStatus
 from marcus.core.models import ImageJob, OcsrCache, Paper, SegCache, Step
 from marcus.core.pipeline import ACTIVE, cancel_paper, seg_cache_key
 from marcus.core.settings import get_settings
@@ -324,7 +324,13 @@ def _sweep_orphans(session: Session, now: datetime, report: PurgeReport) -> None
         session, root / "papers", ("",), Paper, PaperStatus.DELETED.value, cutoff_ts, report
     )
     report.orphan_image_files += _sweep(
-        session, root / "images", (".png", ".png.tmp"), ImageJob, "deleted", cutoff_ts, report
+        session,
+        root / "images",
+        (".png", ".png.tmp"),
+        ImageJob,
+        ImageJobStatus.DELETED.value,
+        cutoff_ts,
+        report,
     )
 
 

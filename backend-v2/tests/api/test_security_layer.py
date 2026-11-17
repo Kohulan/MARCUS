@@ -504,7 +504,7 @@ class _Pipe:
     def incr(self, key):
         pass
 
-    def expire(self, key, seconds):
+    def expire(self, key, seconds, nx=False):
         pass
 
     async def execute(self):
@@ -564,8 +564,9 @@ async def test_uploads_get_503_only_while_the_breaker_is_open(app, clock):
         assert r.status_code == 503 and r.json() == {"detail": "service unavailable"}
         assert slow.calls == 3
         clock[0] += 4.9  # still open: refused without touching Redis; tools fail open
-        assert (await c.post("/api/v2/images", files={"file": ("x.png", PNG, "image/png")})
-                ).status_code == 503
+        assert (
+            await c.post("/api/v2/images", files={"file": ("x.png", PNG, "image/png")})
+        ).status_code == 503
         assert (await c.post("/api/v2/tools/depict", json={})).status_code == 422
         assert slow.calls == 3
         clock[0] += 0.2  # closed again (Redis still slow): one failure does not refuse
@@ -626,6 +627,7 @@ async def test_unknown_peers_share_one_new_owner_bucket(app):
     for i in range(10):
         async with client(app, (f"peer-{i}", 1)) as c:
             assert (await c.get("/api/v2/papers")).status_code == 200
+            assert (await c.get("/api/v2/papers")).status_code == 200  # used: it came back
     async with client(app, ("another-name", 1)) as c:
         r = await c.get("/api/v2/papers")
     assert r.status_code == 429
@@ -677,6 +679,7 @@ async def test_ipv6_new_owner_limit_is_per_64(app):
     for i in range(10):
         async with client(app, (f"2001:db8:5:6::{i + 1:x}", 1)) as c:
             assert (await c.get("/api/v2/papers")).status_code == 200
+            assert (await c.get("/api/v2/papers")).status_code == 200  # used: it came back
     async with client(app, ("2001:db8:5:6:abcd::1", 1)) as c:
         r = await c.get("/api/v2/papers")
     assert r.status_code == 429

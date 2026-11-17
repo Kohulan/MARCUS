@@ -26,9 +26,10 @@ _MAGIC = (
 async def read_limited(upload: UploadFile, limit: int) -> bytes:
     """Read the whole upload, raising 413 once more than `limit` bytes have been seen.
 
-    Never trusts Content-Length; holds at most limit + 1 bytes in memory.
+    Never trusts Content-Length; holds at most limit + 1 bytes in memory (BytesIO hands its
+    buffer out without a second full copy).
     """
-    parts: list[bytes] = []
+    buf = io.BytesIO()
     total = 0
     while True:
         chunk = await upload.read(min(CHUNK, limit + 1 - total))
@@ -37,8 +38,8 @@ async def read_limited(upload: UploadFile, limit: int) -> bytes:
         total += len(chunk)
         if total > limit:
             raise HTTPException(status_code=413, detail="File too large")
-        parts.append(chunk)
-    return b"".join(parts)
+        buf.write(chunk)
+    return buf.getvalue()
 
 
 def sniff_pdf(data: bytes) -> None:
@@ -63,10 +64,9 @@ def sniff_image(data: bytes) -> str:
     too_big = HTTPException(status_code=413, detail="Image too large")
     try:
         with Image.open(io.BytesIO(data)) as probe:
+            width, height = probe.size  # from the header: one open, then verify
+            fmt = probe.format or ""
             probe.verify()
-        with Image.open(io.BytesIO(data)) as img:
-            width, height = img.size
-            fmt = img.format or ""
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise too_big from None
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError, EOFError):

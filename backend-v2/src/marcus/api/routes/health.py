@@ -8,14 +8,15 @@ most 30 s old; otherwise 503 with the missing parts, e.g.
 
 The consumer check is a broker broadcast (`inspect(timeout=1).active_queues()`), so its result
 is cached per API process for READY_CACHE_S: /ready cannot be used to hammer the broker. Only
-one broadcast runs at a time per process, in a worker thread. `timeout=1` only bounds the
-reply collection: kombu publishes the broadcast with retry, and `Connection.ensure` retries
-for ever if the broker drops between the Redis PING and the publish. So each request waits at
-most INSPECT_BUDGET_S (for the lock and the broadcast together); a broadcast that overruns is
-abandoned (its thread finishes whenever kombu gives up or the broker returns) and cached as
-"no live queue". At most one such thread exists per process (a 1-token limiter), so a broker
-outage cannot pile up threads. /ready is not exempt from the per-IP rate limit. The database
-and Redis checks run on every call, each bounded by CHECK_TIMEOUT_S.
+one broadcast runs at a time per process, in a daemon thread (core.celery_app.LiveQueuesProbe,
+shared with the dispatcher's watchdog). `timeout=1` only bounds the reply collection: kombu
+publishes the broadcast with retry, and `Connection.ensure` retries for ever if the broker drops
+between the Redis PING and the publish. So each request waits at most INSPECT_BUDGET_S (for the
+lock and the broadcast together); a broadcast that overruns is abandoned (its thread finishes
+whenever kombu gives up or the broker returns) and cached as "no live queue". While it hangs no
+second one starts, so a broker outage cannot pile up threads. /ready is not exempt from the
+per-IP rate limit. The database and Redis checks run on every call, each bounded by
+CHECK_TIMEOUT_S.
 """
 
 import asyncio
@@ -24,7 +25,7 @@ import time
 
 import anyio
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,10 +54,9 @@ def _monotonic() -> float:
 
 def inspect_live_queues() -> set[str]:
     """Names of the queues that at least one live worker consumes (blocking broadcast)."""
-    from marcus.core.celery_app import celery_app
+    from marcus.core.celery_app import live_queue_names
 
-    replies = celery_app.control.inspect(timeout=INSPECT_TIMEOUT_S).active_queues() or {}
-    return {q["name"] for queues in replies.values() for q in (queues or []) if q.get("name")}
+    return live_queue_names(INSPECT_TIMEOUT_S)
 
 
 class LiveQueues:
@@ -71,7 +71,7 @@ class LiveQueues:
         self._at: float | None = None
         self._value: frozenset[str] = frozenset()
         self._lock: asyncio.Lock | None = None
-        self._threads: anyio.CapacityLimiter | None = None
+        self._probe = None  # core.celery_app.LiveQueuesProbe, made on first use
 
     def _fresh(self) -> bool:
         return self._at is not None and _monotonic() - self._at < READY_CACHE_S
@@ -84,21 +84,20 @@ class LiveQueues:
         if self._fresh():
             return self._value
         if self._lock is None:
+            from marcus.core.celery_app import LiveQueuesProbe
+
             self._lock = asyncio.Lock()
-            self._threads = anyio.CapacityLimiter(1)
-        try:
-            with anyio.fail_after(INSPECT_BUDGET_S):
-                async with self._lock:
-                    if self._fresh():  # refreshed by the request we waited behind
-                        return self._value
-                    live = await anyio.to_thread.run_sync(
-                        inspect_live_queues, abandon_on_cancel=True, limiter=self._threads
-                    )
-                    return self._store(frozenset(live))
-        except TimeoutError:
-            log.warning("ready: celery inspect gave no answer within %.1f s", INSPECT_BUDGET_S)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("ready: celery inspect failed: %s", type(exc).__name__)
+            # late-bound: tests replace inspect_live_queues
+            self._probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "ready", lambda: inspect_live_queues())
+        with anyio.move_on_after(INSPECT_BUDGET_S):
+            async with self._lock:
+                if self._fresh():  # refreshed by the request we waited behind
+                    return self._value
+                live = await anyio.to_thread.run_sync(
+                    self._probe.get, INSPECT_BUDGET_S, abandon_on_cancel=True
+                )
+                return self._store(frozenset(live or ()))  # None (no answer): no live queue
+        log.warning("ready: no consumer check answer within %.1f s", INSPECT_BUDGET_S)
         if self._fresh():  # a waiter whose budget ran out after the holder stored a result
             return self._value
         return self._store(frozenset())
@@ -118,13 +117,20 @@ async def _database_ok(db: AsyncSession) -> bool:
         return False
 
 
-async def _redis_checks() -> tuple[bool, bool]:
-    """(redis answers, dispatcher heartbeat is fresh), one connection, each bounded."""
-    client = aioredis.Redis.from_url(
-        get_settings().redis_url,
-        socket_connect_timeout=CHECK_TIMEOUT_S,
-        socket_timeout=CHECK_TIMEOUT_S,
-    )
+def _ready_redis(app) -> aioredis.Redis:
+    """The probes' Redis client: one per app (API process), not a new connection per call."""
+    url = get_settings().redis_url
+    cached = getattr(app.state, "ready_redis", None)
+    if cached is None or cached[0] != url:
+        client = aioredis.Redis.from_url(
+            url, socket_connect_timeout=CHECK_TIMEOUT_S, socket_timeout=CHECK_TIMEOUT_S
+        )
+        cached = app.state.ready_redis = (url, client)
+    return cached[1]
+
+
+async def _redis_checks(client: aioredis.Redis) -> tuple[bool, bool]:
+    """(redis answers, dispatcher heartbeat is fresh), each bounded."""
     try:
         with anyio.fail_after(CHECK_TIMEOUT_S):
             redis_ok = bool(await client.ping())
@@ -134,16 +140,16 @@ async def _redis_checks() -> tuple[bool, bool]:
     except Exception as exc:  # noqa: BLE001
         log.warning("ready: redis check failed: %s", type(exc).__name__)
         return False, False
-    finally:
-        await client.aclose()
 
 
 @router.get("/ready", response_model=None)
-async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str] | JSONResponse:
+async def ready(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> dict[str, str] | JSONResponse:
     missing: list[str] = []
     if not await _database_ok(db):
         missing.append("database")
-    redis_ok, dispatcher_ok = await _redis_checks()
+    redis_ok, dispatcher_ok = await _redis_checks(_ready_redis(request.app))
     if not redis_ok:
         missing.append("redis")
     elif not dispatcher_ok:  # the dispatcher's liveness lives in Redis: unknown without it

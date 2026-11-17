@@ -13,7 +13,7 @@ import types
 import pytest
 
 from marcus.core.enums import Engine
-from marcus.workers import gpu, ocsr
+from marcus.workers import gpu, ocsr, runtime
 from marcus.workers.ocsr import base, molnextr, molscribe, torch_common
 from marcus.workers.ocsr.base import OcsrResult
 
@@ -281,9 +281,9 @@ def test_molnextr_cpu_fallback_aborts_the_worker_at_preload(stubs, monkeypatch):
     stubs.torch.cuda.is_available = lambda: True
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", "molnextr")
     ocsr.register_configured_engines()
-    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
-    monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     base.preload_engines(sender=None)
     assert aborted == [True]
 

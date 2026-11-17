@@ -48,7 +48,7 @@ from starlette.types import Receive, Scope, Send
 
 from marcus.core import heartbeat
 from marcus.core.db import sync_db_url
-from marcus.core.enums import ErrorClass, StepStatus
+from marcus.core.enums import WAITING_STEPS, ErrorClass, StepStatus
 from marcus.core.models import Paper, Prediction, Segment, Step
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
 from marcus.core.settings import get_settings
@@ -61,7 +61,6 @@ STATEMENT_TIMEOUT_MS = 2000
 TOTAL_DEADLINE_S = 7.5  # the whole database read; Prometheus scrape_timeout is 10 s
 WINDOW = "1 hour"
 BUCKETS = (0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0)
-WAITING = (StepStatus.PENDING.value, StepStatus.QUEUED.value)
 DISK_PATH_LABEL = "/data"
 
 
@@ -91,6 +90,7 @@ class MarcusCollector:
         self._at: float | None = None
         self._families: list = []
         self._engine = None
+        self._redis = None
         self._deadline = math.inf
 
     # -- sources ------------------------------------------------------------------------------
@@ -108,13 +108,11 @@ class MarcusCollector:
 
     def _heartbeat_age(self) -> float:
         try:
-            client = redis.Redis.from_url(
-                get_settings().redis_url, socket_connect_timeout=1, socket_timeout=1
-            )
-            try:
-                age = heartbeat.age(client)
-            finally:
-                client.close()
+            if self._redis is None:  # one client (and pool) for every scrape
+                self._redis = redis.Redis.from_url(
+                    get_settings().redis_url, socket_connect_timeout=1, socket_timeout=1
+                )
+            age = heartbeat.age(self._redis)
         except Exception as exc:  # noqa: BLE001
             log.warning("metrics: redis read failed: %s", type(exc).__name__)
             return math.inf
@@ -125,34 +123,34 @@ class MarcusCollector:
         left_ms = int((self._deadline - _monotonic()) * 1000)
         if left_ms <= 0:
             raise TimeoutError("metrics read exceeded its total deadline")
-        conn.execute(
-            text(f"SET LOCAL statement_timeout = {min(int(STATEMENT_TIMEOUT_MS), left_ms)}")
-        )
+        conn.execute(text(f"SET LOCAL statement_timeout = {min(STATEMENT_TIMEOUT_MS, left_ms)}"))
 
     def _snapshot(self, conn: Connection) -> list:
-        """All database series, read inside the caller's one read-only transaction."""
+        """All database series, read inside the caller's one read-only transaction (the caller
+        set the first query's budget)."""
         fams = []
-        self._budget(conn)
         pending = GaugeMetricFamily("marcus_queue_pending", "Steps waiting.", labels=["queue"])
         running = GaugeMetricFamily("marcus_queue_running", "Steps running.", labels=["queue"])
         counts = {
             (q, status): n
             for q, status, n in conn.execute(
                 select(Step.queue, Step.status, func.count())
-                .where(Step.status.in_([*WAITING, StepStatus.RUNNING.value]))
+                .where(Step.status.in_([*WAITING_STEPS, StepStatus.RUNNING.value]))
                 .group_by(Step.queue, Step.status)
             )
         }
         queues = sorted({*SLOTS, TOOLS_QUEUE} | {q for q, _ in counts})
         for q in queues:
-            pending.add_metric([q], sum(counts.get((q, s), 0) for s in WAITING))
+            pending.add_metric([q], sum(counts.get((q, s), 0) for s in WAITING_STEPS))
             running.add_metric([q], counts.get((q, StepStatus.RUNNING.value), 0))
         fams += [pending, running]
 
         since = text(f"now() - interval '{WINDOW}'")
         run_s = func.extract("epoch", Step.finished_at - Step.started_at)
         step_h = GaugeHistogramMetricFamily(
-            "marcus_step_seconds", "Step run time (last-hour window; do not rate()).", labels=["kind", "engine"]
+            "marcus_step_seconds",
+            "Step run time (last-hour window; do not rate()).",
+            labels=["kind", "engine"],
         )
         engine_col = literal_column("coalesce(steps.engine, '')").label("engine")
         self._budget(conn)
@@ -203,7 +201,7 @@ class MarcusCollector:
         first_row = conn.execute(select(*_histogram_columns(secs)).select_from(first)).one()
         first_h = GaugeHistogramMetricFamily(
             "marcus_first_smiles_seconds",
-            "Upload to first SMILES per paper (last-hour window; do not rate())."
+            "Upload to first SMILES per paper (last-hour window; do not rate()).",
         )
         _add_histogram(first_h, [], first_row)
         fams.append(first_h)
@@ -220,8 +218,8 @@ class MarcusCollector:
                 .group_by(Step.error_class)
             ).all()
         )
-        for cls in [e.value for e in ErrorClass]:
-            failures.add_metric([cls], by_class.pop(cls, 0))
+        for e in ErrorClass:
+            failures.add_metric([e.value], by_class.pop(e.value, 0))
         for cls, n in by_class.items():  # failed without a class (should not happen)
             failures.add_metric([cls or "unknown"], n)
         fams.append(failures)
@@ -251,7 +249,9 @@ class MarcusCollector:
             "marcus_disk_free_bytes", "Free bytes on the data volume.", labels=["path"]
         )
         try:
-            disk.add_metric([DISK_PATH_LABEL], float(shutil.disk_usage(get_settings().data_root).free))
+            disk.add_metric(
+                [DISK_PATH_LABEL], float(shutil.disk_usage(get_settings().data_root).free)
+            )
         except OSError as exc:
             log.warning("metrics: disk_usage failed: %s", type(exc).__name__)
         return [*(db or []), disk, ok]

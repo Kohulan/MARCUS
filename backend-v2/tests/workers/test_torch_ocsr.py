@@ -26,6 +26,7 @@ import pytest
 
 from marcus.core.enums import Engine
 from marcus.core.storage import image_job_path
+from marcus.workers import runtime
 
 pytestmark = pytest.mark.ml
 
@@ -75,9 +76,9 @@ def preload(monkeypatch, ocsr, base, engine: Engine):
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", engine.value)
     ocsr.register_configured_engines()
     assert engine.value in base.PRELOAD
-    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
-    monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     start = time.monotonic()
     base.preload_engines(sender=None)
     print(f"\npreload {engine.value} (load + warm-up): {time.monotonic() - start:.1f} s")

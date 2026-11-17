@@ -26,6 +26,7 @@ Limits:
   `event: error` frame, then closes; the client reconnects after 15 s.
 """
 
+import contextlib
 import json
 import logging
 import time
@@ -43,8 +44,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import current_owner, get_owned_paper
 from marcus.api.read import steps_by_status
+from marcus.api.redisutil import incr_with_ttl
 from marcus.core.db import get_db
-from marcus.core.enums import PaperStatus, StepStatus
+from marcus.core.enums import FINISHED_STEPS, PaperStatus
 from marcus.core.events import paper_channel
 from marcus.core.models import Owner, Paper
 from marcus.core.settings import get_settings
@@ -58,7 +60,6 @@ CLOSE_S = 2.0  # longest wait for unsubscribe + close when the stream ends
 SLOT_TTL_S = 60  # stream slot counter TTL, refreshed on every ping
 RETRY_MS = 15000
 TERMINAL = {PaperStatus.DONE.value, PaperStatus.FAILED.value, PaperStatus.DELETED.value}
-FINISHED_STEP = {StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value}
 TOO_MANY_STREAMS = "Too many open event streams"
 ERROR_FRAME = f"retry: {RETRY_MS}\n\n", 'event: error\ndata: {"detail": "events unavailable"}\n\n'
 
@@ -117,10 +118,7 @@ async def _take_slot(owner_id: uuid.UUID) -> str | None:
     """Count one open stream for the owner; 429 above the limit. None when Redis is down."""
     key = f"sse:{owner_id}"
     try:
-        async with redis_client().pipeline(transaction=True) as pipe:
-            pipe.incr(key)
-            pipe.expire(key, _slot_ttl())
-            count, _ = await pipe.execute()
+        count = await incr_with_ttl(redis_client(), key, _slot_ttl())
     except (RedisError, OSError):
         log.warning("event stream slot for owner %s not counted (Redis)", owner_id, exc_info=True)
         return None  # fail open: the stream itself reports the outage
@@ -142,10 +140,8 @@ async def _give_back(key: str | None) -> None:
 async def _refresh_slot(key: str | None) -> None:
     if key is None:
         return
-    try:
+    with contextlib.suppress(RedisError, OSError):  # the stream notices a lost Redis itself
         await redis_client().expire(key, _slot_ttl())
-    except (RedisError, OSError):
-        pass  # the stream notices a lost Redis on its next read
 
 
 # --- the stream -----------------------------------------------------------------------------
@@ -177,7 +173,7 @@ async def _stream(
                 if event is not None:
                     yield _frame(event)
                     status = event.get("status")
-                    check = isinstance(status, str) and status in FINISHED_STEP
+                    check = isinstance(status, str) and status in FINISHED_STEPS
             if time.monotonic() - last_ping >= ping_s:
                 last_ping = time.monotonic()
                 await _refresh_slot(slot)
@@ -195,10 +191,9 @@ async def _stream(
     finally:
         # Shielded (the server may be cancelling the stream) but bounded (Redis may be gone).
         with anyio.move_on_after(CLOSE_S, shield=True):
-            try:
+            # a failure: the connection is gone; closing it below drops the subscription
+            with contextlib.suppress(Exception):
                 await pubsub.unsubscribe()
-            except Exception:
-                pass  # the connection is gone; closing it below drops the subscription
             try:
                 await pubsub.aclose()
             except Exception:

@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -40,15 +40,12 @@ import fixture_accuracy  # noqa: E402
 import make_fixtures  # noqa: E402
 import payloads  # noqa: E402
 from common import client_v2, target  # noqa: E402
+from common.client_v1 import now_iso  # noqa: E402
 from guard_jarvis import Guard, GuardTripped  # noqa: E402
 from v2.helpers import V2Owner, post_paper, wait_paper  # noqa: E402
 
 RESULTS = HERE / "results"
 BACKEND_PDFS = ROOT.parent / "backend-v2" / "tests" / "fixtures" / "pdfs"
-
-
-def utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def huge_page_pdf() -> bytes:
@@ -151,7 +148,7 @@ def main(argv=None) -> int:
                     help="jarvis guard, ONLY in the owner's GPU window: production v1 must stay stopped")
     a = ap.parse_args(argv)
     base = target._check(a.base_url.rstrip("/"))  # refuses production hosts and ports 8080/9000 on loopback
-    res = {"kind": "robustness_v2", "base_url": base, "target": a.target, "started_at": utc(), "engine": a.engine,
+    res = {"kind": "robustness_v2", "base_url": base, "target": a.target, "started_at": now_iso("seconds"), "engine": a.engine,
            "build": f"v2-{client_v2.git_short_hash()}", "containers_before": containers(a.project)}
 
     probes: list[dict] = []
@@ -244,7 +241,7 @@ def main(argv=None) -> int:
     sc = fixture_accuracy.score(good_rec, meta) if good_rec.get("segments") is not None else {}
     bad_codes = [p for p in probes if p["status"] != 200]
     res.update({
-        "finished_at": utc(),
+        "finished_at": now_iso("seconds"),
         # client_v2 records no paper status; done = no fatal error and not aborted (M1)
         "good_paper": {"done": bool(good_rec) and good_rec.get("fatal_error") is None and not good_rec.get("aborted"),
                        "wall_s": round((good_rec.get("wall_ms") or 0) / 1000, 1),

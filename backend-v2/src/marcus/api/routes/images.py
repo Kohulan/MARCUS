@@ -1,21 +1,22 @@
 import asyncio
+import hashlib
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import client_ip, current_owner, get_owned_image_job
+from marcus.api.deps import client_ip, current_owner, get_owned_image_job, require_engine_enabled
 from marcus.api.limits import enforce_active_limits
 from marcus.api.security import upload_limit
 from marcus.api.uploads import normalize_to_png, read_limited, sanitize_display_name, sniff_image
 from marcus.core.db import get_db
 from marcus.core.enums import Engine
 from marcus.core.models import Owner, Prediction
-from marcus.core.pipeline import start_image_job
+from marcus.core.pipeline import new_image_job, store_image
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -64,14 +65,15 @@ async def upload_image(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     settings = get_settings()
-    if engine == Engine.FAKE and not settings.enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(engine)
     await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)
     png = await decode_image(request.app.state.decode_slots, data)
     name = sanitize_display_name(file.filename)
-    job = await db.run_sync(lambda s: start_image_job(s, owner, png, name, engine))
+    sha = await run_in_threadpool(lambda: hashlib.sha256(png).hexdigest())  # off the event loop
+    job = await db.run_sync(lambda s: new_image_job(s, owner, sha, name, engine))
+    await run_in_threadpool(store_image, job.id, png)  # before the commit, as start_image_job
     await db.commit()
     return {"image_job_id": str(job.id), "status": job.status}
 

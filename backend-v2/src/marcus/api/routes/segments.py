@@ -6,15 +6,16 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import current_owner, get_owned_segment, not_found
+from marcus.api.chem import curation_error
+from marcus.api.chempool import CHEM
+from marcus.api.deps import current_owner, get_owned_segment, not_found, require_engine_enabled
 from marcus.api.read import IMAGE_HEADERS
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, StepKind
+from marcus.core.enums import StepKind
 from marcus.core.models import Curation, Owner, Step
 from marcus.core.pipeline import ACTIVE, request_ocsr
-from marcus.core.settings import get_settings
 
 router = APIRouter()
 
@@ -40,8 +41,7 @@ async def run_prediction(
     db: AsyncSession = Depends(get_db),
 ) -> StepAccepted:
     segment, _ = await get_owned_segment(db, owner, segment_id)
-    if body.engine == Engine.FAKE and not get_settings().enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(body.engine)
     # A request for a segment and engine that is still waiting returns that step instead of
     # queueing another one (repeat clicks must not flood the queue).
     waiting = await db.scalar(
@@ -73,6 +73,14 @@ async def put_curation(
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
     segment, _ = await get_owned_segment(db, owner, segment_id)
+    if body.smiles is not None or body.molfile is not None:
+        error = await CHEM.run(curation_error, body.smiles, body.molfile)
+        if error is not None:
+            field, msg = error
+            raise HTTPException(
+                status_code=422,
+                detail=[{"type": "value_error", "loc": ["body", field], "msg": msg}],
+            )
     curation = await db.get(Curation, segment.id)
     if curation is None:
         curation = Curation(segment_id=segment.id)

@@ -1,0 +1,336 @@
+{
+ "kind": "fixture_accuracy",
+ "client": "v1",
+ "target": "jarvis",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T15:02:03+00:00",
+ "config": {
+  "client": "v1",
+  "target": "jarvis",
+  "base_url": "http://127.0.0.1:19000",
+  "sizes": [
+   15
+  ],
+  "engines": [
+   "molscribe"
+  ],
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "tag": "v1-asshipped-r1-15-molscribe"
+ },
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "runs": [
+  {
+   "fixture": "synth_015",
+   "engine": "molscribe",
+   "wall_s": 190.8,
+   "duration_s": 190.8,
+   "fatal_error": null,
+   "aborted": false,
+   "backend_crash": false,
+   "page_errors": [],
+   "failed_steps": null,
+   "ocsr_cache_hits": null,
+   "cache_cleared_rows": null,
+   "segments_listed": 15,
+   "v2_paper_id": null,
+   "engine_versions": [],
+   "n_seg_errors": 0,
+   "expected": 15,
+   "segments": 15,
+   "valid_smiles": 15,
+   "exact": 12,
+   "exact_rate": 0.8,
+   "skeleton": 14,
+   "skeleton_rate": 0.9333,
+   "lost_pages": [],
+   "exact_slots": [
+    0,
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    12,
+    13,
+    14
+   ],
+   "seg_rows": [
+    {
+     "segment_id": "page_4_1",
+     "page": 4,
+     "smiles": "CC(C)=CCC[C@]1(C)[C@@H](CC=C(C)C)C[C@@]2(CC=C(C)C)C(=O)[C@]1(C(=O)C(C)C)C(=O)C(CC=C(C)C)=C2O",
+     "inchikey": "KGSZHKRKHXOAMG-HQKKAZOISA-N",
+     "error": null,
+     "ocsr_ms": 113602.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_0",
+     "page": 1,
+     "smiles": "[H][C@]12C=C[C@@]3([H])[C@H](CC)[C@H](C)C[C@]3([H])[C@@]1([H])C[C@@]1([H])/C=C\\C(O)=C3/C(=O)N[C@@]([H])(CCCNC(=O)C/C=C\\[C@]21[H])C3=O",
+     "inchikey": "SKDZCWQTNXDRSN-KZNLPQPESA-N",
+     "error": null,
+     "ocsr_ms": 5307.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_2",
+     "page": 2,
+     "smiles": "C/C=C(\\C=C(C)\\C=C\\C=C\\C=C(/C)C(=O)O)C(=O)OC",
+     "inchikey": "YCGXXOLNDOWFSI-ODWWTDRDSA-N",
+     "error": null,
+     "ocsr_ms": 4615.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_0",
+     "page": 2,
+     "smiles": "[H][C@]12CC[C@](C)([C@@H](O)C1)C2(C)C",
+     "inchikey": "DTGKSKDOIYIVQL-OYNCUSHFSA-N",
+     "error": null,
+     "ocsr_ms": 2233.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_1",
+     "page": 0,
+     "smiles": "Cc1ccc(C(C)C)cc1",
+     "inchikey": "HFPZCAJZSCWRBC-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 2053.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_1",
+     "page": 3,
+     "smiles": "O=C1c2c(O)cc(O)cc2O[C@H](c2ccc(O)c(O)c2)[C@H]1O",
+     "inchikey": "CXQWRCVTCMQVQX-LSDHHAIUSA-N",
+     "error": null,
+     "ocsr_ms": 4492.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_1",
+     "page": 2,
+     "smiles": "CCC(C)C1OCCO1",
+     "inchikey": "FRBNVSJPLIGZIP-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 2008.4,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_0",
+     "page": 4,
+     "smiles": "[H][C@]12CC[C@@](C)(O)C[C@]1([H])C=C[C@]1(C)OCCC(=O)[C@]21[H]",
+     "inchikey": "YBLKAJOTCRDLGS-RCZQDCHWSA-N",
+     "error": null,
+     "ocsr_ms": 2487.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_2",
+     "page": 0,
+     "smiles": "CC(C)(C(=O)O)C(=O)O",
+     "inchikey": "OREAFAJWWJHCOT-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 2012.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_2",
+     "page": 4,
+     "smiles": "OC[C@H]1O[C@@H](Oc2cc(O)ccc2/C=C/c2cc(O)cc(O)c2)[C@H](O)[C@@H](O)[C@@H]1O",
+     "inchikey": "UPUMEBJDZQEUFC-CUYWLFDKSA-N",
+     "error": null,
+     "ocsr_ms": 4875.4,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_1",
+     "page": 1,
+     "smiles": "O=C(/C=C/c1ccc(O)cc1)c1c(O)cc(O)cc1O",
+     "inchikey": "YQHMWTPYORBCMF-ZZXKWVIFSA-N",
+     "error": null,
+     "ocsr_ms": 2345.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_2",
+     "page": 1,
+     "smiles": "O=C(O)c1ccccc1",
+     "inchikey": "WPYMKLBDIGXBTP-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 1983.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_2",
+     "page": 3,
+     "smiles": "[H][C@@]12C[C@H](c3ccc4c(c3O)C(=O)c3ccc5c(c3C4=O)C(=O)C[C@](C)(O)C5)O[C@H](C)[C@]13CC1(O[C@@H](C)C(=O)C[C@]1([H])O2)O3",
+     "inchikey": "HWZCTPAEJAKLFF-DYWQVGOUSA-N",
+     "error": null,
+     "ocsr_ms": 5277.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_0",
+     "page": 0,
+     "smiles": "[H][C@]12CC[C@H]([C@H](C)/C=C/[C@H](C)C(C)(C)O)[C@@]1(C)CC[C@@]1(C)C2=C[C@H](O)[C@@]2(C)C[C@@H](O)CC[C@]12C",
+     "inchikey": "LZFZMPOWEXIVGE-VIWBBUQHSA-N",
+     "error": null,
+     "ocsr_ms": 5081.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_0",
+     "page": 3,
+     "smiles": "[H][C@]12CS/C(=C\\C[C@@H](C)OC1=O)C(=O)NC/C=C\\C=C/[C@@H](O)C[C@@H](O)Cc1nc(co1)C(=O)N2",
+     "inchikey": "UXWOXTQWVMFRSE-SMUSVWHUSA-N",
+     "error": null,
+     "ocsr_ms": 5021.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    }
+   ],
+   "timing_valid": true
+  }
+ ],
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 7,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16799,
+  "max_gpu_used_mib": 15696,
+  "events": [
+   {
+    "t": "2026-11-17T15:02:03+00:00",
+    "scenario": "ACC",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:02:33+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:03:03+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:03:33+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:04:03+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:04:33+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:05:03+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:05:14+00:00",
+    "scenario": "ACC",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T15:05:14+00:00",
+ "summary": {
+  "synth_015/molscribe": {
+   "exact": 12,
+   "expected": 15,
+   "skeleton": 14,
+   "segments": 15,
+   "lost_pages": [],
+   "fatal": null
+  }
+ }
+}

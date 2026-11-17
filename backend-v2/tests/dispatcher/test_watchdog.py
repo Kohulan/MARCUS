@@ -279,3 +279,82 @@ def test_running_deadline_unchanged(db_session):
     s.expire_all()
     assert s.get(Step, within.id).status == "running"
     assert s.get(Step, over.id).status == "pending"
+
+
+# --- a queue with no live consumer: a lost delivery is not the step's fault ----------------
+
+
+def test_unserved_queue_requeues_without_counting_an_attempt(db_session):
+    """No worker consumes q.decimer (e.g. the GPU is in Exclusive_Process after a reboot):
+    the step goes back to pending with no attempt counted, however often it happens, so it
+    runs when a worker comes back instead of ending as a final worker_lost."""
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(s, paper, status="queued", queued_at=ago(DECIMER_WAIT + 5))
+    s.commit()
+    asked = []
+
+    def live():
+        asked.append(1)
+        return {"q.cpu", "q.segment"}
+
+    for _ in range(3):
+        assert watchdog_once(s, live_queues=live) == 1
+        s.expire_all()
+        row = s.get(Step, stuck.id)
+        assert row.status == "pending" and row.attempts == 0 and row.queued_at is None
+        assert row.error_class is None and row.finished_at is None
+        row.status = "queued"  # dispatched again, still nobody consumes it
+        row.queued_at = ago(DECIMER_WAIT + 5)
+        s.commit()
+    assert len(asked) == 3  # one consumer check per watchdog run
+    s.refresh(paper)
+    assert paper.status != "failed"
+
+
+def test_served_queue_still_counts_a_lost_delivery(db_session):
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(s, paper, status="queued", queued_at=ago(DECIMER_WAIT + 5))
+    s.commit()
+    assert watchdog_once(s, live_queues=lambda: {"q.decimer"}) == 1
+    s.expire_all()
+    row = s.get(Step, stuck.id)
+    assert row.status == "pending" and row.attempts == 1 and row.error_class == "worker_lost"
+
+
+def test_unknown_consumers_count_no_attempt(db_session):
+    """The consumer check failed (None): do not burn attempts while it cannot be told."""
+    s = db_session
+    paper = make_paper(s)
+    stuck = ocsr_step(s, paper, status="queued", queued_at=ago(DECIMER_WAIT + 5))
+    s.commit()
+
+    def broken():
+        raise RuntimeError("broker gone")
+
+    for probe in (lambda: None, broken):
+        assert watchdog_once(s, live_queues=probe) == 1
+        s.expire_all()
+        row = s.get(Step, stuck.id)
+        assert row.status == "pending" and row.attempts == 0
+        row.status = "queued"
+        row.queued_at = ago(DECIMER_WAIT + 5)
+        s.commit()
+
+
+def test_consumer_check_only_for_stuck_queued_steps(db_session):
+    """A running step past its deadline is a real loss (a worker took it): no broadcast."""
+    s = db_session
+    paper = make_paper(s)
+    ocsr_step(
+        s, paper, status="running", attempts=1, queued_at=ago(200),
+        started_at=ago(OCSR_HARD + GRACE_S + 5),
+    )  # fmt: skip
+    ocsr_step(s, paper, seq=1, status="queued", queued_at=ago(10))  # not stuck
+    s.commit()
+
+    def live():
+        raise AssertionError("not asked")
+
+    assert watchdog_once(s, live_queues=live) == 1

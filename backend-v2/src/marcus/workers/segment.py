@@ -2,7 +2,9 @@
 
 Importing this module registers the handler (GPU worker images import it). Crops are stored
 content-addressed (`storage.segment_crop_path`): the planner creates Segment ids only after
-this handler returns, so the crop cannot be named by segment id. Crop arrays are RGB.
+this handler returns, so the crop cannot be named by segment id. Crop arrays and files are RGB
+(true colour, what users see); the OCSR handler gives the engines v1's red/blue-swapped pixels
+(`marcus.workers.ocsr.handler.v1_engine_input`).
 """
 
 import hashlib
@@ -19,11 +21,9 @@ from celery.signals import worker_process_init
 from PIL import Image, ImageDraw
 
 from marcus.core.enums import StepKind
-from marcus.core.settings import get_settings
-from marcus.core.storage import page_image_path, segment_crop_path
-from marcus.workers.runtime import BadInput, register
-from marcus.workers.runtime import abort_worker as _abort_worker
-from marcus.workers.runtime import in_pool_process as _in_pool_process
+from marcus.core.settings import fake_enabled
+from marcus.core.storage import page_image_path, segment_crop_path, write_atomic
+from marcus.workers.runtime import BadInput, preload_on_worker_init, register
 
 log = logging.getLogger(__name__)
 
@@ -86,12 +86,13 @@ class DecimerSegmenter:
 
     The library returns crops as 4-channel arrays in the input's channel order plus alpha
     (every pixel opaque; pixels outside the structure mask are white) and bboxes as
-    (y0, x0, y1, x1). Crops are returned here with (x0, y0, x1, y1), alpha dropped, and with
-    red and blue SWAPPED, as v1 stores them: v1 writes the RGB crop with `cv2.imwrite`, which
-    takes the array as BGR, so every v1 crop file (shown to users, read by the OCSR engines)
-    has red and blue exchanged. D4 found this as the only crop difference to v1 (the 4 coloured
-    crops of synth_190; one changed a MolNexTR answer). Black-and-white crops are unchanged.
-    Like v1, crops and bboxes are paired by position.
+    (y0, x0, y1, x1). Crops are returned here as RGB (alpha dropped, true colour) with
+    (x0, y0, x1, y1). Like v1, crops and bboxes are paired by position.
+
+    v1 writes the same RGB crop with `cv2.imwrite`, which takes the array as BGR, so v1's crop
+    files have red and blue exchanged and its engines read them that way. v2 stores the true
+    colours (owner decision, D4 fix round 2) and swaps only the engine input
+    (`marcus.workers.ocsr.handler.v1_engine_input`).
     """
 
     version = DECIMER_SEGMENTATION_COMMIT
@@ -104,33 +105,10 @@ class DecimerSegmenter:
 
         # Importing decimer_segmentation builds, loads and warms up the model (module level),
         # so the thread caps and the GPU budget must be set first. Weights come from
-        # PYSTOW_HOME (baked into the image).
-        settings = get_settings()
-        gpu.limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
-        budget = gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
-        if not budget:
+        # PYSTOW_HOME (baked into the image). The import also runs mrcnn/model.py's
+        # configure_gpu(memory_growth=True): skipped while a budget is set (as worker-decimer).
+        with gpu.skip_memory_growth(gpu.prepare_tf(), "decimer_segmentation"):
             from decimer_segmentation import segment_chemical_structures
-        else:
-            # The import runs mrcnn/model.py's configure_gpu(memory_growth=True), which
-            # TensorFlow refuses once the budget's logical device exists ("Cannot set memory
-            # growth on device when virtual devices configured"): the load would fail. With a
-            # budget the growth call is skipped during the import (as worker-decimer does).
-            import tensorflow as tf
-
-            real_growth = tf.config.experimental.set_memory_growth
-
-            def no_growth(device, enable):
-                log.info(
-                    "GPU memory budget set: skipping decimer_segmentation's "
-                    "set_memory_growth(%s)",
-                    enable,
-                )
-
-            tf.config.experimental.set_memory_growth = no_growth
-            try:
-                from decimer_segmentation import segment_chemical_structures
-            finally:
-                tf.config.experimental.set_memory_growth = real_growth
 
         self._segment = segment_chemical_structures
 
@@ -147,7 +125,7 @@ class DecimerSegmenter:
                 array = np.stack([array] * 3, axis=-1)
             crops.append(
                 (
-                    np.ascontiguousarray(array[:, :, 2::-1]),  # RGB -> v1's file order (B, G, R)
+                    np.ascontiguousarray(array[:, :, :3]),  # true colour; alpha dropped
                     (int(x0), int(y0), int(x1), int(y1)),
                 )
             )
@@ -176,7 +154,7 @@ def get_segmenter() -> Segmenter:
     with _lock:
         if _segmenter is None:
             name = os.environ.get("MARCUS_SEGMENTER", "decimer")
-            if name == "fake" and not get_settings().enable_fake_engines:
+            if name == "fake" and not fake_enabled():
                 raise RuntimeError("fake segmenter is disabled (MARCUS_ENABLE_FAKE_ENGINES)")
             factory = SEGMENTERS.get(name)
             if factory is None:
@@ -199,15 +177,11 @@ def preload_segmenter(**_) -> None:
     Only in a Celery pool process: the signal can also be sent elsewhere (tests send it to
     exercise other workers' hooks), and there the parent is not a Celery worker.
     """
-    if not _in_pool_process():
-        return
-    try:
-        seg = get_segmenter()
-    except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
-        log.exception("segmenter failed to load; stopping the worker")
-        _abort_worker()
-        return
-    log.info("segmenter %s loaded", seg.version)
+    preload_on_worker_init(_load_segmenter, "segmenter")
+
+
+def _load_segmenter() -> None:
+    log.info("segmenter %s loaded", get_segmenter().version)
 
 
 def _write_crop(paper_id, array: np.ndarray) -> str:
@@ -217,14 +191,7 @@ def _write_crop(paper_id, array: np.ndarray) -> str:
     Image.fromarray(array).save(buf, format="PNG")
     data = buf.getvalue()
     sha = hashlib.sha256(data).hexdigest()
-    dest = segment_crop_path(paper_id, sha)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    try:
-        tmp.write_bytes(data)
-        os.replace(tmp, dest)
-    finally:
-        tmp.unlink(missing_ok=True)
+    write_atomic(segment_crop_path(paper_id, sha), data)
     return sha
 
 

@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from typing import Literal
 
@@ -6,7 +7,6 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -18,7 +18,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
-from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found, paper_visible
+from marcus.api.chempool import CHEM
+from marcus.api.deps import (
+    client_ip,
+    current_owner,
+    get_owned_paper,
+    not_found,
+    require_engine_enabled,
+    visible,
+)
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
 from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList, StepList
@@ -28,7 +36,7 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.models import Owner, Paper
-from marcus.core.pipeline import cancel_paper, start_paper
+from marcus.core.pipeline import cancel_paper, new_paper, remove_paper_files, store_pdf
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -44,15 +52,17 @@ async def upload_paper(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     settings = get_settings()
-    if engine == Engine.FAKE and not settings.enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(engine)
     await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)
     sniff_pdf(data)
     name = sanitize_display_name(file.filename)
 
-    paper = await db.run_sync(lambda s: start_paper(s, owner, data, name, engine, ocsr))
+    # hash and file write in a thread: up to max_upload_bytes must not block the event loop
+    sha = await run_in_threadpool(lambda: hashlib.sha256(data).hexdigest())
+    paper = await db.run_sync(lambda s: new_paper(s, owner, sha, len(data), name, engine, ocsr))
+    await run_in_threadpool(store_pdf, paper.id, data)  # before the commit, as start_paper
     await db.commit()
     return {"paper_id": str(paper.id), "status": PaperStatus.CHECKING.value}
 
@@ -64,7 +74,7 @@ async def list_papers(
     papers = (
         await db.execute(
             select(Paper)
-            .where(Paper.owner_id == owner.id, *paper_visible())
+            .where(Paper.owner_id == owner.id, *visible(Paper))
             .order_by(Paper.created_at.desc(), Paper.id)
         )
     ).scalars()
@@ -114,11 +124,12 @@ async def delete_paper(
 ) -> None:
     paper = await get_owned_paper(db, owner, paper_id)
     try:
-        await db.run_sync(lambda s: cancel_paper(s, paper.id))
+        await db.run_sync(lambda s: cancel_paper(s, paper.id, remove_files=False))
     except ValueError:
         await db.rollback()
         raise not_found() from None  # removed meanwhile
     await db.commit()
+    await run_in_threadpool(remove_paper_files, paper.id)  # page PNGs and crops: off the loop
 
 
 @router.get("/papers/{paper_id}/pages/{n}/image")
@@ -159,8 +170,8 @@ async def export_paper(
 ) -> Response:
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
-    chosen = export.choose(paper, segments, curations, predictions)
-    content = await run_in_threadpool(export.render, format, paper, chosen)  # RDKit is sync
+    # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
+    content = await CHEM.run(export.build, format, paper, segments, curations, predictions)
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],

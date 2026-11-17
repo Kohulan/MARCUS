@@ -2,13 +2,17 @@
 
 Each call sends a Celery task to the tools queue and waits for its result (hard limit 10 s).
 Timeout -> 504; envelope {ok: false, error} (bad input) -> 422; any other task error -> 500.
+The task expires with the wait, so a call the API gave up on never runs later. Waits use their
+own thread budget (MAX_TOOL_WAITS per API process, not the default pool that file responses and
+exports use); when it is full the call gets 503 at once.
 """
 
+import contextlib
 from typing import Annotated, Literal
 
+import anyio
 from celery.exceptions import TimeoutError as CeleryTimeout
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from marcus.api.deps import current_owner
@@ -23,6 +27,17 @@ MAX_SMILES = 2000
 MAX_MOLFILES = 20
 MAX_MOLFILE_BYTES = 200_000
 MAX_MCS_TOTAL = 1_000_000
+MAX_TOOL_WAITS = 16  # tool calls waiting at once per API process (2 tool processes serve them)
+
+_tool_waits: anyio.CapacityLimiter | None = None
+
+
+def _waits() -> anyio.CapacityLimiter:
+    global _tool_waits
+    if _tool_waits is None:
+        _tool_waits = anyio.CapacityLimiter(MAX_TOOL_WAITS)
+    return _tool_waits
+
 
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
@@ -56,7 +71,8 @@ class CompareIn(BaseModel):
 
 
 def _send_and_wait(name: str, kwargs: dict, timeout: float):
-    result = celery_app.send_task(name, kwargs=kwargs, queue=TOOLS_QUEUE)
+    # expires: a task still queued when the caller has given up is dropped, not run late
+    result = celery_app.send_task(name, kwargs=kwargs, queue=TOOLS_QUEUE, expires=timeout)
     try:
         return result.get(timeout=timeout)
     finally:  # a 504 must not leave a result subscription behind for the API's lifetime
@@ -64,16 +80,13 @@ def _send_and_wait(name: str, kwargs: dict, timeout: float):
 
 
 def _release(result) -> None:
-    try:
+    """Best effort: drop the stored result and the result consumer's subscription."""
+    with contextlib.suppress(Exception):
         result.forget()
-    except Exception:
-        pass
     cancel = getattr(getattr(celery_app.backend, "result_consumer", None), "cancel_for", None)
     if cancel is not None:
-        try:
+        with contextlib.suppress(Exception):
             cancel(result.id)
-        except Exception:
-            pass
 
 
 def run_tool(name: str, kwargs: dict, timeout: float = WAIT_S):
@@ -91,6 +104,14 @@ def run_tool(name: str, kwargs: dict, timeout: float = WAIT_S):
     return envelope["result"]
 
 
+async def call_tool(name: str, kwargs: dict):
+    """run_tool in a thread of the tools' own budget; 503 at once when it is used up."""
+    limiter = _waits()
+    if limiter.available_tokens < 1:
+        raise HTTPException(status_code=503, detail="tools busy, try again")
+    return await anyio.to_thread.run_sync(run_tool, name, kwargs, WAIT_S, limiter=limiter)
+
+
 @router.post("/depict")
 async def depict(body: DepictIn, _owner: Owner = Depends(current_owner)):
     kwargs = {
@@ -100,26 +121,22 @@ async def depict(body: DepictIn, _owner: Owner = Depends(current_owner)):
         "height": body.height,
         "highlight": body.highlight,
     }
-    data = await run_in_threadpool(run_tool, "marcus.tools.depict", kwargs, WAIT_S)
+    data = await call_tool("marcus.tools.depict", kwargs)
     return {"format": body.format, "data": data}
 
 
 @router.post("/smiles-to-molfile")
 async def smiles_to_molfile(body: SmilesIn, _owner: Owner = Depends(current_owner)):
-    data = await run_in_threadpool(
-        run_tool, "marcus.tools.smiles_to_molfile", {"smiles": body.smiles}, WAIT_S
-    )
+    data = await call_tool("marcus.tools.smiles_to_molfile", {"smiles": body.smiles})
     return {"molfile": data}
 
 
 @router.post("/mcs")
 async def mcs(body: McsIn, _owner: Owner = Depends(current_owner)):
-    return await run_in_threadpool(
-        run_tool, "marcus.tools.mcs", {"molfiles": body.molfiles}, WAIT_S
-    )
+    return await call_tool("marcus.tools.mcs", {"molfiles": body.molfiles})
 
 
 @router.post("/compare")
 async def compare(body: CompareIn, _owner: Owner = Depends(current_owner)):
     kwargs = {"smiles_a": body.smiles_a, "smiles_b": body.smiles_b}
-    return await run_in_threadpool(run_tool, "marcus.tools.compare", kwargs, WAIT_S)
+    return await call_tool("marcus.tools.compare", kwargs)

@@ -16,7 +16,7 @@ from PIL import Image
 from marcus.core.enums import StepKind
 from marcus.core.settings import get_settings
 from marcus.core.storage import page_image_path, segment_crop_path
-from marcus.workers import gpu, segment
+from marcus.workers import gpu, runtime, segment
 from marcus.workers.runtime import HANDLERS
 from tests.workers.helpers import view
 
@@ -290,14 +290,13 @@ def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
     ((array, bbox),) = crops
     assert bbox == (2, 3, 9, 8)  # x0, y0, x1, y1
     assert array.dtype == np.uint8 and array.shape == (5, 7, 3)
-    # red and blue swapped, as v1's cv2.imwrite stores the crop (D4 crop parity)
-    assert tuple(array[0, 0]) == (30, 20, 10)
+    assert tuple(array[0, 0]) == (10, 20, 30)  # true colour (the engines get v1's swap later)
 
 
-def test_coloured_crop_file_matches_v1(monkeypatch):
-    """D4: v1 saves the library's RGB(A) crop with cv2.imwrite (BGR order), so a red atom label is
-    blue in v1's crop file (measured on jarvis: v1 pixel (0, 0, 255) where the page is red).
-    v2's stored crop must hold the same pixels; black and white stay as they are."""
+def test_coloured_crop_file_is_true_colour(monkeypatch):
+    """Owner decision (D4 fix round 2): the stored crop, which GET /segments/{id}/image serves,
+    keeps the page's true colours. v1's red/blue swap is applied only to the OCSR engine input
+    (tests/workers/test_ocsr.py)."""
     pid = uuid.uuid4()
     page = make_page(pid, 0, size=(20, 20))
     Image.new("RGB", (20, 20), (255, 255, 255)).save(page)
@@ -313,8 +312,8 @@ def test_coloured_crop_file_matches_v1(monkeypatch):
     sha = segment._write_crop(pid, array)
     with Image.open(segment_crop_path(pid, sha)) as im:
         stored = np.asarray(im.convert("RGB"))
-    assert tuple(stored[0, 0]) == (0, 0, 255)  # v1's file: red became blue
-    assert tuple(stored[1, 1]) == (255, 0, 0)
+    assert tuple(stored[0, 0]) == (255, 0, 0)  # red stays red
+    assert tuple(stored[1, 1]) == (0, 0, 255)
     assert tuple(stored[2, 2]) == (0, 0, 0) and tuple(stored[3, 3]) == (255, 255, 255)
 
 
@@ -339,13 +338,13 @@ def test_preload_hook_connected_to_worker_process_init():
 
 
 def test_preload_loads_the_segmenter(monkeypatch):
-    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     stub = StubSegmenter([])
     aborted = []
     monkeypatch.setattr(segment, "_segmenter", None)
     monkeypatch.setattr(segment, "SEGMENTERS", {"decimer": lambda: stub})
     monkeypatch.delenv("MARCUS_SEGMENTER", raising=False)
-    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     segment.preload_segmenter(sender=None)
     assert stub.loaded == 1 and segment._segmenter is stub and not aborted
     segment.get_segmenter()  # later tasks reuse it: no second load
@@ -354,14 +353,14 @@ def test_preload_loads_the_segmenter(monkeypatch):
 
 
 def test_preload_failure_stops_the_worker(monkeypatch):
-    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
 
     def broken():
         raise OSError("weights missing")
 
     monkeypatch.setattr(segment, "get_segmenter", broken)
-    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     segment.preload_segmenter(sender=None)
     assert aborted == [True]
 
@@ -371,8 +370,8 @@ def test_preload_does_nothing_outside_a_pool_process(monkeypatch):
     model nor signal the parent."""
     called = []
     monkeypatch.setattr(segment, "get_segmenter", lambda: called.append("load"))
-    monkeypatch.setattr(segment, "_abort_worker", lambda: called.append("abort"))
-    assert segment._in_pool_process() is False  # pytest runs in billiard's MainProcess
+    monkeypatch.setattr(runtime, "abort_worker", lambda: called.append("abort"))
+    assert runtime.in_pool_process() is False  # pytest runs in billiard's MainProcess
     segment.preload_segmenter(sender=None)
     assert called == []
 
@@ -384,9 +383,9 @@ def test_abort_worker_cold_stops_parent_and_exits_nonzero(monkeypatch):
         exits.append(code)
         raise SystemExit(code)
 
-    monkeypatch.setattr(segment.os, "kill", lambda pid, sig: killed.append((pid, sig)))
-    monkeypatch.setattr(segment.os, "_exit", fake_exit)
+    monkeypatch.setattr(runtime.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(runtime.os, "_exit", fake_exit)
     with pytest.raises(SystemExit):
-        segment._abort_worker()
+        runtime.abort_worker()
     assert killed == [(os.getppid(), signal.SIGQUIT)]
     assert exits == [1]

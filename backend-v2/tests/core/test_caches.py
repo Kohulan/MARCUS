@@ -126,7 +126,7 @@ def test_same_pdf_twice_same_owner_two_papers_second_from_cache(db_session):
     owner = make_owner(s)
     a = done_first_paper(s, owner)
     (row,) = cache_rows(s)
-    assert (row.pdf_sha256, row.seg_version) == (a.pdf_sha256, f"{SEG_V}|dpi300")
+    assert (row.pdf_sha256, row.seg_version) == (a.pdf_sha256, f"{SEG_V}|dpi300|rgb")
     assert row.payload["pages"] == 2 and len(row.payload["segments"]) == 4
 
     b = make_paper(s, owner)
@@ -311,7 +311,7 @@ def test_seg_cache_survives_concurrent_writer(db_session):
     """The insert is ON CONFLICT DO NOTHING: an existing row (another paper) is kept."""
     s = db_session
     paper = make_paper(s)
-    s.add(SegCache(pdf_sha256=paper.pdf_sha256, seg_version=f"{SEG_V}|dpi300", payload={"x": 1}))
+    s.add(SegCache(pdf_sha256=paper.pdf_sha256, seg_version=f"{SEG_V}|dpi300|rgb", payload={"x": 1}))
     s.flush()
     drive(s, paper)
     s.refresh(paper)
@@ -326,7 +326,7 @@ def test_malformed_cache_payload_is_a_miss(db_session):
     s.add(
         SegCache(
             pdf_sha256=paper.pdf_sha256,
-            seg_version=f"{SEG_V}|dpi300",
+            seg_version=f"{SEG_V}|dpi300|rgb",
             payload={"pages": 2, "segments": [{"page": 0, "idx": "x"}]},
         )
     )
