@@ -52,6 +52,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/papers/{paper_id}"),
     ("DELETE", "/api/v2/papers/{paper_id}"),
     ("GET", "/api/v2/papers/{paper_id}/segments"),
+    ("GET", "/api/v2/papers/{paper_id}/steps"),
     ("GET", "/api/v2/papers/{paper_id}/pages/{n}/image"),
     ("GET", "/api/v2/papers/{paper_id}/text"),
     ("GET", "/api/v2/papers/{paper_id}/export"),

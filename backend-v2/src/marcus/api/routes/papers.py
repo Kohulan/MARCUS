@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api import export
 from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found, paper_visible
 from marcus.api.limits import enforce_active_limits
-from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status
-from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList
+from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
+from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList, StepList
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
@@ -94,6 +94,16 @@ async def get_segments(
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id)
     return SegmentList(segments=await segments_out(db, paper.id))
+
+
+@router.get("/papers/{paper_id}/steps", response_model=StepList)
+async def get_steps(
+    paper_id: uuid.UUID,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> StepList:
+    paper = await get_owned_paper(db, owner, paper_id)
+    return StepList(steps=await steps_out(db, paper.id))
 
 
 @router.delete("/papers/{paper_id}", status_code=204)

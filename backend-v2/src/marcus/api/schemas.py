@@ -71,6 +71,25 @@ class SegmentList(BaseModel):
     segments: list[SegmentOut]
 
 
+class StepOut(_Orm):
+    """One pipeline step. No `error` text: only the coarse `error_class` is public."""
+
+    id: uuid.UUID
+    kind: str
+    page: int | None
+    segment_id: uuid.UUID | None
+    status: str
+    attempts: int
+    error_class: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class StepList(BaseModel):
+    steps: list[StepOut]
+
+
 class PaperDetail(PaperSummary):
     counts: Counts
     segments: list[SegmentOut]

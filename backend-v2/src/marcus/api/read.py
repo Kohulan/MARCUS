@@ -6,7 +6,7 @@ from collections import defaultdict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.schemas import CurationOut, PredictionOut, SegmentOut
+from marcus.api.schemas import CurationOut, PredictionOut, SegmentOut, StepOut
 from marcus.core.models import Curation, Prediction, Segment, Step
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
@@ -69,3 +69,13 @@ async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut
         )
         for seg in segments
     ]
+
+
+async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:
+    """The paper's steps, oldest first (created_at, seq)."""
+    rows = (
+        await db.execute(
+            select(Step).where(Step.paper_id == paper_id).order_by(Step.created_at, Step.seq, Step.id)
+        )
+    ).scalars()
+    return [StepOut.model_validate(s) for s in rows]
