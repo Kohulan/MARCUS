@@ -19,12 +19,14 @@ worker-cpu was down at 03:00 is not caught up; the next day's run purges everyth
 
 import logging
 import os
+import sys
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import beat_init
+from celery.signals import beat_init, setup_logging
 from kombu import Queue
 
+from marcus.core.logging import configure_logging
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
 from marcus.core.settings import get_settings
 
@@ -76,3 +78,20 @@ def _log_beat_schedule(sender=None, **_) -> None:
             "beat schedule: %s -> %s %s (UTC) %s",
             name, entry["task"], entry["schedule"], entry.get("options", {}),
         )
+
+
+def _log_service() -> str:
+    """Service name for log lines: MARCUS_SERVICE, else `worker-<name>` from `-n name@host`."""
+    if os.environ.get("MARCUS_SERVICE"):
+        return os.environ["MARCUS_SERVICE"]
+    argv = sys.argv
+    for i, arg in enumerate(argv[:-1]):
+        if arg == "-n":
+            return "worker-" + argv[i + 1].split("@")[0]
+    return "worker"
+
+
+@setup_logging.connect
+def _json_logs(**_) -> None:
+    """Connecting here stops Celery from installing its own log handlers (worker and beat)."""
+    configure_logging(_log_service())

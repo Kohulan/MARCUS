@@ -1,0 +1,59 @@
+# Override: Prometheus and Grafana for the v2 stack (not part of the base compose).
+#
+#   GRAFANA_ADMIN_PASSWORD=... docker compose -p marcus-v2 \
+#     -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#   (add -f docker-compose.fake.yml before this one for the fake stack)
+#
+# Prometheus scrapes metrics:9100 every 15 s and publishes nothing. Grafana is reachable on
+# 127.0.0.1:13000 only (anonymous access off, admin password from the environment); the
+# dashboard ops/grafana/marcus.json and the data source are provisioned from files.
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      metrics:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:13000:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/marcus.json:/var/lib/grafana/dashboards/marcus.json:ro
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      - prometheus
+
+volumes:
+  promdata:
+  grafanadata:

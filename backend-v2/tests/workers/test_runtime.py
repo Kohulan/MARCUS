@@ -436,3 +436,21 @@ def test_soft_timeout_inside_publish_propagates(monkeypatch):
     monkeypatch.setattr(events, "get_redis", Slow)
     with pytest.raises(SoftTimeLimitExceeded):
         events.publish_event(uuid.uuid4(), {"type": "step"})
+
+
+def test_handler_log_lines_carry_step_and_paper_id(db_session, handlers, bus):
+    """The runtime binds step_id and paper_id (contextvars) around the handler."""
+    from marcus.core import logging as mlog
+
+    paper, step = queued_check_pdf(db_session)
+    seen = {}
+
+    def handler(view, session):
+        seen.update({n: v.get() for n, v in mlog._context.items()})
+        return {"pages": 1}
+
+    register(StepKind.CHECK_PDF, handler)
+    run_step(str(step.id), 0)
+    assert seen["step_id"] == str(step.id)
+    assert seen["paper_id"] == str(paper.id)
+    assert mlog._context["step_id"].get() is None  # restored after the step

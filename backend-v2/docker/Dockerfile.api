@@ -34,5 +34,5 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MARCUS_DATA_ROOT=/data HOME=/tmp
 USER marcus
 EXPOSE 8000
-CMD ["gunicorn", "marcus.api.main:create_app()", "--worker-class", "uvicorn.workers.UvicornWorker", \
+CMD ["gunicorn", "marcus.api.main:create_app(json_logs=True)", "--worker-class", "uvicorn.workers.UvicornWorker", \
      "--bind", "0.0.0.0:8000", "--workers", "2", "--worker-tmp-dir", "/tmp"]

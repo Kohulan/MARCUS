@@ -169,7 +169,7 @@ services:
     # rewrite the socket peer first: the app must see nginx as the peer to trust its headers.
     command:
       - gunicorn
-      - marcus.api.main:create_app()
+      - marcus.api.main:create_app(json_logs=True)
       - --worker-class=uvicorn.workers.UvicornWorker
       - --workers=${GUNICORN_WORKERS:-2}
       - --bind=0.0.0.0:8000
@@ -198,6 +198,30 @@ services:
     command: ["python", "-m", "marcus.dispatcher"]
     environment:
       <<: *env
+    # The loop writes a Redis heartbeat every iteration; unhealthy when it is older than 30 s.
+    healthcheck:
+      test: ["CMD", "python", "-m", "marcus.dispatcher.health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Prometheus /metrics on 9100 for the internal network only: no published port, not behind
+  # nginx (the public API has no metrics route). It reads Postgres (one read-only transaction
+  # per scrape, cached 10 s), Redis (dispatcher heartbeat) and the data volume (read-only).
+  metrics:
+    <<: [*app, *api-image]
+    command: ["python", "-m", "marcus.api.metrics"]
+    environment:
+      <<: *env
+    volumes:
+      - data:/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:9100/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
   worker-cpu:
     <<: *app

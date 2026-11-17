@@ -4,6 +4,9 @@ LISTENs on `marcus_steps` (the steps trigger notifies on insert and status chang
 on a notify or every 1 s, fills free slots, and runs the watchdog every 10 s.
 Stops cleanly on SIGTERM / SIGINT.
 
+Every loop iteration writes the Redis heartbeat (marcus.core.heartbeat), read by /ready and the
+container healthcheck (`python -m marcus.dispatcher.health`).
+
 Exactly one dispatcher replica must run: slot accounting (free_slots, then pick) is not
 atomic across processes, so two dispatchers could overfill a queue.
 """
@@ -16,10 +19,13 @@ import time
 import uuid
 
 import psycopg
+import redis
 from sqlalchemy.engine import make_url
 
+from marcus.core import heartbeat
 from marcus.core.db import sync_session
 from marcus.core.enums import StepKind
+from marcus.core.logging import configure_logging
 from marcus.core.queues import time_limits_for
 from marcus.core.settings import get_settings
 from marcus.dispatcher.pick import Send, dispatch_once, watchdog_once
@@ -89,7 +95,7 @@ def _watchdog() -> None:
         log.exception("watchdog error")
 
 
-def _run(stop: threading.Event, send: Send) -> None:
+def _run(stop: threading.Event, send: Send, beat_client=None) -> None:
     conninfo = psycopg_conninfo(get_settings().database_url)
     last_watchdog = 0.0
     while not stop.is_set():
@@ -100,6 +106,8 @@ def _run(stop: threading.Event, send: Send) -> None:
                 while not stop.is_set():
                     _wait_and_drain(conn, WAKE_S)
                     _dispatch(send)
+                    if beat_client is not None:
+                        heartbeat.beat(beat_client)
                     if time.monotonic() - last_watchdog >= WATCHDOG_EVERY_S:
                         last_watchdog = time.monotonic()
                         _watchdog()
@@ -109,7 +117,7 @@ def _run(stop: threading.Event, send: Send) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging("dispatcher")
     stop = threading.Event()
 
     def _stop(signum, frame):
@@ -118,7 +126,10 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
-    _run(stop, celery_send())
+    beat_client = redis.Redis.from_url(
+        get_settings().redis_url, socket_connect_timeout=2, socket_timeout=2
+    )
+    _run(stop, celery_send(), beat_client)
     log.info("stopped")
 
 

@@ -46,6 +46,7 @@ from marcus.core import events
 from marcus.core.celery_app import celery_app
 from marcus.core.db import sync_session
 from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.logging import log_context
 from marcus.core.models import ImageJob, Paper, Step
 from marcus.core.pipeline import MAX_ATTEMPTS, BadResult, complete_step, fail_step
 
@@ -264,6 +265,11 @@ def execute(step_id: uuid.UUID, sent_attempts: int, worker: str) -> None:
     mine = claim(step_id, sent_attempts, worker)
     if mine is None:
         return
+    with log_context(paper_id=mine.paper_id):
+        _run_claimed(mine, step_id)
+
+
+def _run_claimed(mine: Claim, step_id: uuid.UUID) -> None:
     try:
         _publish(mine, StepStatus.RUNNING.value)
         handler = HANDLERS.get(StepKind(mine.kind))
@@ -297,7 +303,8 @@ def run_step(step_id: str, sent_attempts: int) -> None:
         log.error("run_step: malformed message %r, %r", step_id, sent_attempts)
         return
     try:
-        execute(sid, token, _worker_name())
+        with log_context(step_id=sid):
+            execute(sid, token, _worker_name())
     except Exception:
         log.exception("run_step: step %s could not be recorded; left to the watchdog", sid)
 

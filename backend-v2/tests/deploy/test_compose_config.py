@@ -112,3 +112,62 @@ def test_durability_shortcuts_only_on_the_test_database(compose):
     for path in (COMPOSE, FAKE, ROOT / "docker-compose.gpu.yml"):
         if path.exists():
             assert "fsync" not in path.read_text(), path.name
+
+
+# --- metrics, monitoring ----------------------------------------------------------------------
+
+MONITORING = ROOT / "docker-compose.monitoring.yml"
+
+
+def test_metrics_service_is_internal_and_reads_data_read_only(compose):
+    svc = compose["services"]["metrics"]
+    assert svc["command"] == ["python", "-m", "marcus.api.metrics"]
+    assert "ports" not in svc
+    assert svc["networks"] == ["internal"]
+    assert svc["volumes"] == ["data:/data:ro"]
+    assert svc["image"] == compose["services"]["api"]["image"]
+
+
+def test_nginx_never_proxies_metrics():
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    assert "metrics" not in conf and "9100" not in conf
+
+
+def test_dispatcher_healthcheck_reads_the_heartbeat(compose):
+    hc = compose["services"]["dispatcher"]["healthcheck"]
+    assert hc["test"] == ["CMD", "python", "-m", "marcus.dispatcher.health"]
+
+
+def test_gunicorn_uses_json_logs(compose):
+    assert "marcus.api.main:create_app(json_logs=True)" in compose["services"]["api"]["command"]
+
+
+def test_monitoring_is_a_separate_override_with_grafana_on_loopback():
+    mon = yaml.safe_load(MONITORING.read_text())
+    assert set(mon["services"]) == {"prometheus", "grafana"}
+    assert "ports" not in mon["services"]["prometheus"]
+    assert mon["services"]["grafana"]["ports"] == ["127.0.0.1:13000:3000"]
+    env = mon["services"]["grafana"]["environment"]
+    assert env["GF_AUTH_ANONYMOUS_ENABLED"] == "false"
+    assert "GRAFANA_ADMIN_PASSWORD" in env["GF_SECURITY_ADMIN_PASSWORD"]
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    assert not {"prometheus", "grafana"} & set(base)
+
+
+def test_prometheus_scrapes_metrics_every_15s():
+    cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
+    assert cfg["global"]["scrape_interval"] == "15s"
+    (job,) = cfg["scrape_configs"]
+    assert job["static_configs"][0]["targets"] == ["metrics:9100"]
+
+
+def test_dashboard_covers_the_required_panels():
+    dash = json.loads((ROOT / "ops" / "grafana" / "marcus.json").read_text())
+    exprs = " ".join(t["expr"] for p in dash["panels"] for t in p["targets"])
+    for needle in (
+        "marcus_queue_pending", "marcus_queue_running", "marcus_wait_seconds_bucket",
+        "marcus_step_seconds_bucket", "marcus_first_smiles_seconds_bucket",
+        "marcus_step_failures_total", "marcus_disk_free_bytes",
+        "marcus_dispatcher_heartbeat_age_seconds",
+    ):  # fmt: skip
+        assert needle in exprs, needle

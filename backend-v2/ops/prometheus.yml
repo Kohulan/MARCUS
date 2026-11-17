@@ -1,0 +1,11 @@
+# MARCUS v2 Prometheus (docker-compose.monitoring.yml). One target: the internal metrics service.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: marcus
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["metrics:9100"]

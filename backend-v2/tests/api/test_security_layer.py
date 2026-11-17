@@ -665,3 +665,24 @@ async def test_concurrent_requests_cannot_overshoot_the_limit(app, monkeypatch, 
     async with client(app) as c:
         rs = await asyncio.gather(*(c.get("/api/v2/nope") for _ in range(20)))
     assert sorted(r.status_code for r in rs) == [404] * 5 + [429] * 15
+
+
+async def test_request_id_is_on_log_lines_and_paper_id_from_the_path(app):
+    """The middleware binds request_id (and paper_id from /papers/<uuid>) for the request."""
+    from marcus.core import logging as mlog
+
+    seen = {}
+
+    @app.get("/probe-log")
+    async def probe():
+        seen.update({n: v.get() for n, v in mlog._context.items()})
+        return {}
+
+    async with client(app) as c:
+        r = await c.get("/probe-log")
+    assert seen["request_id"] == r.headers["X-Request-ID"]
+    assert seen["paper_id"] is None
+    paper = uuid.uuid4()
+    m = security._PAPER_PATH.match(f"/api/v2/papers/{paper}/segments")
+    assert m and m.group(1) == str(paper)
+    assert security._PAPER_PATH.match("/api/v2/papers/not-a-uuid/segments") is None

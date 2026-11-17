@@ -187,3 +187,45 @@ async def test_lock_waiters_are_bounded_too(monkeypatch):
         assert calls["n"] == 1  # one broadcast; the waiters reuse the cached timeout
     finally:
         release.set()
+
+
+# --- dispatcher liveness (marcus:dispatcher:heartbeat) ----------------------------------------
+
+
+def _set_heartbeat(value) -> None:
+    import redis
+
+    from marcus.core import heartbeat
+
+    client = redis.Redis.from_url(get_settings().redis_url)
+    if value is None:
+        client.delete(heartbeat.KEY)
+    else:
+        client.set(heartbeat.KEY, str(value))
+
+
+async def test_ready_reports_dispatcher_missing_without_heartbeat(app, inspect_calls):
+    _set_heartbeat(None)
+    async with make_client(app) as c:
+        r = await c.get("/api/v2/ready")
+    assert r.status_code == 503
+    assert r.json() == {"status": "unavailable", "missing": ["dispatcher"]}
+
+
+async def test_ready_reports_dispatcher_missing_when_heartbeat_is_stale(app, inspect_calls):
+    import time
+
+    _set_heartbeat(time.time() - 31)
+    async with make_client(app) as c:
+        r = await c.get("/api/v2/ready")
+    assert r.status_code == 503
+    assert r.json()["missing"] == ["dispatcher"]
+
+
+async def test_ready_accepts_a_recent_heartbeat(app, inspect_calls):
+    import time
+
+    _set_heartbeat(time.time() - 5)
+    async with make_client(app) as c:
+        r = await c.get("/api/v2/ready")
+    assert r.status_code == 200, r.text

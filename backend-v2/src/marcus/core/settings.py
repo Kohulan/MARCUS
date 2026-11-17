@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
+    log_level: str = "INFO"  # JSON logs (marcus.core.logging)
     # TensorFlow CPU thread pools in model workers, applied before the model loads
     # (marcus.workers.gpu.limit_tf_threads). Defaults = the compose defaults, so an image run
     # outside compose is capped too.

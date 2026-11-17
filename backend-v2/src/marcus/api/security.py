@@ -41,6 +41,7 @@ from marcus.api.deps import (
     owner_cookie_header,
     rate_key_for_ip,
 )
+from marcus.core.logging import log_context
 from marcus.core.models import Owner
 from marcus.core.settings import Settings, get_settings
 
@@ -55,6 +56,9 @@ SECURITY_HEADERS = {
 }
 REQUEST_ID_HEADER = "X-Request-ID"
 _REQUEST_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
+_PAPER_PATH = re.compile(
+    r"/api/v2/papers/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:/|$)"
+)
 
 WINDOW_S = 60
 EXEMPT = ("GET", "/api/v2/health")
@@ -129,17 +133,20 @@ class SecurityMiddleware:
                 _add_owner_cookie(scope, headers)
             await send(message)
 
-        try:
-            await self.app(scope, receive, send_with_headers)
-        except Exception:
-            # %r: the path is client-chosen and may hold newlines (log forging)
-            log.exception("unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"])
-            if started:
-                raise  # the response is already on the wire; let the server drop the connection
-            response = JSONResponse(
-                {"detail": "internal error", "request_id": rid}, status_code=500
-            )
-            await response(scope, receive, send_with_headers)
+        paper = _PAPER_PATH.match(scope.get("path", ""))
+        # request_id / paper_id go on every log line of this request (contextvars)
+        with log_context(request_id=rid, paper_id=paper.group(1) if paper else None):
+            try:
+                await self.app(scope, receive, send_with_headers)
+            except Exception:
+                # %r: the path is client-chosen and may hold newlines (log forging)
+                log.exception("unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"])
+                if started:
+                    raise  # the response is already on the wire; the server drops the connection
+                response = JSONResponse(
+                    {"detail": "internal error", "request_id": rid}, status_code=500
+                )
+                await response(scope, receive, send_with_headers)
 
 
 def _add_owner_cookie(scope: Scope, headers: MutableHeaders) -> None:

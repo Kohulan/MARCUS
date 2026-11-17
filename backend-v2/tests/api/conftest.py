@@ -145,3 +145,19 @@ def _limiter_redis(monkeypatch):
     monkeypatch.setattr(
         security, "limiter_redis", lambda: fakeredis.aioredis.FakeRedis(), raising=False
     )
+
+
+@pytest.fixture(autouse=True)
+def _dispatcher_alive():
+    """/ready needs a fresh dispatcher heartbeat in Redis; tests of it set their own value."""
+    import time
+
+    import redis
+
+    from marcus.core import heartbeat
+    from marcus.core.settings import get_settings
+
+    client = redis.Redis.from_url(get_settings().redis_url)
+    client.set(heartbeat.KEY, str(time.time()), ex=heartbeat.TTL_S)
+    yield
+    client.delete(heartbeat.KEY)

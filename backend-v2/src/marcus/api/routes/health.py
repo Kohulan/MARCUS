@@ -2,7 +2,8 @@
 
 `GET /api/v2/ready` answers 200 only if the database and Redis answer and every queue in
 `expected_queues` (env MARCUS_EXPECTED_QUEUES: the queues this deployment runs) has at least
-one live Celery consumer; otherwise 503 with the missing parts, e.g.
+one live Celery consumer, and the dispatcher's Redis heartbeat (marcus.core.heartbeat) is at
+most 30 s old; otherwise 503 with the missing parts, e.g.
 `{"status": "unavailable", "missing": ["redis", "queue:q.fake"]}`.
 
 The consumer check is a broker broadcast (`inspect(timeout=1).active_queues()`), so its result
@@ -28,6 +29,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.core import heartbeat
 from marcus.core.db import get_db
 from marcus.core.settings import get_settings
 
@@ -116,7 +118,8 @@ async def _database_ok(db: AsyncSession) -> bool:
         return False
 
 
-async def _redis_ok() -> bool:
+async def _redis_checks() -> tuple[bool, bool]:
+    """(redis answers, dispatcher heartbeat is fresh), one connection, each bounded."""
     client = aioredis.Redis.from_url(
         get_settings().redis_url,
         socket_connect_timeout=CHECK_TIMEOUT_S,
@@ -124,10 +127,13 @@ async def _redis_ok() -> bool:
     )
     try:
         with anyio.fail_after(CHECK_TIMEOUT_S):
-            return bool(await client.ping())
+            redis_ok = bool(await client.ping())
+        with anyio.fail_after(CHECK_TIMEOUT_S):
+            beat = heartbeat.parse_age(await client.get(heartbeat.KEY))
+        return redis_ok, heartbeat.is_alive(beat)
     except Exception as exc:  # noqa: BLE001
         log.warning("ready: redis check failed: %s", type(exc).__name__)
-        return False
+        return False, False
     finally:
         await client.aclose()
 
@@ -137,9 +143,11 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str] | JSONResp
     missing: list[str] = []
     if not await _database_ok(db):
         missing.append("database")
-    redis_ok = await _redis_ok()
+    redis_ok, dispatcher_ok = await _redis_checks()
     if not redis_ok:
         missing.append("redis")
+    elif not dispatcher_ok:  # the dispatcher's liveness lives in Redis: unknown without it
+        missing.append("dispatcher")
     expected = get_settings().expected_queues
     if expected:
         # the broker is Redis: without it no worker can answer (and inspect could hang)
