@@ -105,6 +105,19 @@ switch that did not take fails the unit. It is not installed by anything here. O
   when not root). (Fixed in D4 fix round 1: worker-segment now keeps its TensorFlow budget,
   measured at 2048 MiB; MolScribe runs on cuda.)
 
+### Decisions from the D4 GPU session (owner, 2026-11-17)
+
+- **One GPU slot each** for segmentation (q.segment) and DECIMER OCSR (q.decimer). The Throughput gate (two papers
+  at once faster than one after the other) stays FAIL as a known limit: 0.99× at 1 slot; 2 slots measured 1.02×,
+  about the size of the 1-slot run-to-run spread (judges/results/2026-11-17-gpu-session.md).
+- **Crops are stored in true colour** (what `GET /segments/{id}/image` serves). v1 saved crops with red and blue
+  swapped (`cv2.imwrite` of an RGB array) and its engines read them that way, so for v1-identical accuracy the OCSR
+  handler gives every engine that swapped image (`marcus.workers.ocsr.handler.v1_engine_input`; segment crops only,
+  never image jobs). A crop downloaded and resubmitted as an image job is NOT swapped, so on a coloured structure
+  it can get a different SMILES than the segment did.
+- The segment worker replaces its process every 200 pages (`--max-tasks-per-child 200`): the segmentation library
+  leaks about 3 MiB of GPU memory per page.
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,

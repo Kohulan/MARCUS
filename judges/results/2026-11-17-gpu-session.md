@@ -87,13 +87,29 @@ still idle a third of the time. Files:
 | F2: segment worker with its TF budget | fixed (f0e4e8e): the library's import-time `set_memory_growth` is skipped when a budget is set, as worker-decimer does; unit tests incl. a fail-first one. On jarvis: `TensorFlow limited to 2048 MiB`, `skipping decimer_segmentation's set_memory_growth`, segmenter loaded | `round1/v2_r1_gpu_checks.log` |
 | Segment budget | TF allocator peak **896-982 MiB** over 44 pages at 300 dpi (synth_015, synth_190, both gold papers), identical segments and speed with a 6144, 2048 and even 1024 MiB cap. Set to **2048 MiB** (db9ab15) | `round1/seg_peak_*.log` |
 | GPU memory leak (found in round 1) | the library leaks about **3.1 MiB of GPU memory per page** (allocator in use 281 → 583 → 899 → 1214 → 1527 MiB at pages 1/100/200/300/400). With 2048 MiB a process ran out after 390 pages in the stack (first run of round 1, 16:42Z: every later page failed `ResourceExhausted`) and after 394 pages in a stand-alone probe. Fix (188eecd): `--max-tasks-per-child 200` (compose and image CMD, pinned by a compose-config test that failed before the fix). **Long run after the fix: 541 segment_page steps (425 in the 1-slot phase), 0 failed, all first attempt, 0 OOM lines** | `round1/seg_leak_2048_final.log`, `round1/v2_r1b_failed_steps.txt` (only the 5 adversarial failures), `round1/run_logs_excerpt.txt` |
-| F5: 4 of 190 crops differed from v1 | **root cause**: v1 writes the library's RGB crop with `cv2.imwrite`, which takes the array as BGR, so red and blue are swapped in every v1 crop file (shown to users, read by the OCSR engines). The 4 differing crops were exactly the coloured ones (158, 158, 314, 158 pixels with R != B). Fixed (f0e4e8e): crops are stored in v1's channel order; unit tests + the ML test (5 passed in the tf test image). Now **190 of 190 crops pixel-identical to v1**, and MolNexTR synth_190 is 154 = v1 | `jarvis_v2_CROPPARITY_20261117T185245.json`, `round1/ml_segment_test.log` |
+| F5: 4 of 190 crops differed from v1 | **root cause**: v1 writes the library's RGB crop with `cv2.imwrite`, which takes the array as BGR, so red and blue are swapped in every v1 crop file (shown to users, read by the OCSR engines). The 4 differing crops were exactly the coloured ones (158, 158, 314, 158 pixels with R != B). Fixed in round 1 (f0e4e8e) by storing crops in v1's channel order: **190 of 190 crops pixel-identical to v1**, and MolNexTR synth_190 154 = v1. **Round 2 (owner decision, see below):** the stored crop is true colour again (what users see) and the OCSR handler gives every engine v1's swapped pixels in memory; that engine input is pixel-identical to v1's file by construction (CPU test against a real `cv2.imwrite` of the library's array) | `jarvis_v2_CROPPARITY_20261117T185245.json`, `round1/ml_segment_test.log` |
 | MolScribe on the GPU | compose default for the GPU stack is now cuda (db9ab15); morning: same SMILES on 205 of 205 crops as cpu; round 1: 12/15 and 169/190 on cuda | `jarvis_v2_ACC_20261117T183735_v2gpu-r1b.json` |
 | I2: guard on every jarvis judge | robustness and gold set now run inside the jarvis guard (`--target jarvis --prod-stopped`), port 8080/9000 refused on loopback (f40a0d0) | result files carry `guard` |
 
 The first run of round 1 (15:46-16:45Z, segment budget 2048 without recycling) is kept as evidence of the leak:
 its S1-S5 and fixture accuracy finished before the leak hit and agree with the final run; its gold set failed from
 page ~390 on (`jarvis_v2_*_d4r1.json`, `round1/v2_r1a_gpu_checks.log`).
+
+## Fix round 2 (owner decisions, no GPU run)
+
+- **Crop colour (N1).** OWNER DECISION: crops are stored in TRUE colour for people (`GET /segments/{id}/image`
+  serves the page's colours), and the OCSR engines get v1's red/blue-swapped pixels in memory, so accuracy stays
+  exactly v1's. One helper (`marcus.workers.ocsr.handler.v1_engine_input`) builds the engine input for segment crops
+  only, never for image jobs; the OCSR cache is keyed on the engine-input bytes, so a crop and an image job with the
+  same stored bytes never share a row; `seg_cache_key` carries a crop-format token (`|rgb`), so no cached
+  segmentation from the old format is reused. No GPU run was needed: the round-1 GPU run showed v2's segmentation
+  output equals v1's for 190 of 190 crops (then stored swapped and compared with v1's files); round 2 changes only
+  where the swap happens, and a CPU test pins the engine input to a real `cv2.imwrite` (OpenCV 4.11.0, v1's version)
+  of the library's RGBA array. `round1/crop_parity.py` now compares v1's files with the engine input.
+- **GPU slots.** OWNER DECISION: v2 ships **1 slot each** for segmentation and DECIMER OCSR. **Throughput stays FAIL
+  as a known limit**: 2 slots measured 1.02×, about the size of the run-to-run spread of the 1-slot runs (0.99× in
+  the morning and in round 1's final run, 1.01× in round 1's first run); the 2-slot override stays a test file only.
+- **Recycling evidence** (M4): `2026-11-17-gpu-session/round1/recycling_evidence.txt`.
 
 ## Checks on the GPU
 
@@ -107,9 +123,8 @@ page ~390 on (`jarvis_v2_*_d4r1.json`, `round1/v2_r1a_gpu_checks.log`).
 
 ## Findings still open
 
-- **F4 Throughput FAIL at the shipping configuration** (0.99×). Two slots for q.segment and q.decimer reach 1.02×
-  and 19 % shorter walls, at 15.5 GB peak on the card; whether to ship 2 slots (and whether 1.02× satisfies the spec's
-  "faster") is a decision for the owner/controller.
+- **F4 Throughput FAIL, a known limit by owner decision** (1 slot ships; 0.99×). Two slots reached 1.02× and 19 %
+  shorter walls at 15.5 GB peak on the card, within the 1-slot run-to-run spread; not shipped.
 - **F3** dcgm-exporter exports no GPU metrics (non-root DCGM).
 - **F6** the Exclusive_Process setter must be changed on switch day; **F7** the outer proxy (141.35.136.10) was not
   read (no access; open item in `backend-v2/README.md`).
