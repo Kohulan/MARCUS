@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MARCUS — Survey Sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:"Gmarket Mark";src:url("/_blob/d5453d6d98ca95204df44e42b70dcb38") format("woff2");font-weight:300}
+body{margin:0;background:#F4F3EA}
+a{color:#1E4D33}a:hover{color:#123222}
+.ticks{background-image:repeating-linear-gradient(90deg,#9FA398 0 1px,transparent 1px 8px);height:7px}
+.vticks{background-image:repeating-linear-gradient(180deg,#9FA398 0 1px,transparent 1px 8px);width:7px}
+.m line{stroke:#1C211D;stroke-width:5;stroke-linecap:round}
+.m text{font:600 34px Geist,sans-serif;fill:#1C211D;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#FFFFFF;stroke-width:14px}
+.mono{font-family:"Geist Mono",monospace}
+.strike{background:linear-gradient(to top right,transparent calc(50% - 1px),#1C211D calc(50% - 1px),#1C211D calc(50% + 1px),transparent calc(50% + 1px))}
+.hatch{background:repeating-linear-gradient(135deg,#E6E5DC 0 6px,#F4F3EA 6px 12px)}
+.lg{border-radius:999px!important;border:0!important;position:relative;cursor:pointer;backdrop-filter:url(#lgf) blur(3px) saturate(1.8);-webkit-backdrop-filter:blur(3px) saturate(1.8);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.9),inset 0 -2px 3px rgba(255,255,255,.3),inset 0 0 0 1px rgba(255,255,255,.45),inset 0 -12px 18px -12px rgba(0,0,0,.22),0 10px 24px -8px rgba(15,30,22,.35)!important;transition:transform .16s ease}
+.lg:hover{transform:scale(1.03)}
+.lg-clear{background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,.25))!important;color:#1C211D!important}
+.lg-orange{background:linear-gradient(180deg,rgba(255,118,72,.95),rgba(250,54,0,.9))!important;color:#141414!important}
+.lg-green{background:linear-gradient(180deg,rgba(46,110,74,.95),rgba(30,77,51,.92))!important;color:#FFFFFF!important}
+.glassbed{background-image:linear-gradient(#D9DACF 1px,transparent 1px),linear-gradient(90deg,#D9DACF 1px,transparent 1px);background-size:16px 16px}
+@media (prefers-reduced-transparency: reduce){.lg{backdrop-filter:none;-webkit-backdrop-filter:none}}
+</style>
+</helmet>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="lgf" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.03" numOctaves="2" seed="7" result="n"/><feGaussianBlur in="n" stdDeviation="2" result="nb"/><feDisplacementMap in="SourceGraphic" in2="nb" scale="18" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<div style="width:100%;max-width:1440px;margin:0 auto;box-sizing:border-box;padding:8px;font-family:Geist,system-ui,sans-serif;color:#1C211D;background:#F4F3EA">
+<div style="border:1px solid #B9BCB2">
+
+<header style="display:flex;flex-wrap:wrap;align-items:stretch;border-bottom:1px solid #B9BCB2">
+<a href="#" style="display:flex;align-items:center;gap:12px;padding:14px 24px;text-decoration:none;color:#1E4D33;flex:1 1 280px">
+<img src="/_blob/8bfdc20d6f465779e7c62ab36a9db414" alt="" style="width:36px;height:36px">
+<span style="font-family:'Gmarket Mark',Geist,sans-serif;font-weight:300;font-size:28px;letter-spacing:0.06em">MARCUS</span>
+</a>
+<nav aria-label="Main" style="display:flex;flex-wrap:wrap" class="mono">
+<a href="#" style="display:block;width:150px;padding:12px 14px 26px;border-left:1px solid #B9BCB2;font-size:12px;letter-spacing:0.06em;color:#1C211D;text-decoration:none">HOW IT WORKS</a>
+<a href="#" style="display:block;width:150px;padding:12px 14px 26px;border-left:1px solid #B9BCB2;font-size:12px;letter-spacing:0.06em;color:#1C211D;text-decoration:none">CITE</a>
+<a href="#" style="display:block;width:150px;padding:12px 14px 26px;border-left:1px solid #B9BCB2;font-size:12px;letter-spacing:0.06em;color:#1C211D;text-decoration:none">GITHUB</a>
+<a href="#" style="display:block;width:170px;padding:12px 14px 26px;border-left:1px solid #B9BCB2;font-size:12px;letter-spacing:0.06em;color:#FFFFFF;background:#1E4D33;text-decoration:none">OPEN THE TOOL →</a>
+</nav>
+</header>
+
+<section aria-label="A paper page, read by MARCUS" style="position:relative;padding:28px 24px 0">
+<div style="display:flex;justify-content:space-between;align-items:center" class="mono"><span aria-hidden="true">+</span><span style="font-size:11px;color:#5E625B;letter-spacing:0.08em">SHEET 01 · SAMPLE PAPER · PAGE 2 OF 8 · 300 DPI</span><span aria-hidden="true">+</span></div>
+<div class="ticks" style="margin:6px 0 0"></div>
+<div style="display:flex;gap:0;min-height:600px">
+<div class="vticks" style="flex:0 0 7px"></div>
+<div style="flex:1 1 auto;display:flex;justify-content:center;align-items:center;padding:40px 24px;position:relative">
+
+<div style="position:relative;width:560px;max-width:100%;height:540px;background:#FFFFFF;border:1px solid #D9DACF;box-shadow:0 1px 0 #D9DACF;padding:36px 40px;box-sizing:border-box">
+<div style="height:9px;width:62%;background:#D9DACF;margin-bottom:10px"></div>
+<div style="height:9px;width:44%;background:#D9DACF;margin-bottom:26px"></div>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<div style="position:relative;flex:0 0 210px;height:200px;display:flex;align-items:center;justify-content:center;outline:2px solid #FA3600;outline-offset:6px">
+<svg class="m" viewBox="-150 -160 320 330" width="190" height="190" aria-hidden="true"><line x1="0" y1="-60" x2="52" y2="-30"/><line x1="52" y1="-30" x2="52" y2="30"/><line x1="52" y1="30" x2="0" y2="60"/><line x1="0" y1="60" x2="-52" y2="30"/><line x1="-52" y1="30" x2="-52" y2="-30"/><line x1="-52" y1="-30" x2="0" y2="-60"/><line x1="52" y1="-30" x2="109" y2="-48.5"/><line x1="109" y1="-48.5" x2="144.3" y2="0"/><line x1="144.3" y1="0" x2="109" y2="48.5"/><line x1="109" y1="48.5" x2="52" y2="30"/><line x1="60" y1="-20" x2="60" y2="20"/><line x1="132.5" y1="2.6" x2="107.8" y2="36.5"/><line x1="-4" y1="-60" x2="-4" y2="-118"/><line x1="4" y1="-60" x2="4" y2="-118"/><line x1="-50" y1="33.5" x2="-100" y2="62.5"/><line x1="-54" y1="26.5" x2="-104" y2="55.5"/><line x1="-52" y1="-30" x2="-104" y2="-60"/><line x1="0" y1="60" x2="0" y2="120"/><line x1="109" y1="-48.5" x2="127.6" y2="-105.6"/><text x="-52" y="-30">N</text><text x="0" y="60">N</text><text x="109" y="-48.5">N</text><text x="109" y="48.5">N</text><text x="0" y="-128">O</text><text x="-112" y="66">O</text></svg>
+<span style="position:absolute;top:-14px;left:-14px;width:12px;height:12px;background:#FA3600"></span>
+<span class="mono" style="position:absolute;top:-34px;left:-8px;font-size:11px;letter-spacing:0.06em;background:#1C211D;color:#F4F3EA;padding:3px 6px">[01] STRUCTURE</span>
+</div>
+<div style="flex:1 1 auto">
+<div style="height:8px;background:#E6E5DC;margin:6px 0 10px"></div><div style="height:8px;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;width:80%;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;width:66%;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;width:72%;background:#E6E5DC"></div>
+</div>
+</div>
+<div style="height:8px;background:#E6E5DC;margin:34px 0 10px"></div><div style="height:8px;width:90%;background:#E6E5DC;margin-bottom:10px"></div><div style="height:8px;width:58%;background:#E6E5DC;margin-bottom:22px"></div>
+<div style="display:flex;justify-content:flex-end">
+<div style="position:relative;width:230px;height:118px;display:flex;align-items:center;justify-content:center;outline:2px dashed #FA3600;outline-offset:6px">
+<svg class="m" viewBox="-70 -80 310 170" width="210" height="112" aria-hidden="true"><line x1="0" y1="-60" x2="52" y2="-30"/><line x1="52" y1="-30" x2="52" y2="30"/><line x1="52" y1="30" x2="0" y2="60"/><line x1="0" y1="60" x2="-52" y2="30"/><line x1="-52" y1="30" x2="-52" y2="-30"/><line x1="-52" y1="-30" x2="0" y2="-60"/><line x1="52" y1="-30" x2="104" y2="-60"/><line x1="104" y1="-60" x2="156" y2="-30"/><line x1="156" y1="-30" x2="156" y2="30"/><line x1="156" y1="30" x2="104" y2="60"/><line x1="104" y1="60" x2="52" y2="30"/><line x1="-3.8" y1="-48.6" x2="-40.2" y2="-27.6"/><line x1="-3.8" y1="48.6" x2="-40.2" y2="27.6"/><line x1="44" y1="-21" x2="44" y2="21"/><line x1="144.2" y1="-27.6" x2="107.8" y2="-48.6"/><line x1="154" y1="33.5" x2="206" y2="63.5"/><line x1="158" y1="26.5" x2="210" y2="56.5"/><text x="104" y="60">O</text><text x="218" y="66">O</text></svg>
+<span style="position:absolute;bottom:-14px;right:-14px;width:12px;height:12px;background:#FA3600"></span>
+<span class="mono" style="position:absolute;bottom:-34px;right:-8px;font-size:11px;letter-spacing:0.06em;background:#FA3600;color:#141414;padding:3px 6px">[02] READING…</span>
+</div>
+</div>
+</div>
+
+<div class="mono" style="position:absolute;left:40px;bottom:36px;font-size:11px;line-height:1.7;color:#5E625B;letter-spacing:0.05em">
+<div>BBOX [01]&#160;&#160;X0 412 · Y0 880 · X1 960 · Y1 1240 PX</div>
+<div>BBOX [02]&#160;&#160;X0 1410 · Y0 2010 · X1 2190 · Y1 2400 PX</div>
+</div>
+<div class="mono" style="position:absolute;right:40px;top:44px;width:250px;font-size:11px;line-height:1.9;letter-spacing:0.05em;color:#1C211D">
+<div><span style="color:#2D7A46">■</span> 001 CHECK PDF</div>
+<div><span style="color:#2D7A46">■</span> 002 RENDER 8 PAGES</div>
+<div><span style="color:#2D7A46">■</span> 003 FIND STRUCTURES · 15</div>
+<div><span style="color:#FA3600">■</span> 004 READ WITH DECIMER · 9 / 15</div>
+<div style="color:#5E625B">□ 005 LOOK UP DOI</div>
+</div>
+</div>
+<div class="vticks" style="flex:0 0 7px"></div>
+</div>
+<div class="ticks"></div>
+<div style="display:flex;justify-content:space-between" class="mono"><span aria-hidden="true">+</span><span aria-hidden="true">+</span></div>
+</section>
+
+<section style="display:flex;flex-wrap:wrap;border-top:1px solid #B9BCB2;margin-top:12px">
+<div style="flex:999 1 560px;padding:28px 24px 34px;min-width:0">
+<h1 style="margin:0;font-weight:800;font-size:76px;line-height:0.92;letter-spacing:-0.035em;text-transform:uppercase;color:#1E4D33">Every molecule<br>has a source.</h1>
+</div>
+<div style="flex:1 1 340px;border-left:1px solid #B9BCB2;padding:22px 18px;font-size:16px;line-height:1.5">
+Upload a PDF. MARCUS finds every chemical structure, reads it with DECIMER, MolNexTR or MolScribe, keeps its page and text beside it, and helps you check it before it goes into COCONUT.
+<div class="mono" style="margin-top:14px;font-size:11px;color:#5E625B;letter-spacing:0.05em">OPEN SOURCE (MIT) · NO LOGIN · FILES DELETED AFTER 30 DAYS</div>
+</div>
+<div class="glassbed" style="flex:0 0 260px;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:18px;border-left:1px solid #B9BCB2">
+<a href="#" class="mono lg lg-orange" style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px;text-decoration:none;font-size:13px;font-weight:500;letter-spacing:0.06em">UPLOAD A PDF<span>→</span></a>
+<a href="#" class="mono lg lg-clear" style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px;text-decoration:none;font-size:13px;letter-spacing:0.06em">TRY A SAMPLE PAPER<span>→</span></a>
+</div>
+</section>
+
+<section aria-label="What MARCUS does" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #B9BCB2">
+<div style="padding:22px 24px 30px">
+<div class="mono" style="font-size:11px;color:#5E625B;letter-spacing:0.08em">FIND</div>
+<div class="mono" style="font-size:12px;color:#B82800;margin-top:22px">[01]</div>
+<h2 style="margin:6px 0 10px;font-size:30px;line-height:1;font-weight:700;letter-spacing:-0.02em;text-transform:uppercase">Every structure<br>on every page</h2>
+<p style="margin:0;font-size:14px;line-height:1.5;color:#3F443D">DECIMER Segmentation marks each drawing, with its page and position kept.</p>
+</div>
+<div style="padding:22px 24px 30px;border-left:1px solid #B9BCB2">
+<div class="mono" style="font-size:11px;color:#5E625B;letter-spacing:0.08em">READ</div>
+<div class="mono" style="font-size:12px;color:#B82800;margin-top:22px">[02]</div>
+<h2 style="margin:6px 0 10px;font-size:30px;line-height:1;font-weight:700;letter-spacing:-0.02em;text-transform:uppercase">Three engines,<br>side by side</h2>
+<p style="margin:0;font-size:14px;line-height:1.5;color:#3F443D">DECIMER by default. Compare with MolNexTR and MolScribe where they disagree.</p>
+</div>
+<div style="padding:22px 24px 30px;border-left:1px solid #B9BCB2">
+<div class="mono" style="font-size:11px;color:#5E625B;letter-spacing:0.08em">CURATE</div>
+<div class="mono" style="font-size:12px;color:#B82800;margin-top:22px">[03]</div>
+<h2 style="margin:6px 0 10px;font-size:30px;line-height:1;font-weight:700;letter-spacing:-0.02em;text-transform:uppercase">Checked,<br>then into COCONUT</h2>
+<p style="margin:0;font-size:14px;line-height:1.5;color:#3F443D">Accept or reject with one key. Send what you accepted, with organism and DOI.</p>
+</div>
+</section>
+
+<section aria-label="In the tool: review" style="border-top:1px solid #B9BCB2;background:#ECEBE1">
+<div style="display:flex;flex-wrap:wrap;align-items:stretch;border-bottom:1px solid #B9BCB2;background:#F4F3EA">
+<div style="flex:1 1 420px;padding:16px 24px">
+<div class="mono" style="font-size:11px;color:#5E625B;letter-spacing:0.08em">IN THE TOOL · REVIEW</div>
+<div style="font-size:22px;font-weight:700;margin-top:4px">Alkaloids from Coffea leaves</div>
+</div>
+<div class="mono" style="display:flex;align-items:center;gap:18px;padding:0 20px;font-size:12px;letter-spacing:0.04em;border-left:1px solid #B9BCB2">
+<span><span style="color:#2D7A46">●</span> 9 ACCEPTED</span><span><span style="color:#FA3600">●</span> 4 TO CHECK</span><span>✕ 2 REJECTED</span>
+</div>
+<div class="glassbed" style="display:flex;align-items:center;padding:10px 14px;border-left:1px solid #B9BCB2"><a href="#" class="mono lg lg-green" style="display:flex;align-items:center;padding:12px 20px;text-decoration:none;font-size:12px;letter-spacing:0.06em">SEND 9 TO COCONUT →</a></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:#B9BCB2;border-bottom:1px solid #B9BCB2">
+
+<div style="background:#FFFFFF;padding:14px;position:relative">
+<div class="mono" style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:0.05em"><span>[03] · PAGE 2</span><span style="color:#2D7A46">ACCEPTED</span></div>
+<div style="height:150px;display:flex;align-items:center;justify-content:center"><svg class="m" viewBox="-150 -160 320 330" width="140" height="140" aria-hidden="true"><line x1="0" y1="-60" x2="52" y2="-30"/><line x1="52" y1="-30" x2="52" y2="30"/><line x1="52" y1="30" x2="0" y2="60"/><line x1="0" y1="60" x2="-52" y2="30"/><line x1="-52" y1="30" x2="-52" y2="-30"/><line x1="-52" y1="-30" x2="0" y2="-60"/><line x1="52" y1="-30" x2="109" y2="-48.5"/><line x1="109" y1="-48.5" x2="144.3" y2="0"/><line x1="144.3" y1="0" x2="109" y2="48.5"/><line x1="109" y1="48.5" x2="52" y2="30"/><line x1="60" y1="-20" x2="60" y2="20"/><line x1="132.5" y1="2.6" x2="107.8" y2="36.5"/><line x1="-4" y1="-60" x2="-4" y2="-118"/><line x1="4" y1="-60" x2="4" y2="-118"/><line x1="-50" y1="33.5" x2="-100" y2="62.5"/><line x1="-54" y1="26.5" x2="-104" y2="55.5"/><line x1="-52" y1="-30" x2="-104" y2="-60"/><line x1="0" y1="60" x2="0" y2="120"/><line x1="109" y1="-48.5" x2="127.6" y2="-105.6"/><text x="-52" y="-30">N</text><text x="0" y="60">N</text><text x="109" y="-48.5">N</text><text x="109" y="48.5">N</text><text x="0" y="-128">O</text><text x="-112" y="66">O</text></svg></div>
+<div class="mono" style="font-size:12px;border-top:1px solid #D9DACF;padding-top:8px;overflow-wrap:anywhere">Cn1cnc2c1c(=O)n(C)c(=O)n2C</div>
+<div style="position:absolute;right:14px;bottom:44px;width:66px;height:66px;border:2px solid #2D7A46;border-radius:50%;display:flex;align-items:center;justify-content:center;transform:rotate(-12deg);color:#2D7A46;font:600 10px 'Geist Mono',monospace;letter-spacing:0.06em">ACCEPTED</div>
+</div>
+
+<div style="background:#FFFFFF;padding:14px;outline:2px solid #FA3600;outline-offset:-2px">
+<div class="mono" style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:0.05em"><span>[04] · PAGE 2</span><span style="background:#FA3600;color:#141414;padding:1px 6px">TO CHECK</span></div>
+<div style="height:150px;display:flex;align-items:center;justify-content:center"><svg class="m" viewBox="-70 -80 310 170" width="200" height="110" aria-hidden="true"><line x1="0" y1="-60" x2="52" y2="-30"/><line x1="52" y1="-30" x2="52" y2="30"/><line x1="52" y1="30" x2="0" y2="60"/><line x1="0" y1="60" x2="-52" y2="30"/><line x1="-52" y1="30" x2="-52" y2="-30"/><line x1="-52" y1="-30" x2="0" y2="-60"/><line x1="52" y1="-30" x2="104" y2="-60"/><line x1="104" y1="-60" x2="156" y2="-30"/><line x1="156" y1="-30" x2="156" y2="30"/><line x1="156" y1="30" x2="104" y2="60"/><line x1="104" y1="60" x2="52" y2="30"/><line x1="-3.8" y1="-48.6" x2="-40.2" y2="-27.6"/><line x1="-3.8" y1="48.6" x2="-40.2" y2="27.6"/><line x1="44" y1="-21" x2="44" y2="21"/><line x1="144.2" y1="-27.6" x2="107.8" y2="-48.6"/><line x1="154" y1="33.5" x2="206" y2="63.5"/><line x1="158" y1="26.5" x2="210" y2="56.5"/><text x="104" y="60">O</text><text x="218" y="66">O</text></svg></div>
+<div class="mono" style="font-size:12px;border-top:1px solid #D9DACF;padding-top:8px">O=c1ccc2ccccc2o1</div>
+<div style="font-size:12px;color:#B82800;margin-top:4px">DECIMER and MolNexTR differ</div>
+<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+<button type="button" class="mono lg lg-green" style="font:500 12px 'Geist Mono',monospace;padding:8px 14px;background:#1E4D33;color:#FFFFFF;border:0;cursor:pointer">ACCEPT A</button>
+<button type="button" class="mono lg lg-clear" style="font:500 12px 'Geist Mono',monospace;padding:8px 14px;background:#FFFFFF;color:#1C211D;border:1px solid #1C211D;cursor:pointer">REJECT R</button>
+<button type="button" class="mono lg lg-clear" style="font:500 12px 'Geist Mono',monospace;padding:8px 14px;background:#FFFFFF;color:#1C211D;border:1px solid #9FA398;cursor:pointer">COMPARE C</button>
+</div>
+</div>
+
+<div style="background:#FFFFFF;padding:14px">
+<div class="mono" style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:0.05em"><span>[07] · PAGE 4</span><span>✕ REJECTED</span></div>
+<div class="strike" style="height:150px;display:flex;align-items:center;justify-content:center;opacity:0.55"><svg class="m" viewBox="-70 -80 310 170" width="200" height="110" aria-hidden="true"><line x1="0" y1="-60" x2="52" y2="-30"/><line x1="52" y1="-30" x2="52" y2="30"/><line x1="52" y1="30" x2="0" y2="60"/><line x1="0" y1="60" x2="-52" y2="30"/><line x1="-52" y1="30" x2="-52" y2="-30"/><line x1="-52" y1="-30" x2="0" y2="-60"/><line x1="52" y1="-30" x2="104" y2="-60"/><line x1="104" y1="-60" x2="156" y2="-30"/><line x1="156" y1="-30" x2="156" y2="30"/><line x1="156" y1="30" x2="104" y2="60"/><line x1="104" y1="60" x2="52" y2="30"/><text x="104" y="60">O</text></svg></div>
+<div class="mono" style="font-size:12px;border-top:1px solid #D9DACF;padding-top:8px;color:#5E625B;text-decoration:line-through">C1=Cc2ccccc2OC1</div>
+<div style="font-size:12px;color:#5E625B;margin-top:4px">Note: a figure label, not a compound</div>
+</div>
+
+<div class="hatch" style="padding:14px;display:flex;flex-direction:column">
+<div class="mono" style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:0.05em"><span>PAGE 5</span><span style="background:#1C211D;color:#F4F3EA;padding:1px 6px">FAILED</span></div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:10px 0">
+<div style="font-size:18px;font-weight:700">Page 5 could not be read</div>
+<div style="font-size:14px;color:#3F443D">It took too long.</div>
+</div>
+<button type="button" class="mono lg lg-clear" style="align-self:flex-start;font:500 12px 'Geist Mono',monospace;padding:8px 14px;background:#FFFFFF;color:#1C211D;border:1px solid #1C211D;cursor:pointer">RETRY THIS PAGE →</button>
+</div>
+
+</div>
+<div class="mono" style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:12px 24px;font-size:11px;letter-spacing:0.06em;color:#3F443D">
+<span>KEYS · A ACCEPT · R REJECT · E EDIT · C COMPARE · ← → MOVE · ? HELP</span><span>EXPORT JSON · CSV · SDF</span>
+</div>
+</section>
+
+<footer class="mono" style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-top:1px solid #B9BCB2;padding:16px 24px;font-size:11px;letter-spacing:0.06em;color:#5E625B">
+<span>MARCUS · FRIEDRICH SCHILLER UNIVERSITY JENA · NFDI4CHEM</span><span>DIGITAL DISCOVERY 2025 · DOI 10.1039/D5DD00313J</span>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2280}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
