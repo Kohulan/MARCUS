@@ -36,9 +36,9 @@ rate-limit window and, after its burst, for the next one.
   here: v1's `/health` does not exist on v2, and a missing v2 route must fail each test's
   existence check, not error the session. `__init__.py` makes the files `v2.test_*`, so they
   do not clash with the v1 files of the same name.
-- Direct bursts go to the api container's own network address, not 127.0.0.1: gunicorn runs
-  with `--forwarded-allow-ips=127.0.0.1`, so uvicorn itself rewrites a loopback peer from
-  X-Forwarded-For before the app sees it (measured: 6104 spoofed loopback requests, no 429;
+- Direct bursts go to the api container's own network address, not 127.0.0.1: gunicorn ran
+  with `--forwarded-allow-ips=127.0.0.1` until R19 was fixed (now `--forwarded-allow-ips=`), so
+  uvicorn rewrote a loopback peer from X-Forwarded-For before the app saw it (measured: 6104 spoofed loopback requests, no 429;
   the same without X-Forwarded-For, 429 at 6001). Only processes inside the container can
   connect from loopback, so this is not reachable from outside.
 - Uploads are retried (twice, 6 s apart) on 503 `{"detail":"service unavailable"}`: one Redis

@@ -74,7 +74,73 @@ def test_nginx_address_is_outside_the_dynamic_pool(compose):
 def test_trusted_proxies_is_exactly_nginx(compose):
     env = compose["services"]["api"]["environment"]
     assert json.loads(env["MARCUS_TRUSTED_PROXIES"]) == [str(_nginx_address(compose))]
-    assert "--forwarded-allow-ips=127.0.0.1" in compose["services"]["api"]["command"]
+
+
+def _dockerfile_api_cmd() -> list[str]:
+    text = (ROOT / "docker" / "Dockerfile.api").read_text().replace("\\\n", " ")
+    line = next(ln for ln in text.splitlines() if ln.startswith("CMD "))
+    return json.loads(line[len("CMD "):])
+
+
+def _gunicorn_commands(compose) -> dict[str, list[str]]:
+    return {"compose api": compose["services"]["api"]["command"], "Dockerfile.api": _dockerfile_api_cmd()}
+
+
+def test_gunicorn_trusts_no_forwarded_headers(compose):
+    """R19: gunicorn's default --forwarded-allow-ips (127.0.0.1,::1) lets a loopback peer set the
+    client IP via X-Forwarded-For before the app's own trusted-proxy walk. Both commands turn
+    it off: the app alone (marcus.api.deps.client_ip) reads X-Forwarded-For."""
+    for where, cmd in _gunicorn_commands(compose).items():
+        flags = [a for a in cmd if a.startswith("--forwarded-allow-ips")]
+        assert flags == ["--forwarded-allow-ips="], (where, cmd)
+
+
+def _uvicorn_worker(argv: list[str]):
+    """The UvicornWorker gunicorn would start for this command line (gunicorn's own parser)."""
+    from gunicorn.config import Config
+    from gunicorn.glogging import Logger
+    from uvicorn.workers import UvicornWorker
+
+    argv = [re.sub(r"\$\{[A-Z_]+:-([^}]*)\}", r"\1", a) for a in argv]  # compose defaults
+    cfg = Config()
+    for key, value in vars(cfg.parser().parse_args(argv)).items():
+        if value is not None and key != "args":
+            cfg.set(key.lower(), value)
+    assert cfg.worker_class_str == "uvicorn.workers.UvicornWorker"
+    return UvicornWorker(0, os.getpid(), [], None, 30, cfg, Logger(cfg))
+
+
+def test_spoofed_xff_from_loopback_does_not_change_client_ip(compose, monkeypatch):
+    """The command lines run through gunicorn's parser and uvicorn's worker config: a request
+    from 127.0.0.1 with X-Forwarded-For reaches the app with 127.0.0.1 as its client IP."""
+    import asyncio
+
+    from fastapi import Request
+
+    from marcus.api.deps import client_ip
+    from marcus.core.settings import get_settings
+
+    monkeypatch.setenv("MARCUS_TRUSTED_PROXIES", '["172.30.0.10"]')
+    get_settings.cache_clear()
+    try:
+        for where, cmd in _gunicorn_commands(compose).items():
+            seen = {}
+
+            async def app(scope, receive, send):
+                seen["ip"] = client_ip(Request(scope))
+
+            worker = _uvicorn_worker(cmd[1:])
+            worker.config.app = app
+            worker.config.load()
+            scope = {
+                "type": "http", "scheme": "http", "method": "GET", "path": "/", "query_string": b"",
+                "client": ("127.0.0.1", 40000),
+                "headers": [(b"x-forwarded-for", b"6.6.6.6"), (b"x-forwarded-proto", b"https")],
+            }
+            asyncio.run(worker.config.loaded_app(scope, None, None))
+            assert seen == {"ip": "127.0.0.1"}, where
+    finally:
+        get_settings.cache_clear()
 
 
 def test_only_nginx_publishes_a_port(compose):

@@ -322,11 +322,11 @@ def direct_burst(fs_probe, path: str, n: int, threads: int = 8) -> dict:
     Forwarded; stop at the first 429. Returns {"sent", "first_429": {"at", "body", "window"} or
     None, "codes", "host", "window_start", "window_end"}.
 
-    The request goes to the container's own network address, not 127.0.0.1: gunicorn runs with
-    --forwarded-allow-ips=127.0.0.1, so uvicorn itself rewrites a loopback peer from
-    X-Forwarded-For before the app sees it (only processes inside the container can connect
-    from loopback). From the container's own address the peer is an ordinary untrusted client,
-    which is what an attacker reaching the API without nginx would be.
+    The request goes to the container's own network address, not 127.0.0.1: before R19 was
+    fixed gunicorn ran with --forwarded-allow-ips=127.0.0.1, so uvicorn rewrote a loopback peer
+    from X-Forwarded-For before the app saw it (now --forwarded-allow-ips=, no rewrite). From the
+    container's own address the peer is an ordinary untrusted client, which is what an attacker
+    reaching the API without nginx would be.
     """
     probe = docker_probe(fs_probe)
     r = subprocess.run(

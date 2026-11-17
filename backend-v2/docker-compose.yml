@@ -182,15 +182,16 @@ services:
   api:
     <<: [*app, *api-image]
     # Client IP and request id are resolved by the app (marcus.api.deps.client_ip, trusted
-    # proxies = nginx). gunicorn's --forwarded-allow-ips stays 127.0.0.1 so uvicorn does not
-    # rewrite the socket peer first: the app must see nginx as the peer to trust its headers.
+    # proxies = nginx). --forwarded-allow-ips= (empty) means uvicorn trusts no peer and never
+    # rewrites the socket peer from X-Forwarded-For: gunicorn's default 127.0.0.1,::1 would let
+    # an in-container loopback peer pick its client IP (R19). The app must see the real peer.
     command:
       - gunicorn
       - marcus.api.main:create_app(json_logs=True)
       - --worker-class=uvicorn.workers.UvicornWorker
       - --workers=${GUNICORN_WORKERS:-2}
       - --bind=0.0.0.0:8000
-      - --forwarded-allow-ips=127.0.0.1
+      - --forwarded-allow-ips=
       - --worker-tmp-dir=/tmp
       - --graceful-timeout=30
       - --access-logfile=-

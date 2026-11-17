@@ -39,5 +39,7 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MARCUS_DATA_ROOT=/data HOME=/tmp
 USER marcus
 EXPOSE 8000
+# --forwarded-allow-ips= (empty): uvicorn never rewrites the client from X-Forwarded-For; the
+# app's trusted-proxy walk (marcus.api.deps.client_ip) alone decides (R19).
 CMD ["gunicorn", "marcus.api.main:create_app(json_logs=True)", "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", "--workers", "2", "--worker-tmp-dir", "/tmp"]
+     "--bind", "0.0.0.0:8000", "--workers", "2", "--forwarded-allow-ips=", "--worker-tmp-dir", "/tmp"]
