@@ -130,10 +130,7 @@ def build(
 ) -> bytes:
     """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
     marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
-    return render(fmt, paper, choose(paper, segments, curations, predictions))
-
-
-def render(fmt: ExportFormat, paper: Paper, chosen: list[Chosen]) -> bytes:
+    chosen = choose(paper, segments, curations, predictions)
     if fmt == "json":
         return to_json(paper, chosen)
     if fmt == "csv":

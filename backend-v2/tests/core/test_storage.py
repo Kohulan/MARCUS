@@ -14,7 +14,6 @@ def test_storage_paths_are_under_data_root():
     paths = [
         storage.pdf_path(U),
         storage.page_image_path(U, 3),
-        storage.segment_image_path(U, V),
         storage.image_job_path(V),
         storage.paper_dir(U),
     ]
@@ -26,7 +25,6 @@ def test_storage_layout():
     root = get_settings().data_root
     assert storage.pdf_path(U) == root / "papers" / str(U) / "source.pdf"
     assert storage.page_image_path(U, 3) == root / "papers" / str(U) / "pages" / "0003.png"
-    assert storage.segment_image_path(U, V) == root / "papers" / str(U) / "segments" / f"{V}.png"
     assert storage.image_job_path(V) == root / "images" / f"{V}.png"
 
 
@@ -35,8 +33,6 @@ def test_storage_rejects_non_uuid():
         storage.pdf_path("../../etc/passwd")
     with pytest.raises(TypeError):
         storage.page_image_path(U, "1")
-    with pytest.raises(TypeError):
-        storage.segment_image_path(U, str(V))
     with pytest.raises(TypeError):
         storage.image_job_path("x")
     with pytest.raises(TypeError):

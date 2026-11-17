@@ -31,10 +31,6 @@ def page_image_path(paper_id: uuid.UUID, page: int) -> Path:
     return paper_dir(paper_id) / "pages" / f"{page:04d}.png"
 
 
-def segment_image_path(paper_id: uuid.UUID, segment_id: uuid.UUID) -> Path:
-    return paper_dir(paper_id) / "segments" / f"{_uuid(segment_id)}.png"
-
-
 def image_job_path(job_id: uuid.UUID) -> Path:
     return get_settings().data_root / "images" / f"{_uuid(job_id)}.png"
 

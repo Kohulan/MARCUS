@@ -344,14 +344,14 @@ def test_interrupted_hand_load_marks_the_process_for_recycling(no_recycle):
     with pytest.raises(SoftTimeLimitExceeded):
         lazy.ensure_loaded()
     assert lazy.loaded is False
-    assert no_recycle.recycle_requested() is True
+    assert no_recycle._recycle_reason is not None
 
 
 def test_successful_hand_load_does_not_recycle(no_recycle):
     lazy = decimer.LazySavedModel(lambda path: object(), "/m/DECIMER_HandDrawn_model")
     lazy.ensure_loaded()
     assert lazy.loaded is True
-    assert no_recycle.recycle_requested() is False
+    assert no_recycle._recycle_reason is None
 
 
 def test_recycle_handler_connected_to_task_postrun():

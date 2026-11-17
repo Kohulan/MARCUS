@@ -361,10 +361,6 @@ def request_recycle(reason: str) -> None:
     log.warning("pool process %d will be replaced after this task: %s", os.getpid(), reason)
 
 
-def recycle_requested() -> bool:
-    return _recycle_reason is not None
-
-
 @task_postrun.connect
 def recycle_if_requested(**_) -> None:
     """After the task returned (run_step has recorded the step's result or failure in the
