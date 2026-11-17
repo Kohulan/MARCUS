@@ -19,6 +19,8 @@ each GPU's memory (env `MARCUS_TORCH_MEM_FRACTION`); without CUDA it does nothin
 
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +81,42 @@ def limit_tf_threads(intra: int | None, inter: int | None) -> None:
     if inter is not None:
         tf.config.threading.set_inter_op_parallelism_threads(inter)
     log.info("TensorFlow threads: intra-op %s, inter-op %s", intra, inter)
+
+
+def prepare_tf() -> bool:
+    """Thread caps and GPU memory budget for a TensorFlow model worker; call before the model
+    loads. True when a GPU memory budget is in force (then see skip_memory_growth)."""
+    from marcus.core.settings import get_settings
+
+    settings = get_settings()
+    limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
+    return limit_tf_memory(gpu_mem_mb_from_env())
+
+
+@contextmanager
+def skip_memory_growth(active: bool, library: str) -> Iterator[None]:
+    """While `active` (a GPU budget is in force), `tf.config.experimental.set_memory_growth` does
+    nothing (logged); the real one is restored afterwards, also when the body raises.
+
+    decimer and decimer_segmentation turn memory growth on for every GPU when imported, which
+    TensorFlow refuses once the budget's logical device exists ("Cannot set memory growth on
+    device when virtual devices configured"): the import, and so the model load, would fail.
+    Without a budget nothing is patched (v1 behaviour: memory growth on)."""
+    if not active:
+        yield
+        return
+    import tensorflow as tf
+
+    real_growth = tf.config.experimental.set_memory_growth
+
+    def no_growth(device, enable):
+        log.info("GPU memory budget set: skipping %s's set_memory_growth(%s)", library, enable)
+
+    tf.config.experimental.set_memory_growth = no_growth
+    try:
+        yield
+    finally:
+        tf.config.experimental.set_memory_growth = real_growth
 
 
 TORCH_MEM_FRACTION_ENV = "MARCUS_TORCH_MEM_FRACTION"

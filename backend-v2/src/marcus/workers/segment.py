@@ -21,7 +21,7 @@ from celery.signals import worker_process_init
 from PIL import Image, ImageDraw
 
 from marcus.core.enums import StepKind
-from marcus.core.settings import fake_enabled, get_settings
+from marcus.core.settings import fake_enabled
 from marcus.core.storage import page_image_path, segment_crop_path, write_atomic
 from marcus.workers.runtime import BadInput, register
 from marcus.workers.runtime import abort_worker as _abort_worker
@@ -107,33 +107,10 @@ class DecimerSegmenter:
 
         # Importing decimer_segmentation builds, loads and warms up the model (module level),
         # so the thread caps and the GPU budget must be set first. Weights come from
-        # PYSTOW_HOME (baked into the image).
-        settings = get_settings()
-        gpu.limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
-        budget = gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
-        if not budget:
+        # PYSTOW_HOME (baked into the image). The import also runs mrcnn/model.py's
+        # configure_gpu(memory_growth=True): skipped while a budget is set (as worker-decimer).
+        with gpu.skip_memory_growth(gpu.prepare_tf(), "decimer_segmentation"):
             from decimer_segmentation import segment_chemical_structures
-        else:
-            # The import runs mrcnn/model.py's configure_gpu(memory_growth=True), which
-            # TensorFlow refuses once the budget's logical device exists ("Cannot set memory
-            # growth on device when virtual devices configured"): the load would fail. With a
-            # budget the growth call is skipped during the import (as worker-decimer does).
-            import tensorflow as tf
-
-            real_growth = tf.config.experimental.set_memory_growth
-
-            def no_growth(device, enable):
-                log.info(
-                    "GPU memory budget set: skipping decimer_segmentation's "
-                    "set_memory_growth(%s)",
-                    enable,
-                )
-
-            tf.config.experimental.set_memory_growth = no_growth
-            try:
-                from decimer_segmentation import segment_chemical_structures
-            finally:
-                tf.config.experimental.set_memory_growth = real_growth
 
         self._segment = segment_chemical_structures
 
