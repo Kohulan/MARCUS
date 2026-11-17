@@ -27,6 +27,7 @@ const required = [
   "privacy/index.html",
   "disclaimer/index.html",
   "404.html",
+  "ketcher/index.html",
 ];
 for (const file of required) {
   if (!existsSync(join(dist, file))) fail(`missing dist/${file}`);

@@ -1,0 +1,15 @@
+# Override for the frontend e2e runs, on top of the fake stack (run from backend-v2/):
+#
+#   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml \
+#     -f ../frontend-v2/e2e/compose.e2e.yml up -d --build
+#
+# The fake file raises the per-IP request limit to 6000/min; e2e runs at the production
+# default (300) so it proves the UI stays under it.
+#
+# MARCUS_COOKIE_SECURE is not set (it stays "true"): F1b showed that Playwright's Chromium
+# keeps the Secure owner cookie on http://localhost (e2e/csp.spec.ts, "owner cookie" tests).
+
+services:
+  api:
+    environment:
+      MARCUS_RATE_LIMIT_IP_PER_MIN: "300"
