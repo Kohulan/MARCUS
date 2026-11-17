@@ -29,6 +29,7 @@ from marcus.core.queues import (
     QUEUE_WAIT_S,
     SLOTS,
     TIME_LIMITS,
+    docling_slots,
 )
 from marcus.core.settings import get_settings
 
@@ -53,7 +54,8 @@ _DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
 # Order: priority class, then owner usage on this queue in the fair window (steps busy now
 # or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
 # the oldest paper / image job, then step order. One statement; the chosen row is locked, rows another
-# dispatcher (or the planner) holds are skipped.
+# dispatcher (or the planner) holds are skipped. `docling_ok` false leaves docling steps out (the
+# docling cap, queues.docling_slots, is reached).
 _PICK_SQL = text(
     """
     WITH usage AS (
@@ -68,7 +70,7 @@ _PICK_SQL = text(
       LEFT JOIN papers p ON p.id = s.paper_id LEFT JOIN image_jobs j ON j.id = s.image_job_id
       JOIN owners o ON o.id = COALESCE(p.owner_id, j.owner_id)
       LEFT JOIN usage u ON u.owner_id = o.id
-    WHERE s.queue = :q AND s.status = 'pending'
+    WHERE s.queue = :q AND s.status = 'pending' AND (s.kind <> 'docling' OR :docling_ok)
     ORDER BY o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
              s.seq, s.created_at
     LIMIT 1 FOR UPDATE OF s SKIP LOCKED
@@ -84,13 +86,27 @@ def free_slots(session: Session, queue: str) -> int:
     return SLOTS[queue] - busy
 
 
-def pick_next(session: Session, queue: str) -> Step | None:
+def docling_busy(session: Session) -> int:
+    """Docling steps queued or running."""
+    return session.execute(
+        select(func.count())
+        .select_from(Step)
+        .where(Step.kind == StepKind.DOCLING.value, Step.status.in_(_BUSY))
+    ).scalar_one()
+
+
+def pick_next(session: Session, queue: str, allow_docling: bool = True) -> Step | None:
     """Lock and return the next pending step of `queue` in fair order, or None.
 
-    The row stays locked until the caller ends the transaction.
+    `allow_docling=False` skips docling steps. The row stays locked until the caller ends the
+    transaction.
     """
     stmt = select(Step).from_statement(_PICK_SQL).execution_options(populate_existing=True)
-    params = {"q": queue, "window": float(get_settings().fair_window_s)}
+    params = {
+        "q": queue,
+        "window": float(get_settings().fair_window_s),
+        "docling_ok": allow_docling,
+    }
     return session.execute(stmt, params).scalars().first()
 
 
@@ -110,11 +126,13 @@ def dispatch_once(session: Session, send: Send) -> int:
 
     Per step: mark it `queued` (+ queued_at), commit, then send. If send raises, the step
     goes back to `pending` in a new transaction and the dispatcher moves to the next queue.
+    Docling (on q.cpu) never takes more than queues.docling_slots() slots.
     """
     sent = 0
     for queue in SLOTS:  # stable order
         while free_slots(session, queue) > 0:
-            step = pick_next(session, queue)
+            allow_docling = queue != "q.cpu" or docling_busy(session) < docling_slots()
+            step = pick_next(session, queue, allow_docling)
             if step is None:
                 break
             step_id, kind, attempts = step.id, StepKind(step.kind), step.attempts

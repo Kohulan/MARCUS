@@ -386,3 +386,54 @@ def test_live_queue_probe_is_bounded(monkeypatch):
     time.sleep(0.2)
     monkeypatch.setattr("marcus.core.celery_app.live_queue_names", lambda timeout: {"q.cpu"})
     assert probe() == {"q.cpu"}
+
+
+def _docling_paper(s, minutes_ago: int, status: str = "pending") -> Step:
+    paper = paper_at(s, make_owner(s), minutes_ago=minutes_ago)
+    paper.pages = 100
+    for st in s.execute(select(Step).where(Step.paper_id == paper.id)).scalars():
+        st.status = "done"  # its check_pdf
+        st.finished_at = datetime.now(UTC) - timedelta(hours=1)
+    step = Step(
+        paper_id=paper.id, kind=StepKind.DOCLING.value, queue="q.cpu", seq=100_000, status=status
+    )
+    s.add(step)
+    s.flush()
+    return step
+
+
+def test_docling_never_holds_every_cpu_slot(db_session, monkeypatch):
+    """Review I3: four papers in docling must not starve a new upload's check_pdf. Docling
+    gets at most SLOTS['q.cpu'] - 2 slots; the rest stay free for check_pdf, render and doi."""
+    from marcus.core.queues import docling_slots
+
+    monkeypatch.setitem(SLOTS, "q.cpu", 4)
+    assert docling_slots() == 2
+    s = db_session
+    docling = [_docling_paper(s, minutes_ago=10 - i) for i in range(4)]
+    new = paper_at(s, make_owner(s), minutes_ago=0)  # its check_pdf is pending
+    s.commit()
+
+    sent = Sent()
+    dispatch_once(s, sent)
+    kinds = [kind for q, _, kind, _ in sent.calls if q == "q.cpu"]
+    assert kinds.count(StepKind.DOCLING) == 2
+    assert StepKind.CHECK_PDF in kinds
+    (check,) = s.execute(select(Step).where(Step.paper_id == new.id)).scalars()
+    assert check.status == "queued"
+    s.expire_all()
+    assert sorted(s.get(Step, d.id).status for d in docling) == [
+        "pending", "pending", "queued", "queued"
+    ]
+    # one cpu slot is still free, but docling is at its cap: nothing more goes out
+    assert free_slots(s, "q.cpu") == 1
+    assert dispatch_once(s, Sent()) == 0
+
+
+def test_docling_cap_is_at_least_one(monkeypatch):
+    from marcus.core.queues import docling_slots
+
+    monkeypatch.setitem(SLOTS, "q.cpu", 1)
+    assert docling_slots() == 1
+    monkeypatch.setitem(SLOTS, "q.cpu", 6)
+    assert docling_slots() == 4

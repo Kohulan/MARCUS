@@ -47,6 +47,16 @@ def _load_slots() -> dict[str, int]:
 
 SLOTS: dict[str, int] = _load_slots()
 
+# q.cpu slots docling may never take: docling runs for minutes per paper, so without a reserve
+# four papers in docling would make a new upload's check_pdf (and render_page, doi) wait for one
+# of them to end. Env override MARCUS_CPU_SLOTS_KEPT_FROM_DOCLING.
+CPU_SLOTS_KEPT_FROM_DOCLING = int(os.environ.get("MARCUS_CPU_SLOTS_KEPT_FROM_DOCLING", 2))
+
+
+def docling_slots() -> int:
+    """How many docling steps may be queued or running at once (at least one)."""
+    return max(1, SLOTS["q.cpu"] - CPU_SLOTS_KEPT_FROM_DOCLING)
+
 # How long a step may sit `queued` (sent, not yet started) before the watchdog counts its
 # delivery as lost, in seconds; independent of the step's run limit. The Celery message expires
 # after the same time. On a queue with no live consumer the watchdog instead puts the step back
