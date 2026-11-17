@@ -127,6 +127,13 @@ test.describe("static assets", () => {
 });
 
 test.describe("ketcher", () => {
+  test("/ketcher without the slash redirects to /ketcher/", async ({ request }) => {
+    const response = await request.get("/ketcher", { maxRedirects: 0 });
+    expect(response.status()).toBe(301);
+    expect(response.headers()["location"]).toBe("/ketcher/");
+    expectAppHeaders(response);
+  });
+
   test("/ketcher/ answers with the Ketcher headers", async ({ request }) => {
     const response = await request.get("/ketcher/");
     expect(response.status()).toBe(200);
@@ -212,12 +219,25 @@ async function listPaperIds(page: Page): Promise<string[]> {
 
 test.describe("owner cookie on http://localhost", () => {
   test("a paper uploaded through page.request is listed by the page's own fetch", async ({
+    browser,
     page,
     context,
   }) => {
     await page.goto("/app");
     const id = await uploadPaperViaApi(page, SAMPLE_PDF, { ocsr: "off" });
     expect(await listPaperIds(page)).toContain(id);
+
+    // Negative check: a fresh browser context (no owner cookie) is a different owner and
+    // must not see the paper.
+    const other = await browser.newContext();
+    try {
+      const stranger = await other.newPage();
+      await stranger.goto("/app");
+      expect(await listPaperIds(stranger)).not.toContain(id);
+    } finally {
+      await other.close();
+    }
+
     // For the record (F1b): whether the owner cookie kept its Secure flag on http://localhost.
     const cookie = (await context.cookies()).find((c) => c.name === "marcus_owner");
     test.info().annotations.push({
