@@ -232,3 +232,39 @@ def test_render_pixel_cap_is_a_setting(monkeypatch):
     monkeypatch.setenv("MARCUS_MAX_PAGE_PIXELS", "9000000")
     get_settings.cache_clear()
     assert cpu.render_page(view(pid, 0), None) == {}
+
+
+def test_render_refuses_a_png_above_the_byte_cap(monkeypatch):
+    """Re-review I6: an incompressible page under the pixel cap can still be ~150 MB of PNG.
+    Above MARCUS_MAX_PAGE_PNG_BYTES the page fails as final bad_input and nothing is written."""
+    from marcus.core.settings import get_settings
+
+    assert get_settings().max_page_png_bytes == 32 * 2**20
+    monkeypatch.setenv("MARCUS_MAX_PAGE_PNG_BYTES", "1000")
+    get_settings.cache_clear()
+    pid = make_paper_with("two_page.pdf")
+    with pytest.raises(BadInput, match="page image too large"):
+        cpu.render_page(view(pid, 0), None)
+    pages = page_image_path(pid, 0).parent
+    assert not pages.exists() or list(pages.iterdir()) == []
+
+
+def test_render_waits_for_disk_space_below_the_floor(monkeypatch):
+    """Re-review I6: below the free-space floor (the one uploads use) a render writes nothing
+    and fails retryable (engine_error, retried), not final bad_input."""
+    from collections import namedtuple
+
+    from marcus.core.enums import ErrorClass
+    from marcus.core.settings import get_settings
+    from marcus.workers.runtime import StorageFull, _classify
+
+    usage = namedtuple("usage", "total used free")
+    floor = get_settings().min_free_disk_bytes
+    monkeypatch.setattr(cpu.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor - 1))
+    pid = make_paper_with("two_page.pdf")
+    with pytest.raises(StorageFull) as info:
+        cpu.render_page(view(pid, 0), None)
+    assert _classify(info.value) == (ErrorClass.ENGINE_ERROR, True)
+    assert not page_image_path(pid, 0).exists()
+    monkeypatch.setattr(cpu.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
+    assert cpu.render_page(view(pid, 0), None) == {}

@@ -182,7 +182,8 @@ def render_page_png(
     path: Path, page: int, out: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB
 ) -> None:
     """Render one page at 300 DPI to `out`; a killed render never leaves a half PNG. A page
-    above Settings.max_page_pixels is refused before rendering (BadInput)."""
+    above Settings.max_page_pixels is refused before rendering, one whose PNG is above
+    Settings.max_page_png_bytes before writing (BadInput)."""
     from marcus.core.settings import get_settings
 
     settings = get_settings()
@@ -192,7 +193,10 @@ def render_page_png(
     try:
         _run_pdf(
             "render",
-            [str(path), page, str(tmp), settings.max_pages, settings.max_page_pixels],
+            [
+                str(path), page, str(tmp), settings.max_pages, settings.max_page_pixels,
+                settings.max_page_png_bytes,
+            ],
             timeout_s,
             mem_mb,
         )

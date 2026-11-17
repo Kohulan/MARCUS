@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     # A page is rendered (300 DPI) only up to this many pixels; a larger one is final bad_input.
     # A4 is 8.7 MP; the cap stops a crafted page from writing a PNG of hundreds of MB.
     max_page_pixels: int = Field(50_000_000, gt=0)
-    # Below this many free bytes on data_root, POST /papers and POST /images answer 503. The
+    # And its PNG only up to this many bytes (an incompressible 50 MP page is ~150 MB; a text
+    # page at 300 DPI is well under 5 MB); a larger one is final bad_input, nothing is written.
+    max_page_png_bytes: int = Field(32 * 2**20, gt=0)
+    # Below this many free bytes on data_root, POST /papers and POST /images answer 503 and
+    # render_page writes nothing (retryable engine_error). The
     # Prometheus alert MarcusDiskUploadsRefused (ops/prometheus-alerts.yml) uses the same value.
     min_free_disk_bytes: int = Field(5 * 2**30, ge=0)
     retention_days: int = 30

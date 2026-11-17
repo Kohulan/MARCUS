@@ -69,6 +69,11 @@ class StepTimeout(Exception):
     Recorded as `timeout` and retried once, like Celery's soft time limit."""
 
 
+class StorageFull(Exception):
+    """The data volume is below its free-space floor; the step wrote nothing. Recorded as
+    `engine_error` and retried once (not final bad_input: the input is not at fault)."""
+
+
 class WorkerLost(Exception):
     """The process doing the step's work was killed from outside (e.g. the OOM killer took a
     pdfsafe child). Recorded as `worker_lost` and retried once."""

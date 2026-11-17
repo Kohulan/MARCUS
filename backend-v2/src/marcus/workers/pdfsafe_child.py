@@ -40,9 +40,12 @@ def op_count(path: str, max_pages: int) -> int:
         doc.close()
 
 
-def op_render(path: str, page: int, out: str, max_pages: int, max_pixels: int) -> None:
+def op_render(
+    path: str, page: int, out: str, max_pages: int, max_pixels: int, max_png_bytes: int
+) -> None:
     """Render one page at 300 DPI. The pixel size (page rect x zoom) is checked first: a page
-    above `max_pixels` is refused before anything is drawn."""
+    above `max_pixels` is refused before anything is drawn. The PNG is encoded in memory and
+    refused above `max_png_bytes` before anything is written."""
     import math
 
     import pymupdf
@@ -60,7 +63,14 @@ def op_render(path: str, page: int, out: str, max_pages: int, max_pixels: int) -
                 f"(limit {max_pixels / 1e6:g} megapixels)"
             )
         pix = doc[page].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-        pix.save(out)
+        png = pix.tobytes("png")
+        if len(png) > max_png_bytes:
+            raise ValueError(
+                f"page image too large: {len(png) / 2**20:.0f} MB of PNG "
+                f"(limit {max_png_bytes / 2**20:g} MB)"
+            )
+        with open(out, "wb") as fh:
+            fh.write(png)
     finally:
         doc.close()
 
