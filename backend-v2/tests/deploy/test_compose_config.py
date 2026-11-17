@@ -285,6 +285,29 @@ def test_dashboard_never_rates_windowed_series():
     assert "marcus_step_failures_total" not in json.dumps(dash)
 
 
+def test_prometheus_alerts_on_low_disk():
+    """Review I6 / spec section 12: a disk-use alarm, not only a gauge and a panel. The rule
+    file is loaded by prometheus.yml and mounted by the monitoring override."""
+    cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
+    assert cfg["rule_files"] == ["/etc/prometheus/alerts.yml"]
+    rules = yaml.safe_load((ROOT / "ops" / "prometheus-alerts.yml").read_text())
+    alerts = {r["alert"]: r for g in rules["groups"] for r in g["rules"]}
+    low = alerts["MarcusDiskLow"]
+    assert "marcus_disk_free_bytes" in low["expr"] and low["labels"]["severity"] == "warning"
+    full = alerts["MarcusDiskUploadsRefused"]
+    assert "marcus_disk_free_bytes" in full["expr"] and full["labels"]["severity"] == "critical"
+    # the critical threshold is the API's upload floor (Settings.min_free_disk_bytes default)
+    from marcus.core.settings import Settings
+
+    floor = Settings.model_fields["min_free_disk_bytes"].default
+    assert f"< {floor}" in full["expr"]
+    assert alerts["MarcusMetricsDown"]["expr"].startswith("up{job=\"marcus\"}")
+    mon = yaml.safe_load(MONITORING.read_text())
+    assert "./ops/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro" in mon["services"][
+        "prometheus"
+    ]["volumes"]
+
+
 def test_prometheus_negotiates_openmetrics_first():
     cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
     for job in cfg["scrape_configs"]:

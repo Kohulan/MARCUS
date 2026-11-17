@@ -6,6 +6,10 @@ global:
   scrape_timeout: 10s
   evaluation_interval: 15s
 
+# Alert rules (disk-use alarm): ops/prometheus-alerts.yml, mounted by the monitoring override.
+rule_files:
+  - /etc/prometheus/alerts.yml
+
 scrape_configs:
   - job_name: marcus
     metrics_path: /metrics
