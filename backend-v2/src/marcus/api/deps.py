@@ -17,7 +17,8 @@ COOKIE_NAME = "marcus_owner"
 COOKIE_MAX_AGE = 30 * 24 * 3600
 COOKIE_PATH = "/api/v2"
 UNKNOWN_IP = "unknown"
-# request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out
+# request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out.
+# Set for a new owner and, to renew the cookie's Max-Age (sliding expiry), for a known one.
 NEW_OWNER_TOKEN = "new_owner_token"
 TOUCH_EVERY = timedelta(seconds=60)  # last_seen_at is written at most this often
 IPV6_RATE_PREFIX = 64  # one IPv6 client usually holds a whole /64
@@ -107,17 +108,18 @@ def _bearer(request: Request) -> str | None:
     return None
 
 
-async def _touch(db: AsyncSession, owner: Owner) -> None:
-    """Record activity at most once a minute (no write per request)."""
+async def _touch(db: AsyncSession, owner: Owner) -> bool:
+    """Record activity at most once a minute (no write per request). True if it wrote."""
     now = datetime.now(UTC)
     if owner.last_seen_at is not None and now - owner.last_seen_at < TOUCH_EVERY:
-        return
+        return False
     owner.last_seen_at = now
     await db.commit()
+    return True
 
 
 def owner_cookie_header(token: str) -> str:
-    """The `Set-Cookie` value for a new browser owner's token."""
+    """The `Set-Cookie` value for a browser owner's token (new, or renewed on use)."""
     response = Response()
     response.set_cookie(
         COOKIE_NAME,
@@ -136,6 +138,9 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
 
     A new owner's token goes on `request.state`; SecurityMiddleware sets the cookie on the
     response, whatever it is (an error, a file, a stream), not only on a route's own one.
+    A known browser owner's cookie is sent again with a fresh Max-Age whenever its activity is
+    recorded (at most once a minute), so the cookie expires 30 days after the last use, not
+    after the first visit.
     """
     settings = get_settings()
 
@@ -166,7 +171,8 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
             )
         ).scalar_one_or_none()
         if owner is not None:
-            await _touch(db, owner)
+            if await _touch(db, owner):
+                setattr(request.state, NEW_OWNER_TOKEN, cookie)  # sliding expiry
             return owner
 
     ip = client_ip(request)

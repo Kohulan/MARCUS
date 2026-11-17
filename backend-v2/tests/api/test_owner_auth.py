@@ -325,3 +325,55 @@ async def test_last_seen_at_is_throttled(app, async_db_session):
     assert await _last_seen(db, owner.id) >= before
     n = (await db.execute(select(func.count()).select_from(Owner))).scalar_one()
     assert n == 1
+
+
+# --- the cookie's expiry slides: renewed on use (at most once a minute) --------------------
+
+
+async def test_known_owner_cookie_is_renewed_on_use(app, async_db_session):
+    """A returning curator keeps the same owner: the cookie gets a fresh Max-Age when the
+    owner is seen again (with the touch, at most once a minute), not only when created."""
+    db = async_db_session
+    token = new_token()
+    owner = Owner(
+        kind=OwnerKind.BROWSER.value,
+        token_hash=hash_token(token),
+        priority_class=int(PriorityClass.BROWSER),
+    )
+    db.add(owner)
+    await db.commit()
+    await _set_last_seen(db, owner.id, datetime.now(UTC) - timedelta(days=29))
+    async with make_client(app) as c:
+        c.cookies.set(COOKIE, token)
+        r = await c.get("/api/v2/_whoami")
+        assert r.status_code == 200 and r.json()["id"] == str(owner.id)
+        cookies = owner_cookies(r)
+        assert len(cookies) == 1
+        sc = cookies[0].lower()
+        assert sc.startswith(f"{COOKIE}={token}".lower())
+        assert "httponly" in sc and "samesite=strict" in sc and "secure" in sc
+        assert "path=/api/v2" in sc and "max-age=2592000" in sc
+        # seen under a minute ago: no second Set-Cookie on every request
+        r2 = await c.get("/api/v2/_whoami")
+        assert r2.status_code == 200 and owner_cookies(r2) == []
+    n = (await db.execute(select(func.count()).select_from(Owner))).scalar_one()
+    assert n == 1
+
+
+async def test_renewed_cookie_on_a_file_response(app, async_db_session):
+    db = async_db_session
+    token = new_token()
+    owner = Owner(
+        kind=OwnerKind.BROWSER.value,
+        token_hash=hash_token(token),
+        priority_class=int(PriorityClass.BROWSER),
+    )
+    db.add(owner)
+    await db.commit()
+    await _set_last_seen(db, owner.id, datetime.now(UTC) - timedelta(hours=1))
+    async with make_client(app) as c:
+        c.cookies.set(COOKIE, token)
+        r = await c.get("/api/v2/_file")
+    assert r.status_code == 200
+    assert [v.split(";")[0] for v in owner_cookies(r)] == [f"{COOKIE}={token}"]
+

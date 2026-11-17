@@ -155,7 +155,8 @@ class SecurityMiddleware:
 
 
 def _add_owner_cookie(scope: Scope, headers: MutableHeaders) -> None:
-    """The one place a new owner's cookie is set: on any response (error, file, stream)."""
+    """The one place the owner cookie is set (new or renewed): on any response (error, file,
+    stream)."""
     token = scope.get("state", {}).get(NEW_OWNER_TOKEN)
     if not token:
         return
