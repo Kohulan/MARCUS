@@ -376,14 +376,46 @@ def test_tf_workers_cap_blas_threads(compose, name):
 # --- boot unit --------------------------------------------------------------------------------
 
 
+UNIT = ROOT / "ops" / "systemd" / "nvidia-compute-default.service"
+MODE_CHECK = "nvidia-smi -i 0 --query-gpu=compute_mode --format=csv,noheader"
+
+
+def _unit_settings() -> dict[str, list[str]]:
+    settings: dict[str, list[str]] = {}
+    for line in UNIT.read_text().splitlines():
+        if "=" in line and not line.startswith(("#", "[")):
+            key, value = line.split("=", 1)
+            settings.setdefault(key, []).append(value)
+    return settings
+
+
 def test_nvidia_compute_default_unit_runs_before_docker():
-    unit = (ROOT / "ops" / "systemd" / "nvidia-compute-default.service").read_text()
-    lines = {line.split("=", 1)[0]: line.split("=", 1)[1] for line in unit.splitlines()
-             if "=" in line and not line.startswith("#")}
-    assert lines["ExecStart"] == "/usr/bin/nvidia-smi -i 0 -c DEFAULT"
-    assert lines["Type"] == "oneshot"
-    assert "docker.service" in lines["Before"].split()
-    assert lines["WantedBy"] == "multi-user.target"
+    unit = _unit_settings()
+    assert unit["ExecStart"] == ["/usr/bin/nvidia-smi -i 0 -c DEFAULT"]
+    assert unit["Type"] == ["oneshot"]
+    assert "docker.service" in unit["Before"][0].split()
+    assert "nvidia-persistenced.service" in unit["After"][0].split()
+    assert "nvidia-persistenced.service" in unit["Wants"][0].split()
+    assert unit["WantedBy"] == ["multi-user.target"]
+
+
+def test_nvidia_compute_default_unit_fails_when_the_mode_is_not_default():
+    """A switch that did not take must fail the unit (not show active while the card is still
+    Exclusive_Process): ExecStartPost reads the mode back."""
+    (post,) = _unit_settings()["ExecStartPost"]
+    assert MODE_CHECK in post and "grep -qx Default" in post
+
+
+def test_switch_day_steps_find_the_boot_time_setter_and_check_after_a_reboot():
+    """jarvis's card goes back to Exclusive_Process on reboot, so something sets it at boot: the
+    switch-day steps (unit header and README) find and disable it, then reboot once and check."""
+    readme = (ROOT / "README.md").read_text()
+    for text in (UNIT.read_text(), readme):
+        assert "systemctl list-unit-files | grep -i nvidia" in text
+        assert "EXCLUSIVE" in text and "/etc/rc.local" in text and "/etc/cron" in text
+        assert "nvidia-persistenced" in text
+        assert "sudo reboot" in text
+        assert "nvidia-smi --query-gpu=compute_mode --format=csv" in text
 
 
 # --- nginx: re-resolve the api quickly, retry idempotent requests ------------------------------

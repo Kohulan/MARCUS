@@ -1,22 +1,40 @@
 # Puts GPU 0 into compute mode DEFAULT at boot, before Docker starts any container: the MARCUS v2
 # GPU override (docker-compose.gpu.yml) runs four model workers on one card, which the
-# EXCLUSIVE_PROCESS mode would refuse after the first process.
+# EXCLUSIVE_PROCESS mode would refuse after the first process. ExecStartPost reads the mode back,
+# so a switch that did not take fails the unit (instead of showing active).
 #
-# NOT installed by anything in this repository. Applied on switch day only (owner's rule):
-#   sudo install -m 644 ops/systemd/nvidia-compute-default.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now nvidia-compute-default.service
-#   nvidia-smi --query-gpu=compute_mode --format=csv   # -> Default
+# NOT installed by anything in this repository. Applied on switch day only (owner's rule).
+#
+# 1. jarvis's card goes back to Exclusive_Process on reboot, so something sets that mode at boot
+#    (the driver's own default is Default). Find it first (read-only):
+#      systemctl list-unit-files | grep -i nvidia
+#      grep -rnE "compute-mode|-c 3|-c EXCLUSIVE|EXCLUSIVE_PROCESS" /etc/systemd /etc/rc.local \
+#        /etc/cron* /etc/nvidia* /etc/modprobe.d /usr/lib/systemd/system/nvidia* 2>/dev/null
+#      crontab -l 2>/dev/null | grep -i nvidia; sudo crontab -l 2>/dev/null | grep -i nvidia
+#      systemctl cat nvidia-persistenced.service   # options of nvidia-persistenced
+#    Disable that setter (or, if it is a systemd unit that must stay, add `After=<that unit>` to
+#    [Unit] below so this unit runs after it).
+# 2. Install and start:
+#      sudo install -m 644 ops/systemd/nvidia-compute-default.service /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now nvidia-compute-default.service
+#      nvidia-smi --query-gpu=compute_mode --format=csv   # -> Default
+# 3. Acceptance: reboot once, then check that the mode survived and the unit is active:
+#      sudo reboot
+#      nvidia-smi --query-gpu=compute_mode --format=csv   # -> Default
+#      systemctl status nvidia-compute-default.service    # active (exited), no failure
 # Undo: sudo systemctl disable --now nvidia-compute-default.service (the mode stays until the
 # next reboot or `nvidia-smi -i 0 -c EXCLUSIVE_PROCESS`).
 
 [Unit]
 Description=NVIDIA GPU 0 compute mode DEFAULT (MARCUS v2: several processes share the card)
+Wants=nvidia-persistenced.service
 After=nvidia-persistenced.service
 Before=docker.service containerd.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/nvidia-smi -i 0 -c DEFAULT
+ExecStartPost=/bin/sh -c '/usr/bin/nvidia-smi -i 0 --query-gpu=compute_mode --format=csv,noheader | grep -qx Default'
 RemainAfterExit=yes
 
 [Install]

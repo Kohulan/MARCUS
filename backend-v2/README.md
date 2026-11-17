@@ -42,14 +42,37 @@ CUDA library versions: `docker/MODEL_PINS.md`.
 
 Host requirements: NVIDIA driver with CUDA 12.8 support, the NVIDIA Container Toolkit, and the
 card in compute mode DEFAULT (four processes share it). The boot unit
-`ops/systemd/nvidia-compute-default.service` runs `nvidia-smi -i 0 -c DEFAULT` before Docker
-starts. It is not installed by anything here; on switch day:
+`ops/systemd/nvidia-compute-default.service` runs `nvidia-smi -i 0 -c DEFAULT` after
+nvidia-persistenced and before Docker starts, then reads the mode back (`ExecStartPost`), so a
+switch that did not take fails the unit. It is not installed by anything here. On switch day:
 
-```bash
-sudo install -m 644 ops/systemd/nvidia-compute-default.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now nvidia-compute-default.service
-nvidia-smi --query-gpu=compute_mode --format=csv    # Default
-```
+1. Find what sets Exclusive_Process at boot (jarvis's card goes back to it on reboot; the driver's
+   own default is Default), read-only, and disable it (or, if it is a systemd unit that must stay,
+   add `After=<that unit>` to the boot unit):
+
+   ```bash
+   systemctl list-unit-files | grep -i nvidia
+   grep -rnE "compute-mode|-c 3|-c EXCLUSIVE|EXCLUSIVE_PROCESS" /etc/systemd /etc/rc.local \
+     /etc/cron* /etc/nvidia* /etc/modprobe.d /usr/lib/systemd/system/nvidia* 2>/dev/null
+   crontab -l 2>/dev/null | grep -i nvidia; sudo crontab -l 2>/dev/null | grep -i nvidia
+   systemctl cat nvidia-persistenced.service    # nvidia-persistenced options
+   ```
+
+2. Install and start:
+
+   ```bash
+   sudo install -m 644 ops/systemd/nvidia-compute-default.service /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now nvidia-compute-default.service
+   nvidia-smi --query-gpu=compute_mode --format=csv    # Default
+   ```
+
+3. Acceptance: reboot once; the mode must still be Default and the unit active (not failed):
+
+   ```bash
+   sudo reboot
+   nvidia-smi --query-gpu=compute_mode --format=csv    # Default
+   systemctl status nvidia-compute-default.service     # active (exited)
+   ```
 
 ### nginx and api restarts
 
