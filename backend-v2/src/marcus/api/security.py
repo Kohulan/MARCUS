@@ -42,6 +42,7 @@ from marcus.api.deps import (
     owner_cookie_header,
     rate_key_for_ip,
 )
+from marcus.api.redisutil import incr_with_ttl
 from marcus.core import storage
 from marcus.core.logging import log_context
 from marcus.core.models import Owner
@@ -243,10 +244,7 @@ class RateLimiter:
         window = int(now) // WINDOW_S
         rkey = f"rl:{scope}:{key}:{window}"
         try:
-            async with self.redis.pipeline(transaction=True) as pipe:
-                pipe.incr(rkey)
-                pipe.expire(rkey, WINDOW_S)
-                count, _ = await pipe.execute()
+            count = await incr_with_ttl(self.redis, rkey, WINDOW_S)
         except (RedisError, OSError) as exc:
             # A call that was in flight when the breaker opened is refused like any hit while
             # open; it is not counted (the count restarts when the breaker closes).

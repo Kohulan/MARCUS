@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import current_owner, get_owned_paper
 from marcus.api.read import steps_by_status
+from marcus.api.redisutil import incr_with_ttl
 from marcus.core.db import get_db
 from marcus.core.enums import FINISHED_STEPS, PaperStatus
 from marcus.core.events import paper_channel
@@ -116,10 +117,7 @@ async def _take_slot(owner_id: uuid.UUID) -> str | None:
     """Count one open stream for the owner; 429 above the limit. None when Redis is down."""
     key = f"sse:{owner_id}"
     try:
-        async with redis_client().pipeline(transaction=True) as pipe:
-            pipe.incr(key)
-            pipe.expire(key, _slot_ttl())
-            count, _ = await pipe.execute()
+        count = await incr_with_ttl(redis_client(), key, _slot_ttl())
     except (RedisError, OSError):
         log.warning("event stream slot for owner %s not counted (Redis)", owner_id, exc_info=True)
         return None  # fail open: the stream itself reports the outage
