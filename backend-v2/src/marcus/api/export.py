@@ -121,6 +121,18 @@ def to_sdf(chosen: list[Chosen]) -> bytes:
     return buf.getvalue().encode("utf-8")
 
 
+def build(
+    fmt: ExportFormat,
+    paper: Paper,
+    segments: list[Segment],
+    curations: dict[uuid.UUID, Curation],
+    predictions: dict[uuid.UUID, list[Prediction]],
+) -> bytes:
+    """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
+    marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
+    return render(fmt, paper, choose(paper, segments, curations, predictions))
+
+
 def render(fmt: ExportFormat, paper: Paper, chosen: list[Chosen]) -> bytes:
     if fmt == "json":
         return to_json(paper, chosen)

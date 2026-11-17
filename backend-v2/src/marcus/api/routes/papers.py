@@ -12,12 +12,12 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
+from marcus.api.chempool import CHEM
 from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found, paper_visible
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
@@ -159,8 +159,8 @@ async def export_paper(
 ) -> Response:
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
-    chosen = export.choose(paper, segments, curations, predictions)
-    content = await run_in_threadpool(export.render, format, paper, chosen)  # RDKit is sync
+    # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
+    content = await CHEM.run(export.build, format, paper, segments, curations, predictions)
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],

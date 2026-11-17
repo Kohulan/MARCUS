@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.api.chem import curation_error
+from marcus.api.chempool import CHEM
 from marcus.api.deps import current_owner, get_owned_segment, not_found
 from marcus.api.read import IMAGE_HEADERS
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
@@ -73,6 +75,14 @@ async def put_curation(
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
     segment, _ = await get_owned_segment(db, owner, segment_id)
+    if body.smiles is not None or body.molfile is not None:
+        error = await CHEM.run(curation_error, body.smiles, body.molfile)
+        if error is not None:
+            field, msg = error
+            raise HTTPException(
+                status_code=422,
+                detail=[{"type": "value_error", "loc": ["body", field], "msg": msg}],
+            )
     curation = await db.get(Curation, segment.id)
     if curation is None:
         curation = Curation(segment_id=segment.id)
