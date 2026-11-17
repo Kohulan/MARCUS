@@ -42,6 +42,11 @@ GRACE_S = 30  # watchdog: a step may run for its hard limit plus this
 # else None. `engine` is the step's OCSR engine (it may have its own time limits), else None.
 Send = Callable[[str, uuid.UUID, StepKind, int, int | None, str | None], None]
 
+# live_queues(): names of the queues at least one live worker consumes, or None when that
+# cannot be told (broker down, broadcast hung). Asked by the watchdog only for a step stuck in
+# `queued`, at most once per run.
+LiveQueues = Callable[[], "set[str] | frozenset[str] | None"]
+
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 _DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
 
@@ -189,12 +194,16 @@ def _stuck():
     )
 
 
-def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
+def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> bool:
     """In the current transaction, lock the step's parent then the step and, if the step is
     still stuck, fail it as worker_lost (retryable). A step stuck in `queued` never started,
     so its lost delivery is counted as an attempt here (the runtime counted a `running` one).
+    `served=False` (its queue has no live consumer, or that is unknown): a step stuck in
+    `queued` goes back to `pending` with no attempt and no error, because nothing could have
+    run it; it is sent again (a fresh message: the old one expires, see celery_send) and runs
+    when a worker comes back. A running step is always failed (a worker took it).
     A missing or deleted parent is left alone (no attempt added): fail_step would ignore it.
-    Does not commit. Returns True if failed.
+    Does not commit. Returns True if the step was failed or put back.
     """
     parent = session.execute(
         select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
@@ -216,6 +225,14 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
     ).scalar_one_or_none()
     if status is None:
         return False
+    if status == StepStatus.QUEUED.value and not served:
+        session.execute(
+            update(Step)
+            .where(Step.id == step_id)
+            .values(status=StepStatus.PENDING.value, queued_at=None)
+            .execution_options(synchronize_session=False)
+        )
+        return True
     if status == StepStatus.QUEUED.value:
         # Never started, so the runtime never counted it: a lost delivery is an attempt,
         # otherwise a broker that keeps losing it would re-queue it forever.
@@ -229,20 +246,38 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID) -> bool:
     return True
 
 
-def watchdog_once(session: Session) -> int:
+def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> int:
     """Fail (retry once, then final) steps stuck in queued/running. Returns the count.
 
+    With `live_queues`, a step stuck in `queued` on a queue that no live worker consumes is put
+    back to `pending` without costing an attempt (a dead queue must not turn its steps into
+    final failures, one per wait allowance). Without it every queue counts as served.
     The scan takes no locks; each step is re-checked and failed in its own transaction.
     """
-    ids = list(session.execute(select(Step.id).where(_stuck())).scalars())
+    rows = session.execute(select(Step.id, Step.status, Step.queue).where(_stuck())).all()
     session.rollback()
-    done = 0
-    for step_id in ids:
+    live: set[str] | frozenset[str] | None = None
+    if live_queues is not None and any(r.status == StepStatus.QUEUED.value for r in rows):
         try:
-            if fail_if_stuck(session, step_id):
+            live = live_queues()
+        except Exception:
+            log.exception("watchdog: consumer check failed")
+            live = None
+    done = 0
+    for step_id, status, queue in rows:
+        served = live_queues is None or (live is not None and queue in live)
+        try:
+            if fail_if_stuck(session, step_id, served=served):
                 session.commit()
                 done += 1
-                log.warning("watchdog: step %s stuck, marked worker_lost", step_id)
+                if served or status != StepStatus.QUEUED.value:
+                    log.warning("watchdog: step %s stuck, marked worker_lost", step_id)
+                else:
+                    log.warning(
+                        "watchdog: step %s queued on %s with no live consumer%s; back to "
+                        "pending, no attempt counted",
+                        step_id, queue, "" if live is not None else " (unknown)",
+                    )
             else:
                 session.rollback()
         except Exception:

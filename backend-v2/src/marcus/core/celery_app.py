@@ -70,6 +70,13 @@ celery_app.conf.update(
 )
 
 
+def live_queue_names(timeout: float) -> set[str]:
+    """Names of the queues that at least one live worker consumes (a blocking broker broadcast;
+    `timeout` bounds only the reply collection, callers bound the whole call)."""
+    replies = celery_app.control.inspect(timeout=timeout).active_queues() or {}
+    return {q["name"] for queues in replies.values() for q in (queues or []) if q.get("name")}
+
+
 @beat_init.connect
 def _log_beat_schedule(sender=None, **_) -> None:
     """Name every scheduled task when beat starts, so the logs show that (and where) beat runs."""

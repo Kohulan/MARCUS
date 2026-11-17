@@ -343,3 +343,46 @@ def test_celery_send_uses_decimer_hand_limits(monkeypatch):
     assert (seen["soft_time_limit"], seen["time_limit"]) == (180, 210)
     celery_send()("q.decimer", uuid.uuid4(), StepKind.OCSR, 0, None, "decimer")
     assert (seen["soft_time_limit"], seen["time_limit"]) == (30, 45)
+
+
+def test_celery_send_expires_after_the_queue_wait(monkeypatch):
+    """An unserved message expires when the watchdog gives up on it, so a worker that comes
+    back does not work through a backlog of deliveries the watchdog already replaced."""
+    from marcus.core import celery_app as ca
+    from marcus.core.queues import QUEUE_WAIT_S
+    from marcus.dispatcher.__main__ import celery_send
+
+    seen = {}
+    monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))
+    celery_send()("q.segment", uuid.uuid4(), StepKind.SEGMENT_PAGE, 0, None)
+    assert seen["expires"] == QUEUE_WAIT_S["q.segment"]
+    celery_send()("q.cpu", uuid.uuid4(), StepKind.CHECK_PDF, 0, None)
+    assert seen["expires"] == QUEUE_WAIT_S["q.cpu"]
+
+
+def test_live_queue_probe_is_bounded(monkeypatch):
+    """The dispatcher's consumer check never blocks its loop past the budget: a hung broadcast
+    gives None (unknown), and no second broadcast starts while it hangs."""
+    import threading
+
+    import marcus.dispatcher.__main__ as main_mod
+
+    release = threading.Event()
+    calls = []
+
+    def hang(timeout):
+        calls.append(1)
+        release.wait(5)
+        return {"q.cpu"}
+
+    monkeypatch.setattr(main_mod, "INSPECT_BUDGET_S", 0.2)
+    monkeypatch.setattr("marcus.core.celery_app.live_queue_names", hang)
+    probe = main_mod.live_queues_probe()
+    assert probe() is None
+    assert probe() is None and len(calls) == 1
+    release.set()
+    import time
+
+    time.sleep(0.2)
+    monkeypatch.setattr("marcus.core.celery_app.live_queue_names", lambda timeout: {"q.cpu"})
+    assert probe() == {"q.cpu"}

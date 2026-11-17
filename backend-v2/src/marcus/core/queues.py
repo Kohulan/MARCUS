@@ -48,7 +48,9 @@ def _load_slots() -> dict[str, int]:
 SLOTS: dict[str, int] = _load_slots()
 
 # How long a step may sit `queued` (sent, not yet started) before the watchdog counts its
-# delivery as lost, in seconds; independent of the step's run limit. Model queues cover a worker
+# delivery as lost, in seconds; independent of the step's run limit. The Celery message expires
+# after the same time. On a queue with no live consumer the watchdog instead puts the step back
+# to pending without counting an attempt (marcus.dispatcher.pick.watchdog_once). Model queues cover a worker
 # (re)start: the pool process preloads its model before it takes a step (DECIMER ~85-105 s on
 # CPU), and a hard-killed or recycled process is replaced the same way. Env override:
 # MARCUS_QUEUE_WAIT_S_<QUEUE>, e.g. MARCUS_QUEUE_WAIT_S_Q_DECIMER=600.
