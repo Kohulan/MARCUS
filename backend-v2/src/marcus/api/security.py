@@ -244,7 +244,7 @@ class RateLimiter:
         window = int(now) // WINDOW_S
         rkey = f"rl:{scope}:{key}:{window}"
         try:
-            count = await incr_with_ttl(self.redis, rkey, WINDOW_S)
+            count = await incr_with_ttl(self.redis, rkey, WINDOW_S, first_only=True)
         except (RedisError, OSError) as exc:
             # A call that was in flight when the breaker opened is refused like any hit while
             # open; it is not counted (the count restarts when the breaker closes).

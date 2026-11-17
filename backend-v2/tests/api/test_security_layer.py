@@ -504,7 +504,7 @@ class _Pipe:
     def incr(self, key):
         pass
 
-    def expire(self, key, seconds):
+    def expire(self, key, seconds, nx=False):
         pass
 
     async def execute(self):
