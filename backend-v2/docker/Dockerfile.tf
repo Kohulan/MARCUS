@@ -130,7 +130,7 @@ RUN python /tmp/unpack_decimer_weights.py /tmp /opt/pystow/DECIMER-V2 \
 
 FROM base AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgomp1 tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 marcus \
     && useradd --system --uid 10001 --gid marcus --home-dir /nonexistent --shell /usr/sbin/nologin marcus \
