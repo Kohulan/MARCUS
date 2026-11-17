@@ -19,8 +19,9 @@ Each upload gets a unique file name and unique bytes so every run really segment
 engines reuse it (what a user does when switching engine); their segment_ms is then about 0 and
 ``segments_already_existed`` is true in the line.
 
-On the jarvis copy (port 29000) the whole run is wrapped in guard_jarvis.Guard (production health and free
-GPU memory checked every 30 s); if it trips the run stops and can be resumed later.
+With --target jarvis (and always on the v1 tunnel port 29000) the whole run is wrapped in guard_jarvis.Guard
+(production state and free GPU memory checked every 30 s, GPU-time ledger); if it trips the run stops and can be
+resumed later. --prod-stopped: the owner's GPU window, production v1 must stay stopped.
 """
 from __future__ import annotations
 
@@ -99,6 +100,12 @@ def main(argv=None) -> int:
     ap.add_argument("--stop-after-down", type=int, default=2, help="stop after this many consecutive connection failures")
     ap.add_argument("--no-logs", action="store_true", help="do not read backend docker logs for page errors")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--target", choices=["local", "jarvis"], default="local",
+                    help="jarvis: the jarvis guard runs whatever the port (GPU memory, production state, GPU-time "
+                         "ledger); it also runs for the v1 tunnel port 29000 anyway")
+    ap.add_argument("--prod-stopped", action="store_true",
+                    help="jarvis guard, ONLY in the owner's GPU window with production v1 stopped on purpose: "
+                         "production must stay stopped (instead of healthy)")
     args = ap.parse_args(argv)
     run_paper = client_v2.run_paper if args.client == "v2" else client_v1.run_paper
 
@@ -121,7 +128,8 @@ def main(argv=None) -> int:
     n_done = 0
     consecutive_down = 0
     try:
-        with Guard(base_url, f"goldset:{args.name}") as guard:
+        with Guard(base_url, f"goldset:{args.name}", enabled=args.target == "jarvis" or is_jarvis_url(base_url),
+                   prod_expected="stopped" if args.prod_stopped else "running") as guard:
             for r, engine in todo:
                 if guard.tripped:
                     break

@@ -1,0 +1,33 @@
+# Throughput experiment for the v2 TEST stack on jarvis (D4 fix round 1, ruling R22 item 6). Not production.
+#
+# Two slots for segmentation (q.segment) and DECIMER OCSR (q.decimer): the dispatcher fills 2 slots per queue
+# (MARCUS_SLOTS_Q_*, marcus.core.queues) and each worker runs 2 prefork processes (one model and one GPU budget
+# per process: 2 x MARCUS_GPU_MEM_MB on the card). Add this file LAST:
+#
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.gpu.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml -f ../judges/stack/docker-compose.v2-jarvis-2slot.yml up -d
+#
+# The slot count is read where SLOTS is used: the dispatcher (fills slots), the api and metrics (settings / queue
+# report); all three get the same values.
+
+x-two-slots: &two-slots
+  MARCUS_SLOTS_Q_SEGMENT: "2"
+  MARCUS_SLOTS_Q_DECIMER: "2"
+
+services:
+  dispatcher:
+    environment: *two-slots
+  api:
+    environment: *two-slots
+  metrics:
+    environment: *two-slots
+
+  worker-segment:
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
+              "-c", "2", "--pool", "prefork", "--include", "marcus.workers.segment",
+              "-n", "segment@%h", "--loglevel", "INFO"]
+
+  worker-decimer:
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.decimer",
+              "-c", "2", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "decimer@%h", "--loglevel", "INFO"]

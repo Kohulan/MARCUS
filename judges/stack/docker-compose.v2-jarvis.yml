@@ -34,19 +34,15 @@
 # Fake engines stay OFF in GPU mode (MARCUS_ENABLE_FAKE_ENGINES from docker-compose.yml, default 0); security
 # mode turns them on through docker-compose.fake.yml only.
 #
-# MolScribe device: MARCUS_MOLSCRIBE_DEVICE=cpu (as v1) unless set in the environment of the `up` command; D4
-# measured cuda against cpu with the fixture judge (judges/results/2026-11-17-gpu-session.md).
+# MolScribe device: cuda, from docker-compose.gpu.yml (since D4 fix round 1; the fixture judge showed no loss
+# against cpu, judges/results/2026-11-17-gpu-session.md).
 
 #
-# D4 WORKAROUND (finding, not a fix): worker-segment runs WITHOUT its TensorFlow memory budget in GPU mode.
-# With MARCUS_GPU_MEM_MB=6144 (docker-compose.gpu.yml) marcus.workers.gpu.limit_tf_memory configures a logical
-# device, and importing decimer_segmentation then calls tf.config.experimental.set_memory_growth
-# (decimer_segmentation/mrcnn/model.py:51, configure_gpu at import) -> "ValueError: Cannot set memory growth on
-# device when virtual devices configured": the segmenter fails to load and the worker exits (restart loop).
-# worker-decimer already guards the same call (marcus/workers/ocsr/decimer.py: set_memory_growth is patched out
-# while decimer imports); marcus/workers/segment.py does not. An empty value disables the budget (the env var's
-# `:-6144` default in docker-compose.gpu.yml cannot be emptied from the shell, hence this file), so TensorFlow uses
-# memory growth as in v1. Remove this block once segment.py guards the import like decimer.py.
+# The first D4 session (2026-11-17, morning) ran worker-segment WITHOUT its TensorFlow budget here (finding F2:
+# decimer_segmentation's import-time set_memory_growth). segment.py now skips that call when a budget is set, so
+# every worker runs with the budgets of docker-compose.gpu.yml (the shipping configuration).
+#
+# Throughput experiment (2 slots for segmentation and DECIMER OCSR): add -f docker-compose.v2-jarvis-2slot.yml last.
 
 services:
   api:
@@ -55,6 +51,3 @@ services:
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
 
-  worker-segment:
-    environment:
-      MARCUS_GPU_MEM_MB: ""

@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import threading
@@ -149,6 +150,10 @@ def cancel_papers() -> list[str]:
 
 
 def git_short_hash() -> str:
+    """The judges' git hash (the build label of v2 run lines). JUDGE_V2_BUILD overrides it where the judges run from
+    a copy without git (jarvis, Task D4: the label was "v2-unknown")."""
+    if os.environ.get("JUDGE_V2_BUILD"):
+        return os.environ["JUDGE_V2_BUILD"]
     try:
         out = subprocess.run(["git", "-C", str(_REPO), "rev-parse", "--short", "HEAD"], capture_output=True,
                              text=True, timeout=10, check=True).stdout.strip()

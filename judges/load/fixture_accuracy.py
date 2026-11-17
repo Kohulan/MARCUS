@@ -108,8 +108,12 @@ def main(argv=None) -> int:
                     cleared = cache.clear(f"ACC {n} {eng}") if cache else None
                     print(f"[{utc()}] synth_{n:03d} {eng} ...", flush=True)
                     t0 = time.time()
-                    rec = api.run_paper(path, eng, base_url=base_url, paper_id=path.stem, abort=guard.abort,
-                                        tag=f"ACC:{a.tag}", **TIMEOUTS)
+                    try:
+                        rec = api.run_paper(path, eng, base_url=base_url, paper_id=path.stem, abort=guard.abort,
+                                            tag=f"ACC:{a.tag}", **TIMEOUTS)
+                    except Exception as e:  # one engine's failure must not end the other engines' runs (M6)
+                        rec = {"segments": [], "wall_ms": 0, "fatal_error": f"{type(e).__name__}: {e}"[:300],
+                               "listed_pages": []}
                     sc = score(rec, meta)
                     row = {"fixture": path.stem, "engine": eng, "wall_s": round(rec["wall_ms"] / 1000, 1),
                            "duration_s": round(time.time() - t0, 1), "fatal_error": rec.get("fatal_error"),
@@ -120,6 +124,8 @@ def main(argv=None) -> int:
                            "engine_versions": sorted({s.get("engine_version") for s in rec["segments"]
                                                       if s.get("engine_version")}),
                            "n_seg_errors": sum(1 for s in rec["segments"] if s.get("error")), **sc}
+                    # R21 (M5): a v2 run with an OCSR cache hit is not a cold run; accuracy holds, timings do not
+                    row["timing_valid"] = not (a.client == "v2" and (rec.get("ocsr_cache_hits") or 0) > 0)
                     res["runs"].append(row)
                     out.write_text(json.dumps(res, indent=1))
                     print(f"    exact {sc['exact']}/{sc['expected']}  skeleton {sc['skeleton']}  segments "

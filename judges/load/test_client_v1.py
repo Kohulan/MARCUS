@@ -167,3 +167,33 @@ def test_record_is_json_serialisable_and_has_readme_fields(monkeypatch, pdf):
         assert k in r
     for k in ("segment_id", "page", "smiles", "ocsr_ms", "error"):
         assert k in r["segments"][0]
+
+
+def _form_fields(body: str) -> dict:
+    import re
+
+    return dict(re.findall(r'name="([a-z_]+)"\r\n\r\n([^\r]*)\r\n', body))
+
+
+@pytest.mark.parametrize("engine,v1_engine,hand", [("decimer-hand", "decimer", "true"), ("decimer", "decimer", "false"),
+                                                   ("molnextr", "molnextr", "false")])
+def test_decimer_hand_is_v1_decimer_with_hand_drawn_flag(monkeypatch, pdf, engine, v1_engine, hand):
+    """v2's engine "decimer-hand" is v1's DECIMER with the API's hand_drawn=true (the Vue UI never sets it). The D4
+    v1 decimer-hand baseline depends on this, on the first call AND on the UI fallback call."""
+    fake = Fake(["page_0_0_segmented.png", "page_1_0_segmented.png"], fail_first_ocsr=["page_1_0_segmented.png"])
+    forms = []
+    orig = fake.__call__
+
+    def capture(req):
+        if "/ocsr/" in req.url.path:
+            forms.append((req.url.path.rsplit("/", 1)[-1], _form_fields(req.content.decode("latin1"))))
+        return orig(req)
+
+    real = _REAL_CLIENT
+    monkeypatch.setattr(client_v1.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(capture), **kw))
+    monkeypatch.setattr(client_v1, "count_pdf_pages", lambda p: 2)
+    r = client_v1.run_paper(pdf, engine, base_url="http://x", paper_id="PMC1", log_source=None)
+    assert r["engine"] == engine  # the run line keeps the v2 name, so v1 and v2 lines pair up
+    assert [p for p, _ in forms] == ["generate_with_depiction", "generate_with_depiction", "generate_both"]
+    for _, f in forms:
+        assert f["engine"] == v1_engine and f["hand_drawn"] == hand
