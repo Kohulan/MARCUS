@@ -1,6 +1,7 @@
 import ipaddress
 import uuid
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import and_, exists, func, or_, select
@@ -54,9 +55,15 @@ def rate_key_for_ip(ip: str) -> str:
     return str(ipaddress.IPv6Network((int(addr), IPV6_RATE_PREFIX), strict=False))
 
 
-def _trusted_networks() -> list:
+@lru_cache(maxsize=8)
+def _networks(entries: tuple[str, ...]) -> tuple:
+    return tuple(ipaddress.ip_network(e, strict=False) for e in entries)
+
+
+def _trusted_networks() -> tuple:
+    """`trusted_proxies` parsed once per value (asked on every request, more than once)."""
     # Entries are validated when Settings load (an invalid one stops startup).
-    return [ipaddress.ip_network(e, strict=False) for e in get_settings().trusted_proxies]
+    return _networks(tuple(get_settings().trusted_proxies))
 
 
 def _is_trusted(addr, nets) -> bool:
