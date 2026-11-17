@@ -24,6 +24,10 @@ address 172.30.0.10 outside the dynamic pool (`MARCUS_TRUSTED_PROXIES`). With th
 override, Grafana publishes 127.0.0.1:13000 through its own `grafana-edge` network, which does no
 masquerading (no route out either).
 
+Switching a running stack to these networks: run `up -d --force-recreate` once (or `down` first;
+volumes stay). Compose recreates a changed network, but containers it does not recreate (e.g.
+postgres, redis) are re-attached without their service aliases, so `postgres` stops resolving.
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,
