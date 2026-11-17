@@ -17,9 +17,9 @@ from collections.abc import Callable
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.orm import Session
 
-from marcus.core.enums import ErrorClass, PaperStatus, StepKind, StepStatus
-from marcus.core.models import ImageJob, Paper, Step
-from marcus.core.pipeline import fail_step
+from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.models import Paper, Step
+from marcus.core.pipeline import fail_step, lock_parent, parent_gone
 from marcus.core.queues import (
     DOCLING_FIXED_S,
     DOCLING_HARD_EXTRA_S,
@@ -49,7 +49,6 @@ Send = Callable[[str, uuid.UUID, StepKind, int, int | None, str | None], None]
 LiveQueues = Callable[[], "set[str] | frozenset[str] | None"]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
-_DELETED = PaperStatus.DELETED.value  # papers and image jobs use the same word
 
 # Order: priority class, then owner usage on this queue in the fair window (steps busy now
 # or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
@@ -111,14 +110,14 @@ def pick_next(session: Session, queue: str, allow_docling: bool = True) -> Step 
 
 
 def _put_back(session: Session, step_id: uuid.UUID) -> None:
-    """After a failed send: back to pending, but only if nobody moved the step on since."""
+    """A queued step back to pending (no attempt counted), only if nobody moved it on since.
+    Does not commit."""
     session.execute(
         update(Step)
         .where(Step.id == step_id, Step.status == StepStatus.QUEUED.value)
         .values(status=StepStatus.PENDING.value, queued_at=None)
         .execution_options(synchronize_session=False)
     )
-    session.commit()
 
 
 def dispatch_once(session: Session, send: Send) -> int:
@@ -151,6 +150,7 @@ def dispatch_once(session: Session, send: Send) -> int:
                 log.exception("send failed for step %s on %s; back to pending", step_id, queue)
                 session.rollback()
                 _put_back(session, step_id)
+                session.commit()
                 break
             sent += 1
         session.rollback()  # end the read-only transaction of the last free_slots / pick
@@ -223,20 +223,10 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     A missing or deleted parent is left alone (no attempt added): fail_step would ignore it.
     Does not commit. Returns True if the step was failed or put back.
     """
-    parent = session.execute(
+    ids = session.execute(
         select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
     ).one_or_none()
-    if parent is None:
-        return False
-    if parent.paper_id is not None:
-        parent_status = session.execute(
-            select(Paper.status).where(Paper.id == parent.paper_id).with_for_update()
-        ).scalar_one_or_none()
-    else:
-        parent_status = session.execute(
-            select(ImageJob.status).where(ImageJob.id == parent.image_job_id).with_for_update()
-        ).scalar_one_or_none()
-    if parent_status is None or parent_status == _DELETED:
+    if ids is None or parent_gone(lock_parent(session, ids.paper_id, ids.image_job_id)):
         return False
     status = session.execute(
         select(Step.status).where(Step.id == step_id, _stuck()).with_for_update()
@@ -244,12 +234,7 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     if status is None:
         return False
     if status == StepStatus.QUEUED.value and not served:
-        session.execute(
-            update(Step)
-            .where(Step.id == step_id)
-            .values(status=StepStatus.PENDING.value, queued_at=None)
-            .execution_options(synchronize_session=False)
-        )
+        _put_back(session, step_id)  # locked and still queued: the guard holds
         return True
     if status == StepStatus.QUEUED.value:
         # Never started, so the runtime never counted it: a lost delivery is an attempt,

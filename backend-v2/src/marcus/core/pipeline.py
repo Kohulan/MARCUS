@@ -181,31 +181,34 @@ def _ocsr_seq(page: int, idx: int) -> int:
     return page * 1000 + idx
 
 
-def _lock_paper(session: Session, paper_id: uuid.UUID) -> Paper | None:
+def _lock(session: Session, model, row_id: uuid.UUID):
+    """SELECT ... FOR UPDATE of one row (fresh attributes), or None."""
     return session.execute(
-        select(Paper)
-        .where(Paper.id == paper_id)
+        select(model)
+        .where(model.id == row_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
 
 
-def _lock_image_job(session: Session, job_id: uuid.UUID) -> ImageJob | None:
-    return session.execute(
-        select(ImageJob)
-        .where(ImageJob.id == job_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
+def lock_parent(
+    session: Session, paper_id: uuid.UUID | None, image_job_id: uuid.UUID | None
+) -> Paper | ImageJob | None:
+    """Lock a step's parent row: its paper, else its image job. None when the row is gone.
+
+    The first half of the lock order every writer of step state keeps: parent row, then step
+    row (the planner here, the runtime's attempt fence, the watchdog)."""
+    if paper_id is not None:
+        return _lock(session, Paper, paper_id)
+    return _lock(session, ImageJob, image_job_id)
 
 
-def _lock_step(session: Session, step_id: uuid.UUID) -> Step | None:
-    return session.execute(
-        select(Step)
-        .where(Step.id == step_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
+def parent_gone(parent: Paper | ImageJob | None) -> bool:
+    """The parent row is missing or deleted: its steps must not change."""
+    return parent is None or parent.status in (
+        PaperStatus.DELETED.value,
+        ImageJobStatus.DELETED.value,
+    )
 
 
 def _load_for_change(session: Session, step_id: uuid.UUID):
@@ -215,21 +218,16 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
     already finished (done/failed/cancelled), or its parent is deleted.
     Lock order is always parent row, then step row.
     """
-    parent = session.execute(
+    ids = session.execute(
         select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
     ).one_or_none()
-    if parent is None:
+    if ids is None:
         return None
-    paper = job = None
-    if parent.paper_id is not None:
-        paper = _lock_paper(session, parent.paper_id)
-        if paper is None or paper.status == PaperStatus.DELETED.value:
-            return None
-    else:
-        job = _lock_image_job(session, parent.image_job_id)
-        if job is None or job.status == ImageJobStatus.DELETED.value:
-            return None
-    step = _lock_step(session, step_id)
+    parent = lock_parent(session, ids.paper_id, ids.image_job_id)
+    if parent_gone(parent):
+        return None
+    paper, job = (parent, None) if ids.paper_id is not None else (None, parent)
+    step = _lock(session, Step, step_id)
     if step is None or step.status in FINISHED_STEPS:
         return None
     return step, paper, job
@@ -677,7 +675,7 @@ def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
     be removed (any OSError) is logged and does not abort the transaction: the paper is
     deleted either way, and the retention purge's orphan sweep removes the leftovers later.
     """
-    paper = _lock_paper(session, paper_id)
+    paper = _lock(session, Paper, paper_id)
     if paper is None:
         raise ValueError("paper not found")
     session.execute(
@@ -710,7 +708,7 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     segment = session.get(Segment, segment_id)
     if segment is None:
         raise ValueError("segment not found")
-    paper = _lock_paper(session, segment.paper_id)
+    paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
     step = _new_step(

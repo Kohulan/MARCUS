@@ -48,8 +48,8 @@ from marcus.core.celery_app import celery_app
 from marcus.core.db import sync_session
 from marcus.core.enums import ErrorClass, StepKind, StepStatus
 from marcus.core.logging import log_context
-from marcus.core.models import ImageJob, Paper, Step
-from marcus.core.pipeline import MAX_ATTEMPTS, BadResult, complete_step, fail_step
+from marcus.core.models import Step
+from marcus.core.pipeline import MAX_ATTEMPTS, BadResult, complete_step, fail_step, lock_parent
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +100,12 @@ class Claim:
     page: int | None
     segment_id: uuid.UUID | None
 
+    @classmethod
+    def from_row(cls, step_id: uuid.UUID, row) -> "Claim":
+        """From a row with the _RETURNING columns."""
+        return cls(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id, row.page,
+                   row.segment_id)  # fmt: skip
+
 
 _RETURNING = (
     Step.attempts, Step.kind, Step.paper_id, Step.image_job_id, Step.page, Step.segment_id,
@@ -142,10 +148,7 @@ def _start(session: Session, step_id: uuid.UUID, worker: str, *guard) -> Claim |
         .returning(*_RETURNING)
         .execution_options(synchronize_session=False)
     ).one_or_none()
-    if row is None:
-        return None
-    return Claim(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id, row.page,
-                 row.segment_id)  # fmt: skip
+    return None if row is None else Claim.from_row(step_id, row)
 
 
 def claim(step_id: uuid.UUID, sent_attempts: int, worker: str) -> Claim | None:
@@ -170,8 +173,7 @@ def claim(step_id: uuid.UUID, sent_attempts: int, worker: str) -> Claim | None:
                 log.info("step %s: message for attempt token %d is stale (%s); dropped",
                          step_id, sent_attempts, row.status if row else "unknown")  # fmt: skip
                 return None
-            seen = Claim(step_id, row.attempts, row.kind, row.paper_id, row.image_job_id,
-                         row.page, row.segment_id)  # fmt: skip
+            seen = Claim.from_row(step_id, row)
             if row.attempts >= MAX_ATTEMPTS:
                 session.rollback()
                 log.warning("step %s redelivered after %d attempts: worker_lost", step_id,
@@ -193,12 +195,7 @@ def claim(step_id: uuid.UUID, sent_attempts: int, worker: str) -> Claim | None:
 
 def _still_mine(session: Session, mine: Claim) -> bool:
     """Lock parent then step (planner order); True if this delivery still owns the step."""
-    if mine.paper_id is not None:
-        session.execute(select(Paper.id).where(Paper.id == mine.paper_id).with_for_update())
-    else:
-        session.execute(
-            select(ImageJob.id).where(ImageJob.id == mine.image_job_id).with_for_update()
-        )
+    lock_parent(session, mine.paper_id, mine.image_job_id)
     row = session.execute(
         select(Step.status, Step.attempts).where(Step.id == mine.step_id).with_for_update()
     ).one_or_none()
@@ -207,37 +204,28 @@ def _still_mine(session: Session, mine: Claim) -> bool:
 
 
 def _complete(mine: Claim, result: dict) -> None:
-    """complete_step under the attempt fence. Raises (after rollback) on any error."""
+    """complete_step under the attempt fence. Raises on any error (closing the session rolls
+    back, here and in _fail)."""
     with sync_session() as session:
-        try:
-            if not _still_mine(session, mine):
-                session.rollback()
-                log.warning("step %s attempt %d is stale; result dropped", mine.step_id,
-                            mine.attempts)  # fmt: skip
-                return
-            complete_step(session, mine.step_id, result)
-            session.commit()
-        except BaseException:
-            session.rollback()
-            raise
+        if not _still_mine(session, mine):
+            log.warning("step %s attempt %d is stale; result dropped", mine.step_id,
+                        mine.attempts)  # fmt: skip
+            return
+        complete_step(session, mine.step_id, result)
+        session.commit()
     _publish(mine, StepStatus.DONE.value)
 
 
 def _fail(mine: Claim, error_class: ErrorClass, error: str, retryable: bool) -> None:
     """fail_step under the attempt fence, then publish the step's new status."""
     with sync_session() as session:
-        try:
-            if not _still_mine(session, mine):
-                session.rollback()
-                log.warning("step %s attempt %d is stale; failure dropped", mine.step_id,
-                            mine.attempts)  # fmt: skip
-                return
-            fail_step(session, mine.step_id, error_class, error, retryable)
-            status = session.get(Step, mine.step_id).status
-            session.commit()
-        except BaseException:
-            session.rollback()
-            raise
+        if not _still_mine(session, mine):
+            log.warning("step %s attempt %d is stale; failure dropped", mine.step_id,
+                        mine.attempts)  # fmt: skip
+            return
+        fail_step(session, mine.step_id, error_class, error, retryable)
+        status = session.get(Step, mine.step_id).status
+        session.commit()
     _publish(mine, status)
 
 
