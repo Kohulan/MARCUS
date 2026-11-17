@@ -181,15 +181,20 @@ def page_count(path: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB) -> int:
 def render_page_png(
     path: Path, page: int, out: Path, timeout_s: int, mem_mb: int = DEFAULT_MEM_MB
 ) -> None:
-    """Render one page at 300 DPI to `out`; a killed render never leaves a half PNG."""
+    """Render one page at 300 DPI to `out`; a killed render never leaves a half PNG. A page
+    above Settings.max_page_pixels is refused before rendering (BadInput)."""
     from marcus.core.settings import get_settings
 
+    settings = get_settings()
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(f".{out.stem}.{uuid.uuid4().hex}.tmp.png")
     try:
         _run_pdf(
-            "render", [str(path), page, str(tmp), get_settings().max_pages], timeout_s, mem_mb
+            "render",
+            [str(path), page, str(tmp), settings.max_pages, settings.max_page_pixels],
+            timeout_s,
+            mem_mb,
         )
         os.replace(tmp, out)
     finally:

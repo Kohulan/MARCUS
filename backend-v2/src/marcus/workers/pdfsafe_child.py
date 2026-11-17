@@ -40,7 +40,11 @@ def op_count(path: str, max_pages: int) -> int:
         doc.close()
 
 
-def op_render(path: str, page: int, out: str, max_pages: int) -> None:
+def op_render(path: str, page: int, out: str, max_pages: int, max_pixels: int) -> None:
+    """Render one page at 300 DPI. The pixel size (page rect x zoom) is checked first: a page
+    above `max_pixels` is refused before anything is drawn."""
+    import math
+
     import pymupdf
 
     doc = _open_checked(path, max_pages)
@@ -48,6 +52,13 @@ def op_render(path: str, page: int, out: str, max_pages: int) -> None:
         if not 0 <= page < doc.page_count:
             raise ValueError("page out of range")
         zoom = 300 / 72
+        rect = doc[page].rect
+        width, height = math.ceil(rect.width * zoom), math.ceil(rect.height * zoom)
+        if width * height > max_pixels:
+            raise ValueError(
+                f"page too large to render: {width}x{height} pixels at 300 DPI "
+                f"(limit {max_pixels / 1e6:g} megapixels)"
+            )
         pix = doc[page].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
         pix.save(out)
     finally:

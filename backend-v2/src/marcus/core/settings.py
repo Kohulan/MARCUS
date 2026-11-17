@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     data_root: Path = Path("/data")
     max_upload_bytes: int = 20 * 1024 * 1024
     max_pages: int = 100
+    # A page is rendered (300 DPI) only up to this many pixels; a larger one is final bad_input.
+    # A4 is 8.7 MP; the cap stops a crafted page from writing a PNG of hundreds of MB.
+    max_page_pixels: int = Field(50_000_000, gt=0)
+    # Below this many free bytes on data_root, POST /papers and POST /images answer 503. The
+    # Prometheus alert MarcusDiskUploadsRefused (ops/prometheus-alerts.yml) uses the same value.
+    min_free_disk_bytes: int = Field(5 * 2**30, ge=0)
     retention_days: int = 30
     browser_max_active_papers: int = 3
     ip_max_new_owners_per_hour: int = 10

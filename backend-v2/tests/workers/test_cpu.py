@@ -196,3 +196,39 @@ def test_docling_real_multipage_paper_within_cpu_limit():
     print(f"docling wall {wall:.1f} s, child cpu {cpu_used:.1f} s, cpu limit {limit} s")
     assert cpu_used < 0.8 * limit
     assert "texts" in json.loads((paper_dir(pid) / "text.json").read_text())
+
+
+def _big_page_paper(width_pt: float, height_pt: float):
+    paper_id = uuid.uuid4()
+    pdf = pdf_path(paper_id)
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    doc = pymupdf.open()
+    doc.new_page(width=width_pt, height=height_pt)
+    doc.save(str(pdf))
+    doc.close()
+    return paper_id
+
+
+def test_render_refuses_a_page_above_the_pixel_cap():
+    """Review I6: a page is rendered only up to MARCUS_MAX_PAGE_PIXELS (50 MP at 300 DPI); a
+    larger one is refused before any pixel is drawn, as final bad_input, and leaves no file."""
+    pid = _big_page_paper(3000, 3000)  # 12500 x 12500 px at 300 DPI = 156 MP
+    start = time.monotonic()
+    with pytest.raises(BadInput, match="page too large to render"):
+        cpu.render_page(view(pid, 0), None)
+    assert time.monotonic() - start < 15
+    pages = page_image_path(pid, 0).parent
+    assert not pages.exists() or list(pages.iterdir()) == []
+
+
+def test_render_pixel_cap_is_a_setting(monkeypatch):
+    from marcus.core.settings import get_settings
+
+    pid = _big_page_paper(595, 842)  # A4: 2480 x 3508 px = 8.7 MP
+    monkeypatch.setenv("MARCUS_MAX_PAGE_PIXELS", "8000000")
+    get_settings.cache_clear()
+    with pytest.raises(BadInput, match="page too large to render"):
+        cpu.render_page(view(pid, 0), None)
+    monkeypatch.setenv("MARCUS_MAX_PAGE_PIXELS", "9000000")
+    get_settings.cache_clear()
+    assert cpu.render_page(view(pid, 0), None) == {}
