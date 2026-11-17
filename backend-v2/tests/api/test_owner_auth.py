@@ -197,6 +197,74 @@ async def test_parallel_first_requests_do_not_use_up_new_owner_slots(app, async_
         assert (await c.get("/api/v2/_whoami")).status_code == 429
 
 
+async def test_owners_collected_first_and_used_later_stay_at_ten(app, async_db_session):
+    """Re-review N1: 100 cookie-less requests first (all owners unused, only the total cap
+    applies), then each cookie used. Only 10 may become used owners; the 11th first return
+    gets the same 429 as the creation limit and stays unused."""
+    tokens = []
+    async with make_client(app) as c:
+        for _ in range(100):
+            c.cookies.clear()
+            r = await c.get("/api/v2/_whoami")
+            assert r.status_code == 200
+            tokens.append(owner_cookies(r)[0].split(";")[0].split("=", 1)[1])
+        c.cookies.clear()
+        assert (await c.get("/api/v2/_whoami")).status_code == 429  # total cap of 100
+    codes = []
+    for token in tokens:
+        async with make_client(app) as c:
+            c.cookies.set(COOKIE, token)
+            codes.append((await c.get("/api/v2/_whoami")).status_code)
+    assert codes == [200] * 10 + [429] * 90
+    refused = await _httpx_detail(app, tokens[10])
+    assert refused == {"detail": "Too many new sessions from this address"}
+    # a used owner keeps working
+    async with make_client(app) as c:
+        c.cookies.set(COOKIE, tokens[0])
+        assert (await c.get("/api/v2/_whoami")).status_code == 200
+    used = (
+        await async_db_session.execute(
+            select(func.count())
+            .select_from(Owner)
+            .where(Owner.last_seen_at > Owner.created_at)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert used == 10
+
+
+async def _httpx_detail(app, token) -> dict:
+    async with make_client(app) as c:
+        c.cookies.set(COOKIE, token)
+        r = await c.get("/api/v2/_whoami")
+    assert r.status_code == 429 and owner_cookies(r) == []
+    return r.json()
+
+
+async def test_a_used_owner_is_never_refused_on_its_first_return(app, async_db_session):
+    """An owner already used by a cookie-less upload (it has a paper) passed the check when it
+    was created: its first return is not counted again."""
+    db = async_db_session
+    tokens = []
+    for _ in range(10):
+        token = new_token()
+        owner = Owner(
+            kind=OwnerKind.BROWSER.value,
+            token_hash=hash_token(token),
+            priority_class=int(PriorityClass.BROWSER),
+            created_ip="127.0.0.1",
+        )
+        db.add(owner)
+        await db.commit()
+        await db.run_sync(lambda s, o=owner: _paper_for(s, o))
+        await db.commit()
+        tokens.append(token)
+    for token in tokens:
+        async with make_client(app) as c:
+            c.cookies.set(COOKIE, token)
+            assert (await c.get("/api/v2/_whoami")).status_code == 200
+
+
 async def test_an_owner_with_a_paper_counts_as_used(app, async_db_session):
     """A cookie-less upload creates the owner and its paper in one request: it counts."""
     db = async_db_session

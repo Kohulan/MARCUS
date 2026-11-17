@@ -113,6 +113,42 @@ def _used():
     )
 
 
+TOO_MANY_SESSIONS = "Too many new sessions from this address"
+
+
+async def _lock_address(db: AsyncSession, ip: str) -> None:
+    """Serialize owner creation and first use per address bucket (until the commit)."""
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
+
+
+async def _check_first_use(db: AsyncSession, owner: Owner) -> None:
+    """An unused owner coming back for the first time becomes used: refuse (429, as at
+    creation) if its address already has ip_max_new_owners_per_hour used owners created in the
+    last hour. Without this, owners collected unused (only the total cap applies) could all be
+    used later. An owner already used (a cookie-less upload gave it a paper) or created over an
+    hour ago is not counted again. The caller's commit (the touch) ends the lock."""
+    since = datetime.now(UTC) - timedelta(hours=1)
+    if owner.created_at < since:
+        return
+    ip = str(owner.created_ip) if owner.created_ip is not None else UNKNOWN_IP
+    await _lock_address(db, ip)
+    already = (
+        await db.execute(select(func.count()).select_from(Owner).where(Owner.id == owner.id, _used()))
+    ).scalar_one()
+    if already:
+        return
+    used = (
+        await db.execute(
+            select(func.count())
+            .select_from(Owner)
+            .where(owners_from_ip(ip), Owner.created_at >= since, Owner.id != owner.id, _used())
+        )
+    ).scalar_one()
+    if used >= get_settings().ip_max_new_owners_per_hour:
+        await db.rollback()
+        raise HTTPException(status_code=429, detail=TOO_MANY_SESSIONS)
+
+
 def _bearer(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     scheme, _, token = auth.partition(" ")
@@ -194,6 +230,8 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
             )
         ).scalar_one_or_none()
         if owner is not None:
+            if owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at:
+                await _check_first_use(db, owner)  # its first return makes it a used owner
             if await _touch(db, owner):
                 setattr(request.state, NEW_OWNER_TOKEN, cookie)  # sliding expiry
             return owner
@@ -202,7 +240,7 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
     ip_valid = _parse_ip(ip) is not None
     # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
     # An unknown address is one shared bucket (fail closed), not a free pass.
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
+    await _lock_address(db, ip)
     since = datetime.now(UTC) - timedelta(hours=1)
     total, used = (
         await db.execute(
@@ -215,7 +253,7 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
         used >= settings.ip_max_new_owners_per_hour
         or total >= settings.ip_max_new_sessions_per_hour
     ):
-        raise HTTPException(status_code=429, detail="Too many new sessions from this address")
+        raise HTTPException(status_code=429, detail=TOO_MANY_SESSIONS)
 
     token = new_token()
     owner = Owner(
