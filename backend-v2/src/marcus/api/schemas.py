@@ -55,6 +55,7 @@ class PredictionOut(_Orm):
     molfile: str | None
     valid: bool
     ms: int
+    cached: bool
     created_at: datetime
 
 

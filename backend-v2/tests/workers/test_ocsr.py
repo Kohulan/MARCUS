@@ -165,3 +165,21 @@ def test_engine_loaded_once(monkeypatch):
     base.get_engine(Engine.DECIMER)
     base.get_engine(Engine.DECIMER)
     assert calls == [1]
+
+
+def test_ocsr_marks_cache_hits_and_misses(monkeypatch):
+    """The step result says whether it came from ocsr_cache (judges need it for honest timings)."""
+    from marcus.workers.ocsr import handler
+
+    use_engine(monkeypatch, "CCO")
+    sha = "cd" * 32
+    pid = uuid.uuid4()
+    crop = segment_crop_path(pid, sha)
+    crop.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 8)).save(crop)
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
+    miss = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
+    assert miss["cached"] is False
+    monkeypatch.setattr(handler, "_cache_get", lambda *a: SimpleNamespace(smiles="CCO", molfile=None))
+    hit = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
+    assert hit["cached"] is True and hit["ms"] == 0

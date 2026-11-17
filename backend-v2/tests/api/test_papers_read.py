@@ -550,3 +550,18 @@ async def test_queue_ignores_my_expired_papers(app, async_db_session):
     async with make_client(app, token) as c:
         body = (await c.get("/api/v2/queue")).json()
     assert [p["id"] for p in body["papers"]] == [str(kept.paper_id)]
+
+
+async def test_prediction_exposes_cached_flag(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await db.execute(
+        update(Prediction).where(Prediction.segment_id == seeded.segment_ids[0]).values(cached=True)
+    )
+    await db.commit()
+    async with make_client(app, token) as c:
+        r = await c.get(f"/api/v2/papers/{seeded.paper_id}")
+    segs = {s["id"]: s for s in r.json()["segments"]}
+    assert [p["cached"] for p in segs[str(seeded.segment_ids[0])]["predictions"]] == [True]
+    assert [p["cached"] for p in segs[str(seeded.segment_ids[1])]["predictions"]] == [False]

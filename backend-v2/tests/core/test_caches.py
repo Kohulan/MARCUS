@@ -408,6 +408,7 @@ def test_ocsr_cache_hit_skips_engine(db_session, engine_slot):
         "molfile": "MOLFILE",
         "valid": True,
         "ms": 0,
+        "cached": True,
         "engine_version": "stub-9",
     }
     assert first["smiles"] == second["smiles"]

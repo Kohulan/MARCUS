@@ -318,6 +318,8 @@ def _check_ocsr_result(result: dict) -> None:
     version = result.get("engine_version")
     if not _is_text(version) or not version:
         raise BadResult("ocsr: 'engine_version' must be a non-empty string")
+    if "cached" in result and not isinstance(result["cached"], bool):
+        raise BadResult("ocsr: 'cached' must be a bool")
 
 
 def _check_doi_result(result: dict) -> None:
@@ -543,6 +545,7 @@ def _prediction(step: Step, result: dict) -> Prediction:
         molfile=result.get("molfile"),
         valid=result["valid"],
         ms=result["ms"],
+        cached=bool(result.get("cached", False)),
     )
 
 

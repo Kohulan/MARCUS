@@ -114,6 +114,18 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
     ]
 
 
+def test_ocsr_result_stores_cached_flag(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    ocsr1, ocsr2 = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    finish(s, ocsr1, {**OCSR, "cached": True, "ms": 0})
+    finish(s, ocsr2, OCSR)
+    cached = {p.segment_id: p.cached for p in s.execute(select(Prediction)).scalars()}
+    assert cached == {ocsr1.segment_id: True, ocsr2.segment_id: False}
+
+
 def test_ocsr_result_writes_prediction(db_session):
     s = db_session
     paper = make_paper(s)

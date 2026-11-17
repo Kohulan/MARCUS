@@ -188,6 +188,8 @@ class Prediction(Base):
     molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
     valid: Mapped[bool] = mapped_column()
     ms: Mapped[int] = mapped_column(Integer)
+    # True when the result came from ocsr_cache (ms is then 0), not from the engine
+    cached: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 

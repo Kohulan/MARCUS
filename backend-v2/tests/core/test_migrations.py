@@ -92,3 +92,18 @@ def test_models_declare_the_0003_indexes():
     }
     for key, columns in INDEXES_0003.items():
         assert declared.get(key) == columns, key
+
+
+def test_0004_adds_predictions_cached(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        assert "cached" in _columns(engine, "predictions")
+        command.downgrade(cfg, "0003")
+        assert "cached" not in _columns(engine, "predictions")
+    finally:
+        command.upgrade(cfg, "head")

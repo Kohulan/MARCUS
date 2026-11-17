@@ -118,6 +118,7 @@ def ocsr(step, session) -> dict:
                 "molfile": hit.molfile,
                 "valid": is_valid_smiles(hit.smiles),
                 "ms": 0,
+                "cached": True,
                 "engine_version": version,
             }
     engine = get_engine(name)
@@ -131,6 +132,7 @@ def ocsr(step, session) -> dict:
         "molfile": result.molfile,
         "valid": is_valid_smiles(result.smiles),
         "ms": ms,
+        "cached": False,
         "engine_version": engine.version,
     }
 
