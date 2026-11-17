@@ -232,22 +232,20 @@ async def test_concurrent_uploads_respect_the_owner_limit(migrated_db, app, asyn
 async def test_uploads_refused_with_503_below_the_free_disk_floor(app, monkeypatch):
     """Review I6: below MARCUS_MIN_FREE_DISK_BYTES on the data volume, new papers and images
     are refused (503) before anything is written; work already accepted goes on."""
-    import shutil
     from collections import namedtuple
 
-    from marcus.api import security
+    from marcus.core import storage
 
     usage = namedtuple("usage", "total used free")
     floor = get_settings().min_free_disk_bytes
     assert floor > 0
-    monkeypatch.setattr(security.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor - 1))
+    monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor - 1))
     async with make_client(app) as c:
         r = await upload(c)
         img = await c.post("/api/v2/images", files={"file": ("a.png", b"x", "image/png")})
     assert r.status_code == 503 and r.json() == {"detail": "storage is full, try again later"}
     assert img.status_code == 503
     assert not (get_settings().data_root / "papers").exists()
-    monkeypatch.setattr(shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
-    monkeypatch.setattr(security.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
+    monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
     async with make_client(app) as c:
         assert (await upload(c)).status_code == 202

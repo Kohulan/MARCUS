@@ -254,17 +254,18 @@ def test_render_waits_for_disk_space_below_the_floor(monkeypatch):
     and fails retryable (engine_error, retried), not final bad_input."""
     from collections import namedtuple
 
+    from marcus.core import storage
     from marcus.core.enums import ErrorClass
     from marcus.core.settings import get_settings
     from marcus.workers.runtime import StorageFull, _classify
 
     usage = namedtuple("usage", "total used free")
     floor = get_settings().min_free_disk_bytes
-    monkeypatch.setattr(cpu.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor - 1))
+    monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor - 1))
     pid = make_paper_with("two_page.pdf")
     with pytest.raises(StorageFull) as info:
         cpu.render_page(view(pid, 0), None)
     assert _classify(info.value) == (ErrorClass.ENGINE_ERROR, True)
     assert not page_image_path(pid, 0).exists()
-    monkeypatch.setattr(cpu.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
+    monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
     assert cpu.render_page(view(pid, 0), None) == {}

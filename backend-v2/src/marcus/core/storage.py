@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import uuid
 from pathlib import Path
 
@@ -46,6 +47,17 @@ def segment_crop_path(paper_id: uuid.UUID, sha256: str) -> Path:
     if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
         raise ValueError("sha256 must be 64 lowercase hex characters")
     return paper_dir(paper_id) / "segments" / "by-sha" / f"{sha256}.png"
+
+
+def disk_is_full() -> bool:
+    """Free bytes on the data volume below Settings.min_free_disk_bytes (an unreadable volume
+    counts as full: nothing could be stored either). Uploads answer 503 and render_page writes
+    nothing while it holds."""
+    settings = get_settings()
+    try:
+        return shutil.disk_usage(settings.data_root).free < settings.min_free_disk_bytes
+    except OSError:
+        return True
 
 
 def write_atomic(path: Path, data: bytes, mode: int | None = None, *, unique: bool = True) -> None:
