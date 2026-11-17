@@ -124,9 +124,14 @@ def _used():
 TOO_MANY_SESSIONS = "Too many new sessions from this address"
 
 
+async def advisory_xact_lock(db: AsyncSession, key: str) -> None:
+    """Postgres advisory lock on `key` (hashed), held until the transaction ends."""
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(key))))
+
+
 async def _lock_address(db: AsyncSession, ip: str) -> None:
     """Serialize owner creation and first use per address bucket (until the commit)."""
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
+    await advisory_xact_lock(db, rate_key_for_ip(ip))
 
 
 async def _check_first_use(db: AsyncSession, owner: Owner) -> None:
