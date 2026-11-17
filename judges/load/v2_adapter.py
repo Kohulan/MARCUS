@@ -89,6 +89,34 @@ V1_TO_V2 = {
 OCSR_CACHE_TABLE = "ocsr_cache"  # backend-v2 marcus.core.models.OcsrCache.__tablename__ (tested)
 PG_USER = PG_DB = "marcus"  # backend-v2 docker-compose.yml POSTGRES_USER / POSTGRES_DB
 _REFUSED_CONTAINER_PARTS = ("marcus-backend", "marcus-frontend", "judge", "prod")
+TEST_PROJECT_PREFIX = "marcus-v2-test"  # the only project whose Postgres may be cleared on jarvis or a remote docker
+_LOCAL_DOCKER_SCHEMES = ("unix://", "npipe://")
+_JARVIS_HOST = re.compile(r"(^|[/@.])jarvis([.:/]|$)|uni-jena\.de", re.IGNORECASE)
+
+
+def docker_host() -> str:
+    """Where `docker exec` goes: DOCKER_HOST if set, else the current docker context's endpoint
+    (`docker context inspect` honours DOCKER_CONTEXT). '' when it cannot be found out."""
+    host = os.environ.get("DOCKER_HOST", "").strip()
+    if host:
+        return host
+    try:
+        p = subprocess.run(["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return (p.stdout or "").strip() if p.returncode == 0 else ""
+
+
+def _docker_host_refusal() -> str | None:
+    """Why a container without the test prefix may not be cleared on this docker host (None = local)."""
+    host = docker_host()
+    if _JARVIS_HOST.search(host):
+        return f"the docker host {host!r} is jarvis: only the {TEST_PROJECT_PREFIX} project's Postgres may be cleared"
+    if not host.startswith(_LOCAL_DOCKER_SCHEMES):  # tcp://, ssh://, or unknown ('') count as remote
+        return (f"the docker host {host or '(unknown)'!r} is remote (or unknown): only the "
+                f"{TEST_PROJECT_PREFIX} project's Postgres may be cleared there")
+    return None
 
 _events: list[dict] = []
 _events_lock = threading.Lock()
@@ -99,7 +127,11 @@ _CREATED_JOBS: list[str] = []
 
 
 class CacheClear:
-    """Empty the v2 OCSR cache on a TEST stack (R21). Refuses production and anything that is not a test Postgres."""
+    """Empty the v2 OCSR cache on a TEST stack (R21). Refuses production and anything that is not a test Postgres.
+
+    A container without the marcus-v2-test prefix is refused on `--target jarvis` and whenever `docker exec` would
+    reach a remote docker (DOCKER_HOST or the docker context not a local socket, or not known), jarvis above all.
+    """
 
     def __init__(self, container: str, target_name: str):
         name = container or ""
@@ -111,8 +143,11 @@ class CacheClear:
             why = "a production (or v1 judge) container"
         elif "postgres" not in low:
             why = "not a Postgres container"
-        elif target_name == "jarvis" and not low.startswith("marcus-v2-test"):
-            why = "on jarvis only the marcus-v2-test project's Postgres may be cleared (marcus-v2 is production after the switch)"
+        elif not low.startswith(TEST_PROJECT_PREFIX):
+            if target_name == "jarvis":
+                why = "on jarvis only the marcus-v2-test project's Postgres may be cleared (marcus-v2 is production after the switch)"
+            else:
+                why = _docker_host_refusal()
         if why:
             raise SystemExit(f"Refusing to clear the OCSR cache in container {name!r}: {why}.")
         self.container, self.target_name = name, target_name

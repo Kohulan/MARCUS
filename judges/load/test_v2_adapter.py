@@ -353,6 +353,66 @@ def test_cache_clear_failure_is_loud(monkeypatch):
         v2_adapter.CacheClear("marcus-v2-postgres-1", "local").clear("x")
 
 
+# ------------------------------------------------------------------ D3b item 4: remote docker hosts
+@pytest.fixture(autouse=True)
+def _local_docker(monkeypatch):
+    """CacheClear asks where `docker exec` goes: the local socket unless a test says otherwise."""
+    monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+
+
+@pytest.mark.parametrize("host", [
+    "ssh://kohulan@jarvis.ian.uni-jena.de", "tcp://jarvis.ian.uni-jena.de:2376", "ssh://jarvis",
+])
+def test_cache_clear_refuses_jarvis_docker_host_without_test_prefix(monkeypatch, host):
+    monkeypatch.setenv("DOCKER_HOST", host)
+    with pytest.raises(SystemExit, match="jarvis"):
+        v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+
+
+@pytest.mark.parametrize("host", ["ssh://user@other-host", "tcp://10.0.0.5:2375", "tcp://localhost:2375"])
+def test_cache_clear_refuses_any_remote_docker_host_without_test_prefix(monkeypatch, host):
+    monkeypatch.setenv("DOCKER_HOST", host)
+    with pytest.raises(SystemExit, match="remote"):
+        v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+
+
+@pytest.mark.parametrize("host", ["ssh://kohulan@jarvis.ian.uni-jena.de", "tcp://10.0.0.5:2375"])
+def test_cache_clear_accepts_remote_docker_host_with_test_prefix(monkeypatch, host):
+    monkeypatch.setenv("DOCKER_HOST", host)
+    assert v2_adapter.CacheClear("marcus-v2-test-postgres-1", "local").container == "marcus-v2-test-postgres-1"
+
+
+class _Ctx:
+    def __init__(self, stdout, returncode=0):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, ""
+
+
+def test_cache_clear_reads_the_docker_context_without_docker_host(monkeypatch):
+    monkeypatch.delenv("DOCKER_HOST")
+    sent = []
+    monkeypatch.setattr(v2_adapter.subprocess, "run",
+                        lambda argv, **kw: sent.append(argv) or _Ctx("ssh://kohulan@jarvis.ian.uni-jena.de\n"))
+    with pytest.raises(SystemExit, match="jarvis"):
+        v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+    assert sent == [["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]]
+    monkeypatch.setattr(v2_adapter.subprocess, "run", lambda argv, **kw: _Ctx("unix:///var/run/docker.sock\n"))
+    assert v2_adapter.CacheClear("marcus-v2-postgres-1", "local").container == "marcus-v2-postgres-1"
+
+
+@pytest.mark.parametrize("outcome", ["oserror", "fails", "empty"])
+def test_cache_clear_refuses_when_the_docker_host_is_unknown(monkeypatch, outcome):
+    monkeypatch.delenv("DOCKER_HOST")
+
+    def run(argv, **kw):
+        if outcome == "oserror":
+            raise FileNotFoundError("docker")
+        return _Ctx("", 1) if outcome == "fails" else _Ctx("\n")
+
+    monkeypatch.setattr(v2_adapter.subprocess, "run", run)
+    with pytest.raises(SystemExit, match="remote"):
+        v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+
+
 def test_each_script_call_sends_different_image_bytes(api):
     owner = v2_adapter.create_session("http://x")
     call = v2_adapter.script_call("http://x", owner, scenarios.png_bytes(), "fake")
