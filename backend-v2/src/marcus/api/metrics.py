@@ -90,6 +90,7 @@ class MarcusCollector:
         self._at: float | None = None
         self._families: list = []
         self._engine = None
+        self._redis = None
         self._deadline = math.inf
 
     # -- sources ------------------------------------------------------------------------------
@@ -107,13 +108,11 @@ class MarcusCollector:
 
     def _heartbeat_age(self) -> float:
         try:
-            client = redis.Redis.from_url(
-                get_settings().redis_url, socket_connect_timeout=1, socket_timeout=1
-            )
-            try:
-                age = heartbeat.age(client)
-            finally:
-                client.close()
+            if self._redis is None:  # one client (and pool) for every scrape
+                self._redis = redis.Redis.from_url(
+                    get_settings().redis_url, socket_connect_timeout=1, socket_timeout=1
+                )
+            age = heartbeat.age(self._redis)
         except Exception as exc:  # noqa: BLE001
             log.warning("metrics: redis read failed: %s", type(exc).__name__)
             return math.inf

@@ -25,7 +25,7 @@ import time
 
 import anyio
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,13 +117,20 @@ async def _database_ok(db: AsyncSession) -> bool:
         return False
 
 
-async def _redis_checks() -> tuple[bool, bool]:
-    """(redis answers, dispatcher heartbeat is fresh), one connection, each bounded."""
-    client = aioredis.Redis.from_url(
-        get_settings().redis_url,
-        socket_connect_timeout=CHECK_TIMEOUT_S,
-        socket_timeout=CHECK_TIMEOUT_S,
-    )
+def _ready_redis(app) -> aioredis.Redis:
+    """The probes' Redis client: one per app (API process), not a new connection per call."""
+    url = get_settings().redis_url
+    cached = getattr(app.state, "ready_redis", None)
+    if cached is None or cached[0] != url:
+        client = aioredis.Redis.from_url(
+            url, socket_connect_timeout=CHECK_TIMEOUT_S, socket_timeout=CHECK_TIMEOUT_S
+        )
+        cached = app.state.ready_redis = (url, client)
+    return cached[1]
+
+
+async def _redis_checks(client: aioredis.Redis) -> tuple[bool, bool]:
+    """(redis answers, dispatcher heartbeat is fresh), each bounded."""
     try:
         with anyio.fail_after(CHECK_TIMEOUT_S):
             redis_ok = bool(await client.ping())
@@ -133,16 +140,16 @@ async def _redis_checks() -> tuple[bool, bool]:
     except Exception as exc:  # noqa: BLE001
         log.warning("ready: redis check failed: %s", type(exc).__name__)
         return False, False
-    finally:
-        await client.aclose()
 
 
 @router.get("/ready", response_model=None)
-async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, str] | JSONResponse:
+async def ready(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> dict[str, str] | JSONResponse:
     missing: list[str] = []
     if not await _database_ok(db):
         missing.append("database")
-    redis_ok, dispatcher_ok = await _redis_checks()
+    redis_ok, dispatcher_ok = await _redis_checks(_ready_redis(request.app))
     if not redis_ok:
         missing.append("redis")
     elif not dispatcher_ok:  # the dispatcher's liveness lives in Redis: unknown without it
