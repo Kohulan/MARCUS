@@ -43,9 +43,25 @@ def _seg(sid, page, idx, preds):
     return {"id": sid, "page": page, "idx": idx, "bbox": [0, 0, 1, 1], "curation": None, "predictions": preds}
 
 
+def _row(kind, page=None, seg=None, t0=0.0, t1=1.0, status="done", error_class=None):
+    """A steps-endpoint row; t0/t1 are seconds after a fixed base."""
+    def iso(t):
+        return None if t is None else f"2026-01-01T00:00:{t:06.3f}+00:00"
+    return {"id": f"{kind}-{page}-{seg}", "kind": kind, "page": page, "segment_id": seg, "status": status,
+            "attempts": 1, "error_class": error_class, "created_at": iso(t0), "started_at": iso(t0),
+            "finished_at": iso(t1)}
+
+
+def ok_steps():
+    return [_row("render_page", 0, t0=1, t1=2), _row("segment_page", 0, t0=2, t1=4), _row("segment_page", 2, t0=3, t1=7.5),
+            _row("ocsr", 0, S0, t0=8, t1=8.25), _row("ocsr", 2, S1, t0=8.25, t1=8.75)]
+
+
 class FakeV2:
-    def __init__(self, events, segments, status="done", pages=3, sse=True, end="done", poll_statuses=None):
+    def __init__(self, events, segments, status="done", pages=3, sse=True, end="done", poll_statuses=None, steps=None,
+                 steps_status=200):
         self.events, self.segments, self.status, self.pages = events, segments, status, pages
+        self.steps, self.steps_status = steps or [], steps_status
         self.sse, self.end = sse, end
         self.poll_statuses = list(poll_statuses or [])
         self.calls, self.uploads, self.cookies_seen = [], [], []
@@ -63,6 +79,8 @@ class FakeV2:
             if not self.sse:
                 return httpx.Response(503)
             return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=_sse(self.events, self.end))
+        if path == f"/api/v2/papers/{PID}/steps":
+            return httpx.Response(self.steps_status, json={"steps": self.steps})
         if path == f"/api/v2/papers/{PID}":
             status = self.poll_statuses.pop(0) if self.poll_statuses else self.status
             return httpx.Response(200, json={"id": PID, "display_name": "x.pdf", "status": status, "pages": self.pages,
@@ -101,15 +119,17 @@ def ok_events():
 
 def test_run_paper_maps_steps_to_paperrun(monkeypatch, pdf):
     fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO", engine="molscribe")),
-                                _seg(S1, 2, 1, _pred("CCN", ms=55, engine="molscribe"))])
+                                _seg(S1, 2, 1, _pred("CCN", ms=55, engine="molscribe"))], steps=ok_steps())
     patch(monkeypatch, fake)
     r = client_v2.run_paper(pdf, "molscribe", base_url="http://x", paper_id="PMC1")
     assert r["build"] == "v2-abc1234" and r["engine"] == "molscribe" and r["paper_id"] == "PMC1"
     assert r["pages_total"] == 3 and r["pages_with_segments"] == 2 and r["page_errors"] == []
     assert [s["segment_id"] for s in r["segments"]] == ["page_0_0", "page_2_1"]
     assert [s["page"] for s in r["segments"]] == [0, 2] and [s["smiles"] for s in r["segments"]] == ["CCO", "CCN"]
-    assert all(s["error"] is None and s["ocsr_ms"] > 0 for s in r["segments"])
-    assert r["segment_ms"] > 0 and r["wall_ms"] >= r["segment_ms"] and r["fatal_error"] is None
+    assert all(s["error"] is None for s in r["segments"])
+    assert [s["ocsr_ms"] for s in r["segments"]] == [250.0, 500.0]  # ocsr step started -> finished
+    assert r["segment_ms"] == 5500.0  # first segment_page start (2 s) -> last finish (7.5 s)
+    assert r["fatal_error"] is None and r["timings_ms"]["render_pages"] == 1000.0
     assert r["client"] == "client_v2" and r["http_calls"] == len(fake.calls)
     # the owner cookie issued on the upload is sent on the following calls
     assert fake.cookies_seen[0] is None and all("marcus_owner=tok" in (c or "") for c in fake.cookies_seen[1:])
@@ -122,15 +142,16 @@ def test_run_paper_maps_steps_to_paperrun(monkeypatch, pdf):
 
 
 def test_failed_page_becomes_page_error(monkeypatch, pdf):
-    events = [_step("render_page", "done", 0), _step("segment_page", "running", 0), _step("segment_page", "failed", 0),
-              _step("render_page", "failed", 1),
-              _step("ocsr", "running", 2, S1), _step("ocsr", "failed", 2, S1)]
+    steps = [_row("render_page", 0, t0=1, t1=2), _row("segment_page", 0, t0=2, t1=3, status="failed", error_class="timeout"),
+             _row("render_page", 1, t0=2, t1=3, status="failed", error_class="bad_input"),
+             _row("ocsr", 2, S1, t0=4, t1=5, status="failed", error_class="engine_error")]
     seg = [_seg(S1, 2, 0, [])]
-    patch(monkeypatch, FakeV2(events, seg, status="done"))
+    patch(monkeypatch, FakeV2([], seg, status="done", steps=steps))
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
-    assert sorted((e["page"], e["kind"]) for e in r["page_errors"]) == [(0, "segment_page"), (1, "render_page")]
+    assert [(e["page"], e["kind"], e["error_class"]) for e in r["page_errors"]] == [
+        (0, "segment_page", "timeout"), (1, "render_page", "bad_input")]
     assert all(e["error"] for e in r["page_errors"])
-    assert r["segments"][0]["error"] and r["segments"][0]["smiles"] == ""
+    assert r["segments"][0]["error"] == "ocsr step failed (engine_error)" and r["segments"][0]["smiles"] == ""
 
 
 def test_refuses_production_host(monkeypatch, pdf):
@@ -149,13 +170,22 @@ def test_unknown_engine_fails_clearly(monkeypatch, pdf):
 
 
 def test_polling_fallback_when_sse_unavailable(monkeypatch, pdf):
-    fake = FakeV2([], [_seg(S0, 0, 0, _pred("CCO"))], sse=False, poll_statuses=["processing", "processing"])
+    steps = [_row("segment_page", 0, t0=1, t1=3), _row("ocsr", 0, S0, t0=3, t1=3.5)]
+    fake = FakeV2([], [_seg(S0, 0, 0, _pred("CCO"))], sse=False, poll_statuses=["processing", "processing"], steps=steps)
     patch(monkeypatch, fake)
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
     assert r["segments"][0]["smiles"] == "CCO" and r["fatal_error"] is None
-    assert r["segments"][0]["ocsr_ms"] == 40  # no step events: the engine's own time
+    # the steps endpoint covers what the stream cannot: timings are there with no SSE at all
+    assert r["segments"][0]["ocsr_ms"] == 500.0 and r["segment_ms"] == 2000.0
     assert sum(1 for m, p in fake.calls if p == f"/api/v2/papers/{PID}") >= 3
     assert r["events_mode"] == "poll"
+
+
+def test_missing_steps_endpoint_is_recorded_not_fatal(monkeypatch, pdf):
+    patch(monkeypatch, FakeV2([], [_seg(S0, 0, 0, _pred("CCO"))], steps_status=404))
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert r["fatal_error"] is None and r["segment_ms"] is None and r["steps_error"].startswith("HTTP 404")
+    assert r["segments"][0]["ocsr_ms"] == 40  # falls back to the engine's own time
 
 
 def test_failed_paper_is_fatal_error(monkeypatch, pdf):
@@ -165,7 +195,7 @@ def test_failed_paper_is_fatal_error(monkeypatch, pdf):
 
 
 def test_no_segments_is_not_fatal(monkeypatch, pdf):
-    patch(monkeypatch, FakeV2([_step("segment_page", "done", 0)], []))
+    patch(monkeypatch, FakeV2([_step("segment_page", "done", 0)], [], steps=[_row("segment_page", 0)]))
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
     assert r["no_segments"] is True and r["fatal_error"] is None and r["segments"] == []
 

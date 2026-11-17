@@ -11,15 +11,14 @@ Flow (one ``httpx.Client`` per paper so the HttpOnly ``marcus_owner`` cookie iss
 With ``max_segments=N`` the paper is uploaded with ocsr="off" and only the first N segments get
 ``POST /api/v2/segments/{id}/predictions`` (v1 ran OCSR on the first N listed segments).
 
-What the v2 API does and does not expose (it has no steps endpoint): step events carry no timestamps and no
-error_class, so every duration here is what this client observed on the stream (event arrival):
+Timings and errors come from ``GET /api/v2/papers/{id}/steps`` (read once the paper is terminal; step
+timestamps are the server's). SSE is used only for progress (``on_event``) and to detect the end:
 
-  segment_ms  first segment_page "running" -> last segment_page terminal event. None when no segment_page
-              event was seen (polling fallback, or all events missed: the stream starts after the upload
-              returns, so very early events can be missed).
-  ocsr_ms     per segment: ocsr running -> terminal event; else the engine's own ``ms`` from the prediction.
-  page_errors one entry per render_page / segment_page step whose last event is "failed";
-              ``error_class`` is None (not exposed by the API).
+  segment_ms  first segment_page started_at -> last segment_page finished_at (None without such steps).
+  ocsr_ms     per segment: its ocsr step started_at -> finished_at (newest ocsr step of that segment);
+              else the engine's own ``ms`` from the prediction.
+  page_errors one entry per failed render_page / segment_page step: {page, error, kind, error_class}.
+  t_start_ms  per segment: ocsr started_at minus the paper's first step created_at (server clock only).
 
 Differences from v1 inputs: ``on_429``, ``max_429_retries``, ``ui_extras`` and ``log_source`` are v1-only
 (no UI call sequence, page errors come from step events, not docker logs): accepted and ignored. Keys with
@@ -37,6 +36,7 @@ import threading
 import time
 import uuid
 import weakref
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -101,32 +101,14 @@ def _err_text(e: Exception) -> str:
     return f"{type(e).__name__}: {str(e)[:300]}"
 
 
-class _Steps:
-    """Step events seen on the stream, keyed by step_id (events carry no timestamps: arrival time is used)."""
-
-    def __init__(self):
-        self.by_id: dict[str, dict] = {}
-        self.count = 0
-
-    def add(self, ev: dict, t: float) -> dict | None:
-        if ev.get("type") != "step" or not ev.get("step_id"):
-            return None
-        self.count += 1
-        s = self.by_id.setdefault(ev["step_id"], {"kind": ev.get("kind"), "page": ev.get("page"),
-                                                  "segment_id": ev.get("segment_id"), "t_start": None, "t_end": None,
-                                                  "status": None})
-        status = ev.get("status")
-        s["status"] = status
-        if status == "running":
-            if s["t_start"] is None:
-                s["t_start"] = t
-            s["t_end"] = None
-        elif status in ("done", "failed", "cancelled"):
-            s["t_end"] = t
-        return s
-
-    def of_kind(self, kind: str):
-        return [s for s in self.by_id.values() if s["kind"] == kind]
+def _ts(v) -> float | None:
+    """ISO-8601 timestamp from the API -> epoch seconds."""
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(v.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def run_paper(
@@ -187,7 +169,7 @@ def run_paper(
         "rate_limit_events": [], "server_segment_s": [], "log_keywords": {}, "fatal_error": None,
         "aborted": False, "max_segments": max_segments, "backend_crash": None, "no_segments": False,
         "v2_engine": v2_engine, "v2_paper_id": None, "events_mode": None, "events_seen": 0,
-        "page_errors_source": "step events (failed render_page/segment_page); error_class not exposed by the API",
+        "page_errors_source": "GET /papers/{id}/steps (failed render_page/segment_page steps)",
     }
 
     client = httpx.Client(
@@ -241,13 +223,24 @@ def run_paper(
     def get_paper(pid) -> dict:
         return call("paper", "GET", f"{API}/papers/{pid}").json()
 
-    steps = _Steps()
+    seen = {"events": 0}
+    ocsr_started: dict[str, float] = {}
 
     def on_step(ev: dict):
-        s = steps.add(ev, time.perf_counter())
-        if s and on_event and s["kind"] == "ocsr" and s["status"] in ("done", "failed"):
-            ms = round((s["t_end"] - s["t_start"]) * 1000, 1) if s["t_start"] else None
-            on_event({"event": "segment", "i": None, "of": None, "ms": ms, "error": "failed" if s["status"] == "failed" else None})
+        """Progress only: counts events and reports each finished ocsr step to ``on_event``."""
+        if ev.get("type") != "step":
+            return
+        seen["events"] += 1
+        if ev.get("kind") != "ocsr":
+            return
+        key = ev.get("step_id") or ""
+        if ev.get("status") == "running":
+            ocsr_started.setdefault(key, time.perf_counter())
+        elif on_event and ev.get("status") in ("done", "failed"):
+            t = ocsr_started.get(key)
+            on_event({"event": "segment", "i": None, "of": None,
+                      "ms": round((time.perf_counter() - t) * 1000, 1) if t else None,
+                      "error": "failed" if ev["status"] == "failed" else None})
 
     def stream_events(pid) -> str | None:
         """SSE until ``event: end``. Returns the final status, or None when the stream gave up."""
@@ -296,6 +289,7 @@ def run_paper(
 
     status = None
     detail: dict = {}
+    step_rows: list[dict] = []
     pid = None
     try:
         check_abort()
@@ -328,6 +322,13 @@ def run_paper(
                 check_abort()
                 time.sleep(POLL_S)
             rec["timings_ms"]["predictions"] = round((time.perf_counter() - ts) * 1000, 1)
+        if status != "deleted":
+            try:
+                step_rows = call("steps", "GET", f"{API}/papers/{pid}/steps").json()["steps"]
+            except Aborted:
+                raise
+            except Exception as e:  # old backend without the endpoint: the record keeps None timings
+                rec["steps_error"] = _err_text(e)
         if status == "failed":
             rec["fatal_error"] = "PaperFailed: v2 paper status 'failed'"
         elif status == "deleted":
@@ -354,41 +355,55 @@ def run_paper(
     rec["listed_pages"] = sorted({s["page"] for s in segs_all})
     rec["pages_with_segments"] = len(rec["listed_pages"])
     rec["no_segments"] = bool(detail) and not segs_all and rec["fatal_error"] is None
-    rec["events_seen"] = steps.count
+    rec["events_seen"] = seen["events"]
+    rec["steps_seen"] = len(step_rows)
 
-    failed_ids = {s["segment_id"] for s in steps.of_kind("ocsr") if s["status"] == "failed"}
-    ocsr_by_seg = {s["segment_id"]: s for s in steps.of_kind("ocsr")}
+    for st in step_rows:
+        st["_start"], st["_end"] = _ts(st.get("started_at")), _ts(st.get("finished_at"))
+    origin = min((t for t in (_ts(st.get("created_at")) for st in step_rows) if t), default=None)
+    ocsr_by_seg: dict[str, dict] = {}
+    for st in step_rows:  # ordered by created_at, seq: the last one of a segment is the newest
+        if st["kind"] == "ocsr" and st.get("segment_id"):
+            ocsr_by_seg[st["segment_id"]] = st
     rows = segs_all if max_segments is None else segs_all[:max_segments]
     for seg in rows:
         pred = next((p for p in seg["predictions"] if p["engine"] == ENGINES[engine]), None)  # newest first
         st = ocsr_by_seg.get(seg["id"])
-        observed = round((st["t_end"] - st["t_start"]) * 1000, 1) if st and st["t_start"] and st["t_end"] else None
+        observed = None
+        if st and st["_start"] and st["_end"]:
+            observed = round((st["_end"] - st["_start"]) * 1000, 1)
         error = None
         if pred is None and rec["fatal_error"] is None:
-            error = "ocsr step failed" if seg["id"] in failed_ids else "no prediction"
+            error = "ocsr step failed" if st and st["status"] == "failed" else "no prediction"
+            if st and st.get("error_class"):
+                error += f" ({st['error_class']})"
         row = {"segment_id": f"page_{seg['page']}_{seg['idx']}", "page": seg["page"], "page_number": seg["page"] + 1,
                "filename": None, "smiles": (pred or {}).get("smiles") or "",
                "ocsr_ms": observed if observed is not None else (pred or {}).get("ms"),
                "error": error, "fallback": False,
-               "t_start_ms": round((st["t_start"] - t0) * 1000, 1) if st and st["t_start"] else None,
+               "t_start_ms": round((st["_start"] - origin) * 1000, 1) if st and st["_start"] and origin else None,
                "rate_limited": 0, "v2_segment_id": seg["id"], "valid": (pred or {}).get("valid"),
                "engine_ms": (pred or {}).get("ms"), "engine_version": (pred or {}).get("engine_version")}
         row["exceeds_ocsr_timeout"] = bool(row["ocsr_ms"] and row["ocsr_ms"] > ocsr_timeout_s * 1000)
         rec["segments"].append(row)
 
-    seg_steps = steps.of_kind("segment_page")
-    starts = [s["t_start"] for s in seg_steps if s["t_start"]]
-    ends = [s["t_end"] for s in seg_steps if s["t_end"]]
+    seg_steps = [st for st in step_rows if st["kind"] == "segment_page"]
+    starts = [st["_start"] for st in seg_steps if st["_start"]]
+    ends = [st["_end"] for st in seg_steps if st["_end"]]
     if starts and ends:
         seg_ms = (max(ends) - min(starts)) * 1000
         rec["segment_ms"] = round(seg_ms, 1)
         rec["exceeds_ui_segment_timeout"] = seg_ms > segment_timeout_s * 1000
-    for kind in ("render_page", "segment_page"):
-        for s in steps.of_kind(kind):
-            if s["status"] == "failed":
-                rec["page_errors"].append({"page": s["page"], "error": f"{kind} step failed", "kind": kind,
-                                           "error_class": None})
-    rec["page_errors"].sort(key=lambda e: (e["page"] is None, e["page"], e["kind"]))
+    rstarts = [st["_start"] for st in step_rows if st["kind"] == "render_page" and st["_start"]]
+    rends = [st["_end"] for st in step_rows if st["kind"] == "render_page" and st["_end"]]
+    if rstarts and rends:
+        rec["timings_ms"]["render_pages"] = round((max(rends) - min(rstarts)) * 1000, 1)
+    for st in step_rows:
+        if st["kind"] in ("render_page", "segment_page") and st["status"] == "failed":
+            ec = st.get("error_class")
+            rec["page_errors"].append({"page": st["page"], "error": f"{st['kind']} failed" + (f": {ec}" if ec else ""),
+                                       "kind": st["kind"], "error_class": ec})
+    rec["page_errors"].sort(key=lambda e: (e["page"] is None, e["page"] or 0, e["kind"]))
 
     rec["wall_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     rec["http_calls"] = http["n"]
