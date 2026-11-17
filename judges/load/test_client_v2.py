@@ -276,8 +276,71 @@ def test_first_times_are_none_without_steps(monkeypatch, pdf):
 def test_ocsr_done_ms_is_the_v1_comparable_end(monkeypatch, pdf):
     """v1 wall_ms ends at the last OCSR answer; a v2 paper ends after docling/doi too. ocsr_done_ms = upload round
     trip + (last ocsr step finished_at, any final status - first step created_at)."""
-    steps = ok_steps() + [_row("docling", t0=1.5, t1=60.0)]
+    steps = ok_steps() + [_row("docling", t0=1.5, t1=59.0)]
     fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO")), _seg(S1, 2, 1, _pred("CCN"))], steps=steps)
     patch(monkeypatch, fake)
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
     assert 10750.0 <= r["ocsr_done_ms"] < 10950.0  # last ocsr finished 11.75 s, origin 1.0 s
+
+
+# ------------------------------------------------------------------ D3 fix round 1
+def test_failed_non_page_steps_are_recorded(monkeypatch, pdf):
+    """I2: a failed or retried docling / doi / check_pdf step must show in the record (kind, error_class, duration)."""
+    steps = ok_steps() + [_row("docling", t0=1.5, t1=59.0, status="failed", error_class="bad_input"),
+                          _row("doi", t0=1.5, t1=3.5, status="done", error_class="timeout", attempts=2)]
+    patch(monkeypatch, FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO"))], steps=steps))
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert r["failed_steps"] == [
+        {"kind": "docling", "status": "failed", "error_class": "bad_input", "attempts": 1, "duration_ms": 57500.0},
+        {"kind": "doi", "status": "done", "error_class": "timeout", "attempts": 2, "duration_ms": 2000.0}]
+    assert r["fatal_error"] is None  # the paper is done; the failure is visible, not fatal
+
+
+def test_no_failed_steps_is_an_empty_list(monkeypatch, pdf):
+    patch(monkeypatch, FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO"))], steps=ok_steps()))
+    assert client_v2.run_paper(pdf, "decimer", base_url="http://x")["failed_steps"] == []
+
+
+class _AbortOnEvents(FakeV2):
+    """Sets the caller's abort event when the client opens the event stream (a guard trip mid-paper)."""
+
+    def __init__(self, abort, **kw):
+        super().__init__(ok_events(), [], **kw)
+        self.abort = abort
+
+    def __call__(self, req):
+        if req.url.path.endswith("/events"):
+            self.abort.set()
+        return super().__call__(req)
+
+
+def test_abort_after_upload_deletes_the_paper_as_its_owner(monkeypatch, pdf):
+    """I1: on v2 the pipeline runs on the server; closing the client is not enough, the paper must be deleted."""
+    import threading
+
+    ev = threading.Event()
+    fake = _AbortOnEvents(ev)
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x", abort=ev)
+    assert r["aborted"] is True
+    dels = [i for i, (m, p) in enumerate(fake.calls) if (m, p) == ("DELETE", f"/api/v2/papers/{PID}")]
+    assert len(dels) == 1 and fake.cookies_seen[dels[0]] == "marcus_owner=tok"
+    assert r["cancelled"] is True
+    assert client_v2.live_papers() == {}
+
+
+def test_cancel_papers_deletes_every_live_paper(monkeypatch):
+    fake = FakeV2([], [])
+    patch(monkeypatch, fake)
+    client_v2._register(PID, "http://x", "tok")
+    assert client_v2.live_papers() == {PID: ("http://x", "tok")}
+    assert client_v2.cancel_papers() == [PID]
+    assert fake.calls == [("DELETE", f"/api/v2/papers/{PID}")] and fake.cookies_seen == ["marcus_owner=tok"]
+    assert client_v2.live_papers() == {}
+
+
+def test_finished_run_leaves_no_live_paper_and_is_listed_as_created(monkeypatch, pdf):
+    patch(monkeypatch, FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO"))], steps=ok_steps()))
+    client_v2.created_papers(clear=True)
+    client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert client_v2.live_papers() == {} and client_v2.created_papers() == [PID]

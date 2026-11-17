@@ -65,7 +65,7 @@ import httpx  # noqa: E402
 
 import make_fixtures  # noqa: E402
 import v2_adapter  # noqa: E402
-from common import client_v1, remote, target  # noqa: E402
+from common import client_v1, client_v2, remote, target  # noqa: E402
 from common.client_v1 import run_paper  # noqa: E402
 from guard_jarvis import Guard, GuardTripped, is_jarvis_url  # noqa: E402
 
@@ -113,11 +113,45 @@ def summarise_run(rec: dict, expected: int | None = None) -> dict:
            "listed_pages": rec.get("listed_pages"), "http_calls": rec["http_calls"], "rate_limit_events": len(rec["rate_limit_events"]),
            "server_segment_s": rec.get("server_segment_s"), **seg_stats(rec)}
     if rec.get("client") == "client_v2":  # v2-only numbers (judges/README.md, "v1 vs v2 key meanings")
-        out.update({"segment_compute_ms": rec.get("segment_compute_ms"), "ocsr_cache_hits": rec.get("ocsr_cache_hits"),
+        out.update({"segment_compute_ms": rec.get("segment_compute_ms"), "ocsr_cache_hits": paper_cache_hits(rec),
+                    "failed_steps": rec.get("failed_steps") or [], "cancelled": rec.get("cancelled"),
                     "ocsr_compute_ms": stats([s.get("ocsr_compute_ms") for s in rec["segments"]]),
                     "v2_paper_id": rec.get("v2_paper_id"), "events_mode": rec.get("events_mode"),
                     "timings_ms": rec.get("timings_ms"), **fairness_fields(rec)})
     return out
+
+
+def paper_cache_hits(rec: dict) -> int:
+    """OCSR cache hits of one v2 paper: the ``cached`` flag, or an engine time of 0 ms (worker images older than the
+    flag never set it; the fake engine reports 1000 ms and never uses the cache)."""
+    by_ms = sum(1 for s in rec.get("segments") or [] if s.get("cached") or s.get("ocsr_compute_ms") == 0)
+    return max(rec.get("ocsr_cache_hits") or 0, by_ms)
+
+
+def timing_validity(hits: int, failed_steps: list, allow_warm: bool) -> dict:
+    """R21: a timed arm with an OCSR cache hit is not a cold timing; I2: nor is one whose docling / doi / check_pdf
+    step failed (its wall is then a time limit). --allow-warm-cache accepts hits knowingly, never failed steps."""
+    reasons = []
+    if hits and not allow_warm:
+        reasons.append(f"{hits} OCSR cache hit(s): not a cold timing (rerun on a cleared cache, or --allow-warm-cache)")
+    bad = [f for f in failed_steps or [] if f.get("status") == "failed"]
+    if bad:
+        kinds = sorted({f["kind"] for f in bad})
+        reasons.append(f"{len(bad)} failed non-page step(s) ({', '.join(kinds)}): the wall time is a time limit")
+    out = {"valid": not reasons, "ocsr_cache_hits": hits, "failed_steps": len(bad), "reasons": reasons}
+    if allow_warm:
+        out["warm_cache_allowed"] = True
+    return out
+
+
+CACHE = None  # v2_adapter.CacheClear for the test stack (set by main), None = no clearing (v1 or --allow-warm-cache)
+ALLOW_WARM = False
+
+
+def cold(label: str) -> None:
+    """Empty the test stack's OCSR cache before a timed scenario, arm or repeat (v2, R21)."""
+    if CACHE is not None:
+        CACHE.clear(label)
 
 
 def fairness_fields(rec: dict) -> dict:
@@ -188,8 +222,9 @@ class Probe:
     mode="closed": a script loop: call, wait for the answer, sleep ``period_s``, call again.
     """
 
-    def __init__(self, name, make_call, period_s=1.0, mode="open", timeout_s=300.0):
+    def __init__(self, name, make_call, period_s=1.0, mode="open", timeout_s=300.0, abort: threading.Event | None = None):
         self.name, self.make_call, self.period_s, self.mode, self.timeout_s = name, make_call, period_s, mode, timeout_s
+        self.abort = abort  # a guard trip ends the probe at once (no new call is started)
         self.samples: list[dict] = []
         self._stop = threading.Event()
         self._thr: threading.Thread | None = None
@@ -211,7 +246,7 @@ class Probe:
 
     def _loop(self):
         nxt = time.perf_counter()
-        while not self._stop.is_set():
+        while not self._stop.is_set() and not (self.abort is not None and self.abort.is_set()):
             if self.mode == "open":
                 self._pending.append(self._pool.submit(self._one))
                 nxt += self.period_s
@@ -358,6 +393,39 @@ def host_load() -> list | None:
         return None
 
 
+LOCAL_TEST_PG = "marcus-v2-postgres-1"
+
+
+def _walk(x, fn):
+    if isinstance(x, dict):
+        fn(x)
+        for v in x.values():
+            _walk(v, fn)
+    elif isinstance(x, list):
+        for v in x:
+            _walk(v, fn)
+
+
+def scenario_validity(results) -> dict:
+    """Every timing verdict, cache-hit count and failed non-page step in a scenario's results (summary level)."""
+    verdicts, hits, failed = [], 0, {}
+
+    def fn(d):
+        nonlocal hits
+        t = d.get("timing")
+        if isinstance(t, dict) and "valid" in t:  # each timed run/arm has one verdict carrying its own hit count
+            verdicts.append(t["valid"])
+            hits += t.get("ocsr_cache_hits") or 0
+        for f in d.get("failed_steps") or [] if isinstance(d.get("failed_steps"), list) else []:
+            if isinstance(f, dict):
+                k = f"{f.get('kind')}:{f.get('status')}:{f.get('error_class')}"
+                failed[k] = failed.get(k, 0) + 1
+
+    _walk(results, fn)
+    return {"timings": len(verdicts), "all_valid": all(verdicts) if verdicts else None, "ocsr_cache_hits": hits,
+            "failed_steps_by_kind": failed}
+
+
 def breaker_503s(res) -> dict:
     """503 'service unavailable' answers (rate limiter circuit breaker open): adapter calls + paper uploads."""
     papers = []
@@ -398,6 +466,7 @@ def s1(base_url, guard, args, res):
         for i in range(args.s1_repeats):
             if guard.tripped:
                 break
+            cold(f"S1 {eng} run {i}")
             rec = API.run_paper(path, eng, base_url=base_url, paper_id=path.stem, abort=guard.abort, keep_http_log=True,
                                 max_segments=args.s1_max_segments, tag="S1", **BIG_TIMEOUTS)
             keys = set()
@@ -410,6 +479,8 @@ def s1(base_url, guard, args, res):
             run["lost_pages"] = lost_pages(rec, meta)
             run["segments"] = seg_rows(rec)
             run["http_log"] = rec.get("http_log")
+            if CLIENT == "v2":
+                run["timing"] = timing_validity(paper_cache_hits(rec), rec.get("failed_steps"), ALLOW_WARM)
             entry["runs"].append(run)
     API.remove_session(base_url, sid)
     res["summary"] = {eng: [{"wall_s": round(r["wall_ms"] / 1000, 1), "segment_s": round((r["segment_ms"] or 0) / 1000, 1),
@@ -437,7 +508,9 @@ def v2_extra(r: dict) -> dict:
     return {"segment_compute_s": None if ms is None else round(ms / 1000, 1),
             "ocsr_compute_p50_ms": r["ocsr_compute_ms"].get("p50"), "ocsr_cache_hits": r.get("ocsr_cache_hits"),
             "first_segment_start_s": r.get("first_segment_start_s"), "first_smiles_s": r.get("first_smiles_s"),
-            "ocsr_done_s": r.get("ocsr_done_s"), "fatal_error": r.get("fatal_error")}
+            "ocsr_done_s": r.get("ocsr_done_s"), "fatal_error": r.get("fatal_error"),
+            "failed_steps": [f"{f['kind']}:{f['status']}:{f.get('error_class')}" for f in r.get("failed_steps") or []],
+            "timing_valid": (r.get("timing") or {}).get("valid")}
 
 
 def _run_s2_core(base_url, guard, args, big_n, extra_probes=None):
@@ -448,8 +521,8 @@ def _run_s2_core(base_url, guard, args, big_n, extra_probes=None):
     eng = args.engine
     box: dict = {}
     t_start = time.perf_counter()
-    hp = Probe("health", API.health_call(base_url), 1.0).start()
-    extra = extra_probes() if extra_probes else {}
+    hp = Probe("health", API.health_call(base_url), 1.0, abort=guard.abort).start()
+    extra = extra_probes(guard.abort) if extra_probes else {}
     cap = big_cap_for(CLIENT, args.big_cap)
 
     def big():
@@ -486,23 +559,23 @@ def _run_s2_core(base_url, guard, args, big_n, extra_probes=None):
     return box, smalls, probes, small_meta, big_meta
 
 
-def depict_probe(base_url, args):
+def depict_probe(base_url, args, abort=None):
     """{'depict': Probe} for v2 (POST /tools/depict, own owner), {} for v1."""
     sid = API.create_session(base_url) if CLIENT == "v2" else None
     call = API.depict_call(base_url, sid) if sid else None
-    return {"depict": Probe("depict", call, args.depict_period_s, timeout_s=60).start()} if call else {}
+    return {"depict": Probe("depict", call, args.depict_period_s, timeout_s=60, abort=abort).start()} if call else {}
 
 
 def s2(base_url, guard, args, res, big_n=None, with_script=False):
     big_n = big_n or args.s2_big_size
     sess: dict = {}
 
-    def extra():
-        probes = depict_probe(base_url, args)
+    def extra(abort):
+        probes = depict_probe(base_url, args, abort)
         if with_script:
             sess["sid"] = API.create_session(base_url) or "x"
             probes["script"] = Probe("script", API.script_call(base_url, sess["sid"], png_bytes(), args.engine),
-                                     args.s5_period_s, mode="closed", timeout_s=900).start()
+                                     args.s5_period_s, mode="closed", timeout_s=900, abort=abort).start()
         return probes
 
     box, smalls, probes, small_meta, big_meta = _run_s2_core(base_url, guard, args, big_n, extra_probes=extra)
@@ -537,7 +610,15 @@ def s2(base_url, guard, args, res, big_n=None, with_script=False):
                               "samples": probes.get("script")}
         if hasattr(sess.get("sid"), "owners_used"):
             out["script_user"]["owners_used"] = sess["sid"].owners_used
+            out["script_user"]["image_jobs"] = sess["sid"].jobs
+        out["script_user"]["ocsr_cache_hits"] = v2_adapter.image_job_cache_hits(sess.get("sid"))
     out["s1_reference"] = base
+    if CLIENT == "v2":
+        # the small papers' timings are the gate numbers: their hits and failed steps decide; the big paper's (and
+        # the script user's) cache hits count too, since a warm big paper is not "heavy work"
+        hits = sum(d.get("ocsr_cache_hits") or 0 for d in out["small"]) + ((out["big"] or {}).get("ocsr_cache_hits") or 0)
+        hits += (out.get("script_user") or {}).get("ocsr_cache_hits") or 0
+        out["timing"] = timing_validity(hits, [f for d in out["small"] for f in d.get("failed_steps") or []], ALLOW_WARM)
     walls = [d["wall_ms"] / 1000 for d in out["small"]]
     res["results"] = out
     res["summary"] = {"small_wall_s": [round(w, 1) for w in walls], "small_wall_p95_s": pct(walls, 95),
@@ -552,6 +633,11 @@ def s2(base_url, guard, args, res, big_n=None, with_script=False):
                       "big_segments": len(big["segments"]) if big else None,
                       "health_ms": out["health_probe"]["ms_ok"], "health_over_200ms": out["health_probe"]["share_over_200ms"],
                       "health_n_503": out["health_probe"]["n_503"]}
+    if CLIENT == "v2":
+        res["summary"]["timing_valid"] = out["timing"]["valid"]
+        res["summary"]["ocsr_cache_hits"] = out["timing"]["ocsr_cache_hits"]
+        res["summary"]["big_failed_steps"] = [f"{f['kind']}:{f['status']}:{f.get('error_class')}"
+                                              for f in (out["big"] or {}).get("failed_steps") or []]
     if "depict_probe" in out:
         res["summary"]["depict_ms"] = out["depict_probe"]["all_ms"]
         res["summary"]["depict_p95_ms"] = out["depict_probe"]["all_ms"].get("p95")
@@ -561,19 +647,19 @@ def s2(base_url, guard, args, res, big_n=None, with_script=False):
 def s3(base_url, guard, args, res):
     path, meta = fixture(args.s3_size)
     sid = API.create_session(base_url)
-    hp = Probe("health", API.health_call(base_url), 1.0).start()
-    bp = Probe("heartbeat", API.heartbeat_call(base_url, sid or "none"), 1.0).start()
-    dp = depict_probe(base_url, args).get("depict")
+    hp = Probe("health", API.health_call(base_url), 1.0, abort=guard.abort).start()
+    bp = Probe("heartbeat", API.heartbeat_call(base_url, sid or "none"), 1.0, abort=guard.abort).start()
+    dp = depict_probe(base_url, args, guard.abort).get("depict")
     probes = [("health", hp), ("heartbeat", bp)] + ([("depict", dp)] if dp else [])
     idle_s = args.s3_idle_s
-    time.sleep(idle_s)
+    guard.abort.wait(idle_s)
     t_a = (time.perf_counter() - hp.t0) * 1000
     # segmentation only, as v1 (S3 tests event-loop blocking by segmentation); engine: v1 decimer, v2 --engine
     eng = "decimer" if CLIENT == "v1" else args.engine
     rec = API.run_paper(path, eng, base_url=base_url, paper_id=path.stem, max_segments=0, abort=guard.abort, tag="S3",
                         **BIG_TIMEOUTS)
     t_b = (time.perf_counter() - hp.t0) * 1000
-    time.sleep(idle_s)
+    guard.abort.wait(idle_s)
     samples_by = {name: pr.stop() for name, pr in probes}
     # all probes share hp's clock origin within a few ms (started one after the other); depict is shifted to it
     if dp:
@@ -625,7 +711,8 @@ def s4(base_url, guard, args, res):
     src = API.logsrc(base_url)
     arms = []
     res["results"] = {"fixture": path.name, "expected_each": n, "arms": arms,
-                      "note": "page errors come from backend docker logs in the arm's time window (all papers of the arm together)"}
+                      "note": ("page errors come from backend docker logs in the arm's time window (all papers of the arm together)"
+                               if CLIENT == "v1" else "page errors come from each paper's failed page steps")}
 
     eng = "decimer" if CLIENT == "v1" else args.engine
     depth = s4_max_segments(CLIENT)
@@ -636,11 +723,13 @@ def s4(base_url, guard, args, res):
         return API.run_paper(p, eng, base_url=base_url, paper_id=p.stem, max_segments=depth, abort=guard.abort,
                              log_source=False, tag=tag, **BIG_TIMEOUTS)
 
-    def run_arm(kind, mode, repeat, paths, expected):
-        """paths: PDFs submitted; sequential = one after the other, concurrent = all at the same moment."""
+    def run_arm(kind, mode, repeat, paths, expected, per_page):
+        """paths: PDFs submitted; sequential = one after the other, concurrent = all at the same moment.
+        per_page: each paper's fixture structure count per page (for lost pages)."""
         if guard.tripped or not API.server_ok(base_url):
             res["results"]["stopped"] = "guard tripped" if guard.tripped else "backend not answering /health"
             return False
+        cold(f"S4 {kind} {mode} repeat {repeat}")
         mark = src.mark() if src else None
         t0 = time.perf_counter()
         if mode == "sequential":
@@ -666,19 +755,29 @@ def s4(base_url, guard, args, res):
                                  "segments_with_smiles": sum(1 for s in x["segments"] if s.get("smiles")),
                                  "ocsr_errors": sum(1 for s in x["segments"] if s.get("error")),
                                  "segment_compute_ms": x.get("segment_compute_ms"),
-                                 "lost_pages": lost_pages(x, meta if kind == "two_papers" else [expected[k]])}
+                                 "ocsr_done_ms": x.get("ocsr_done_ms"), "ocsr_cache_hits": paper_cache_hits(x),
+                                 "failed_steps": x.get("failed_steps") or [], "cancelled": x.get("cancelled"),
+                                 "lost_pages": lost_pages(x, per_page[k])}
                                 for k, (p, x) in enumerate(zip(paths, recs))],
                      "page_errors": pe, "page_error_count": len(pe) if pe is not None else None,
                      "server_segment_s": parsed["server_segment_s"] if parsed else None,
                      "log_keywords": parsed["keyword_counts"] if parsed else None,
                      "backend_crash": parsed["backend_crash"] if parsed else None,
                      "error_pages_by_batch4": _batches(pe) if pe else {}})
+        if CLIENT == "v2":
+            arms[-1]["timing"] = timing_validity(sum(paper_cache_hits(x) for x in recs),
+                                                 [f for x in recs for f in x.get("failed_steps") or []], ALLOW_WARM)
         return True
 
-    # Part 1: two multi-page papers, sequential vs concurrent (the plan's S4)
+    # Part 1: two multi-page papers, sequential vs concurrent (the plan's S4). v2: two DIFFERENT papers (the two
+    # halves of the fixture), since a second copy of the same PDF gives the same crops = OCSR cache hits.
+    two = s4_two_paper_paths(CLIENT, path, split=lambda: half_pdfs(n))
+    pp = meta["per_page"]
+    two_pp = [pp, pp] if two[0] == two[1] else [pp[:len(pp) // 2], pp[len(pp) // 2:]]
+    res["results"]["two_papers"] = [p.name for p in two]
     for r in range(args.s4_repeats):
         for mode in ("sequential", "concurrent"):
-            if not run_arm("two_papers", mode, r, [path, path], n):
+            if not run_arm("two_papers", mode, r, list(two), n, two_pp):
                 break
     # Part 2 (control): one-page PDFs, so no thread pool inside a request. If errors appear only in part 1,
     # the page threads of ONE request cause them; if they appear here too, requests overlap on the model.
@@ -686,9 +785,33 @@ def s4(base_url, guard, args, res):
         sp = single_page_pdfs(args.s4_single_pages)
         for r in range(args.s4_repeats):
             for mode in ("sequential", "concurrent"):
-                if not run_arm("single_pages", mode, r, [p for p, _ in sp], [e for _, e in sp]):
+                if not run_arm("single_pages", mode, r, [p for p, _ in sp], [e for _, e in sp], [[e] for _, e in sp]):
                     break
     res["summary"] = _s4_summary(arms, n, meta)
+
+
+def half_pdfs(n: int) -> tuple[Path, Path]:
+    """The fixture cut into its first and second half of pages (same fixture, no new paper, distinct crops)."""
+    import pymupdf
+
+    src, meta = fixture(n)
+    outdir = make_fixtures.OUT / "halves"
+    outdir.mkdir(parents=True, exist_ok=True)
+    half = meta["pages"] // 2
+    out = []
+    for k, pages in enumerate((list(range(0, half)), list(range(half, meta["pages"])))):
+        dst = outdir / f"{src.stem}_half{k}.pdf"
+        if not dst.exists():
+            d = pymupdf.open(src)
+            d.select(pages)
+            d.save(dst)
+        out.append(dst)
+    return out[0], out[1]
+
+
+def s4_two_paper_paths(client: str, path: Path, split) -> tuple[Path, Path]:
+    """v1: the same PDF twice (its S4 question is page threads). v2: two different halves (cold OCSR cache)."""
+    return split() if client == "v2" else (path, path)
 
 
 def _batches(errs):
@@ -730,9 +853,16 @@ def _s4_summary(arms, n, meta):
         seq, con = by.get(f"{kind}/sequential"), by.get(f"{kind}/concurrent")
         if seq and con and seq["wall_s"] and con["wall_s"]:
             ms, mc = sum(seq["wall_s"]) / len(seq["wall_s"]), sum(con["wall_s"]) / len(con["wall_s"])
-            by[f"{kind}_concurrent_vs_sequential"] = {"sequential_mean_s": round(ms, 1), "concurrent_mean_s": round(mc, 1),
-                                                     "speedup": round(ms / mc, 2) if mc else None,
-                                                     "concurrent_faster": mc < ms}
+            timings = [a.get("timing") for a in arms if a["kind"] == kind and a.get("timing") is not None]
+            valid = all(t.get("valid") for t in timings)
+            sp = round(ms / mc, 2) if mc else None
+            cmp_ = {"sequential_mean_s": round(ms, 1), "concurrent_mean_s": round(mc, 1), "valid": valid}
+            if valid:
+                cmp_.update(speedup=sp, concurrent_faster=mc < ms)
+            else:  # R21 / I2: an arm with cache hits or a failed docling/doi step is no timing
+                cmp_.update(speedup=None, concurrent_faster=None, speedup_invalid=sp,
+                            invalid_reasons=sorted({r for t in timings for r in t.get("reasons", [])}))
+            by[f"{kind}_concurrent_vs_sequential"] = cmp_
     for a in arms:
         key = f"{a['kind']}/{a['mode']}"
         by[key].setdefault("segments_with_smiles", []).extend(p.get("segments_with_smiles") for p in a["papers"])
@@ -745,17 +875,22 @@ def s5(base_url, guard, args, res):
     sid = API.create_session(base_url)
     png = png_bytes()
     alone = Probe("script", API.script_call(base_url, sid or "x", png, args.engine), args.s5_period_s, mode="closed",
-                  timeout_s=900).start()
-    time.sleep(args.s5_seconds)
+                  timeout_s=900, abort=guard.abort).start()
+    guard.abort.wait(args.s5_seconds)  # a guard trip ends the alone phase at once
     a = alone.stop()
     res["results"] = {"engine": args.engine, "client": CLIENT, "period_s": args.s5_period_s, "alone": {**lat_stats(a), "samples": a}}
     if hasattr(sid, "owners_used"):
         res["results"]["alone"]["owners_used"] = sid.owners_used
+        res["results"]["alone"]["image_jobs"] = sid.jobs
+    hits = v2_adapter.image_job_cache_hits(sid)
+    res["results"]["alone"]["timing"] = timing_validity(hits, [], getattr(args, "allow_warm_cache", False))
     res["summary"] = {"alone_ms_ok": res["results"]["alone"]["ms_ok"], "n_429": res["results"]["alone"]["n_429"],
-                      "n_503": res["results"]["alone"]["n_503"], "alone_n_not_ok": res["results"]["alone"]["n"] - res["results"]["alone"]["n_ok"]}
+                      "n_503": res["results"]["alone"]["n_503"], "alone_n_not_ok": res["results"]["alone"]["n"] - res["results"]["alone"]["n_ok"],
+                      "alone_ocsr_cache_hits": hits, "alone_timing_valid": res["results"]["alone"]["timing"]["valid"]}
     API.remove_session(base_url, sid)
     if not args.s5_skip_during and not guard.tripped:
         sub = {}
+        cold("S5 during-S2 part")
         s2(base_url, guard, args, sub, with_script=True)
         su = sub["results"]["script_user"]
         res["results"]["during_s2"] = {**{k: v for k, v in su.items() if k != "samples"}, "samples": su["samples"],
@@ -767,6 +902,9 @@ def s5(base_url, guard, args, res):
         res["summary"]["during_s2_n_429"] = su["n_429"]
         res["summary"]["during_s2_n_503"] = su["n_503"]
         res["summary"]["during_s2_n_not_ok"] = su["n"] - su["n_ok"]
+        if "timing_valid" in sub["summary"]:
+            res["summary"]["during_s2_timing_valid"] = sub["summary"]["timing_valid"]
+            res["summary"]["during_s2_ocsr_cache_hits"] = sub["summary"]["ocsr_cache_hits"]
         for k in ("depict_p95_ms", "depict_ms", "small_wall_s", "small_first_segment_start_s", "small_first_smiles_s"):
             if k in sub["summary"]:
                 res["summary"][f"during_s2_{k}" if k.startswith("depict") else f"s2_{k}"] = sub["summary"][k]
@@ -825,15 +963,28 @@ def main(argv=None) -> int:
     ap.add_argument("--prod-stopped", action="store_true",
                     help="jarvis guard, ONLY in the owner's GPU test window with v1 production stopped on purpose: "
                          "production must stay stopped (instead of healthy); GPU memory and ledger rules unchanged")
+    ap.add_argument("--cache-pg-container", default=os.environ.get("MARCUS_TEST_PG_CONTAINER"),
+                    help="v2: the TEST stack's Postgres container whose OCSR cache is emptied before each scenario, arm "
+                         f"and repeat (env MARCUS_TEST_PG_CONTAINER; local default {LOCAL_TEST_PG}; jarvis: the "
+                         "marcus-v2-test project's postgres, required). docker exec, so DOCKER_HOST reaches a remote docker")
+    ap.add_argument("--allow-warm-cache", action="store_true",
+                    help="v2: do not clear the OCSR cache and accept cache hits as valid timings (warm-behaviour runs only)")
     ap.add_argument("--tag", default="", help="added to the result file name")
     a = ap.parse_args(argv)
 
-    global API, CLIENT
+    global API, CLIENT, CACHE, ALLOW_WARM
     CLIENT, API = a.client, select_client(a.client)
+    ALLOW_WARM, CACHE = a.allow_warm_cache, None
     if a.client == "v1" and (a.engine in V2_ONLY_ENGINES or set(a.engines) & set(V2_ONLY_ENGINES)):
         ap.error("engine 'fake' exists only on the v2 fake stack (--client v2)")
     base_url = (a.base_url or (TARGETS_V2 if a.client == "v2" else TARGETS)[a.target]).rstrip("/")
     target._check(base_url)
+    if a.client == "v2" and not a.allow_warm_cache:
+        container = a.cache_pg_container or (LOCAL_TEST_PG if a.target == "local" else None)
+        if not container:
+            ap.error("--client v2 needs --cache-pg-container <the test stack's postgres container> (R21: timings on a "
+                     "cold OCSR cache), or --allow-warm-cache")
+        CACHE = v2_adapter.CacheClear(container, a.target)  # refuses production / non-test containers
     RESULTS.mkdir(exist_ok=True)
     a.s1_reference = load_s1_reference(a.target, RESULTS, a.client)
     for n in {15, 190, 2020}:
@@ -855,11 +1006,17 @@ def main(argv=None) -> int:
         a.s1_reference = load_s1_reference(a.target, RESULTS, a.client)  # picks up an S1 file written earlier in this run
         if a.client == "v2":
             v2_adapter.http_events(clear=True)
+            v2_adapter.reset_abandon()
+            client_v2.created_papers(clear=True)
+            v2_adapter.created_image_jobs(clear=True)
+        n_clears = len(CACHE.log) if CACHE else 0
         print(f"[{utc()}] {name} on {a.target} ({a.client}) ...", flush=True)
         try:
             with Guard(base_url, name, enabled=guard_enabled(a.target, base_url),
-                       prod_expected="stopped" if a.prod_stopped else "running") as guard:
+                       prod_expected="stopped" if a.prod_stopped else "running",
+                       on_trip=[v2_adapter.abandon_all] if a.client == "v2" else None) as guard:
                 try:
+                    cold(f"before {name}")
                     SCENARIOS[name](base_url, guard, a, res)
                 except Exception as e:  # keep what we have
                     import traceback
@@ -881,7 +1038,15 @@ def main(argv=None) -> int:
             res["v2_http_errors"] = {"n": len(ev), "by_status": {str(k): sum(1 for e in ev if e["status"] == k)
                                                                  for k in sorted({e["status"] for e in ev})}, "events": ev[:500]}
             res["v2_breaker_503"] = {"adapter_calls": v2_adapter.breaker_503_count(ev), **breaker_503s(res)}
+            res["v2_created"] = {"papers": client_v2.created_papers(clear=True),
+                                 "image_jobs": v2_adapter.created_image_jobs(clear=True)}
+            res["ocsr_cache"] = {"cleared": CACHE.log[n_clears:] if CACHE else [], "allow_warm_cache": a.allow_warm_cache,
+                                 "container": CACHE.container if CACHE else None}
+            res["validity"] = scenario_validity(res.get("results"))
             if isinstance(res.get("summary"), dict):
+                res["summary"]["timing_valid_all"] = res["validity"]["all_valid"]
+                res["summary"]["ocsr_cache_hits_total"] = res["validity"]["ocsr_cache_hits"]
+                res["summary"]["failed_steps_by_kind"] = res["validity"]["failed_steps_by_kind"]
                 res["summary"]["v2_breaker_503"] = res["v2_breaker_503"]["adapter_calls"] + res["v2_breaker_503"]["paper_runs_503"]
                 res["summary"]["host_load"] = res["host_load"]
         fn = result_path(RESULTS, a.target, a.client, name, a.tag)

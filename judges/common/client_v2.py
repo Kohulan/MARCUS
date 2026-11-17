@@ -31,6 +31,11 @@ timestamps are the server's clock, only differences of them are used). SSE is us
                       bytes of every upload defeat the PDF-level segmentation cache but NOT the OCSR cache
                       (keyed by the crop image). Accuracy is unaffected. There is deliberately no bypass switch.
   page_errors         one entry per failed render_page / segment_page step: {page, error, kind, error_class}.
+  failed_steps        v2 only: every check_pdf / docling / doi step that failed or carries an error_class (timed out and
+                      was retried): {kind, status, error_class, attempts, duration_ms}. A paper can end ``done`` with a
+                      failed docling (no text); its wall time is then a time limit, not the work.
+  cancelled           v2 only: True when an aborted run deleted its paper (``DELETE /papers/{id}`` as its owner). On v2
+                      the pipeline runs on the server, so closing the client does not stop GPU work.
   t_start_ms          per segment: ocsr started_at minus the paper's first step created_at (server clock only).
   first_segment_start_ms  v2 only: client upload round trip + (first segment_page started_at - paper's first
                       step created_at): when the paper's segmentation began, measured like segment_ms (spec §3 Fair).
@@ -77,6 +82,10 @@ TERMINAL = {"done", "failed", "deleted"}
 ACTIVE_STEP = ("pending", "queued", "running")
 
 _ACTIVE: "weakref.WeakSet[httpx.Client]" = weakref.WeakSet()
+_LIVE: dict[str, tuple[str, str]] = {}  # paper id -> (base_url, owner cookie) while run_paper waits for it
+_CREATED: list[str] = []
+_LIVE_LOCK = threading.Lock()
+NON_PAGE_KINDS = ("check_pdf", "docling", "doi")
 _REPO = Path(__file__).resolve().parents[2]
 
 
@@ -90,6 +99,53 @@ def abort_all() -> int:
         except Exception:
             pass
     return n
+
+
+def _register(pid: str, base_url: str, cookie: str | None) -> None:
+    with _LIVE_LOCK:
+        _LIVE[pid] = (base_url, cookie)
+        _CREATED.append(pid)
+
+
+def _unregister(pid: str | None) -> None:
+    with _LIVE_LOCK:
+        _LIVE.pop(pid, None)
+
+
+def live_papers() -> dict:
+    """Papers uploaded by run_paper whose run has not ended (id -> (base_url, cookie))."""
+    with _LIVE_LOCK:
+        return dict(_LIVE)
+
+
+def created_papers(clear: bool = False) -> list[str]:
+    """Every paper id run_paper uploaded (``clear`` empties the list)."""
+    with _LIVE_LOCK:
+        out = list(_CREATED)
+        if clear:
+            _CREATED.clear()
+    return out
+
+
+def _delete_paper(pid: str, base_url: str, cookie: str | None) -> bool:
+    """DELETE /papers/{id} as its owner (best effort, own short-lived client: the run's client may be closed)."""
+    try:
+        with httpx.Client(base_url=base_url, timeout=httpx.Timeout(15.0),
+                          headers={"Cookie": f"{OWNER_COOKIE}={cookie}"} if cookie else {}) as c:
+            r = c.request("DELETE", f"{API}/papers/{pid}")
+            return r.status_code < 400 or r.status_code == 404  # 404: already gone
+    except Exception:
+        return False
+
+
+def cancel_papers() -> list[str]:
+    """Delete every live paper as its owner (a guard trip: stop the server-side work). Returns the ids sent."""
+    with _LIVE_LOCK:
+        items = list(_LIVE.items())
+        _LIVE.clear()
+    for pid, (base_url, cookie) in items:
+        _delete_paper(pid, base_url, cookie)
+    return [pid for pid, _ in items]
 
 
 def git_short_hash() -> str:
@@ -190,6 +246,7 @@ def run_paper(
         "aborted": False, "max_segments": max_segments, "backend_crash": None, "no_segments": False,
         "v2_engine": v2_engine, "v2_paper_id": None, "events_mode": None, "events_seen": 0,
         "page_errors_source": "GET /papers/{id}/steps (failed render_page/segment_page steps)",
+        "failed_steps": [], "cancelled": False,
     }
 
     client = httpx.Client(
@@ -321,6 +378,8 @@ def run_paper(
         rec["timings_ms"]["upload"] = round(upload_ms, 1)
         pid = up.json()["paper_id"]
         rec["v2_paper_id"] = pid
+        cookie = client.headers.get("Cookie", "").partition("=")[2] or None
+        _register(pid, base_url, cookie)
 
         rec["events_mode"] = "sse"
         status = stream_events(pid)
@@ -370,6 +429,13 @@ def run_paper(
         except Exception:
             pass
         _ACTIVE.discard(client)
+        if pid is not None:
+            live = live_papers().get(pid)
+            _unregister(pid)
+            if rec["aborted"] and live is not None:  # stop the server-side pipeline (GPU work) of this paper
+                rec["cancelled"] = _delete_paper(pid, *live)
+            elif rec["aborted"]:
+                rec["cancelled"] = True  # cancel_papers() (guard trip) already deleted it
 
     # ------------------------------------------------------------------ build the record
     segs_all = detail.get("segments") or []
@@ -446,6 +512,11 @@ def run_paper(
             rec["page_errors"].append({"page": st["page"], "error": f"{st['kind']} failed" + (f": {ec}" if ec else ""),
                                        "kind": st["kind"], "error_class": ec})
     rec["page_errors"].sort(key=lambda e: (e["page"] is None, e["page"] or 0, e["kind"]))
+    for st in step_rows:
+        if st["kind"] in NON_PAGE_KINDS and (st["status"] == "failed" or st.get("error_class")):
+            dur = round((st["_end"] - st["_start"]) * 1000, 1) if st["_start"] and st["_end"] else None
+            rec["failed_steps"].append({"kind": st["kind"], "status": st["status"], "error_class": st.get("error_class"),
+                                        "attempts": st.get("attempts"), "duration_ms": dur})
 
     rec["wall_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     rec["http_calls"] = http["n"]

@@ -27,9 +27,25 @@ limits (10 new owners per hour, 6 active papers) are raised on the fake stack an
 
 Every answer >= 400 is kept (``http_events``) with its ``detail``; ``breaker_503_count`` counts the
 ``503 {"detail": "service unavailable"}`` answers of the rate limiter's open circuit breaker.
+
+Cold OCSR cache (controller ruling R21). v2 caches OCSR by (sha256 of the crop or image, engine, engine version) for
+every real engine, image jobs included, so a repeated fixture or probe image would be served in about 0 ms.
+  * ``CacheClear`` empties the cache table on the TEST stack's Postgres between scenarios, arms and repeats:
+    ``docker exec <container> psql -U marcus -d marcus -c 'DELETE FROM ocsr_cache'`` (the fs-probe's ``docker exec``
+    path; ``DOCKER_HOST`` reaches a remote docker). It refuses production and non-test container names.
+  * each script/warm-up image gets a few near-white corner pixels changed per call, so no two calls share bytes;
+  * every image job records its engine ``ms`` (0 = a cache hit; the image API has no ``cached`` flag).
+
+Guard trip (``abandon_all``): no new image job is posted and every poll loop returns ``"aborted"`` at once; the open
+image jobs are listed (v2 has no DELETE for an image job: one OCSR step each, abandoned). Papers are deleted by
+``client_v2.cancel_papers``.
 """
 from __future__ import annotations
 
+import io
+import os
+import re
+import subprocess
 import sys
 import threading
 import time
@@ -70,8 +86,92 @@ V1_TO_V2 = {
                          "adapter": "page_errors_of"},
 }
 
+OCSR_CACHE_TABLE = "ocsr_cache"  # backend-v2 marcus.core.models.OcsrCache.__tablename__ (tested)
+PG_USER = PG_DB = "marcus"  # backend-v2 docker-compose.yml POSTGRES_USER / POSTGRES_DB
+_REFUSED_CONTAINER_PARTS = ("marcus-backend", "marcus-frontend", "judge", "prod")
+
 _events: list[dict] = []
 _events_lock = threading.Lock()
+_STOP = threading.Event()  # set by abandon_all (guard trip)
+_jobs_lock = threading.Lock()
+_OPEN_JOBS: set[str] = set()
+_CREATED_JOBS: list[str] = []
+
+
+class CacheClear:
+    """Empty the v2 OCSR cache on a TEST stack (R21). Refuses production and anything that is not a test Postgres."""
+
+    def __init__(self, container: str, target_name: str):
+        name = container or ""
+        low = name.lower()
+        why = None
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
+            why = "not a plain container name"
+        elif any(x in low for x in _REFUSED_CONTAINER_PARTS) or low.endswith(".uni-jena.de") or "decimer.ai" in low:
+            why = "a production (or v1 judge) container"
+        elif "postgres" not in low:
+            why = "not a Postgres container"
+        elif target_name == "jarvis" and not low.startswith("marcus-v2-test"):
+            why = "on jarvis only the marcus-v2-test project's Postgres may be cleared (marcus-v2 is production after the switch)"
+        if why:
+            raise SystemExit(f"Refusing to clear the OCSR cache in container {name!r}: {why}.")
+        self.container, self.target_name = name, target_name
+        self.log: list[dict] = []
+
+    def argv(self) -> list[str]:
+        return ["docker", "exec", self.container, "psql", "-U", PG_USER, "-d", PG_DB, "-v", "ON_ERROR_STOP=1",
+                "-c", f"DELETE FROM {OCSR_CACHE_TABLE}"]
+
+    def clear(self, label: str) -> int:
+        p = subprocess.run(self.argv(), capture_output=True, text=True, timeout=60)
+        if p.returncode != 0:
+            raise RuntimeError(f"OCSR cache clear failed in {self.container!r}: {(p.stderr or p.stdout).strip()[:300]}")
+        m = re.search(r"DELETE (\d+)", p.stdout or "")
+        n = int(m.group(1)) if m else 0
+        self.log.append({"label": label, "deleted": n, "t": time.time()})
+        return n
+
+
+def abandon_all() -> dict:
+    """Guard trip: stop posting image jobs and polling at once; returns the image jobs left open (abandoned)."""
+    _STOP.set()
+    with _jobs_lock:
+        return {"image_jobs": sorted(_OPEN_JOBS)}
+
+
+def reset_abandon() -> None:
+    _STOP.clear()
+    with _jobs_lock:
+        _OPEN_JOBS.clear()
+
+
+def created_image_jobs(clear: bool = False) -> list[str]:
+    with _jobs_lock:
+        out = list(_CREATED_JOBS)
+        if clear:
+            _CREATED_JOBS.clear()
+    return out
+
+
+def image_job_cache_hits(owner) -> int:
+    return sum(1 for j in getattr(owner, "jobs", []) if j.get("cache_hit"))
+
+
+def unique_image(png: bytes) -> bytes:
+    """The same picture with 4 near-white corner pixels set from random bytes: different sha256, same molecule
+    (values 249-254 on a white background). Bytes that are not an image are returned unchanged."""
+    try:
+        from PIL import Image
+
+        im = Image.open(io.BytesIO(png)).convert("RGB")
+    except Exception:
+        return png
+    r = os.urandom(12)
+    for i in range(4):
+        im.putpixel((i, 0), tuple(249 + (r[3 * i + k] % 6) for k in range(3)))
+    out = io.BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue()
 
 
 def http_events(clear: bool = False) -> list[dict]:
@@ -113,6 +213,7 @@ class Owner:
         self.uploads_per_owner = uploads_per_owner
         self.uploads = 0
         self.owners_used = 0
+        self.jobs: list[dict] = []  # one entry per finished image job: id, status, engine ms, cache_hit
         self._lock = threading.Lock()
         self.client = _client(base_url)
 
@@ -199,26 +300,42 @@ def heartbeat_call(base_url, sid):
 def _image_job(owner: Owner, png: bytes, engine: str, timeout: float):
     """POST /images, then poll GET /images/{id}. Returns 200 when done, the HTTP status of a refused call,
     'job_failed' / 'job_deleted', or 'timeout'."""
+    if _STOP.is_set():
+        return "aborted"
     deadline = time.perf_counter() + timeout
     owner.before_upload()
-    r = owner.request("POST", f"{API}/images", files={"file": ("probe.png", png, "image/png")},
+    r = owner.request("POST", f"{API}/images", files={"file": ("probe.png", unique_image(png), "image/png")},
                       data={"engine": client_v2.ENGINES.get(engine, engine)}, timeout=timeout)
     if r.status_code != 202:
         return r.status_code
     jid = r.json()["image_job_id"]
-    while True:
-        left = deadline - time.perf_counter()
-        if left <= 0:
-            return "timeout"
-        g = owner.request("GET", f"{API}/images/{jid}", timeout=max(1.0, left))
-        if g.status_code != 200:
-            return g.status_code
-        st = g.json().get("status")
-        if st == "done":
-            return 200
-        if st in ("failed", "deleted"):
-            return f"job_{st}"
-        time.sleep(POLL_S)
+    with _jobs_lock:
+        _OPEN_JOBS.add(jid)
+        _CREATED_JOBS.append(jid)
+    try:
+        while True:
+            if _STOP.is_set():
+                return "aborted"  # stays in _OPEN_JOBS: abandoned
+            left = deadline - time.perf_counter()
+            if left <= 0:
+                return "timeout"
+            g = owner.request("GET", f"{API}/images/{jid}", timeout=max(1.0, left))
+            if g.status_code != 200:
+                return g.status_code
+            d = g.json()
+            st = d.get("status")
+            if st in ("done", "failed", "deleted"):
+                ms = (d.get("prediction") or {}).get("ms")
+                with owner._lock:
+                    owner.jobs.append({"image_job_id": jid, "status": st, "ms": ms, "cache_hit": ms == 0})
+                with _jobs_lock:
+                    _OPEN_JOBS.discard(jid)
+                return 200 if st == "done" else f"job_{st}"
+            _STOP.wait(POLL_S)
+    except Exception:
+        with _jobs_lock:
+            _OPEN_JOBS.discard(jid)
+        raise
 
 
 def script_call(base_url, sid, png, engine="decimer"):

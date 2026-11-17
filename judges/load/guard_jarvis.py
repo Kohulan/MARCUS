@@ -7,7 +7,8 @@ Before a scenario and every 30 s during it the guard checks, read-only over SSH:
 
 If either fails (or the check itself cannot run: fail closed) the guard trips at once: it sets
 ``guard.abort`` (an Event the scenarios and client_v1/client_v2.run_paper watch), closes every open HTTP client
-of client_v1 and client_v2 and writes the reason to ``load/results/guard_events.jsonl``. Scenarios must stop sending
+of client_v1 and client_v2, deletes every live v2 paper as its owner (client_v2.cancel_papers: on v2 the pipeline
+runs on the server), runs the scenario's ``on_trip`` hooks (v2: abandon image jobs) and writes the reason to ``load/results/guard_events.jsonl``. Scenarios must stop sending
 work and record ``guard.tripped`` in their result.
 
 Production-stopped mode (``prod_expected="stopped"``, scenarios.py ``--prod-stopped``) is ONLY for the owner's GPU test
@@ -91,10 +92,12 @@ class Guard:
 
     def __init__(self, base_url: str, scenario: str, *, interval_s: float = INTERVAL_S,
                  min_free_mib: int = MIN_FREE_MIB, checker=None, enabled: bool | None = None,
-                 use_ledger: bool = True, prod_expected: str = "running"):
+                 use_ledger: bool = True, prod_expected: str = "running", on_trip=None):
         if prod_expected not in PROD_MODES:
             raise ValueError(f"prod_expected must be one of {PROD_MODES}, not {prod_expected!r}")
         self.prod_expected = prod_expected
+        self.on_trip = list(on_trip or [])  # extra stop actions (v2: abandon image jobs), run after the papers
+        self.cancelled: dict | None = None
         self.base_url = base_url
         self.scenario = scenario
         self.interval_s = interval_s
@@ -142,10 +145,22 @@ class Guard:
         self.tripped_reason = reason
         self.abort.set()
         closed = client_v1.abort_all() + client_v2.abort_all()  # both builds' paper clients
+        # v2 runs the pipeline on the server: closing clients does not free the GPU, deleting the papers does
+        cancelled = {"papers": [], "hooks": []}
+        try:
+            cancelled["papers"] = client_v2.cancel_papers()
+        except Exception as e:
+            cancelled["papers_error"] = f"{type(e).__name__}: {e}"
+        for hook in self.on_trip:
+            try:
+                cancelled["hooks"].append(hook())
+            except Exception as e:
+                cancelled["hooks"].append({"error": f"{type(e).__name__}: {e}"})
+        self.cancelled = cancelled
         RESULTS.mkdir(exist_ok=True)
         with open(RESULTS / "guard_events.jsonl", "a") as f:
             f.write(json.dumps({"t": _utc(), "scenario": self.scenario, "event": "TRIPPED", "reason": reason,
-                                "http_clients_closed": closed}) + "\n")
+                                "http_clients_closed": closed, "cancelled": cancelled}) + "\n")
         print(f"[guard] TRIPPED during {self.scenario}: {reason} (closed {closed} http clients)", file=sys.stderr, flush=True)
 
     @property
@@ -185,7 +200,8 @@ class Guard:
     def summary(self) -> dict:
         free = [e["gpu_free_mib"] for e in self.events if "gpu_free_mib" in e]
         return {
-            "enabled": self.enabled, "prod_expected": self.prod_expected, "checks": len(self.events), "tripped": self.tripped,
+            "enabled": self.enabled, "prod_expected": self.prod_expected, "checks": len(self.events),
+            "cancelled": self.cancelled, "tripped": self.tripped,
             "trip_reason": self.tripped_reason, "min_gpu_free_mib": min(free) if free else None,
             "max_gpu_used_mib": max((e["gpu_used_mib"] for e in self.events if "gpu_used_mib" in e), default=None),
             "events": self.events,

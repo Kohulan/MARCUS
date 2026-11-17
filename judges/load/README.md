@@ -125,11 +125,30 @@ Results: `results/<target>_v2_<scenario>_<time>.json`; the S2 slowdown uses the 
 | page errors from docker logs | failed `render_page` / `segment_page` steps in each record |
 | (v2 only) | `POST /api/v2/tools/depict` probe every `--depict-period-s` (2 s) in S2, S3, S5: `depict_p95_ms` |
 
+**Cold OCSR cache (R21).** v2 caches OCSR per (crop or image bytes, engine, engine version), image jobs included, so a
+fixture or probe image seen before is answered in about 0 ms. Before every scenario, S1 run, S4 arm and the S5 S2 part the
+judge empties the cache table of the TEST stack: `docker exec <container> psql -U marcus -d marcus -c 'DELETE FROM
+ocsr_cache'` (`--cache-pg-container`, env `MARCUS_TEST_PG_CONTAINER`; local default `marcus-v2-postgres-1`; on jarvis the
+`marcus-v2-test` project's postgres, required; `DOCKER_HOST` reaches a remote docker). Production, v1 judge and non-Postgres
+names are refused, and on jarvis only `marcus-v2-test*`. Each script/warm-up image gets 4 random near-white corner pixels,
+so no two calls share bytes. Every paper records `ocsr_cache_hits` (the `cached` flag, or an engine time of 0 ms) and every
+image job its engine `ms`. A timed run or arm with a hit, or with a failed `check_pdf`/`docling`/`doi` step (`failed_steps`:
+its wall is then a time limit), gets `timing.valid: false` with the reasons; S4's concurrent-vs-sequential comparison is
+then `valid: false` with no `concurrent_faster`. `--allow-warm-cache` (off by default) skips the clearing and accepts hits.
+Every v2 result has `ocsr_cache.cleared`, `validity` and `v2_created` (paper and image-job ids). S4 v2 submits the two
+halves of the fixture as its two papers (a second copy of one PDF has the same crops).
+
+**Guard trip on v2.** The pipeline runs on the server, so closing clients is not enough: the guard deletes every live
+paper as its owner (`DELETE /api/v2/papers/{id}`, `client_v2.cancel_papers`), stops posting image jobs and polling
+(`v2_adapter.abandon_all`; the open jobs are listed, v2 has no image-job DELETE), and every probe and the S3/S5 idle and
+alone phases end at once. What was cancelled goes into `guard.cancelled`.
+
 Differences: S2's big paper runs full OCSR (`--big-cap` ignored, logged); S3 and S4 use `--engine`; S4 runs the full
 pipeline (spec: two papers at once must finish faster than one after the other); every paper is its own owner; the S5
 script user moves to a new owner before its 10th upload per owner (the per-owner limit is 10 uploads per minute; v1's
 script user had its own rate-limit bucket for the same reason). New fields: `first_segment_start_s`, `first_smiles_s`,
-`ocsr_done_s` (v1-comparable end: a v2 paper's `wall_s` also includes docling, about 55-65 s on CPU),
+`ocsr_done_s` (v1-comparable end: a v2 paper's `wall_s` also includes docling: 77-89 s for synth_015 on the loaded CPU
+host, and the 24-page synth_190 hit docling's time limit at about 330 s),
 `segment_compute_s`, `ocsr_compute_p50_ms`, `ocsr_cache_hits`, `depict_p95_ms`, probe `n_503`, `host_load`
 (1/5/15-min load average at start and end), `v2_http_errors` (every answer >= 400 the adapter saw) and `v2_breaker_503`
 (`503 {"detail": "service unavailable"}`: the rate limiter's circuit breaker was open). The fake stack makes 2
