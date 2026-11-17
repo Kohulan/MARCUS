@@ -27,6 +27,11 @@ COPY --from=builder /app/.venv /app/.venv
 COPY src /app/src
 RUN echo /app/src > /app/.venv/lib/python3.11/site-packages/marcus.pth \
     && /app/.venv/bin/python -m compileall -q /app/src
+# The admin CLI (`marcus ...`): the project itself is not installed, so write the console
+# script `[project.scripts] marcus = "marcus.cli:main"` would have created.
+RUN printf '#!/app/.venv/bin/python\nimport sys\nfrom marcus.cli import main\nsys.exit(main())\n' \
+        > /app/.venv/bin/marcus \
+    && chmod 755 /app/.venv/bin/marcus
 COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 WORKDIR /app

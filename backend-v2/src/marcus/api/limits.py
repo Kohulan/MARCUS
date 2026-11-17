@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.deps import owners_from_ip, rate_key_for_ip
 from marcus.core.enums import OwnerKind, PaperStatus
 from marcus.core.models import ImageJob, Owner, Paper
+from marcus.core.quota import pages_used_stmt
 from marcus.core.settings import get_settings
 
 ACTIVE_PAPER = [PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value]
@@ -48,7 +49,12 @@ async def enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None
     # Locks live until the upload commits (or rolls back). Order: owner, then IP.
     await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"owner:{owner.id}"))))
     if owner.kind != OwnerKind.BROWSER.value:
-        return  # API keys get a daily page quota instead
+        # API keys get a daily page quota instead; the owner lock above serialises uploads.
+        if owner.daily_page_quota is not None:
+            used = (await db.execute(pages_used_stmt(owner.id))).scalar_one()
+            if used >= owner.daily_page_quota:
+                raise HTTPException(status_code=429, detail="daily quota exceeded")
+        return
     # An unknown client address is one shared bucket (fail closed), like any other address.
     ip_key = rate_key_for_ip(ip)  # an IPv6 client's /64
     await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"ip:{ip_key}"))))
