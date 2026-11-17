@@ -142,6 +142,9 @@ def main(argv=None) -> int:
                 n_done += 1
                 down = bool(rec["fatal_error"]) and rec["fatal_error"].split(":")[0] in ("ConnectError", "RemoteProtocolError", "ReadError", "ConnectTimeout")
                 consecutive_down = consecutive_down + 1 if down else 0
+                if rec.get("ocsr_cache_hits"):
+                    print(f"WARNING: {r['paper_id']} {engine}: {rec['ocsr_cache_hits']} OCSR cache hit(s); ocsr_ms and wall_ms "
+                          f"are not comparable with v1 (timing needs a cold cache; accuracy is fine)", flush=True)
                 n_err = sum(1 for s in rec["segments"] if s["error"])
                 print(f"[{n_done}/{len(todo)}] {r['paper_id']} {engine:9s} wall {rec['wall_ms'] / 1000:7.1f}s  seg {(rec['segment_ms'] or 0) / 1000:6.1f}s  "
                       f"segments {len(rec['segments']):3d}/{rec['segments_reported']}  seg_errors {n_err}  page_errors {len(rec['page_errors'])}  "

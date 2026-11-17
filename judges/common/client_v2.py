@@ -12,13 +12,26 @@ With ``max_segments=N`` the paper is uploaded with ocsr="off" and only the first
 ``POST /api/v2/segments/{id}/predictions`` (v1 ran OCSR on the first N listed segments).
 
 Timings and errors come from ``GET /api/v2/papers/{id}/steps`` (read once the paper is terminal; step
-timestamps are the server's). SSE is used only for progress (``on_event``) and to detect the end:
+timestamps are the server's clock, only differences of them are used). SSE is used only for progress
+(``on_event``) and to detect the end. The same key means the same thing as in v1; v2-only numbers have NEW keys:
 
-  segment_ms  first segment_page started_at -> last segment_page finished_at (None without such steps).
-  ocsr_ms     per segment: its ocsr step started_at -> finished_at (newest ocsr step of that segment);
-              else the engine's own ``ms`` from the prediction.
-  page_errors one entry per failed render_page / segment_page step: {page, error, kind, error_class}.
-  t_start_ms  per segment: ocsr started_at minus the paper's first step created_at (server clock only).
+  segment_ms          v1: wall time of the extract_segments call (upload -> all segments listed). v2: the
+                      client's upload round trip + (last segment_page finished_at - paper's first step
+                      created_at). Includes upload, check_pdf, render, queue wait. None when no
+                      segment_page step exists (e.g. segmentation cache hit) or the steps are unavailable.
+  segment_compute_ms  v2 only: first segment_page started_at -> last finished_at (worker time, no queue wait).
+  ocsr_ms             per segment, v1: client round trip of the OCSR call. v2: the segment's newest ocsr step
+                      created_at -> finished_at: queue wait, retries and timeouts included (created_at does not
+                      reset on a retry). None when the timing is missing. NEVER falls back to ocsr_compute_ms.
+  ocsr_compute_ms     per segment, v2 only: the engine's own ``ms`` (0 for a cache hit). ``ocsr_attempts`` and
+                      ``ocsr_ms_source`` ("step created_at -> finished_at") say what ocsr_ms is.
+  ocsr_cache_hits     run, v2 only: predictions served from the OCSR cache (``cached`` flag on the prediction,
+                      also per segment as ``cached``). A hit takes about 0 ms, so v2 TIMING runs are valid only
+                      on a cold cache: the first run of a (paper, engine) pair or a fresh stack. The unique
+                      bytes of every upload defeat the PDF-level segmentation cache but NOT the OCSR cache
+                      (keyed by the crop image). Accuracy is unaffected. There is deliberately no bypass switch.
+  page_errors         one entry per failed render_page / segment_page step: {page, error, kind, error_class}.
+  t_start_ms          per segment: ocsr started_at minus the paper's first step created_at (server clock only).
 
 Differences from v1 inputs: ``on_429``, ``max_429_retries``, ``ui_extras`` and ``log_source`` are v1-only
 (no UI call sequence, page errors come from step events, not docker logs): accepted and ignored. Keys with
@@ -160,7 +173,7 @@ def run_paper(
     rate_events: list[dict] = []
     rec: dict = {
         "paper_id": paper_id, "pdf_sha256": pdf_sha, "engine": engine, "build": f"v2-{git_short_hash()}",
-        "started_at": started_at, "wall_ms": None, "segment_ms": None,
+        "started_at": started_at, "wall_ms": None, "segment_ms": None, "segment_compute_ms": None, "ocsr_cache_hits": 0,
         "pages_total": count_pdf_pages(pdf_path), "pages_with_segments": 0,
         "page_errors": [], "segments": [],
         "client": "client_v2", "base_url": base_url, "tag": tag, "upload_name": up_name, "upload_sha256": up_sha,
@@ -290,11 +303,14 @@ def run_paper(
     status = None
     detail: dict = {}
     step_rows: list[dict] = []
+    upload_ms = None
     pid = None
     try:
         check_abort()
+        t_up = time.perf_counter()
         up = call("upload", "POST", f"{API}/papers", files={"file": (up_name, data, "application/pdf")},
                   data={"engine": v2_engine, "ocsr": "auto" if max_segments is None else "off"})
+        upload_ms = (time.perf_counter() - t_up) * 1000
         pid = up.json()["paper_id"]
         rec["v2_paper_id"] = pid
 
@@ -366,34 +382,43 @@ def run_paper(
         if st["kind"] == "ocsr" and st.get("segment_id"):
             ocsr_by_seg[st["segment_id"]] = st
     rows = segs_all if max_segments is None else segs_all[:max_segments]
+    hits = 0
     for seg in rows:
         pred = next((p for p in seg["predictions"] if p["engine"] == ENGINES[engine]), None)  # newest first
         st = ocsr_by_seg.get(seg["id"])
-        observed = None
-        if st and st["_start"] and st["_end"]:
-            observed = round((st["_end"] - st["_start"]) * 1000, 1)
+        wall = None
+        if st:
+            t_created, t_end = _ts(st.get("created_at")), st["_end"]
+            if t_created is not None and t_end is not None:
+                wall = round((t_end - t_created) * 1000, 1)
         error = None
         if pred is None and rec["fatal_error"] is None:
             error = "ocsr step failed" if st and st["status"] == "failed" else "no prediction"
             if st and st.get("error_class"):
                 error += f" ({st['error_class']})"
+        cached = (pred or {}).get("cached")
+        hits += 1 if cached else 0
         row = {"segment_id": f"page_{seg['page']}_{seg['idx']}", "page": seg["page"], "page_number": seg["page"] + 1,
                "filename": None, "smiles": (pred or {}).get("smiles") or "",
-               "ocsr_ms": observed if observed is not None else (pred or {}).get("ms"),
-               "error": error, "fallback": False,
+               "ocsr_ms": wall, "ocsr_ms_source": "step created_at -> finished_at",
+               "ocsr_compute_ms": (pred or {}).get("ms"), "ocsr_attempts": st.get("attempts") if st else None,
+               "cached": cached, "error": error, "fallback": False,
                "t_start_ms": round((st["_start"] - origin) * 1000, 1) if st and st["_start"] and origin else None,
                "rate_limited": 0, "v2_segment_id": seg["id"], "valid": (pred or {}).get("valid"),
-               "engine_ms": (pred or {}).get("ms"), "engine_version": (pred or {}).get("engine_version")}
-        row["exceeds_ocsr_timeout"] = bool(row["ocsr_ms"] and row["ocsr_ms"] > ocsr_timeout_s * 1000)
+               "engine_version": (pred or {}).get("engine_version")}
+        row["exceeds_ocsr_timeout"] = bool(wall and wall > ocsr_timeout_s * 1000)
         rec["segments"].append(row)
+    rec["ocsr_cache_hits"] = hits
 
     seg_steps = [st for st in step_rows if st["kind"] == "segment_page"]
     starts = [st["_start"] for st in seg_steps if st["_start"]]
     ends = [st["_end"] for st in seg_steps if st["_end"]]
     if starts and ends:
-        seg_ms = (max(ends) - min(starts)) * 1000
-        rec["segment_ms"] = round(seg_ms, 1)
-        rec["exceeds_ui_segment_timeout"] = seg_ms > segment_timeout_s * 1000
+        rec["segment_compute_ms"] = round((max(ends) - min(starts)) * 1000, 1)
+        if origin is not None and upload_ms is not None:
+            seg_ms = upload_ms + (max(ends) - origin) * 1000
+            rec["segment_ms"] = round(seg_ms, 1)
+            rec["exceeds_ui_segment_timeout"] = seg_ms > segment_timeout_s * 1000
     rstarts = [st["_start"] for st in step_rows if st["kind"] == "render_page" and st["_start"]]
     rends = [st["_end"] for st in step_rows if st["kind"] == "render_page" and st["_end"]]
     if rstarts and rends:

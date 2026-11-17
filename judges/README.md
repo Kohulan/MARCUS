@@ -46,3 +46,21 @@ Each run is one JSON line (`runs/*.jsonl`):
  "segments": [{"segment_id": "page_3_1", "page": 3, "smiles": "...",
                "ocsr_ms": 0, "error": null}]}
 ```
+
+### v1 vs v2 key meanings
+
+The same key means the same thing in both builds; numbers only v2 can give have their own key.
+
+| Key | v1 (`client_v1`) | v2 (`client_v2`) |
+|---|---|---|
+| `segment_ms` | wall time of the `extract_segments` call: upload to all segments listed | client upload round trip + (last `segment_page` finished_at - paper's first step created_at): upload, check_pdf, render and queue wait included. None if the paper has no `segment_page` step (segmentation cache hit) |
+| `segment_compute_ms` | None (not available) | first `segment_page` started_at to last finished_at (worker time only) |
+| `segments[].ocsr_ms` | client round trip of the OCSR call (incl. fallback, 429 waits) | newest `ocsr` step created_at to finished_at: queue wait, retries, timeouts included. None when the timing is missing; never replaced by the engine time |
+| `segments[].ocsr_compute_ms` | None | the engine's own ms (0 for a cache hit) |
+| `ocsr_cache_hits` | 0 | predictions served from the v2 OCSR cache (`cached` flag on the prediction) |
+
+**v2 timing runs need a cold OCSR cache.** The cache is keyed by the crop image, engine and engine version, so
+re-running a paper with the same engine (or `run_goldset --retry-failed`) serves OCSR from the cache in about
+0 ms; the unique upload bytes only defeat the PDF-level segmentation cache. Time a paper+engine on its first
+run or on a fresh stack, and check `ocsr_cache_hits == 0` (`run_goldset` warns otherwise). Accuracy (SMILES) is
+unaffected by the cache. There is no cache-bypass switch in the backend, on purpose.

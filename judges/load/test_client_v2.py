@@ -34,27 +34,28 @@ def _sse(events, end="done", pause=0.01):
     return gen()
 
 
-def _pred(smiles, ms=40, valid=True, engine="decimer"):
+def _pred(smiles, ms=40, valid=True, engine="decimer", cached=False):
     return [{"id": "p", "engine": engine, "engine_version": "1", "smiles": smiles, "molfile": None,
-             "valid": valid, "ms": ms, "created_at": "2026-01-01T00:00:00Z"}]
+             "valid": valid, "ms": ms, "cached": cached, "created_at": "2026-01-01T00:00:00Z"}]
 
 
 def _seg(sid, page, idx, preds):
     return {"id": sid, "page": page, "idx": idx, "bbox": [0, 0, 1, 1], "curation": None, "predictions": preds}
 
 
-def _row(kind, page=None, seg=None, t0=0.0, t1=1.0, status="done", error_class=None):
+def _row(kind, page=None, seg=None, t0=0.0, t1=1.0, status="done", error_class=None, created=None, attempts=1):
     """A steps-endpoint row; t0/t1 are seconds after a fixed base."""
     def iso(t):
         return None if t is None else f"2026-01-01T00:00:{t:06.3f}+00:00"
     return {"id": f"{kind}-{page}-{seg}", "kind": kind, "page": page, "segment_id": seg, "status": status,
-            "attempts": 1, "error_class": error_class, "created_at": iso(t0), "started_at": iso(t0),
+            "attempts": attempts, "error_class": error_class, "created_at": iso(t0 if created is None else created), "started_at": iso(t0),
             "finished_at": iso(t1)}
 
 
 def ok_steps():
-    return [_row("render_page", 0, t0=1, t1=2), _row("segment_page", 0, t0=2, t1=4), _row("segment_page", 2, t0=3, t1=7.5),
-            _row("ocsr", 0, S0, t0=8, t1=8.25), _row("ocsr", 2, S1, t0=8.25, t1=8.75)]
+    return [_row("check_pdf", t0=1, t1=1.5), _row("render_page", 0, t0=2, t1=3, created=1.5),
+            _row("segment_page", 0, t0=4, t1=5, created=3), _row("segment_page", 2, t0=5, t1=9.5, created=3),
+            _row("ocsr", 0, S0, t0=11, t1=11.25, created=5), _row("ocsr", 2, S1, t0=11.25, t1=11.75, created=9.5)]
 
 
 class FakeV2:
@@ -127,8 +128,6 @@ def test_run_paper_maps_steps_to_paperrun(monkeypatch, pdf):
     assert [s["segment_id"] for s in r["segments"]] == ["page_0_0", "page_2_1"]
     assert [s["page"] for s in r["segments"]] == [0, 2] and [s["smiles"] for s in r["segments"]] == ["CCO", "CCN"]
     assert all(s["error"] is None for s in r["segments"])
-    assert [s["ocsr_ms"] for s in r["segments"]] == [250.0, 500.0]  # ocsr step started -> finished
-    assert r["segment_ms"] == 5500.0  # first segment_page start (2 s) -> last finish (7.5 s)
     assert r["fatal_error"] is None and r["timings_ms"]["render_pages"] == 1000.0
     assert r["client"] == "client_v2" and r["http_calls"] == len(fake.calls)
     # the owner cookie issued on the upload is sent on the following calls
@@ -176,7 +175,7 @@ def test_polling_fallback_when_sse_unavailable(monkeypatch, pdf):
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
     assert r["segments"][0]["smiles"] == "CCO" and r["fatal_error"] is None
     # the steps endpoint covers what the stream cannot: timings are there with no SSE at all
-    assert r["segments"][0]["ocsr_ms"] == 500.0 and r["segment_ms"] == 2000.0
+    assert r["segments"][0]["ocsr_ms"] == 500.0 and r["segment_compute_ms"] == 2000.0
     assert sum(1 for m, p in fake.calls if p == f"/api/v2/papers/{PID}") >= 3
     assert r["events_mode"] == "poll"
 
@@ -185,7 +184,7 @@ def test_missing_steps_endpoint_is_recorded_not_fatal(monkeypatch, pdf):
     patch(monkeypatch, FakeV2([], [_seg(S0, 0, 0, _pred("CCO"))], steps_status=404))
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
     assert r["fatal_error"] is None and r["segment_ms"] is None and r["steps_error"].startswith("HTTP 404")
-    assert r["segments"][0]["ocsr_ms"] == 40  # falls back to the engine's own time
+    assert r["segments"][0]["ocsr_ms"] is None and r["segments"][0]["ocsr_compute_ms"] == 40
 
 
 def test_failed_paper_is_fatal_error(monkeypatch, pdf):
@@ -209,3 +208,45 @@ def test_abort_event_stops_before_upload(monkeypatch, pdf):
     ev.set()
     r = client_v2.run_paper(pdf, "decimer", base_url="http://x", abort=ev)
     assert r["aborted"] is True and fake.calls == []
+
+
+def test_segment_ms_is_user_wall_time_incl_upload_check_and_queue(monkeypatch, pdf):
+    """I1: same quantity as v1 (upload -> all segments ready), not the compute span."""
+    fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO")), _seg(S1, 2, 1, _pred("CCN"))], steps=ok_steps())
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    # server clock: first step created at 1.0 s, last segment_page finished at 9.5 s -> 8500 ms, plus the
+    # client's upload round trip (a few ms against the mock)
+    assert 8500.0 <= r["segment_ms"] < 8700.0
+    assert r["segment_compute_ms"] == 5500.0  # first segment_page start (4 s) -> last finish (9.5 s)
+    assert r["segment_ms"] > r["segment_compute_ms"]
+
+
+def test_ocsr_ms_is_created_to_finished_and_compute_is_separate(monkeypatch, pdf):
+    """I2: queue wait, retries included; the engine's own ms is its own key; no silent fallback."""
+    steps = ok_steps()
+    steps[4] = _row("ocsr", 0, S0, t0=11, t1=11.25, created=5, attempts=2)  # waited 6 s, retried
+    fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO", ms=40)), _seg(S1, 2, 1, _pred("CCN", ms=55))], steps=steps)
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    a, b = r["segments"]
+    assert (a["ocsr_ms"], a["ocsr_compute_ms"], a["ocsr_attempts"]) == (6250.0, 40, 2)
+    assert (b["ocsr_ms"], b["ocsr_compute_ms"]) == (2250.0, 55)
+    assert a["ocsr_ms_source"] == "step created_at -> finished_at"
+
+
+def test_ocsr_ms_is_none_without_timing_not_engine_ms(monkeypatch, pdf):
+    fake = FakeV2([], [_seg(S0, 0, 0, _pred("CCO", ms=40))], steps=[_row("segment_page", 0, t0=1, t1=2)])
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    s = r["segments"][0]
+    assert s["ocsr_ms"] is None and s["ocsr_compute_ms"] == 40 and s["smiles"] == "CCO"
+
+
+def test_ocsr_cache_hits_are_counted(monkeypatch, pdf):
+    segs = [_seg(S0, 0, 0, _pred("CCO", ms=0, cached=True)), _seg(S1, 2, 1, _pred("CCN", ms=55))]
+    patch(monkeypatch, FakeV2(ok_events(), segs, steps=ok_steps()))
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert r["ocsr_cache_hits"] == 1 and [s["cached"] for s in r["segments"]] == [True, False]
+    patch(monkeypatch, FakeV2([], [], steps=[]))
+    assert client_v2.run_paper(pdf, "decimer", base_url="http://x")["ocsr_cache_hits"] == 0
