@@ -484,13 +484,16 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
     if not paper.pages:
         return
     session.flush()
-    rows = session.execute(
-        select(Step.page, Step.model_version).where(
-            Step.paper_id == paper.id,
-            Step.kind == StepKind.SEGMENT_PAGE.value,
-            Step.status == StepStatus.DONE.value,
-        )
-    ).all()
+    done = (
+        Step.paper_id == paper.id,
+        Step.kind == StepKind.SEGMENT_PAGE.value,
+        Step.status == StepStatus.DONE.value,
+    )
+    # Cheap first: pages segmented so far. Only the paper's last page reads the rows.
+    pages_done = session.execute(select(func.count(Step.page.distinct())).where(*done))
+    if pages_done.scalar_one() != paper.pages:
+        return
+    rows = session.execute(select(Step.page, Step.model_version).where(*done)).all()
     versions = {r.page: r.model_version for r in rows}
     if set(versions) != set(range(paper.pages)) or set(versions.values()) != {seg_version}:
         return
