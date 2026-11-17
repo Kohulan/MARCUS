@@ -78,35 +78,12 @@ def celery_send() -> Send:
 
 
 def live_queues_probe() -> LiveQueues:
-    """The watchdog's consumer check: a Celery broadcast in a daemon thread, waited for at most
-    INSPECT_BUDGET_S. A broadcast that overruns (kombu can retry a publish for ever) is
-    abandoned and gives None (unknown); while it still hangs no second one starts, and being a
-    daemon it never holds up the dispatcher's exit."""
-    running: threading.Thread | None = None
+    """The watchdog's consumer check (core.celery_app.LiveQueuesProbe), waited for at most
+    INSPECT_BUDGET_S; None (unknown) when the broadcast overran or failed."""
+    from marcus.core.celery_app import LiveQueuesProbe  # lazy: pick.py stays Celery-free
 
-    def probe():
-        nonlocal running
-        if running is not None and running.is_alive():
-            return None
-        from marcus.core import celery_app as ca  # lazy: pick.py stays Celery-free
-
-        out: dict = {}
-
-        def broadcast() -> None:
-            try:
-                out["live"] = set(ca.live_queue_names(INSPECT_TIMEOUT_S))
-            except Exception as exc:  # noqa: BLE001
-                out["error"] = type(exc).__name__
-
-        running = threading.Thread(target=broadcast, name="inspect", daemon=True)
-        running.start()
-        running.join(INSPECT_BUDGET_S)
-        if "live" not in out:
-            log.warning("consumer check gave no answer: %s", out.get("error", "timeout"))
-            return None
-        return out["live"]
-
-    return probe
+    probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "watchdog")
+    return lambda: probe.get(INSPECT_BUDGET_S)
 
 
 def _wait_and_drain(conn: psycopg.Connection, timeout: float) -> None:

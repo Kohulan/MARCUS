@@ -8,14 +8,15 @@ most 30 s old; otherwise 503 with the missing parts, e.g.
 
 The consumer check is a broker broadcast (`inspect(timeout=1).active_queues()`), so its result
 is cached per API process for READY_CACHE_S: /ready cannot be used to hammer the broker. Only
-one broadcast runs at a time per process, in a worker thread. `timeout=1` only bounds the
-reply collection: kombu publishes the broadcast with retry, and `Connection.ensure` retries
-for ever if the broker drops between the Redis PING and the publish. So each request waits at
-most INSPECT_BUDGET_S (for the lock and the broadcast together); a broadcast that overruns is
-abandoned (its thread finishes whenever kombu gives up or the broker returns) and cached as
-"no live queue". At most one such thread exists per process (a 1-token limiter), so a broker
-outage cannot pile up threads. /ready is not exempt from the per-IP rate limit. The database
-and Redis checks run on every call, each bounded by CHECK_TIMEOUT_S.
+one broadcast runs at a time per process, in a daemon thread (core.celery_app.LiveQueuesProbe,
+shared with the dispatcher's watchdog). `timeout=1` only bounds the reply collection: kombu
+publishes the broadcast with retry, and `Connection.ensure` retries for ever if the broker drops
+between the Redis PING and the publish. So each request waits at most INSPECT_BUDGET_S (for the
+lock and the broadcast together); a broadcast that overruns is abandoned (its thread finishes
+whenever kombu gives up or the broker returns) and cached as "no live queue". While it hangs no
+second one starts, so a broker outage cannot pile up threads. /ready is not exempt from the
+per-IP rate limit. The database and Redis checks run on every call, each bounded by
+CHECK_TIMEOUT_S.
 """
 
 import asyncio
@@ -70,7 +71,7 @@ class LiveQueues:
         self._at: float | None = None
         self._value: frozenset[str] = frozenset()
         self._lock: asyncio.Lock | None = None
-        self._threads: anyio.CapacityLimiter | None = None
+        self._probe = None  # core.celery_app.LiveQueuesProbe, made on first use
 
     def _fresh(self) -> bool:
         return self._at is not None and _monotonic() - self._at < READY_CACHE_S
@@ -83,21 +84,20 @@ class LiveQueues:
         if self._fresh():
             return self._value
         if self._lock is None:
+            from marcus.core.celery_app import LiveQueuesProbe
+
             self._lock = asyncio.Lock()
-            self._threads = anyio.CapacityLimiter(1)
-        try:
-            with anyio.fail_after(INSPECT_BUDGET_S):
-                async with self._lock:
-                    if self._fresh():  # refreshed by the request we waited behind
-                        return self._value
-                    live = await anyio.to_thread.run_sync(
-                        inspect_live_queues, abandon_on_cancel=True, limiter=self._threads
-                    )
-                    return self._store(frozenset(live))
-        except TimeoutError:
-            log.warning("ready: celery inspect gave no answer within %.1f s", INSPECT_BUDGET_S)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("ready: celery inspect failed: %s", type(exc).__name__)
+            # late-bound: tests replace inspect_live_queues
+            self._probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "ready", lambda: inspect_live_queues())
+        with anyio.move_on_after(INSPECT_BUDGET_S):
+            async with self._lock:
+                if self._fresh():  # refreshed by the request we waited behind
+                    return self._value
+                live = await anyio.to_thread.run_sync(
+                    self._probe.get, INSPECT_BUDGET_S, abandon_on_cancel=True
+                )
+                return self._store(frozenset(live or ()))  # None (no answer): no live queue
+        log.warning("ready: no consumer check answer within %.1f s", INSPECT_BUDGET_S)
         if self._fresh():  # a waiter whose budget ran out after the holder stored a result
             return self._value
         return self._store(frozenset())
