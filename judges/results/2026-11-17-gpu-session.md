@@ -148,3 +148,78 @@ On jarvis, `~/Project_MARCUS/v2-test/`: `run_v1_r1.sh` (v1 as shipped, restart b
 `run_v2_gpu_r1b.sh` (all v2 gates at the shipping configuration, then S4 with 2 slots). The probes are copied to
 `2026-11-17-gpu-session/round1/`: `seg_gpu_peak.py` (segmenter memory per page in the tf:cuda image, `MODE=growth`
 or `budget`), `seg_gpu_leak.py` (the same, pages repeated with `REPEAT`), `crop_parity.py` (v2 crops vs v1 crop files).
+
+## D5 rerun after final fixes (2026-11-17, 21:01-21:16Z)
+
+The gates whose code changed after D4 were rerun on the final code. Those are Safe, Responsive and a short Robust
+smoke. The code they cover is the final-review fix wave (merge `7410155`) and the /simplify cleanup up to `e985b05`.
+The build is branch v2-backend at HEAD **`bdcc6c5`**, which is `e985b05` plus the revert of `6e86c78`. The code went
+to `~/Project_MARCUS/v2-test/` on jarvis with `git archive`, and the D4 trees are kept beside it as `*.d4`. All five
+images were rebuilt on jarvis from that code (`marcus-v2-api:local`, `-cpu:local`, `-tools:local`, `-tf:cuda`,
+`-torch:cuda`); a check in the image found the /simplify `storage.disk_is_full`. The stack ran with the same compose
+files as D4 (`backend-v2/docker-compose.yml` + `docker-compose.gpu.yml`, or `docker-compose.fake.yml` for security
+mode, + `judges/stack/docker-compose.v2-jarvis.yml`). Run line: build `v2-d5-bdcc6c5`.
+
+- **Old data wiped first.** `down -v` ran on both stack modes, and afterwards no `marcus-v2-test` volume was left
+  (crops stored before `c69cdbc` would be swapped twice).
+- **nginx per-IP caps raised in the judge stack (ruling R25).** The fix wave added `MARCUS_NGINX_CONN_PER_IP` (64)
+  and `MARCUS_NGINX_UPLOADS_PER_IP` (4). `docker-compose.v2-jarvis.yml` now raises them to 1000 and 100, like the
+  API per-IP limits, and says why in its header. The nginx log showed `limit_conn perip 1000, uploads 100`, real_ip
+  off. Every other edge setting was as in production:
+  - `client_max_body_size 1m`, and 21m only on `POST /papers` and `/images`;
+  - api `mem_limit` 6g and nginx 1536m, each with a 1g `/tmp` tmpfs (`d5/d5_security_stack.log`,
+    `d5/d5_gpu_checks.log`).
+- **Shipping GPU settings, checked in the running stack:**
+  - `SLOTS` `q.segment` 1 and `q.decimer` 1 (owner decision);
+  - worker-segment `MARCUS_GPU_MEM_MB=2048` with `--max-tasks-per-child 200`; its log shows
+    `TensorFlow limited to 2048 MiB` and that the library's `set_memory_growth` was skipped;
+  - worker-decimer 4096 MiB;
+  - MolNexTR and MolScribe at torch 0.09 each, with MolScribe `loaded on cuda`.
+- **Guard.** Every load and robustness run used the jarvis guard (`--target jarvis --prod-stopped`) and never
+  tripped. The OCSR cache was cleared before each scenario.
+- **Production.** v1 production stayed stopped (`marcus-backend` exited, restart policy `no`), and
+  `marcus-maintenance` answered 503 on 127.0.0.1:8080 and :9000 before and after.
+
+### Gate table (D5, v2 `bdcc6c5`, shipping configuration)
+
+| Gate | Spec rule | D4 round 1 (v2 `f40a0d0`+recycle) | **D5 (v2 `bdcc6c5`)** | Verdict |
+|---|---|---|---|---|
+| **Safe** | 17 of 17, each proves its v2 endpoint exists | 19 passed, 1 skipped | **19 passed, 1 skipped** (`needs_frontend`: the browser half of #14, which waits for the React UI) in 260 s. All 16 v1 functions have a v2 test of the same name, and each passes its own existence check. Both XFF bursts (via nginx and direct to the API) were limited | **PASS except #14 browser half** (as D4) |
+| **Responsive** | `/health` p95 < 100 ms during heavy work; depict p95 < 2 s | S3 health p95 5.8 ms; depict p95 35.9 ms (S3), 33.2 ms (S5) | **S3** (synth_190 segmentation, 131 s): health p95 **6.3 ms** (max 8.3, 130/130 ok), heartbeat p95 13.0 ms, depict p95 **46.9 ms** (65/65 ok). **S5** (during S2): depict p95 **39.2 ms** (145 calls), health p95 5.3 ms (290). No 429, 503 or error answers in either run | **PASS** |
+| **Robust (smoke)** | a bad PDF fails only its own paper; no worker crash takes the API down; 0 lost pages | all 4 verdicts true, health 110/110 | the same 8 adversarial PDFs next to synth_015: `png_as_pdf` refused (415); garbage, zero-page and encrypted failed `check_pdf` bad_input; huge page failed `render_page` (the new 50-megapixel cap: `60001x60001 pixels ... limit 50 megapixels`) and docling bad_input; XSS text, the 1 GiB flate bomb and the cut synth_015 finished. Good paper 15/15 segments, 0 lost pages, 9 exact. `/health` 200 on **128 of 128** probes (max 8 ms); **0 restarts, 0 OOM**. Verdicts `good_paper_done_all_15`, `every_bad_paper_failed_or_rejected_alone`, `api_health_always_200`, `no_container_restart` all true | **PASS** |
+
+Also measured (not rerun as gates):
+- **S5's S2 part:** the small paper started segmenting at 2.5 s and showed its first SMILES at 7.2 s (Fair bar:
+  10 s and 60 s; D4 2.5 s and 6.0 s). The big paper got 190/190 segments with full OCSR.
+- **Script user (S5):** `generate_smiles` p95 was 1.19 s alone and 2.55 s during S2 (D4: 1.16 s and 2.72 s).
+- **Whole GPU-mode session (S3, S5, robustness):**
+  - 65 `segment_page`, 300 `ocsr`, 65 `render_page` and 11 `check_pdf` steps, all on the first attempt;
+  - the only failed steps are the 5 adversarial ones listed above;
+  - 0 `ResourceExhausted` or out-of-memory lines in the 4 GPU workers;
+  - card peak 8,572 MiB; mean GPU utilisation 9.6 % (nvidia-smi every 2 s).
+
+Not rerun, because D5's scope was Safe, Responsive and a Robust smoke: Fair (its S2 numbers come from S5 above),
+Not less accurate, gold set and Throughput. Their D4 round 1 verdicts above stand for build `f40a0d0`+recycle and
+round 2's crop change. Throughput stays FAIL as a known limit (owner decision, 1 slot).
+
+Notes:
+- The S3 idle depict p95 was 127.8 ms (D4: 28.6 ms). The idle phase has 16 samples, and its 128.9 ms maximum is
+  the first depict call on a fresh tools worker. During segmentation the p95 was 46.9 ms.
+- In the robustness run the good paper had 15 OCSR cache hits. This is because `robustness_v2.py` does not clear
+  the cache, and S5 had just processed synth_015. It does not affect the Robust verdicts, which make no timing claim.
+  D4 ran robustness after a cache clear, with 0 hits.
+- `run_d5.sh` ran the whole session. Its last steps: `down -v` the stack (images kept); no `marcus-v2-test`
+  container, volume or network left; GPU 0 MiB, compute mode Default.
+
+Files:
+- `load/results/jarvis_v2_SECURITY_20261117T220121_d5.xml`
+- `load/results/jarvis_v2_S3_20261117T220912_d5.json`
+- `load/results/jarvis_v2_S5_20261117T221503_d5.json`
+- `load/results/jarvis_v2_ROBUST_20261117T221608.json`
+- `2026-11-17-gpu-session/d5/`:
+  - `run_d5.sh` and `v2_lib.sh` (the run script and its helpers);
+  - `d5_run.log`, `d5_security.log` and `d5_security_stack.log`;
+  - `d5_gpu_checks.log` (limits, slots, budgets, device), `d5_after.log` (restart counts, step table, failed
+    steps, OOM count) and `d5_gpu.csv`.
+
+The result file names carry jarvis local time (CET), as D4's did.

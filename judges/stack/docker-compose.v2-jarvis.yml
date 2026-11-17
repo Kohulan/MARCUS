@@ -30,6 +30,14 @@
 #   MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR       10           1000
 #   MARCUS_IP_MAX_ACTIVE_PAPERS             6            100
 #   MARCUS_RATE_LIMIT_IP_PER_MIN            300          6000
+#   MARCUS_NGINX_CONN_PER_IP (nginx)        64           1000
+#   MARCUS_NGINX_UPLOADS_PER_IP (nginx)     4            100
+#
+# The two nginx caps (limit_conn per address, docker/nginx-edge.sh; added by the final-review fix wave, 7410155) are
+# per-IP limits too and are raised the same way (ruling R25): the robustness judge uploads 8 adversarial PDFs at once
+# from the one judge IP, which the production cap of 4 uploads in progress per address would answer with 429. Every
+# other nginx setting stays as in production (the 1 MB body cap outside POST /papers and /images, 21 MB on those two,
+# the tmpfs and mem_limit of api and nginx). Used since Task D5 (rerun of Safe, Responsive and a Robust smoke).
 #
 # Fake engines stay OFF in GPU mode (MARCUS_ENABLE_FAKE_ENGINES from docker-compose.yml, default 0); security
 # mode turns them on through docker-compose.fake.yml only.
@@ -51,3 +59,7 @@ services:
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
 
+  nginx:
+    environment:
+      MARCUS_NGINX_CONN_PER_IP: "1000"
+      MARCUS_NGINX_UPLOADS_PER_IP: "100"
