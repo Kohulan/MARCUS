@@ -24,8 +24,8 @@ attempt, so a stale duplicate message can never touch a newer attempt.
 
 After each commit one event is published (marcus.core.events); publishing never raises.
 
-Error mapping: SoftTimeLimitExceeded and StepTimeout -> timeout (retryable); BadInput ->
-bad_input (final);
+Error mapping: SoftTimeLimitExceeded and StepTimeout -> timeout (retryable); WorkerLost ->
+worker_lost (retryable); BadInput -> bad_input (final);
 BadResult from complete_step -> engine_error (final); anything else -> engine_error
 (retryable). The message is stored on the step (max 2000 chars) and never sent to clients.
 """
@@ -67,6 +67,11 @@ class BadInput(Exception):
 class StepTimeout(Exception):
     """The step's work ran past its own wall-time limit (e.g. a pdfsafe child was killed).
     Recorded as `timeout` and retried once, like Celery's soft time limit."""
+
+
+class WorkerLost(Exception):
+    """The process doing the step's work was killed from outside (e.g. the OOM killer took a
+    pdfsafe child). Recorded as `worker_lost` and retried once."""
 
 
 class _NoHandler(Exception):
@@ -234,6 +239,8 @@ def _fail(mine: Claim, error_class: ErrorClass, error: str, retryable: bool) -> 
 def _classify(exc: BaseException) -> tuple[ErrorClass, bool]:
     if isinstance(exc, SoftTimeLimitExceeded | StepTimeout):
         return ErrorClass.TIMEOUT, True
+    if isinstance(exc, WorkerLost):
+        return ErrorClass.WORKER_LOST, True
     if isinstance(exc, BadInput):
         return ErrorClass.BAD_INPUT, False
     if isinstance(exc, BadResult | _NoHandler):

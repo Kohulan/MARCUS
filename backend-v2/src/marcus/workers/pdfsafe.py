@@ -44,6 +44,12 @@ class ChildFailed(Exception):
     """The child raised or died. Only a short message travels back."""
 
 
+class ChildKilled(ChildFailed):
+    """The child was SIGKILLed from outside before it answered: the container's OOM killer (or
+    an operator), never its own limits (RLIMIT_AS raises MemoryError, RLIMIT_CPU sends SIGXCPU
+    and the wall timeout is ChildTimeout). Says nothing about the PDF."""
+
+
 def _child_env(threads: int | None = None) -> dict[str, str]:
     env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
     env.setdefault("PYTHONHASHSEED", "0")
@@ -116,6 +122,8 @@ def run_op(
     try:
         reply = json.loads(data)
     except ValueError:
+        if proc.returncode == -signal.SIGKILL:
+            raise ChildKilled("child killed by SIGKILL (out of memory?)") from None
         raise ChildFailed(f"child exited with code {proc.returncode}") from None
     if reply.get("ok"):
         return reply.get("result")
@@ -148,14 +156,18 @@ def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
 def _run_pdf(
     op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None
 ):
-    """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child that
-    failed (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final bad input."""
-    from marcus.workers.runtime import BadInput, StepTimeout
+    """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child killed
+    from outside (SIGKILL: the container's OOM killer) is a retryable lost worker (WorkerLost);
+    a child that failed otherwise (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final
+    bad input."""
+    from marcus.workers.runtime import BadInput, StepTimeout, WorkerLost
 
     try:
         return run_op(op, args, timeout_s, mem_mb, threads)
     except ChildTimeout:
         raise StepTimeout("timeout") from None
+    except ChildKilled as exc:
+        raise WorkerLost(str(exc)[:200]) from None
     except ChildFailed as exc:
         raise BadInput(str(exc)[:200]) from None
 

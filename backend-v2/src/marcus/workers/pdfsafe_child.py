@@ -132,6 +132,12 @@ def op_fail(*args) -> None:  # diagnostic
     raise RuntimeError("boom")
 
 
+def op_sigkill(*args) -> None:  # diagnostic: what the container's OOM killer does
+    import signal
+
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
 OPS = {
     "count": op_count,
     "render": op_render,
@@ -141,6 +147,7 @@ OPS = {
     "_alloc": op_alloc,
     "_spin": op_spin,
     "_fail": op_fail,
+    "_sigkill": op_sigkill,
 }
 
 

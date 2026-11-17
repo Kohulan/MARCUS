@@ -188,7 +188,22 @@ def test_cpu_limit_kill_through_run_pdf_stays_bad_input(monkeypatch):
 
     monkeypatch.setattr(pdfsafe.subprocess, "Popen", popen)
     start = time.monotonic()
-    with pytest.raises(BadInput, match=r"child exited with code -(24|9)") as info:
+    with pytest.raises(BadInput, match=r"child exited with code -24") as info:
         pdfsafe._run_pdf("_spin", [], 20, None)
     assert not isinstance(info.value, StepTimeout)
     assert time.monotonic() - start < 15
+
+
+def test_sigkilled_child_is_retryable_not_bad_input():
+    """Review I3: a child killed from outside (the container's OOM killer sends SIGKILL; the
+    wall timeout and RLIMIT_CPU end it otherwise) says nothing about the PDF: it is a
+    retryable worker_lost, not final bad_input."""
+    from marcus.core.enums import ErrorClass
+    from marcus.workers.runtime import WorkerLost, _classify
+
+    with pytest.raises(pdfsafe.ChildKilled):
+        pdfsafe.run_op("_sigkill", [], timeout_s=20)
+    with pytest.raises(WorkerLost, match="killed") as info:
+        pdfsafe._run_pdf("_sigkill", [], 20, None)
+    assert not isinstance(info.value, BadInput)
+    assert _classify(info.value) == (ErrorClass.WORKER_LOST, True)
