@@ -38,7 +38,7 @@ The whole pipeline in one open tool: segment, recognise with several engines (DE
 
 - Terminology (keep): paper, page, segment, structure, engine, SMILES, molfile, curation (accepted / rejected), COCONUT.
 - English only. Desktop only for the tool.
-- No server data or user text may be injected as HTML; strict CSP (self, COCONUT, Crossref, DataCite, PubChem, Matomo).
+- No server data or user text may be injected as HTML; strict CSP (self, COCONUT, PubChem, Matomo).
 - Analytics: the existing Matomo tracker (`https://matomo.nfdi4chem.de/`, site id 7).
 - Annotation of the text by a local LLM comes later; the UI reserves a place for it.
 

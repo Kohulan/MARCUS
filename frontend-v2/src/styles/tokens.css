@@ -1,0 +1,104 @@
+/*
+ * Field Sheet design tokens (spec §7, seed key 6b4eb402).
+ *
+ * Light values are fixed by the plan's Global Constraints. Dark values are the
+ * builder's call in the same world: a deep green-black base, paper surfaces as
+ * dark green-grey, state colours lightened. Every text pair is WCAG AA (4.5:1)
+ * on paper, surface and sunken; the ratios are in the F1 report.
+ *
+ * Dark mode applies when the system asks for it and the visitor has not picked
+ * light, or when the visitor picked dark (public/theme.js sets data-theme).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Grounds */
+  --paper: #fafaf7;
+  --surface: #ffffff;
+  --sunken: #f4f6f2;
+
+  /* Text */
+  --ink: #15241b;
+  --text-2: #3e5044;
+  --muted: #55675a;
+
+  /* Rules and actions */
+  --line: #dce3da;
+  --green: #1e4d33;
+
+  /* States: always paired with a word and a shape, never colour alone */
+  --accepted: #2d7a46;
+  --to-check: #9a5b0c;
+  --rejected: #b23a2a;
+  --failed-bg: #f7eeeb;
+  --failed-ink: #7a3b30;
+
+  /* Text set on a filled green, state or ink bar (buttons, label headers) */
+  --on-green: #ffffff;
+  --on-ink: #ffffff;
+
+  /* Browser surfaces */
+  --focus: var(--green);
+  --selection: #dcebdf;
+
+  /* Type */
+  --font-head: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-text: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mark: "Gmarket Sans", var(--font-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --paper: #0f1712;
+    --surface: #17211b;
+    --sunken: #0b110d;
+
+    --ink: #e5ece6;
+    --text-2: #c3cfc6;
+    --muted: #9aaa9e;
+
+    --line: #2b3a31;
+    --green: #8ccb9f;
+
+    --accepted: #6cc489;
+    --to-check: #e3a857;
+    --rejected: #f2907f;
+    --failed-bg: #2b1a16;
+    --failed-ink: #f0b7ab;
+
+    --on-green: #0f1712;
+    --on-ink: #0f1712;
+
+    --selection: #2e4a37;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #0f1712;
+  --surface: #17211b;
+  --sunken: #0b110d;
+
+  --ink: #e5ece6;
+  --text-2: #c3cfc6;
+  --muted: #9aaa9e;
+
+  --line: #2b3a31;
+  --green: #8ccb9f;
+
+  --accepted: #6cc489;
+  --to-check: #e3a857;
+  --rejected: #f2907f;
+  --failed-bg: #2b1a16;
+  --failed-ink: #f0b7ab;
+
+  --on-green: #0f1712;
+  --on-ink: #0f1712;
+
+  --selection: #2e4a37;
+}
