@@ -290,14 +290,13 @@ def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
     ((array, bbox),) = crops
     assert bbox == (2, 3, 9, 8)  # x0, y0, x1, y1
     assert array.dtype == np.uint8 and array.shape == (5, 7, 3)
-    # red and blue swapped, as v1's cv2.imwrite stores the crop (D4 crop parity)
-    assert tuple(array[0, 0]) == (30, 20, 10)
+    assert tuple(array[0, 0]) == (10, 20, 30)  # true colour (the engines get v1's swap later)
 
 
-def test_coloured_crop_file_matches_v1(monkeypatch):
-    """D4: v1 saves the library's RGB(A) crop with cv2.imwrite (BGR order), so a red atom label is
-    blue in v1's crop file (measured on jarvis: v1 pixel (0, 0, 255) where the page is red).
-    v2's stored crop must hold the same pixels; black and white stay as they are."""
+def test_coloured_crop_file_is_true_colour(monkeypatch):
+    """Owner decision (D4 fix round 2): the stored crop, which GET /segments/{id}/image serves,
+    keeps the page's true colours. v1's red/blue swap is applied only to the OCSR engine input
+    (tests/workers/test_ocsr.py)."""
     pid = uuid.uuid4()
     page = make_page(pid, 0, size=(20, 20))
     Image.new("RGB", (20, 20), (255, 255, 255)).save(page)
@@ -313,8 +312,8 @@ def test_coloured_crop_file_matches_v1(monkeypatch):
     sha = segment._write_crop(pid, array)
     with Image.open(segment_crop_path(pid, sha)) as im:
         stored = np.asarray(im.convert("RGB"))
-    assert tuple(stored[0, 0]) == (0, 0, 255)  # v1's file: red became blue
-    assert tuple(stored[1, 1]) == (255, 0, 0)
+    assert tuple(stored[0, 0]) == (255, 0, 0)  # red stays red
+    assert tuple(stored[1, 1]) == (0, 0, 255)
     assert tuple(stored[2, 2]) == (0, 0, 0) and tuple(stored[3, 3]) == (255, 255, 255)
 
 

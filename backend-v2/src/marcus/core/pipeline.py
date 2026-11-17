@@ -59,9 +59,14 @@ RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of th
 CROP_SOURCES_TRIED = 20  # live papers tried per crop on a cache hit
 
 
+CROP_FORMAT = "rgb"  # stored crops are true-colour RGB PNGs (D4 fix round 2); part of the key
+
+
 def seg_cache_key(seg_version: str) -> str:
-    """seg_cache.seg_version: the segmenter version plus the fixed render settings."""
-    return f"{seg_version}|dpi{RENDER_DPI}"
+    """seg_cache.seg_version: the segmenter version plus the fixed render settings and the crop
+    format, so cached segmentations from an older crop format are never reused (and retention
+    purges them)."""
+    return f"{seg_version}|dpi{RENDER_DPI}|{CROP_FORMAT}"
 
 
 class BadResult(ValueError):

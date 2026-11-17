@@ -2,7 +2,9 @@
 
 Importing this module registers the handler (GPU worker images import it). Crops are stored
 content-addressed (`storage.segment_crop_path`): the planner creates Segment ids only after
-this handler returns, so the crop cannot be named by segment id. Crop arrays are RGB.
+this handler returns, so the crop cannot be named by segment id. Crop arrays and files are RGB
+(true colour, what users see); the OCSR handler gives the engines v1's red/blue-swapped pixels
+(`marcus.workers.ocsr.handler.v1_engine_input`).
 """
 
 import hashlib
@@ -86,12 +88,13 @@ class DecimerSegmenter:
 
     The library returns crops as 4-channel arrays in the input's channel order plus alpha
     (every pixel opaque; pixels outside the structure mask are white) and bboxes as
-    (y0, x0, y1, x1). Crops are returned here with (x0, y0, x1, y1), alpha dropped, and with
-    red and blue SWAPPED, as v1 stores them: v1 writes the RGB crop with `cv2.imwrite`, which
-    takes the array as BGR, so every v1 crop file (shown to users, read by the OCSR engines)
-    has red and blue exchanged. D4 found this as the only crop difference to v1 (the 4 coloured
-    crops of synth_190; one changed a MolNexTR answer). Black-and-white crops are unchanged.
-    Like v1, crops and bboxes are paired by position.
+    (y0, x0, y1, x1). Crops are returned here as RGB (alpha dropped, true colour) with
+    (x0, y0, x1, y1). Like v1, crops and bboxes are paired by position.
+
+    v1 writes the same RGB crop with `cv2.imwrite`, which takes the array as BGR, so v1's crop
+    files have red and blue exchanged and its engines read them that way. v2 stores the true
+    colours (owner decision, D4 fix round 2) and swaps only the engine input
+    (`marcus.workers.ocsr.handler.v1_engine_input`).
     """
 
     version = DECIMER_SEGMENTATION_COMMIT
@@ -147,7 +150,7 @@ class DecimerSegmenter:
                 array = np.stack([array] * 3, axis=-1)
             crops.append(
                 (
-                    np.ascontiguousarray(array[:, :, 2::-1]),  # RGB -> v1's file order (B, G, R)
+                    np.ascontiguousarray(array[:, :, :3]),  # true colour; alpha dropped
                     (int(x0), int(y0), int(x1), int(y1)),
                 )
             )
