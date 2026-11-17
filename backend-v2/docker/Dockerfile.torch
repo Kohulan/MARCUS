@@ -11,12 +11,16 @@
 # v1 one. Declared-but-never-imported requirements are not installed (OpenNMT-py and SmilesPE
 # are therefore --no-deps too); the dependency check below allows exactly those.
 #
-# TORCH_VARIANT selects the torch wheel build of the same version:
-#   cpu   (default) torch==2.10.0+cpu from download.pytorch.org/whl/cpu; no CUDA libraries.
-#   cu128 torch==2.10.0 / torchvision==0.25.0 from PyPI: the default PyPI wheel is the CUDA 12.8
-#         build, and it is what v1 installed (torch.version.cuda 12.8; no direct_url, i.e. PyPI).
-#         The nvidia-* CUDA 12.8 wheels, triton and cuda-bindings are pinned at the v1 versions
-#         and checked by the dependency check. For the GPU stage (not built or tested yet).
+# VARIANT (build arg) selects the torch wheel build of the same version:
+#   cpu  (default) torch==2.10.0+cpu from download.pytorch.org/whl/cpu; no CUDA libraries.
+#   cuda torch==2.10.0 / torchvision==0.25.0 from PyPI: the default PyPI wheel is the CUDA 12.8
+#        build, and it is what v1 installed (torch.version.cuda 12.8; no direct_url, i.e. PyPI).
+#        The nvidia-* CUDA 12.8 wheels, triton and cuda-bindings are pinned at the v1 versions
+#        and checked by the dependency check. Image marcus-v2-torch:cuda (docker-compose.gpu.yml).
+#        Same python:3.11-slim-bookworm base, no system CUDA: torch's libraries carry a DT_RPATH
+#        to site-packages/nvidia/*/lib, searched before LD_LIBRARY_PATH, so in v1 too every CUDA
+#        library torch loads (cuDNN 9.10.2, cuBLAS 12.8.4, cuSOLVER 11.7.3, ...) comes from those
+#        wheels, never from v1's CUDA 11.8 base image (loader probe, docker/MODEL_PINS.md).
 #
 # Weights are downloaded at BUILD time with a pinned sha256, at a pinned Hugging Face revision;
 # runtime needs no network and the root filesystem stays read-only.
@@ -29,12 +33,12 @@
 # Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
 # `pytest -m ml` in this image). Build context: backend-v2/.
 
-ARG TORCH_VARIANT=cpu
+ARG VARIANT=cpu
 
 FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
 
 FROM python:3.11-slim-bookworm AS builder
-ARG TORCH_VARIANT
+ARG VARIANT
 COPY --from=uv /uv /usr/local/bin/uv
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
@@ -49,11 +53,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # torch and torchvision: the CPU build from the PyTorch CPU index, or the CUDA 12.8 build from
 # PyPI (as v1). --no-deps: their dependencies are pinned here and below.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    case "$TORCH_VARIANT" in \
+    case "$VARIANT" in \
       cpu) uv pip install --python /app/.venv/bin/python --no-deps \
              --index-url https://download.pytorch.org/whl/cpu \
              torch==2.10.0+cpu torchvision==0.25.0+cpu ;; \
-      cu128) uv pip install --python /app/.venv/bin/python --no-deps \
+      cuda) uv pip install --python /app/.venv/bin/python --no-deps \
              torch==2.10.0 torchvision==0.25.0 \
            && uv pip install --python /app/.venv/bin/python \
              nvidia-cublas-cu12==12.8.4.1 nvidia-cuda-cupti-cu12==12.8.90 \
@@ -63,7 +67,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
              nvidia-cusparse-cu12==12.5.8.93 nvidia-cusparselt-cu12==0.7.1 nvidia-nccl-cu12==2.27.5 \
              nvidia-nvjitlink-cu12==12.8.93 nvidia-nvshmem-cu12==3.4.5 nvidia-nvtx-cu12==12.8.90 \
              triton==3.6.0 cuda-bindings==12.9.4 cuda-pathfinder==1.3.3 ;; \
-      *) echo "TORCH_VARIANT must be cpu or cu128" >&2; exit 1 ;; \
+      *) echo "VARIANT must be cpu or cuda" >&2; exit 1 ;; \
     esac
 # Model stack, pinned from the v1 image freeze (closure resolved for Python 3.11).
 RUN --mount=type=cache,target=/root/.cache/uv \

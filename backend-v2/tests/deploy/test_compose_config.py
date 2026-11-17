@@ -191,8 +191,9 @@ def test_monitoring_is_a_separate_override_with_grafana_on_loopback():
 def test_prometheus_scrapes_metrics_every_15s():
     cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
     assert cfg["global"]["scrape_interval"] == "15s"
-    (job,) = cfg["scrape_configs"]
-    assert job["static_configs"][0]["targets"] == ["metrics:9100"]
+    jobs = {job["job_name"]: job for job in cfg["scrape_configs"]}
+    assert set(jobs) == {"marcus", "dcgm"}
+    assert jobs["marcus"]["static_configs"][0]["targets"] == ["metrics:9100"]
 
 
 def test_dashboard_covers_the_required_panels():
@@ -216,6 +217,12 @@ def test_dashboard_never_rates_windowed_series():
             if "marcus_" in e and not e.startswith("marcus_dispatcher"):
                 assert "rate(" not in e and "increase(" not in e, e
     assert "marcus_step_failures_total" not in json.dumps(dash)
+
+
+def test_prometheus_negotiates_openmetrics_first():
+    cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
+    for job in cfg["scrape_configs"]:
+        assert job["scrape_protocols"] == ["OpenMetricsText1.0.0", "PrometheusText0.0.4"], job
 
 
 # --- networks: internal-only, egress for nginx and worker-cpu ---------------------------------
@@ -251,8 +258,9 @@ def test_internal_network_is_internal_and_egress_is_not(compose):
     [
         ("docker-compose.yml",),
         ("docker-compose.yml", "docker-compose.fake.yml"),
+        ("docker-compose.yml", "docker-compose.gpu.yml"),
     ],
-    ids=["base", "fake"],
+    ids=["base", "fake", "gpu"],
 )
 def test_only_nginx_and_worker_cpu_leave_the_internal_network(files):
     config = _compose_config(*files)
@@ -273,6 +281,109 @@ def test_monitoring_keeps_prometheus_internal_and_grafana_without_egress():
     assert set(mon["services"]["grafana"]["networks"]) == {"internal", "grafana-edge"}
     edge = mon["networks"]["grafana-edge"]
     assert edge["driver_opts"]["com.docker.network.bridge.enable_ip_masquerade"] == "false"
+
+
+# --- GPU override -----------------------------------------------------------------------------
+
+GPU = "docker-compose.gpu.yml"
+GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molnextr", "worker-molscribe")
+# Production card (Task D4 host): 32 GB. Budgets cap the frameworks' allocators; each process's
+# CUDA context comes on top and is counted here at a generous 512 MiB.
+GPU_TOTAL_MIB = 32 * 1024
+CUDA_CONTEXT_MIB = 512
+BUDGET_LIMIT_MIB = 20 * 1024
+
+
+def _gpu_reservation(svc: dict) -> list[dict]:
+    return svc.get("deploy", {}).get("resources", {}).get("reservations", {}).get("devices", [])
+
+
+def test_gpu_override_budget_under_20gb():
+    config = _compose_config("docker-compose.yml", GPU)
+    services = config["services"]
+    env = {name: services[name]["environment"] for name in GPU_SERVICES}
+    assert env["worker-segment"]["MARCUS_GPU_MEM_MB"] == "6144"
+    assert env["worker-decimer"]["MARCUS_GPU_MEM_MB"] == "4096"
+    assert env["worker-molnextr"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
+    assert env["worker-molscribe"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
+    budget = int(env["worker-segment"]["MARCUS_GPU_MEM_MB"])
+    budget += int(env["worker-decimer"]["MARCUS_GPU_MEM_MB"])
+    for name in ("worker-molnextr", "worker-molscribe"):
+        budget += float(env[name]["MARCUS_TORCH_MEM_FRACTION"]) * GPU_TOTAL_MIB
+    budget += CUDA_CONTEXT_MIB * len(GPU_SERVICES)
+    assert budget <= BUDGET_LIMIT_MIB, budget
+
+    published = {name for name, svc in services.items() if svc.get("ports")}
+    assert published == {"nginx"}
+    assert _non_internal_members(config) == EGRESS_SERVICES
+
+
+def test_gpu_override_reserves_the_gpu_for_exactly_the_model_workers():
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    reserved = {name for name, svc in services.items() if _gpu_reservation(svc)}
+    assert reserved == {*GPU_SERVICES, "dcgm-exporter"}
+    for name in reserved:
+        (device,) = _gpu_reservation(services[name])
+        assert device["driver"] == "nvidia" and device["capabilities"] == ["gpu"], name
+        assert device["count"] == 1, name
+
+
+def test_gpu_override_builds_the_cuda_images():
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    expected = {
+        "worker-segment": ("docker/Dockerfile.tf", "marcus-v2-tf:cuda"),
+        "worker-decimer": ("docker/Dockerfile.tf", "marcus-v2-tf:cuda"),
+        "worker-molnextr": ("docker/Dockerfile.torch", "marcus-v2-torch:cuda"),
+        "worker-molscribe": ("docker/Dockerfile.torch", "marcus-v2-torch:cuda"),
+    }
+    for name, (dockerfile, image) in expected.items():
+        svc = services[name]
+        assert svc["build"]["dockerfile"] == dockerfile, name
+        assert svc["build"]["args"]["VARIANT"] == "cuda", name
+        assert svc["build"]["target"] == "runtime", name
+        assert svc["image"] == image, name
+    # the base stack keeps the CPU images
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    for name in expected:
+        assert base[name]["build"]["args"]["VARIANT"] == "cpu", name
+        assert not base[name]["image"].endswith(":cuda"), name
+
+
+def test_dcgm_exporter_is_internal_only_and_scraped():
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    dcgm = services["dcgm-exporter"]
+    assert set(dcgm["networks"]) == {"internal"}
+    assert not dcgm.get("ports")
+    assert re.fullmatch(r"nvcr\.io/nvidia/k8s/dcgm-exporter:[\w.-]+", dcgm["image"])
+    cfg = yaml.safe_load((ROOT / "ops" / "prometheus.yml").read_text())
+    targets = [
+        t for job in cfg["scrape_configs"] for c in job["static_configs"] for t in c["targets"]
+    ]
+    assert "dcgm-exporter:9400" in targets
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    assert "dcgm-exporter" not in base
+
+
+@pytest.mark.parametrize("name", ["worker-segment", "worker-decimer"])
+def test_tf_workers_cap_blas_threads(compose, name):
+    """OpenMP / OpenBLAS read their variables when numpy is first imported (before TF's own
+    thread settings apply), so compose sets them for the TF workers too."""
+    env = compose["services"][name]["environment"]
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        assert env[var] == "${MARCUS_TF_INTRA_THREADS:-4}", (name, var)
+
+
+# --- boot unit --------------------------------------------------------------------------------
+
+
+def test_nvidia_compute_default_unit_runs_before_docker():
+    unit = (ROOT / "ops" / "systemd" / "nvidia-compute-default.service").read_text()
+    lines = {line.split("=", 1)[0]: line.split("=", 1)[1] for line in unit.splitlines()
+             if "=" in line and not line.startswith("#")}
+    assert lines["ExecStart"] == "/usr/bin/nvidia-smi -i 0 -c DEFAULT"
+    assert lines["Type"] == "oneshot"
+    assert "docker.service" in lines["Before"].split()
+    assert lines["WantedBy"] == "multi-user.target"
 
 
 # --- nginx: re-resolve the api quickly, retry idempotent requests ------------------------------

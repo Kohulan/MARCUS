@@ -15,7 +15,7 @@ pinned in the Dockerfile. All versions below are identical to the v1 freeze.
 | efficientnet / Keras-Applications / pillow_heif / selfies / PyYAML | 1.1.1 / 1.0.8 / 0.21.0 / 2.2.0 / 6.0.2 (what decimer imports or declares) | v1 image freeze |
 | decimer_segmentation | git `Kohulan/DECIMER-Image-Segmentation` @ `d0045d9ef4b29a2a8d865eae55399ba1b14481bf` (1.5.1, v1's `development` branch), `--no-deps` | v1 image freeze |
 | Mask R-CNN weights `mask_rcnn_molecule.h5` | Zenodo record 10663579, sha256 `329120facb69e88add819a3216db0fbfef57e9a37d6b6db0f6149819a11d46a5`, baked at `/opt/pystow/DECIMER-Segmentation_model/` | same file v1 downloads at runtime (`MODEL_DOWNLOAD_URL` in the package) |
-| tensorflow | 2.15.1 (CPU wheel, no `[and-cuda]`) | v1 image freeze |
+| tensorflow | 2.15.1 (no `[and-cuda]` extra; the CUDA libraries of the `cuda` variant are listed below) | v1 image freeze |
 | keras | 2.15.0 | v1 image freeze |
 | tensorflow-estimator / tensorboard / tensorboard-data-server / tensorflow-io-gcs-filesystem | 2.15.0 / 2.15.2 / 0.7.2 / 0.37.1 | v1 image freeze |
 | numpy | 1.24.3 | v1 image freeze |
@@ -68,11 +68,11 @@ is the v1 one.
 | pystow / opt-einsum / sympy / networkx | 0.7.0 / 3.4.0 / 1.14.0 / 3.4.2 | v1 image freeze |
 | rest of the closure (joblib, threadpoolctl, imageio, tifffile, ...; 46 pinned packages plus torch and torchvision) | as listed in the Dockerfile | v1 image freeze |
 
-**torch build variant** (build arg `TORCH_VARIANT`, compose `MARCUS_TORCH_VARIANT`):
+**torch build variant** (build arg `VARIANT`; `docker-compose.gpu.yml` builds `cuda`):
 
 - `cpu` (default, the image built and tested in B3): `torch==2.10.0+cpu`, `torchvision==0.25.0+cpu`
   from `download.pytorch.org/whl/cpu`; no CUDA libraries. `marcus-v2-torch:local` is this build.
-- `cu128`: the build v1 runs (`torch.__version__` `2.10.0+cu128`, `torch.version.cuda` `12.8` in
+- `cuda` (torch 2.10.0+cu128): the build v1 runs (`torch.__version__` `2.10.0+cu128`, `torch.version.cuda` `12.8` in
   `marcus-backend:latest`). Installed as v1 did, from PyPI (`torch==2.10.0`, `torchvision==0.25.0`,
   `--no-deps`; the default PyPI wheel is the CUDA 12.8 build, and v1's torch has no
   `direct_url.json`, i.e. it came from PyPI), plus the CUDA wheels at the v1 versions, checked by
@@ -81,7 +81,8 @@ is the v1 one.
   11.3.3.83, nvidia-cufile-cu12 1.13.1.3, nvidia-curand-cu12 10.3.9.90, nvidia-cusolver-cu12
   11.7.3.90, nvidia-cusparse-cu12 12.5.8.93, nvidia-cusparselt-cu12 0.7.1, nvidia-nccl-cu12 2.27.5,
   nvidia-nvjitlink-cu12 12.8.93, nvidia-nvshmem-cu12 3.4.5, nvidia-nvtx-cu12 12.8.90, triton 3.6.0,
-  cuda-bindings 12.9.4, cuda-pathfinder 1.3.3. For the GPU stage (C4). Not built in B3.
+  cuda-bindings 12.9.4, cuda-pathfinder 1.3.3. Same `python:3.11-slim-bookworm` base as `cpu`: no
+  system CUDA is needed (see "CUDA libraries" below). Built in C4 as `marcus-v2-torch:cuda`.
 
 Not installed although declared (never imported at runtime; the build's dependency check allows
 exactly these): MolNexTR's `pytorch-lightning`, `pyonmttok` and `opencv-python`; MolScribe's
@@ -118,6 +119,64 @@ Runtime differences from v1 (same weights, same library calls):
 
 Kept from v1 as is (library behaviour): MolNexTR logs `name 'rdFMCS' is not defined` for some
 structures (an unimported name in an exception path of its post-processing; output unchanged).
+
+
+## CUDA libraries of the `cuda` variants (Task C4)
+
+Neither image can use a GPU on the build host; what was checked is which library file each
+framework would load, with a loader probe run in v1's `marcus-backend:latest` and in the v2 image
+(`--network none`, no GPU). The probe emulates the dynamic loader's search for every library the
+framework asks for (DT_RPATH, `LD_LIBRARY_PATH`, the caller's DT_RUNPATH with `$ORIGIN` expanded,
+ld.so.cache, default dirs), loads each hit with ctypes and asks it for its version where a call
+works without a driver; for torch it also lists the CUDA libraries mapped after `import torch`
+(`/proc/self/maps`). Result: **identical in v1 and v2, library by library.**
+
+TensorFlow 2.15.1 (`tf.sysconfig.get_build_info()`: `cuda_version` 12.2, `cudnn_version` 8,
+`is_cuda_build` True; compute capabilities sm_50, sm_60, sm_70, sm_75, compute_80). TF dlopens its
+CUDA libraries from `libtensorflow_framework.so.2`, whose RUNPATH points into
+`site-packages/nvidia/*/lib`; `LD_LIBRARY_PATH` (which v1 extends by `/usr/local/cuda/lib64`) comes
+first and ld.so.cache last:
+
+| library TF asks for | found via | file / package | version reported |
+|---|---|---|---|
+| libcudart.so.12 | RUNPATH | nvidia-cuda-runtime-cu12 12.8.90 | cudaRuntimeGetVersion 12080 |
+| libcublas.so.12, libcublasLt.so.12 | RUNPATH | nvidia-cublas-cu12 12.8.4.1 | 12.8.4 |
+| libcufft.so.11 | RUNPATH | nvidia-cufft-cu12 11.3.3.83 | cufftGetVersion 11303 |
+| libcusolver.so.11 | LD_LIBRARY_PATH | base image CUDA 11.8 `libcusolver.so.11.4.1.48` | 11.4.1 |
+| libcusparse.so.12 | RUNPATH | nvidia-cusparse-cu12 12.5.8.93 | 12.5.8 |
+| libcudnn.so.8 (+ ops/cnn/adv_infer) | ld.so.cache | base image `libcudnn8` 8.9.6.50 (CUDA 11.8 build) | cudnnGetVersion 8906 |
+| libnccl.so.2 | RUNPATH (`_pywrap_tensorflow_internal.so`) | nvidia-nccl-cu12 2.27.5 | 22705 |
+| libcupti.so.12, libnvinfer.so.8 | not found (as in v1) | - | - |
+| ptxas (XLA) | `site-packages/nvidia/cuda_nvcc/bin` | nvidia-cuda-nvcc-cu12 12.2.140 | - |
+
+So `marcus-v2-tf:cuda` uses v1's base image `nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04` (for
+cuDNN 8.9.6 and cuSOLVER 11.4.1, which TF really takes from there), the same `LD_LIBRARY_PATH`, and
+exactly the wheels above (+ nvidia-nvjitlink-cu12 12.8.93, which cuFFT/cuSPARSE need). Python: 3.11
+is not packaged for Ubuntu 22.04, so uv installs CPython 3.11.14 (python-build-standalone) under
+`/opt/python` (the CPU image has Debian's python:3.11-slim 3.11.18). Not installed, because TF
+never loads them: the torch-only wheels of v1's shared environment (nvidia-cudnn-cu12 9.x, which
+has no `libcudnn.so.8`; nvidia-cusolver-cu12, shadowed by `LD_LIBRARY_PATH`; cuSPARSELt, cuFile,
+cuRAND, NVSHMEM, NVTX, NVRTC, CUPTI).
+
+torch 2.10.0+cu128 (`torch.version.cuda` 12.8, `torch.backends.cudnn.version()` 91002): its CUDA
+libraries carry a DT_RPATH to `site-packages/nvidia/*/lib`, searched before `LD_LIBRARY_PATH`, so
+v1's CUDA 11.8 base image plays no part. Loaded after `import torch` (21 files, same in v1 and v2):
+cuBLAS/cuBLASLt 12.8.4.1, CUPTI 12.8.90, NVRTC 12.8.93, cudart 12.8.90, cuDNN 9.10.2.21 (libcudnn,
+libcudnn_graph), cuFFT 11.3.3.83, cuFile 1.13.1.3, cuRAND 10.3.9.90, cuSOLVER 11.7.3.90, cuSPARSE
+12.5.8.93, cuSPARSELt 0.7.1, NCCL 2.27.5, nvJitLink 12.8.93, NVSHMEM 3.4.5, NVTX 12.8.90 and torch's
+own libc10_cuda / libtorch_cuda / libtorch_nvshmem; the NEEDED entries of libtorch_cuda,
+libtorch_cuda_linalg, libtorch_global_deps and libc10_cuda (20) resolve identically.
+
+Images (built locally, never pushed):
+
+| image | base | disk (`docker images`) | content size |
+|---|---|---|---|
+| `marcus-v2-tf:cuda` | nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 + CPython 3.11.14 | 14.8 GB | 5.34 GB |
+| `marcus-v2-torch:cuda` | python:3.11-slim-bookworm (3.11.18) | 17.3 GB | 6.61 GB |
+
+Host needs: an NVIDIA driver that supports CUDA 12.8 (torch cu128; the same holds for v1 today)
+and a card TF 2.15 can run (built for sm_50-sm_75 + compute_80 PTX, JIT via ptxas 12.2 for newer
+cards). Both are D4 checks on the production host.
 
 
 ## CPU worker image (`docker/Dockerfile.cpu`)

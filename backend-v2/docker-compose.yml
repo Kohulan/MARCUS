@@ -14,6 +14,9 @@
 # is exactly that address (never the bridge CIDR), so only nginx may name the client IP and
 # request id.
 #
+# GPU (production): add -f docker-compose.gpu.yml (CUDA images, GPU reservations, memory budgets,
+# dcgm-exporter).
+#
 # Migrations: the one-shot `api-migrate` service runs `alembic upgrade head` once; api,
 # dispatcher and workers start only after it completed successfully.
 #
@@ -77,7 +80,18 @@ x-tf-image: &tf-image
     context: .
     dockerfile: docker/Dockerfile.tf
     target: runtime
+    args:
+      VARIANT: cpu  # cuda: docker-compose.gpu.yml (marcus-v2-tf:cuda)
   image: marcus-v2-tf:local
+
+# TF workers' CPU threads. OpenMP / OpenBLAS (numpy, OpenCV, scikit-image in the segmentation
+# post-processing) read their variables when numpy is first imported, before TF's own pools are
+# set (marcus.workers.gpu.limit_tf_threads), so compose sets them.
+x-tf-threads: &tf-threads
+  MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+  MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+  OMP_NUM_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+  OPENBLAS_NUM_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
 
 # Test-only services of the TF image's `test` target (profile "test"). No network at all:
 # proves the weights are baked in and nothing is fetched at runtime.
@@ -87,6 +101,8 @@ x-tf-test: &tf-test
     context: .
     dockerfile: docker/Dockerfile.tf
     target: test
+    args:
+      VARIANT: cpu
   image: marcus-v2-tf-test:local
   read_only: true
   tmpfs:
@@ -97,8 +113,7 @@ x-tf-test: &tf-test
     - ALL
   network_mode: none
   environment:
-    MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
-    MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+    <<: *tf-threads
   mem_limit: 8g
 
 x-torch-image: &torch-image
@@ -107,8 +122,7 @@ x-torch-image: &torch-image
     dockerfile: docker/Dockerfile.torch
     target: runtime
     args:
-      # cpu (default) or cu128 (the CUDA 12.8 build v1 runs; GPU override). docker/MODEL_PINS.md
-      TORCH_VARIANT: ${MARCUS_TORCH_VARIANT:-cpu}
+      VARIANT: cpu  # cuda (the CUDA 12.8 build v1 runs): docker-compose.gpu.yml
   image: marcus-v2-torch:local
 
 # torch CPU threads, set before the model loads (marcus.workers.gpu.limit_torch_threads). The
@@ -277,13 +291,11 @@ services:
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
               "-n", "segment@%h", "--loglevel", "INFO"]
     environment:
-      <<: [*env, *seg-version]
+      # TF CPU thread pools (x-tf-threads): one worker must not take every core next to docling.
+      <<: [*env, *seg-version, *tf-threads]
       # GPU budget in MiB for TensorFlow (marcus.workers.gpu), set per service; empty = no
-      # limit / CPU only.
+      # limit / CPU only (docker-compose.gpu.yml sets 6144).
       MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-}
-      # TF CPU thread pools: one worker must not take every core next to docling.
-      MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
-      MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
@@ -299,12 +311,11 @@ services:
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
               "-n", "decimer@%h", "--loglevel", "INFO"]
     environment:
-      <<: *env
+      <<: [*env, *tf-threads]
       MARCUS_OCSR_ENGINES: decimer,decimer-hand
-      # GPU budget in MiB for TensorFlow, this service only; empty = no limit / CPU only.
+      # GPU budget in MiB for TensorFlow, this service only; empty = no limit / CPU only
+      # (docker-compose.gpu.yml sets 4096).
       MARCUS_GPU_MEM_MB: ${MARCUS_DECIMER_GPU_MEM_MB:-}
-      MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
-      MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
@@ -357,7 +368,7 @@ services:
       dockerfile: docker/Dockerfile.torch
       target: test
       args:
-        TORCH_VARIANT: ${MARCUS_TORCH_VARIANT:-cpu}
+        VARIANT: cpu
     image: marcus-v2-torch-test:local
     read_only: true
     tmpfs:

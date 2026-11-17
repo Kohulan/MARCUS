@@ -15,8 +15,20 @@
 # declared-but-unused requirements: opencv-python for both packages (we ship the headless build
 # of the same version), ipython and numba (never imported by decimer_segmentation).
 #
-# CPU only: tensorflow is installed without the [and-cuda] extra (no CUDA libraries). TF still
-# runs on CPU; the GPU variant belongs to the GPU override.
+# VARIANT (build arg) selects the base and the CUDA libraries; the Python packages are the same:
+#   cpu  (default) python:3.11-slim-bookworm, no CUDA libraries; TF runs on CPU.
+#   cuda v1's runtime (docker-compose.gpu.yml, image marcus-v2-tf:cuda). TF 2.15.1 is a CUDA 12.2 /
+#        cuDNN 8 build that loads its CUDA libraries at runtime: LD_LIBRARY_PATH first, then the
+#        RUNPATH of libtensorflow_framework.so.2 (site-packages/nvidia/*/lib), then ld.so.cache.
+#        In v1 (base nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04, LD_LIBRARY_PATH incl.
+#        /usr/local/cuda/lib64) that resolves to: cudart 12.8.90, cuBLAS 12.8.4.1, cuFFT 11.3.3.83,
+#        cuSPARSE 12.5.8.93, NCCL 2.27.5 from the nvidia-*-cu12 wheels, but cuSOLVER 11.4.1.48
+#        (CUDA 11.8, LD_LIBRARY_PATH) and cuDNN 8.9.6.50 (ld.so.cache) from the base image; ptxas
+#        from nvidia-cuda-nvcc-cu12 12.2.140. The cuda variant therefore uses the same base image,
+#        the same LD_LIBRARY_PATH and those wheels at the v1 versions (measured with a loader probe,
+#        docker/MODEL_PINS.md). Python 3.11 is not in Ubuntu 22.04, so uv installs CPython 3.11.14
+#        (python-build-standalone) under /opt/python. The wheels TF never loads (torch's cuDNN 9,
+#        cuSPARSELt, cuFile, NVSHMEM, ...) are not installed.
 #
 # Weights are downloaded at BUILD time with a pinned sha256 under PYSTOW_HOME=/opt/pystow, where
 # the packages look for them (pystow). Runtime needs no network; the root filesystem stays
@@ -31,12 +43,30 @@
 # Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
 # `pytest -m ml` in this image). Build context: backend-v2/.
 
+ARG VARIANT=cpu
+
 FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
 
-FROM python:3.11-slim-bookworm AS builder
+# Python 3.11 base per variant; MARCUS_PYTHON is the interpreter the venv is built on.
+FROM python:3.11-slim-bookworm AS base-cpu
+ENV MARCUS_PYTHON=/usr/local/bin/python3.11
+
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 AS base-cuda
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    UV_PYTHON_INSTALL_DIR=/opt/python uv python install 3.11.14 \
+    && chmod -R a+rX /opt/python \
+    && /opt/python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 -c "import ssl, sqlite3, ctypes"
+# As v1 (backend/Dockerfile): the CUDA 11.8 libraries are searched before TF's RUNPATH.
+ENV MARCUS_PYTHON=/opt/python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 \
+    LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64
+
+FROM base-${VARIANT} AS base
+
+FROM base AS builder
+ARG VARIANT
 COPY --from=uv /uv /usr/local/bin/uv
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV UV_COMPILE_BYTECODE=1 UV_COMPILE_BYTECODE_TIMEOUT=600 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/app/.venv
@@ -44,7 +74,18 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-editable --extra tf
+    uv sync --frozen --no-install-project --no-editable --extra tf --python "$MARCUS_PYTHON"
+# cuda: the nvidia-*-cu12 wheels TF loads in v1, at the v1 versions (pip check below covers them).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    case "$VARIANT" in \
+      cpu) ;; \
+      cuda) uv pip install --python /app/.venv/bin/python \
+              nvidia-cuda-runtime-cu12==12.8.90 nvidia-cublas-cu12==12.8.4.1 \
+              nvidia-cufft-cu12==11.3.3.83 nvidia-cusparse-cu12==12.5.8.93 \
+              nvidia-nvjitlink-cu12==12.8.93 nvidia-nccl-cu12==2.27.5 \
+              nvidia-cuda-nvcc-cu12==12.2.140 ;; \
+      *) echo "VARIANT must be cpu or cuda" >&2; exit 1 ;; \
+    esac
 # Model stack, pinned from the v1 image freeze (closure resolved for Python 3.11).
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python /app/.venv/bin/python \
@@ -87,7 +128,7 @@ COPY docker/unpack_decimer_weights.py /tmp/unpack_decimer_weights.py
 RUN python /tmp/unpack_decimer_weights.py /tmp /opt/pystow/DECIMER-V2 \
     && chmod -R a+rX /opt/pystow
 
-FROM python:3.11-slim-bookworm AS runtime
+FROM base AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/* \

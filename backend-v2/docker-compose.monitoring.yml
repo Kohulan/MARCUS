@@ -4,7 +4,8 @@
 #     -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #   (add -f docker-compose.fake.yml before this one for the fake stack)
 #
-# Prometheus scrapes metrics:9100 every 15 s, internal network only, and publishes nothing. Grafana is reachable on
+# Prometheus scrapes metrics:9100 (and dcgm-exporter:9400 with docker-compose.gpu.yml) every
+# 15 s, internal network only, and publishes nothing. Grafana is reachable on
 # 127.0.0.1:13000 only (anonymous access off, admin password from the environment); the
 # dashboard ops/grafana/marcus.json and the data source are provisioned from files.
 

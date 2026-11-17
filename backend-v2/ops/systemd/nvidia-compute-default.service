@@ -1,0 +1,23 @@
+# Puts GPU 0 into compute mode DEFAULT at boot, before Docker starts any container: the MARCUS v2
+# GPU override (docker-compose.gpu.yml) runs four model workers on one card, which the
+# EXCLUSIVE_PROCESS mode would refuse after the first process.
+#
+# NOT installed by anything in this repository. Applied on switch day only (owner's rule):
+#   sudo install -m 644 ops/systemd/nvidia-compute-default.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nvidia-compute-default.service
+#   nvidia-smi --query-gpu=compute_mode --format=csv   # -> Default
+# Undo: sudo systemctl disable --now nvidia-compute-default.service (the mode stays until the
+# next reboot or `nvidia-smi -i 0 -c EXCLUSIVE_PROCESS`).
+
+[Unit]
+Description=NVIDIA GPU 0 compute mode DEFAULT (MARCUS v2: several processes share the card)
+After=nvidia-persistenced.service
+Before=docker.service containerd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nvidia-smi -i 0 -c DEFAULT
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
