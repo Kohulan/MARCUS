@@ -29,6 +29,11 @@ class PaperSummary(_Orm):
     ocsr_mode: str
     created_at: datetime
     expires_at: datetime
+    structures: int
+    accepted: int
+    rejected: int
+    to_review: int
+    failed_pages: int
 
 
 class PaperList(BaseModel):
@@ -81,6 +86,7 @@ class StepOut(_Orm):
     status: str
     attempts: int
     error_class: str | None
+    engine: str | None  # set for ocsr steps
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

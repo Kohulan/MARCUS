@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from rdkit import Chem
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 
 import marcus.api.routes
 from marcus.api import export
@@ -227,7 +227,11 @@ async def test_curation_molfile_must_parse(app, async_db_session):
     good = Chem.MolToMolBlock(Chem.MolFromSmiles("CCO"))
     # five-valent carbon: reads as a block but fails sanitization
     bad_valence = Chem.MolToMolBlock(Chem.MolFromSmiles("C(C)(C)(C)(C)C", sanitize=False))
-    for molfile in ("not a molfile", "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n", bad_valence):
+    for molfile in (
+        "not a molfile",
+        "\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n",
+        bad_valence,
+    ):
         r = await _curate(app, token, seg, {"status": "accepted", "molfile": molfile})
         assert r.status_code == 422, molfile
         assert "molfile" in json.dumps(r.json()["detail"])
@@ -286,7 +290,9 @@ async def test_curation_parse_runs_off_the_event_loop(app, async_db_session, mon
     seeded = await seed_paper(db, alice)
     seg = seeded.segment_ids[0]
     # warm the pool (process start and RDKit import are not what is measured)
-    assert (await _curate(app, token, seg, {"status": "accepted", "smiles": "CC"})).status_code == 200
+    assert (
+        await _curate(app, token, seg, {"status": "accepted", "smiles": "CC"})
+    ).status_code == 200
 
     real = chempool.CHEM.run
 
@@ -651,3 +657,143 @@ async def test_prediction_exposes_cached_flag(app, async_db_session):
     segs = {s["id"]: s for s in r.json()["segments"]}
     assert [p["cached"] for p in segs[str(seeded.segment_ids[0])]["predictions"]] == [True]
     assert [p["cached"] for p in segs[str(seeded.segment_ids[1])]["predictions"]] == [False]
+
+
+COUNT_KEYS = ("structures", "accepted", "rejected", "to_review", "failed_pages")
+
+
+def _counts(p: dict) -> tuple:
+    return tuple(p[k] for k in COUNT_KEYS)
+
+
+async def _add_segment(db, paper_id, page=0, idx=9):
+    from marcus.core.models import Segment
+
+    seg = Segment(paper_id=paper_id, page=page, idx=idx, bbox=[0, 0, 1, 1], image_sha256="2" * 64)
+    db.add(seg)
+    await db.flush()
+    db.add(Curation(segment_id=seg.id, status="unchecked"))
+    await db.commit()
+    return seg.id
+
+
+async def _fail_step(db, paper_id, kind, page=0, status="failed"):
+    await db.execute(
+        update(Step)
+        .where(Step.paper_id == paper_id, Step.kind == kind)
+        .values(status=status, error_class="engine_error" if status == "failed" else None)
+    )
+    await db.commit()
+
+
+async def _add_step(db, paper_id, kind, status, page=0):
+    last = (
+        await db.execute(select(Step).where(Step.paper_id == paper_id, Step.kind == kind).limit(1))
+    ).scalar_one()
+    db.add(
+        Step(
+            paper_id=paper_id, kind=kind, queue=last.queue, page=page,
+            seq=last.seq + 100, status=status,
+            created_at=last.created_at + timedelta(seconds=5),
+        )
+    )  # fmt: skip
+    await db.commit()
+
+
+async def _seed_counts(db, owner):
+    seeded = await seed_paper(db, owner)
+    s3 = await _add_segment(db, seeded.paper_id)
+    a, b = seeded.segment_ids
+    await db.execute(update(Curation).where(Curation.segment_id == a).values(status="accepted"))
+    await db.execute(update(Curation).where(Curation.segment_id == b).values(status="rejected"))
+    await db.commit()
+    assert s3
+    return seeded
+
+
+async def test_list_papers_has_counts(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await _seed_counts(db, alice)
+    await _fail_step(db, seeded.paper_id, "segment_page")
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+        detail = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+    assert _counts(listed[0]) == (3, 1, 1, 1, 1)
+    assert _counts(detail) == (3, 1, 1, 1, 1)
+
+
+async def test_paper_without_segments_has_zero_counts(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    await seed_paper(db, alice, write_files=False)
+    await db.execute(update(Paper).values(status="processing"))
+    await db.commit()
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert _counts(listed[0]) == (2, 0, 0, 2, 0)
+
+
+async def test_failed_page_retried_ok_is_not_counted(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await _fail_step(db, seeded.paper_id, "segment_page")
+    await _add_step(db, seeded.paper_id, "segment_page", "done")
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert listed[0]["failed_pages"] == 0
+
+
+async def test_failed_page_retry_running_is_not_counted(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await _fail_step(db, seeded.paper_id, "render_page")
+    await _add_step(db, seeded.paper_id, "render_page", "running")
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert listed[0]["failed_pages"] == 0
+
+
+async def test_page_with_two_failed_kinds_counts_once(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await _fail_step(db, seeded.paper_id, "render_page")
+    await _fail_step(db, seeded.paper_id, "segment_page")
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert listed[0]["failed_pages"] == 1
+
+
+async def test_list_papers_query_count_does_not_grow_with_papers(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    engine = db.bind.sync_engine if db.bind is not None else db.get_bind()
+    n = 0
+
+    def _count(*_a, **_k):
+        nonlocal n
+        n += 1
+
+    async def statements() -> int:
+        nonlocal n
+        n = 0
+        event.listen(engine, "before_cursor_execute", _count)
+        try:
+            async with make_client(app, token) as c:
+                assert (await c.get("/api/v2/papers")).status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", _count)
+        return n
+
+    await seed_paper(db, alice)
+    await statements()  # warm-up: the first request re-loads the expired owner row
+    one = await statements()
+    for _ in range(4):
+        await seed_paper(db, alice)
+    five = await statements()
+    assert one == five

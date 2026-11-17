@@ -28,8 +28,16 @@ from marcus.api.deps import (
     visible,
 )
 from marcus.api.limits import enforce_active_limits
-from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
-from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList, StepList
+from marcus.api.read import (
+    IMAGE_HEADERS,
+    load_segments,
+    paper_counts,
+    paper_summary,
+    segments_out,
+    steps_by_status,
+    steps_out,
+)
+from marcus.api.schemas import Counts, PaperDetail, PaperList, SegmentList, StepList
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
@@ -71,14 +79,17 @@ async def upload_paper(
 async def list_papers(
     owner: Owner = Depends(current_owner), db: AsyncSession = Depends(get_db)
 ) -> PaperList:
-    papers = (
-        await db.execute(
-            select(Paper)
-            .where(Paper.owner_id == owner.id, *visible(Paper))
-            .order_by(Paper.created_at.desc(), Paper.id)
-        )
-    ).scalars()
-    return PaperList(papers=[PaperSummary.model_validate(p) for p in papers])
+    papers = list(
+        (
+            await db.execute(
+                select(Paper)
+                .where(Paper.owner_id == owner.id, *visible(Paper))
+                .order_by(Paper.created_at.desc(), Paper.id)
+            )
+        ).scalars()
+    )
+    counts = await paper_counts(db, [p.id for p in papers])
+    return PaperList(papers=[paper_summary(p, counts[p.id]) for p in papers])
 
 
 @router.get("/papers/{paper_id}", response_model=PaperDetail)
@@ -90,7 +101,7 @@ async def get_paper(
     paper = await get_owned_paper(db, owner, paper_id)
     counts = await steps_by_status(db, paper.id)
     return PaperDetail(
-        **PaperSummary.model_validate(paper).model_dump(),
+        **paper_summary(paper, (await paper_counts(db, [paper.id]))[paper.id]).model_dump(),
         counts=Counts(steps_by_status=counts),
         segments=await segments_out(db, paper.id),
     )
