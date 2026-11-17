@@ -39,16 +39,15 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from redis.exceptions import RedisError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.deps import current_owner, get_owned_paper
-from marcus.api.read import steps_by_status
 from marcus.api.redisutil import incr_with_ttl
 from marcus.core.db import get_db
 from marcus.core.enums import FINISHED_STEPS, PaperStatus
 from marcus.core.events import paper_channel
-from marcus.core.models import Owner, Paper
+from marcus.core.models import Owner, Paper, Step
 from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -94,9 +93,19 @@ def _end_frame(status: str) -> str:
 
 
 async def _snapshot(db: AsyncSession, paper_id: uuid.UUID) -> dict:
-    status = await db.scalar(select(Paper.status).where(Paper.id == paper_id))
-    counts = await steps_by_status(db, paper_id)
+    """The paper's status and its step counts by status, one statement (no row: purged)."""
+    rows = (
+        await db.execute(
+            select(Paper.status, Step.status, func.count(Step.id))
+            .select_from(Paper)
+            .outerjoin(Step, Step.paper_id == Paper.id)
+            .where(Paper.id == paper_id)
+            .group_by(Paper.status, Step.status)
+        )
+    ).all()
     await db.commit()  # end the read transaction: release the pooled connection
+    status = rows[0][0] if rows else None
+    counts = {step_status: n for _, step_status, n in rows if step_status is not None}
     return {"status": status, "counts": {"steps_by_status": counts}}
 
 

@@ -172,15 +172,15 @@ async def test_event_racing_the_snapshot_is_delivered(
     seeded = await seed_paper(db, alice)
     channel = paper_channel(seeded.paper_id)
     racing = {"step_id": "r", "kind": "doi", "status": "done"}
-    original = events_route.steps_by_status
+    original = events_route._snapshot
     calls = []
 
-    async def publish_then_count(session, paper_id):
+    async def publish_then_snapshot(session, paper_id):
         calls.append(subscribers(redis_server, channel))
         fakeredis.FakeRedis(server=redis_server).publish(channel, json.dumps(racing))
         return await original(session, paper_id)
 
-    monkeypatch.setattr(events_route, "steps_by_status", publish_then_count)
+    monkeypatch.setattr(events_route, "_snapshot", publish_then_snapshot)
     sse = SSE(app, f"/api/v2/papers/{seeded.paper_id}/events", token)
     assert (await sse.start())["status"] == 200
     assert parse_snapshot(await sse.chunk())["status"] == "processing"
