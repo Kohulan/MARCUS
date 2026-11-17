@@ -141,6 +141,7 @@ async def put_bulk_curation(
             await db.execute(
                 select(Segment.id)
                 .where(Segment.paper_id == paper.id, Segment.id.in_(ids))
+                .order_by(Segment.id)  # one lock order: overlapping bulk calls cannot deadlock
                 .with_for_update()
             )
         ).scalars()

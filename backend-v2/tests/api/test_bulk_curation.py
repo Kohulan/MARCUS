@@ -56,10 +56,9 @@ async def test_bulk_keeps_curated_smiles_and_molfile(app, async_db_session):
     seeded = await seed_paper(db, alice)
     seg = seeded.segment_ids[0]
     async with make_client(app, token) as c:
-        body = {"status": "unchecked", "smiles": "c1ccccc1", "molfile": "M  END", "note": "n"}
         # molfile is not parsed here: write the row directly
         cur = await _row(db, seg)
-        cur.smiles, cur.molfile, cur.note = body["smiles"], body["molfile"], "n"
+        cur.smiles, cur.molfile, cur.note = "c1ccccc1", "M  END", "n"
         await db.commit()
         r = await c.put(
             f"/api/v2/papers/{seeded.paper_id}/curation",
