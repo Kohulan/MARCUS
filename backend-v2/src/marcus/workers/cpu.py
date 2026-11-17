@@ -23,8 +23,8 @@ from marcus.workers.runtime import register
 
 log = logging.getLogger(__name__)
 
-# Child timeouts sit below the Celery soft limits (20/30/scaled/15) so a timeout here is mapped
-# to BadInput before the runtime's SoftTimeLimitExceeded can fire.
+# Child timeouts sit below the Celery soft limits (20/30/scaled/15) so the child is killed (and
+# reported as StepTimeout: error class timeout, retried once) before Celery's soft limit fires.
 CHECK_TIMEOUT_S = 15
 RENDER_TIMEOUT_S = 25
 DOCLING_MARGIN_S = 20  # child timeout = Celery soft limit - margin (soft scales with pages)

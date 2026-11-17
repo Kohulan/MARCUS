@@ -11,7 +11,7 @@ import pytest
 
 from marcus.core.storage import pdf_path
 from marcus.workers import pdfsafe
-from marcus.workers.runtime import BadInput
+from marcus.workers.runtime import BadInput, StepTimeout
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdfs"
 
@@ -30,11 +30,27 @@ def test_hanging_child_is_killed_on_timeout():
     assert time.monotonic() - start < 8
 
 
-def test_timeout_maps_to_bad_input(monkeypatch):
+def test_timeout_maps_to_a_retryable_step_timeout(monkeypatch):
+    """A child past its wall limit is a timeout (retried once), not bad input (D3 F2)."""
     real = pdfsafe.run_op
     monkeypatch.setattr(pdfsafe, "run_op", lambda op, args, t, m, th=None: real("_sleep", [], 2, m))
-    with pytest.raises(BadInput, match="timeout"):
+    with pytest.raises(StepTimeout, match="timeout") as info:
         pdfsafe.page_count(_paper(), timeout_s=2)
+    assert not isinstance(info.value, BadInput)
+
+
+def test_corrupt_pdf_stays_bad_input():
+    with pytest.raises(BadInput):
+        pdfsafe.page_count(_paper("png_as.pdf"), timeout_s=20)
+
+
+def test_out_of_memory_child_stays_bad_input(monkeypatch):
+    real = pdfsafe.run_op
+    monkeypatch.setattr(
+        pdfsafe, "run_op", lambda op, args, t, m, th=None: real("_alloc", [1500], 20, 512)
+    )
+    with pytest.raises(BadInput, match="out of memory"):
+        pdfsafe.page_count(_paper(), timeout_s=20)
 
 
 def test_rlimit_as_is_enforced():

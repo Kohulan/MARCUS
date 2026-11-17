@@ -16,7 +16,7 @@ import pytest
 
 from marcus.core.storage import page_image_path, paper_dir, pdf_path
 from marcus.workers import cpu, pdfsafe
-from marcus.workers.runtime import HANDLERS, BadInput
+from marcus.workers.runtime import HANDLERS, BadInput, StepTimeout
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdfs"
 
@@ -70,7 +70,7 @@ def test_adversarial_pdf_times_out_without_hanging_worker(name):
     start = time.monotonic()
     try:
         assert pdfsafe.page_count(pdf_path(pid), timeout_s=5) >= 1
-    except BadInput:
+    except (BadInput, StepTimeout):
         pass
     assert time.monotonic() - start < 10
 

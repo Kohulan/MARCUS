@@ -5,7 +5,9 @@ Events go to an in-memory fakeredis server that the test subscribes to.
 """
 
 import json
+import shutil
 import uuid
+from pathlib import Path
 
 import fakeredis
 import pytest
@@ -16,9 +18,12 @@ from marcus.core import events
 from marcus.core.db import sync_session
 from marcus.core.enums import StepKind
 from marcus.core.models import ImageJob, Paper, Prediction, Step
-from marcus.workers import runtime
+from marcus.core.storage import pdf_path
+from marcus.workers import cpu, pdfsafe, runtime
 from marcus.workers.runtime import BadInput, register, run_step
 from tests.factories import make_image_job, make_paper
+
+PDF_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdfs"
 
 OCSR_RESULT = {
     "smiles": "CCO",
@@ -149,6 +154,41 @@ def test_soft_timeout_is_retried_then_failed_timeout(db_session, bus):
     assert row.status == "failed" and row.attempts == 2 and row.error_class == "timeout"
     assert s.get(Paper, paper.id).status == "failed"
     assert statuses(bus()) == ["running", "pending", "running", "failed"]
+
+
+def test_pdf_child_timeout_is_retried_once_then_failed_timeout(db_session, bus):
+    """A pdfsafe child that sleeps past its wall limit: error_class timeout, one retry (D3 F2)."""
+    s = db_session
+    paper, step = queued_check_pdf(s)
+
+    def handler(view, session):
+        return {"pages": pdfsafe._run_pdf("_sleep", [], 1, None)}
+
+    register(StepKind.CHECK_PDF, handler)
+    run_step(str(step.id), 0)
+    row = reload(s, step.id)
+    assert row.status == "pending" and row.attempts == 1
+    assert row.error_class == "timeout" and row.error == "timeout"
+
+    requeue(s, step.id)
+    run_step(str(step.id), 1)
+    row = reload(s, step.id)
+    assert row.status == "failed" and row.attempts == 2 and row.error_class == "timeout"
+    assert s.get(Paper, paper.id).status == "failed"
+    assert statuses(bus()) == ["running", "pending", "running", "failed"]
+
+
+def test_corrupt_pdf_is_final_bad_input(db_session, bus):
+    s = db_session
+    paper, step = queued_check_pdf(s)
+    pdf_path(paper.id).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(PDF_FIXTURES / "png_as.pdf", pdf_path(paper.id))
+
+    register(StepKind.CHECK_PDF, cpu.check_pdf)
+    run_step(str(step.id), 0)
+    row = reload(s, step.id)
+    assert row.status == "failed" and row.attempts == 1 and row.error_class == "bad_input"
+    assert statuses(bus()) == ["running", "failed"]
 
 
 def test_bad_input_not_retried(db_session, bus):

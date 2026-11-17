@@ -148,12 +148,14 @@ def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
 def _run_pdf(
     op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None
 ):
-    from marcus.workers.runtime import BadInput
+    """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child that
+    failed (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final bad input."""
+    from marcus.workers.runtime import BadInput, StepTimeout
 
     try:
         return run_op(op, args, timeout_s, mem_mb, threads)
     except ChildTimeout:
-        raise BadInput("timeout") from None
+        raise StepTimeout("timeout") from None
     except ChildFailed as exc:
         raise BadInput(str(exc)[:200]) from None
 
