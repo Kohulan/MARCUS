@@ -170,16 +170,20 @@ def _bearer(request: Request) -> str | None:
     return None
 
 
+def _first_return(owner: Owner) -> bool:
+    """No activity recorded since the request that created the owner (see `_used`)."""
+    return owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at
+
+
 async def _touch(db: AsyncSession, owner: Owner) -> bool:
     """Record activity at most once a minute (no write per request). True if it wrote.
 
     The first return of an owner is always recorded (last_seen_at moves past created_at): that
     marks it as used for the new-owner limit (`_used`)."""
     now = datetime.now(UTC)
-    first_return = owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at
     if (
         owner.last_seen_at is not None
-        and not first_return
+        and not _first_return(owner)
         and now - owner.last_seen_at < TOUCH_EVERY
     ):
         return False
@@ -243,7 +247,7 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
             )
         ).scalar_one_or_none()
         if owner is not None:
-            if owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at:
+            if _first_return(owner):
                 await _check_first_use(db, owner)  # its first return makes it a used owner
             if await _touch(db, owner):
                 setattr(request.state, NEW_OWNER_TOKEN, cookie)  # sliding expiry

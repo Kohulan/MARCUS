@@ -125,13 +125,13 @@ class MarcusCollector:
         if left_ms <= 0:
             raise TimeoutError("metrics read exceeded its total deadline")
         conn.execute(
-            text(f"SET LOCAL statement_timeout = {min(int(STATEMENT_TIMEOUT_MS), left_ms)}")
+            text(f"SET LOCAL statement_timeout = {min(STATEMENT_TIMEOUT_MS, left_ms)}")
         )
 
     def _snapshot(self, conn: Connection) -> list:
-        """All database series, read inside the caller's one read-only transaction."""
+        """All database series, read inside the caller's one read-only transaction (the caller
+        set the first query's budget)."""
         fams = []
-        self._budget(conn)
         pending = GaugeMetricFamily("marcus_queue_pending", "Steps waiting.", labels=["queue"])
         running = GaugeMetricFamily("marcus_queue_running", "Steps running.", labels=["queue"])
         counts = {
@@ -219,8 +219,8 @@ class MarcusCollector:
                 .group_by(Step.error_class)
             ).all()
         )
-        for cls in [e.value for e in ErrorClass]:
-            failures.add_metric([cls], by_class.pop(cls, 0))
+        for e in ErrorClass:
+            failures.add_metric([e.value], by_class.pop(e.value, 0))
         for cls, n in by_class.items():  # failed without a class (should not happen)
             failures.add_metric([cls or "unknown"], n)
         fams.append(failures)

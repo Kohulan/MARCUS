@@ -7,6 +7,7 @@ own thread budget (MAX_TOOL_WAITS per API process, not the default pool that fil
 exports use); when it is full the call gets 503 at once.
 """
 
+import contextlib
 from typing import Annotated, Literal
 
 import anyio
@@ -78,16 +79,13 @@ def _send_and_wait(name: str, kwargs: dict, timeout: float):
 
 
 def _release(result) -> None:
-    try:
+    """Best effort: drop the stored result and the result consumer's subscription."""
+    with contextlib.suppress(Exception):
         result.forget()
-    except Exception:
-        pass
     cancel = getattr(getattr(celery_app.backend, "result_consumer", None), "cancel_for", None)
     if cancel is not None:
-        try:
+        with contextlib.suppress(Exception):
             cancel(result.id)
-        except Exception:
-            pass
 
 
 def run_tool(name: str, kwargs: dict, timeout: float = WAIT_S):

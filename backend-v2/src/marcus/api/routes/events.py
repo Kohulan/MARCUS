@@ -26,6 +26,7 @@ Limits:
   `event: error` frame, then closes; the client reconnects after 15 s.
 """
 
+import contextlib
 import json
 import logging
 import time
@@ -139,10 +140,8 @@ async def _give_back(key: str | None) -> None:
 async def _refresh_slot(key: str | None) -> None:
     if key is None:
         return
-    try:
+    with contextlib.suppress(RedisError, OSError):  # the stream notices a lost Redis itself
         await redis_client().expire(key, _slot_ttl())
-    except (RedisError, OSError):
-        pass  # the stream notices a lost Redis on its next read
 
 
 # --- the stream -----------------------------------------------------------------------------
@@ -192,10 +191,9 @@ async def _stream(
     finally:
         # Shielded (the server may be cancelling the stream) but bounded (Redis may be gone).
         with anyio.move_on_after(CLOSE_S, shield=True):
-            try:
+            # a failure: the connection is gone; closing it below drops the subscription
+            with contextlib.suppress(Exception):
                 await pubsub.unsubscribe()
-            except Exception:
-                pass  # the connection is gone; closing it below drops the subscription
             try:
                 await pubsub.aclose()
             except Exception:
