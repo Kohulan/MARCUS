@@ -9,7 +9,7 @@ from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import OwnerKind, StepKind
 from marcus.core.models import Paper, Step
 from marcus.core.queues import SLOTS
-from marcus.dispatcher.pick import dispatch_once, free_slots, pick_next
+from marcus.dispatcher.pick import dispatch_once, pick_next, slot_usage
 from tests.factories import make_image_job, make_owner, make_paper
 
 Q = "q.decimer"
@@ -139,7 +139,7 @@ def test_free_slots_counts_queued_and_running(db_session, monkeypatch):
     add_steps(s, paper, 1, status="running", seq0=1)
     add_steps(s, paper, 2, status="pending", seq0=2)
     add_steps(s, paper, 1, status="done", seq0=4, finished_ago=5)
-    assert free_slots(s, Q) == 1
+    assert slot_usage(s)[0][Q] == 1
 
 
 def test_free_slots_respected(db_session, one_slot):
@@ -426,7 +426,7 @@ def test_docling_never_holds_every_cpu_slot(db_session, monkeypatch):
         "pending", "pending", "queued", "queued"
     ]
     # one cpu slot is still free, but docling is at its cap: nothing more goes out
-    assert free_slots(s, "q.cpu") == 1
+    assert slot_usage(s) == ({**SLOTS, "q.cpu": 1}, 2)
     assert dispatch_once(s, Sent()) == 0
 
 

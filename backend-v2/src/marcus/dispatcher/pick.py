@@ -77,21 +77,18 @@ _PICK_SQL = text(
 )
 
 
-def free_slots(session: Session, queue: str) -> int:
-    """SLOTS[queue] minus the steps of that queue that are queued or running."""
-    busy = session.execute(
-        select(func.count()).select_from(Step).where(Step.queue == queue, Step.status.in_(_BUSY))
-    ).scalar_one()
-    return SLOTS[queue] - busy
-
-
-def docling_busy(session: Session) -> int:
-    """Docling steps queued or running."""
-    return session.execute(
-        select(func.count())
-        .select_from(Step)
-        .where(Step.kind == StepKind.DOCLING.value, Step.status.in_(_BUSY))
-    ).scalar_one()
+def slot_usage(session: Session) -> tuple[dict[str, int], int]:
+    """(free slots per queue, docling steps queued or running), one statement: SLOTS[queue] minus
+    the steps of that queue that are queued or running."""
+    rows = session.execute(
+        select(
+            Step.queue, func.count(), func.count().filter(Step.kind == StepKind.DOCLING.value)
+        )
+        .where(Step.status.in_(_BUSY))
+        .group_by(Step.queue)
+    ).all()
+    busy = {queue: n for queue, n, _ in rows}
+    return {q: slots - busy.get(q, 0) for q, slots in SLOTS.items()}, sum(d for *_, d in rows)
 
 
 def pick_next(session: Session, queue: str, allow_docling: bool = True) -> Step | None:
@@ -126,11 +123,17 @@ def dispatch_once(session: Session, send: Send) -> int:
     Per step: mark it `queued` (+ queued_at), commit, then send. If send raises, the step
     goes back to `pending` in a new transaction and the dispatcher moves to the next queue.
     Docling (on q.cpu) never takes more than queues.docling_slots() slots.
+
+    The busy steps are counted once per call and then kept locally (one per step sent): only
+    this (single) dispatcher makes steps busy, everything else only frees slots, so the local
+    count can only be too high, never too low; a slot freed meanwhile is filled on the next
+    wake.
     """
     sent = 0
+    free, docling = slot_usage(session)
     for queue in SLOTS:  # stable order
-        while free_slots(session, queue) > 0:
-            allow_docling = queue != "q.cpu" or docling_busy(session) < docling_slots()
+        while free[queue] > 0:
+            allow_docling = queue != "q.cpu" or docling < docling_slots()
             step = pick_next(session, queue, allow_docling)
             if step is None:
                 break
@@ -153,7 +156,9 @@ def dispatch_once(session: Session, send: Send) -> int:
                 session.commit()
                 break
             sent += 1
-        session.rollback()  # end the read-only transaction of the last free_slots / pick
+            free[queue] -= 1
+            docling += kind is StepKind.DOCLING
+        session.rollback()  # end the read-only transaction of the last pick
     return sent
 
 
