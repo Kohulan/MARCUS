@@ -24,7 +24,14 @@ from marcus.api.chem import smiles_from_molfile
 from marcus.api.chempool import CHEM
 from marcus.api.deps import not_found
 from marcus.api.security import tools_limit
-from marcus.api.tooling import MAX_SMILES, WAIT_S, in_tool_budget, run_tool
+from marcus.api.tooling import (
+    MAX_SMILES,
+    RETRY_AFTER_S,
+    WAIT_S,
+    depiction_slot,
+    in_tool_budget,
+    run_tool,
+)
 from marcus.core import storage
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, Owner, Paper, Prediction, Segment
@@ -34,8 +41,6 @@ log = logging.getLogger(__name__)
 DEPICTION_MAX_BYTES = 512 * 1024
 DEPICT_TASK = "marcus.tools.depict"
 DEPICT_OPTIONS = {"fmt": "svg", "width": 512, "height": 512, "highlight": ""}
-RETRY_AFTER_S = 5
-
 Source = Literal["curated", "predicted"]
 
 
@@ -61,7 +66,12 @@ async def shown_structure(
         return curation.smiles, "curated"
     if curation is not None and curation.molfile:
         # RDKit holds the GIL: never on the event loop (marcus.api.chempool)
-        smiles = await CHEM.run(smiles_from_molfile, curation.molfile)
+        try:
+            smiles = await CHEM.run(smiles_from_molfile, curation.molfile)
+        except HTTPException as exc:
+            if exc.status_code == 503:  # chem pool busy: the route's 503 with Retry-After
+                raise _unavailable() from None
+            raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
     pick = next((p for p in valid if p.engine == paper.engine), None) or next(iter(valid), None)
     return (pick.smiles, "predicted") if pick is not None else None
@@ -111,7 +121,8 @@ def _mark_undrawable(marker) -> None:
 async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Source) -> bytes:
     """The stored SVG of `smiles`, drawing (and storing) it on a miss. 404 (`not_found()`)
     for a SMILES that is never drawn; 429 for a curated miss over the tools limit; 503 with
-    Retry-After when the tools worker is busy, slow or failing (nothing stored)."""
+    Retry-After when the depictions' share of the tools budget is held, or the tools worker is
+    busy, slow or failing (nothing stored)."""
     if len(smiles) > MAX_SMILES:
         raise not_found()
     sha = hashlib.sha256(smiles.encode()).hexdigest()
@@ -123,8 +134,19 @@ async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Sour
     if found is not None:
         return found
 
-    if source == "curated":
-        await tools_limit(request, owner)
+    # The depictions' own share of the tools budget (marcus.api.tooling): 503 + Retry-After at
+    # once when it is held, before the owner's tools bucket is charged.
+    with depiction_slot():
+        if source == "curated":
+            await tools_limit(request, owner)
+        svg = await _draw(smiles, marker)
+    data = svg.encode()
+    if len(data) <= DEPICTION_MAX_BYTES:
+        await anyio.to_thread.run_sync(_store, path, data)
+    return data
+
+
+async def _draw(smiles: str, marker) -> str:
     kwargs = {"smiles": smiles, **DEPICT_OPTIONS}
     try:
         svg = await in_tool_budget(run_tool, DEPICT_TASK, kwargs, WAIT_S)
@@ -135,7 +157,4 @@ async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Sour
         raise _unavailable() from None  # 504 timeout, 500 tool error, 503 budget full
     if not isinstance(svg, str):
         raise _unavailable()
-    data = svg.encode()
-    if len(data) <= DEPICTION_MAX_BYTES:
-        await anyio.to_thread.run_sync(_store, path, data)
-    return data
+    return svg

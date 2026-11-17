@@ -324,3 +324,135 @@ async def test_depiction_curated_miss_counts_tools_bucket(
         assert (await c.get(url(predicted))).status_code == 200  # prediction miss
         assert (await c.get(url(curated, "?engine=decimer"))).status_code == 200
     assert len(draws.seen) == drawn + 2
+
+
+@pytest.fixture
+def small_budget(monkeypatch):
+    """Tools budget of 3 per process, of which depictions may hold 2."""
+    from marcus.api import tooling
+
+    monkeypatch.setattr(tooling, "MAX_TOOL_WAITS", 3)
+    monkeypatch.setattr(tooling, "_tool_waits", None)
+    monkeypatch.setattr(tooling, "MAX_DEPICTION_WAITS", 2)
+    monkeypatch.setattr(tooling, "_depiction_waits", None)
+    return tooling
+
+
+async def _hold_depictions(monkeypatch, smiles_list):
+    """Start one depiction miss per SMILES whose tool call blocks until `release` is set."""
+    import asyncio
+    import threading
+
+    release = threading.Event()
+    started = []
+
+    def blocking(name, kwargs, timeout):
+        started.append(kwargs["smiles"])
+        release.wait(5)
+        return svg_for(kwargs["smiles"])
+
+    monkeypatch.setattr(depiction, "run_tool", blocking)
+    held = [
+        asyncio.ensure_future(depiction.draw_or_read(None, None, s, "predicted"))
+        for s in smiles_list
+    ]
+    for _ in range(100):
+        if len(started) == len(smiles_list):
+            break
+        await asyncio.sleep(0.02)
+    assert len(started) == len(smiles_list)
+    return release, started, held
+
+
+async def test_depictions_hold_only_their_share_tools_keep_a_slot(
+    app, async_db_session, monkeypatch, small_budget
+):
+    """Review I-1: depictions at their cap get 503 + Retry-After at once (no tool call), and
+    an interactive /tools/depict call still gets a slot of the tools budget."""
+    import asyncio
+
+    release, started, held = await _hold_depictions(monkeypatch, ["C", "CC"])
+    try:
+        with pytest.raises(HTTPException) as info:
+            await depiction.draw_or_read(None, None, "CCC", "predicted")
+        assert info.value.status_code == 503 and info.value.headers == {"Retry-After": "5"}
+        assert started == ["C", "CC"]  # refused before the tool call
+
+        monkeypatch.setattr(small_budget, "run_tool", lambda n, k, t: "<svg/>")
+        _, token = await new_owner(async_db_session)
+        async with make_client(app, token) as c:
+            r = await c.post("/api/v2/tools/depict", json={"smiles": "C"})
+        assert r.status_code == 200 and r.json() == {"format": "svg", "data": "<svg/>"}
+    finally:
+        release.set()
+    assert [d.decode() for d in await asyncio.gather(*held)] == [svg_for("C"), svg_for("CC")]
+    # the share is free again
+    assert await depiction.draw_or_read(None, None, "CCCC", "predicted") == svg_for("CCCC").encode()
+
+
+async def test_depiction_at_cap_does_not_charge_the_tools_bucket(
+    app, async_db_session, monkeypatch, small_budget
+):
+    """Review M-2: a curated miss refused for a held share costs no tools-bucket hit."""
+    import asyncio
+
+    charged = []
+
+    async def fake_limit(request, owner):
+        charged.append(owner)
+
+    monkeypatch.setattr(depiction, "tools_limit", fake_limit)
+    release, _, held = await _hold_depictions(monkeypatch, ["C", "CC"])
+    try:
+        with pytest.raises(HTTPException) as info:
+            await depiction.draw_or_read(None, "owner", "CCN", "curated")
+        assert info.value.status_code == 503
+    finally:
+        release.set()
+    await asyncio.gather(*held)
+    assert charged == []
+
+
+async def test_tools_busy_503_has_retry_after(monkeypatch, small_budget):
+    import asyncio
+    import threading
+
+    release = threading.Event()
+
+    def blocking(name, kwargs, timeout):
+        release.wait(5)
+        return "ok"
+
+    monkeypatch.setattr(small_budget, "run_tool", blocking)
+    held = [asyncio.ensure_future(small_budget.call_tool("marcus.tools.mcs", {})) for _ in range(3)]
+    try:
+        for _ in range(100):
+            if small_budget._waits().available_tokens == 0:
+                break
+            await asyncio.sleep(0.02)
+        with pytest.raises(HTTPException) as info:
+            await small_budget.call_tool("marcus.tools.mcs", {})
+        assert info.value.status_code == 503 and info.value.detail == "tools busy, try again"
+        assert info.value.headers == {"Retry-After": "5"}
+    finally:
+        release.set()
+    assert await asyncio.gather(*held) == ["ok"] * 3
+
+
+async def test_depiction_chem_pool_busy_503_has_retry_after(
+    app, async_db_session, draws, monkeypatch
+):
+    """Review M-3: a curated molfile-only segment while the chem pool is saturated."""
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _curate(db, seg, molfile=Chem.MolToMolBlock(Chem.MolFromSmiles("CCO")))
+
+    async def busy(fn, *args):
+        raise HTTPException(status_code=503, detail="busy, try again")
+
+    monkeypatch.setattr(depiction.CHEM, "run", busy)
+    async with make_client(app, token) as c:
+        r = await c.get(url(seg))
+    assert r.status_code == 503 and r.headers["retry-after"] == "5"
+    assert draws.seen == []

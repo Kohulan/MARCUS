@@ -4,7 +4,13 @@ Each call sends a Celery task to the tools queue and waits for its result (hard 
 Timeout -> 504; envelope {ok: false, error} (bad input) -> 422; any other task error -> 500.
 The task expires with the wait, so a call the API gave up on never runs later. Waits use their
 own thread budget (MAX_TOOL_WAITS per API process, not the default pool that file responses and
-exports use); when it is full the call gets 503 at once.
+exports use); when it is full the call gets 503 at once, with Retry-After.
+
+Stored depictions (marcus.api.depiction) draw on the same budget but only through their own
+share of it (`depiction_slot`, MAX_DEPICTION_WAITS per API process): a 200-structure first view
+can never hold more than that, so /tools/* keeps MAX_TOOL_WAITS - MAX_DEPICTION_WAITS slots.
+The share also bounds how many depict tasks one API process puts ahead of an interactive call
+in q.tools (each task expires with its wait, so none pile up behind a refused request).
 """
 
 import contextlib
@@ -18,9 +24,12 @@ from marcus.core.celery_app import TOOLS_QUEUE, celery_app
 WAIT_S = 10
 MAX_SMILES = 2000
 MAX_TOOL_WAITS = 16  # tool calls waiting at once per API process (2 tool processes serve them)
+MAX_DEPICTION_WAITS = 4  # of those, at most this many stored-depiction draws
 TOOLS_BUSY = "tools busy, try again"
+RETRY_AFTER_S = 5
 
 _tool_waits: anyio.CapacityLimiter | None = None
+_depiction_waits: anyio.CapacityLimiter | None = None
 
 
 def _waits() -> anyio.CapacityLimiter:
@@ -28,6 +37,34 @@ def _waits() -> anyio.CapacityLimiter:
     if _tool_waits is None:
         _tool_waits = anyio.CapacityLimiter(MAX_TOOL_WAITS)
     return _tool_waits
+
+
+def _depiction_share() -> anyio.CapacityLimiter:
+    global _depiction_waits
+    if _depiction_waits is None:
+        _depiction_waits = anyio.CapacityLimiter(MAX_DEPICTION_WAITS)
+    return _depiction_waits
+
+
+def tools_busy() -> HTTPException:
+    return HTTPException(
+        status_code=503, detail=TOOLS_BUSY, headers={"Retry-After": str(RETRY_AFTER_S)}
+    )
+
+
+@contextlib.contextmanager
+def depiction_slot():
+    """Hold one of the depictions' MAX_DEPICTION_WAITS slots for the block; 503 (tools_busy)
+    at once when all are held. The tool call inside still needs a slot of the tools budget."""
+    share = _depiction_share()
+    try:
+        share.acquire_nowait()
+    except anyio.WouldBlock:
+        raise tools_busy() from None
+    try:
+        yield
+    finally:
+        share.release()
 
 
 def _send_and_wait(name: str, kwargs: dict, timeout: float):
@@ -69,7 +106,7 @@ async def in_tool_budget(fn, *args):
     the budget is used up."""
     limiter = _waits()
     if limiter.available_tokens < 1:
-        raise HTTPException(status_code=503, detail=TOOLS_BUSY)
+        raise tools_busy()
     return await anyio.to_thread.run_sync(fn, *args, limiter=limiter)
 
 
