@@ -38,6 +38,7 @@ def _waits() -> anyio.CapacityLimiter:
         _tool_waits = anyio.CapacityLimiter(MAX_TOOL_WAITS)
     return _tool_waits
 
+
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
 

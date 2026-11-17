@@ -81,9 +81,7 @@ def slot_usage(session: Session) -> tuple[dict[str, int], int]:
     """(free slots per queue, docling steps queued or running), one statement: SLOTS[queue] minus
     the steps of that queue that are queued or running."""
     rows = session.execute(
-        select(
-            Step.queue, func.count(), func.count().filter(Step.kind == StepKind.DOCLING.value)
-        )
+        select(Step.queue, func.count(), func.count().filter(Step.kind == StepKind.DOCLING.value))
         .where(Step.status.in_(_BUSY))
         .group_by(Step.queue)
     ).all()
@@ -284,7 +282,9 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
                     log.warning(
                         "watchdog: step %s queued on %s with no live consumer%s; back to "
                         "pending, no attempt counted",
-                        step_id, queue, "" if live is not None else " (unknown)",
+                        step_id,
+                        queue,
+                        "" if live is not None else " (unknown)",
                     )
             else:
                 session.rollback()

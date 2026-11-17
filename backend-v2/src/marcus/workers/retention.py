@@ -324,7 +324,13 @@ def _sweep_orphans(session: Session, now: datetime, report: PurgeReport) -> None
         session, root / "papers", ("",), Paper, PaperStatus.DELETED.value, cutoff_ts, report
     )
     report.orphan_image_files += _sweep(
-        session, root / "images", (".png", ".png.tmp"), ImageJob, ImageJobStatus.DELETED.value, cutoff_ts, report
+        session,
+        root / "images",
+        (".png", ".png.tmp"),
+        ImageJob,
+        ImageJobStatus.DELETED.value,
+        cutoff_ts,
+        report,
     )
 
 

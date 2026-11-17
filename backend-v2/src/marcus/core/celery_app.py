@@ -115,9 +115,7 @@ class LiveQueuesProbe:
             if self._running is not None and self._running.is_alive():
                 log.warning("%s: consumer check still hangs; no answer", self.label)
                 return None
-            thread = self._running = threading.Thread(
-                target=broadcast, name="inspect", daemon=True
-            )
+            thread = self._running = threading.Thread(target=broadcast, name="inspect", daemon=True)
             thread.start()
         thread.join(budget)
         if "live" not in out:
@@ -134,7 +132,10 @@ def _log_beat_schedule(sender=None, **_) -> None:
     for name, entry in sorted(celery_app.conf.beat_schedule.items()):
         logging.getLogger(__name__).info(
             "beat schedule: %s -> %s %s (UTC) %s",
-            name, entry["task"], entry["schedule"], entry.get("options", {}),
+            name,
+            entry["task"],
+            entry["schedule"],
+            entry.get("options", {}),
         )
 
 

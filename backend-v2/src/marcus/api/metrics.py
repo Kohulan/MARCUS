@@ -123,9 +123,7 @@ class MarcusCollector:
         left_ms = int((self._deadline - _monotonic()) * 1000)
         if left_ms <= 0:
             raise TimeoutError("metrics read exceeded its total deadline")
-        conn.execute(
-            text(f"SET LOCAL statement_timeout = {min(STATEMENT_TIMEOUT_MS, left_ms)}")
-        )
+        conn.execute(text(f"SET LOCAL statement_timeout = {min(STATEMENT_TIMEOUT_MS, left_ms)}"))
 
     def _snapshot(self, conn: Connection) -> list:
         """All database series, read inside the caller's one read-only transaction (the caller
@@ -150,7 +148,9 @@ class MarcusCollector:
         since = text(f"now() - interval '{WINDOW}'")
         run_s = func.extract("epoch", Step.finished_at - Step.started_at)
         step_h = GaugeHistogramMetricFamily(
-            "marcus_step_seconds", "Step run time (last-hour window; do not rate()).", labels=["kind", "engine"]
+            "marcus_step_seconds",
+            "Step run time (last-hour window; do not rate()).",
+            labels=["kind", "engine"],
         )
         engine_col = literal_column("coalesce(steps.engine, '')").label("engine")
         self._budget(conn)
@@ -201,7 +201,7 @@ class MarcusCollector:
         first_row = conn.execute(select(*_histogram_columns(secs)).select_from(first)).one()
         first_h = GaugeHistogramMetricFamily(
             "marcus_first_smiles_seconds",
-            "Upload to first SMILES per paper (last-hour window; do not rate())."
+            "Upload to first SMILES per paper (last-hour window; do not rate()).",
         )
         _add_histogram(first_h, [], first_row)
         fams.append(first_h)
@@ -249,7 +249,9 @@ class MarcusCollector:
             "marcus_disk_free_bytes", "Free bytes on the data volume.", labels=["path"]
         )
         try:
-            disk.add_metric([DISK_PATH_LABEL], float(shutil.disk_usage(get_settings().data_root).free))
+            disk.add_metric(
+                [DISK_PATH_LABEL], float(shutil.disk_usage(get_settings().data_root).free)
+            )
         except OSError as exc:
             log.warning("metrics: disk_usage failed: %s", type(exc).__name__)
         return [*(db or []), disk, ok]

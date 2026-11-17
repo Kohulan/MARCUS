@@ -153,7 +153,9 @@ async def _check_first_use(db: AsyncSession, owner: Owner) -> None:
     ip = str(owner.created_ip) if owner.created_ip is not None else UNKNOWN_IP
     await _lock_address(db, ip)
     already = (
-        await db.execute(select(func.count()).select_from(Owner).where(Owner.id == owner.id, _used()))
+        await db.execute(
+            select(func.count()).select_from(Owner).where(Owner.id == owner.id, _used())
+        )
     ).scalar_one()
     if already:
         return

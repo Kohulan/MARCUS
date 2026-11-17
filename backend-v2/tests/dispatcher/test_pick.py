@@ -296,7 +296,11 @@ def test_dispatch_sends_docling_pages_and_scaled_limits(db_session):
     paper.pages = 100
     s.add(
         Step(
-            paper_id=paper.id, kind="docling", queue="q.cpu", seq=100_000, status="pending",
+            paper_id=paper.id,
+            kind="docling",
+            queue="q.cpu",
+            seq=100_000,
+            status="pending",
         )
     )
     s.commit()
@@ -312,9 +316,7 @@ def test_celery_send_uses_scaled_limits(monkeypatch):
     from marcus.dispatcher.__main__ import celery_send
 
     seen = {}
-    monkeypatch.setattr(
-        ca.celery_app, "send_task", lambda name, **kw: seen.update(kw)
-    )
+    monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))
     celery_send()("q.cpu", uuid.uuid4(), StepKind.DOCLING, 0, 100)
     assert (seen["soft_time_limit"], seen["time_limit"]) == (1260, 1320)
     celery_send()("q.cpu", uuid.uuid4(), StepKind.CHECK_PDF, 0, None)
@@ -423,7 +425,10 @@ def test_docling_never_holds_every_cpu_slot(db_session, monkeypatch):
     assert check.status == "queued"
     s.expire_all()
     assert sorted(s.get(Step, d.id).status for d in docling) == [
-        "pending", "pending", "queued", "queued"
+        "pending",
+        "pending",
+        "queued",
+        "queued",
     ]
     # one cpu slot is still free, but docling is at its cap: nothing more goes out
     assert slot_usage(s) == ({**SLOTS, "q.cpu": 1}, 2)

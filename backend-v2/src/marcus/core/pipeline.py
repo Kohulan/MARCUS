@@ -742,7 +742,9 @@ def remove_paper_files(paper_id: uuid.UUID) -> None:
     except OSError as exc:
         log.warning(
             "paper %s: files not removed (%s: %s); the retention sweep retries",
-            paper_id, type(exc).__name__, exc,
+            paper_id,
+            type(exc).__name__,
+            exc,
         )
 
 

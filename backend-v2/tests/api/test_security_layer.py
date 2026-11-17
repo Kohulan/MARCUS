@@ -564,8 +564,9 @@ async def test_uploads_get_503_only_while_the_breaker_is_open(app, clock):
         assert r.status_code == 503 and r.json() == {"detail": "service unavailable"}
         assert slow.calls == 3
         clock[0] += 4.9  # still open: refused without touching Redis; tools fail open
-        assert (await c.post("/api/v2/images", files={"file": ("x.png", PNG, "image/png")})
-                ).status_code == 503
+        assert (
+            await c.post("/api/v2/images", files={"file": ("x.png", PNG, "image/png")})
+        ).status_code == 503
         assert (await c.post("/api/v2/tools/depict", json={})).status_code == 422
         assert slow.calls == 3
         clock[0] += 0.2  # closed again (Redis still slow): one failure does not refuse

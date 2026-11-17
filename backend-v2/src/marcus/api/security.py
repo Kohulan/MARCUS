@@ -147,7 +147,9 @@ class SecurityMiddleware:
                 await self.app(scope, receive, send_with_headers)
             except Exception:
                 # %r: the path is client-chosen and may hold newlines (log forging)
-                log.exception("unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"])
+                log.exception(
+                    "unhandled error request_id=%s %s %r", rid, scope["method"], scope["path"]
+                )
                 if started:
                     raise  # the response is already on the wire; the server drops the connection
                 response = JSONResponse(
