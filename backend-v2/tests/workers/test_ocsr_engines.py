@@ -388,3 +388,33 @@ def test_recycle_handler_never_exits_outside_a_pool_process(no_recycle, monkeypa
     assert no_recycle.in_pool_process() is False
     no_recycle.recycle_if_requested(sender=None)
     assert exits == []
+
+
+def test_engine_version_without_loading_the_model(fake_decimer):
+    """The OCSR cache lookup needs the version only: reading it never loads a model."""
+    tf = fake_decimer()
+    decimer.register(Engine.DECIMER_HAND)
+    assert base.engine_version(Engine.DECIMER_HAND) == "2.8.0-hand"
+    assert base.engine_version("decimer-hand") == "2.8.0-hand"  # cached per process
+    assert tf.loads == [] and decimer._predict is None and decimer.hand_model_loaded() is False
+    assert "decimer-hand" not in base._ENGINES
+
+
+def test_engine_version_of_a_loaded_engine_is_its_version(monkeypatch):
+    class E:
+        name = Engine.DECIMER
+        version = "v-loaded"
+
+        def load(self):
+            pass
+
+    monkeypatch.setitem(base.FACTORIES, "decimer", E)
+    base.get_engine(Engine.DECIMER)
+    assert base.engine_version(Engine.DECIMER) == "v-loaded"
+
+
+def test_engine_version_refuses_fake_and_unknown():
+    with pytest.raises(RuntimeError):
+        base.engine_version(Engine.FAKE)
+    with pytest.raises(RuntimeError):
+        base.engine_version(Engine.MOLSCRIBE)

@@ -1,11 +1,15 @@
 """The `ocsr` step handler (GPU worker images import `marcus.workers.ocsr`).
 
 OCSR cache (spec §7): before predicting, the handler looks up (sha256 of the input image's
-bytes, engine, engine version) in `ocsr_cache`. A hit returns the cached SMILES and molfile
-(`ms` 0, `valid` recomputed with RDKit) without calling the engine; a miss predicts and then
-stores a non-empty SMILES in its own short transaction (ON CONFLICT DO NOTHING). The cache
-row holds no owner data: only the hash, the engine and its output. A cache read or write that
-fails is logged and ignored (the prediction does not depend on it).
+bytes, engine, engine version) in `ocsr_cache`. The version is read without loading the model
+(base.engine_version), so a hit never loads one. A hit returns the cached SMILES and molfile
+(`ms` 0, `valid` recomputed with RDKit) without calling the engine; a miss loads the engine if
+needed, predicts and stores a non-empty SMILES in its own short transaction (ON CONFLICT DO
+NOTHING). The cache row holds no owner data: only the hash, the engine and its output. A cache
+read or write that fails is logged and ignored (the prediction does not depend on it).
+
+The fake engine never reads or writes the cache: its output is not a real result, and the
+fake stack's tests must measure the engine, not cache hits.
 """
 
 import hashlib
@@ -20,7 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from marcus.core.enums import Engine, StepKind
 from marcus.core.models import OcsrCache, Segment
 from marcus.core.storage import image_job_path, segment_crop_path
-from marcus.workers.ocsr.base import get_engine
+from marcus.workers.ocsr.base import engine_version, get_engine
 from marcus.workers.runtime import BadInput, register
 
 RDLogger.DisableLog("rdApp.*")
@@ -103,21 +107,25 @@ def ocsr(step, session) -> dict:
     image = _input_image(step, session)
     if not image.is_file():
         raise BadInput("input image is missing")
-    sha = hashlib.sha256(image.read_bytes()).hexdigest()
+    use_cache = name is not Engine.FAKE
+    if use_cache:
+        sha = hashlib.sha256(image.read_bytes()).hexdigest()
+        version = engine_version(name)
+        hit = _cache_get(session, sha, name.value, version)
+        if hit is not None:
+            return {
+                "smiles": hit.smiles,
+                "molfile": hit.molfile,
+                "valid": is_valid_smiles(hit.smiles),
+                "ms": 0,
+                "engine_version": version,
+            }
     engine = get_engine(name)
-    hit = _cache_get(session, sha, name.value, engine.version)
-    if hit is not None:
-        return {
-            "smiles": hit.smiles,
-            "molfile": hit.molfile,
-            "valid": is_valid_smiles(hit.smiles),
-            "ms": 0,
-            "engine_version": engine.version,
-        }
     start = time.monotonic()
     result = engine.predict(image)
     ms = int((time.monotonic() - start) * 1000)
-    _cache_put(session, sha, name.value, engine.version, result.smiles, result.molfile)
+    if use_cache:
+        _cache_put(session, sha, name.value, engine.version, result.smiles, result.molfile)
     return {
         "smiles": result.smiles,
         "molfile": result.molfile,

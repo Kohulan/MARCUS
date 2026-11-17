@@ -14,8 +14,8 @@ fake OCSR 1 s per segment.
 Segmentation cache: a PDF whose bytes were segmented before is not segmented again (its
 segments come from seg_cache). Every upload therefore appends a fresh nonce after the PDF's
 end (readers ignore trailing bytes), so each test really segments, unless it asks for the
-same bytes on purpose (the cache test). The fake OCSR results are cached too (the fake
-segmenter draws the same crops on every page size); no test here depends on OCSR timing.
+same bytes on purpose (the cache test). The fake OCSR engine never uses the OCSR cache, so
+fake ocsr steps always really run (ms > 0).
 
 Timing source: the API exposes no step timestamps, so the fairness numbers come from the
 paper's server-sent events (arrival time on this host's clock) measured against the paper's
@@ -253,6 +253,7 @@ def test_same_pdf_twice_second_paper_from_segmentation_cache():
         assert not {s["id"] for s in first["segments"]} & {s["id"] for s in second["segments"]}
         for seg in second["segments"]:
             assert seg["predictions"], f"segment {seg['id']} has no prediction"
+            assert seg["predictions"][0]["ms"] > 0  # fake OCSR ran: no OCSR cache for fake
     finally:
         owner.close()
 
@@ -298,9 +299,12 @@ def test_small_paper_starts_within_10s_behind_big_paper():
         assert big["status"] not in ("done", "failed"), "big paper finished first: no contention"
         assert first_segment - created < 10
         assert first_prediction - created < 60
-        # B's prediction is really there
+        # B's prediction is really there, made by the fake engine (it bypasses the OCSR cache,
+        # so the timings above measured real OCSR work, not cache hits)
         segs = b.paper(small_id)["segments"]
-        assert any(s["predictions"] for s in segs)
+        preds = [p for s in segs for p in s["predictions"]]
+        assert preds
+        assert all(p["engine"] == "fake" and p["ms"] > 0 for p in preds), preds
     finally:
         a.close()
         b.close()

@@ -457,3 +457,61 @@ def test_ocsr_cache_rows_hold_no_owner_data(db_session, engine_slot):
     _run_ocsr(_job_image())
     cols = {c.name for c in OcsrCache.__table__.columns}
     assert cols == {"image_sha256", "engine", "engine_version", "smiles", "molfile", "created_at"}
+
+
+class LazyStub(CountingEngine):
+    """A lazily loaded engine (like decimer-hand) that counts its loads."""
+
+    name = Engine.DECIMER_HAND
+
+    def __init__(self, smiles, version="2.8.0-hand"):
+        super().__init__(smiles, version)
+        self.loads = 0
+
+    def load(self):
+        self.loads += 1
+
+
+def test_ocsr_cache_hit_on_lazy_engine_does_not_load_the_model(db_session, monkeypatch):
+    from marcus.workers.ocsr import base
+
+    monkeypatch.setattr(base, "_ENGINES", {})
+    built = []
+
+    def factory():
+        built.append(LazyStub("SHOULD-NOT-RUN"))
+        return built[-1]
+
+    monkeypatch.setitem(base.FACTORIES, "decimer-hand", factory)
+    job = _job_image()
+    sha = _sha(storage.image_job_path(job).read_bytes())
+    db_session.add(OcsrCache(image_sha256=sha, engine="decimer-hand", engine_version="2.8.0-hand",
+                             smiles="CCO", molfile=None))  # fmt: skip
+    db_session.commit()
+    out = _run_ocsr(job, engine="decimer-hand")
+    assert out["smiles"] == "CCO" and out["ms"] == 0 and out["engine_version"] == "2.8.0-hand"
+    assert sum(e.loads for e in built) == 0 and sum(e.calls for e in built) == 0
+    assert "decimer-hand" not in base._ENGINES  # nothing loaded for the hit
+
+    # a miss loads once and predicts
+    out = _run_ocsr(_job_image((0, 0, 0)), engine="decimer-hand")
+    assert out["smiles"] == "SHOULD-NOT-RUN"
+    assert sum(e.loads for e in built) == 1 and sum(e.calls for e in built) == 1
+
+
+def test_fake_engine_bypasses_the_ocsr_cache(db_session, monkeypatch):
+    from marcus.workers.ocsr import base
+
+    monkeypatch.setenv("MARCUS_ENABLE_FAKE_ENGINES", "1")
+    get_settings.cache_clear()
+    monkeypatch.setattr(base, "_ENGINES", {})
+    job = _job_image()
+    sha = _sha(storage.image_job_path(job).read_bytes())
+    db_session.add(OcsrCache(image_sha256=sha, engine="fake", engine_version="fake-1",
+                             smiles="CCO", molfile=None))  # fmt: skip
+    db_session.commit()
+    out = _run_ocsr(job, engine="fake")
+    assert out["smiles"] == "c1ccccc1"  # the engine ran; the planted row was not read
+    _run_ocsr(_job_image((0, 0, 0)), engine="fake")
+    rows = db_session.execute(select(OcsrCache.smiles)).scalars().all()
+    assert rows == ["CCO"]  # nothing written for the fake engine

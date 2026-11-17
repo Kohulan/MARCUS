@@ -30,6 +30,10 @@ class OcsrResult:
 
 
 class OcsrEngine(Protocol):
+    """`version` is static (package version or pinned commit) and set by the constructor:
+    constructing an engine is cheap and never loads a model (that is `load()`), so the OCSR
+    cache can be checked before any model is loaded (`engine_version`)."""
+
     name: Engine
     version: str
 
@@ -43,6 +47,7 @@ ENGINES_ENV = "MARCUS_OCSR_ENGINES"
 FACTORIES: dict[str, Callable[[], OcsrEngine]] = {}
 PRELOAD: set[str] = set()  # engines loaded when a pool process starts
 _ENGINES: dict[str, OcsrEngine] = {}
+_VERSIONS: dict[str, tuple[Callable[[], OcsrEngine], str]] = {}  # key -> (factory, version)
 _lock = threading.Lock()
 
 
@@ -77,11 +82,38 @@ def _fake_factory() -> OcsrEngine:
 FACTORIES["fake"] = _fake_factory
 
 
-def get_engine(name: Engine | str) -> OcsrEngine:
-    """One instance per process, created and `load()`ed on first use."""
+def _checked_key(name: Engine | str) -> str:
     key = str(Engine(name))
     if key == Engine.FAKE and not get_settings().enable_fake_engines:
         raise RuntimeError("fake engine is disabled (MARCUS_ENABLE_FAKE_ENGINES is not set)")
+    return key
+
+
+def engine_version(name: Engine | str) -> str:
+    """The engine's version without loading its model (the OCSR cache key needs only this; a
+    cache hit on a lazily loaded engine such as decimer-hand must not pay its model load).
+
+    A loaded engine answers itself; otherwise an unloaded instance is constructed (cheap, see
+    OcsrEngine) and its version is kept per process, tied to the registered factory."""
+    key = _checked_key(name)
+    with _lock:
+        engine = _ENGINES.get(key)
+        if engine is not None:
+            return engine.version
+        factory = FACTORIES.get(key)
+        if factory is None:
+            raise RuntimeError(f"OCSR engine {key!r} is not available in this worker")
+        cached = _VERSIONS.get(key)
+        if cached is not None and cached[0] is factory:
+            return cached[1]
+        version = factory().version
+        _VERSIONS[key] = (factory, version)
+        return version
+
+
+def get_engine(name: Engine | str) -> OcsrEngine:
+    """One instance per process, created and `load()`ed on first use."""
+    key = _checked_key(name)
     with _lock:
         engine = _ENGINES.get(key)
         if engine is None:
