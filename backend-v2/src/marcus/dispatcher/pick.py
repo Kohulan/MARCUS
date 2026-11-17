@@ -26,6 +26,7 @@ from marcus.core.queues import (
     DOCLING_MIN_SOFT_S,
     DOCLING_PER_PAGE_S,
     ENGINE_TIME_LIMITS,
+    QUEUE_WAIT_S,
     SLOTS,
     TIME_LIMITS,
 )
@@ -33,7 +34,7 @@ from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
 
-GRACE_S = 30  # watchdog: a step may sit in queued/running for its hard limit plus this
+GRACE_S = 30  # watchdog: a step may run for its hard limit plus this
 
 # send(queue, step_id, kind, attempts, pages, engine): `attempts` is the step's attempts value
 # read in the transaction that set it queued; the runtime uses it to drop stale duplicate
@@ -162,16 +163,29 @@ def _deadline_s():
     )
 
 
+def _queue_wait_s():
+    """Allowance in seconds for a step in `queued`: QUEUE_WAIT_S of its queue (independent of
+    its run limit; covers a worker restart with model preload)."""
+    return case(
+        *((Step.queue == queue, wait) for queue, wait in QUEUE_WAIT_S.items()),
+        else_=max(QUEUE_WAIT_S.values()),
+    )
+
+
 def _stuck():
-    """SQL condition: queued or running for longer than the step's deadline.
+    """SQL condition: queued for longer than its queue's wait allowance, or running for longer
+    than the step's run deadline (hard limit + grace).
 
     A running step without started_at (should not happen) falls back to queued_at, so it
     can never escape the watchdog.
     """
-    limit = func.now() - func.make_interval(0, 0, 0, 0, 0, 0, _deadline_s())
+
+    def ago(seconds):
+        return func.now() - func.make_interval(0, 0, 0, 0, 0, 0, seconds)
+
     since = func.coalesce(Step.started_at, Step.queued_at)
-    return ((Step.status == StepStatus.QUEUED.value) & (Step.queued_at < limit)) | (
-        (Step.status == StepStatus.RUNNING.value) & (since < limit)
+    return ((Step.status == StepStatus.QUEUED.value) & (Step.queued_at < ago(_queue_wait_s()))) | (
+        (Step.status == StepStatus.RUNNING.value) & (since < ago(_deadline_s()))
     )
 
 

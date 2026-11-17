@@ -47,6 +47,33 @@ def _load_slots() -> dict[str, int]:
 
 SLOTS: dict[str, int] = _load_slots()
 
+# How long a step may sit `queued` (sent, not yet started) before the watchdog counts its
+# delivery as lost, in seconds; independent of the step's run limit. Model queues cover a worker
+# (re)start: the pool process preloads its model before it takes a step (DECIMER ~85-105 s on
+# CPU), and a hard-killed or recycled process is replaced the same way. Env override:
+# MARCUS_QUEUE_WAIT_S_<QUEUE>, e.g. MARCUS_QUEUE_WAIT_S_Q_DECIMER=600.
+_MODEL_QUEUE_WAIT_S = 300
+_DEFAULT_QUEUE_WAIT_S = {
+    "q.cpu": 120,
+    "q.segment": _MODEL_QUEUE_WAIT_S,
+    "q.decimer": _MODEL_QUEUE_WAIT_S,
+    "q.molnextr": _MODEL_QUEUE_WAIT_S,
+    "q.molscribe": _MODEL_QUEUE_WAIT_S,
+    "q.fake": 120,
+    "q.llm": _MODEL_QUEUE_WAIT_S,
+}
+
+
+def _load_queue_wait() -> dict[str, int]:
+    waits = {}
+    for queue, default in _DEFAULT_QUEUE_WAIT_S.items():
+        env = "MARCUS_QUEUE_WAIT_S_" + queue.replace(".", "_").upper()
+        waits[queue] = int(os.environ.get(env, default))
+    return waits
+
+
+QUEUE_WAIT_S: dict[str, int] = _load_queue_wait()
+
 # Synchronous tools (depict, MCS, ...): not a pipeline queue, so no dispatcher slots.
 TOOLS_QUEUE = "q.tools"
 

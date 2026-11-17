@@ -317,3 +317,73 @@ def test_hand_engine_alone_does_not_warm_up_the_normal_model(fake_decimer):
     decimer.DecimerEngine(hand_drawn=True).load()
     assert decimer.hand_model_loaded() is True
     assert decimer._warmed_up is False
+
+
+# --- recycle the pool process after an interrupted model load ------------------------------
+
+
+@pytest.fixture
+def no_recycle(monkeypatch):
+    from marcus.workers import runtime
+
+    monkeypatch.setattr(runtime, "_recycle_reason", None)
+    return runtime
+
+
+def test_interrupted_hand_load_marks_the_process_for_recycling(no_recycle):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    calls = []
+
+    def slow_load(path):
+        calls.append(path)
+        raise SoftTimeLimitExceeded()
+
+    lazy = decimer.LazySavedModel(slow_load, "/m/DECIMER_HandDrawn_model")
+    with pytest.raises(SoftTimeLimitExceeded):
+        lazy.ensure_loaded()
+    assert lazy.loaded is False
+    assert no_recycle.recycle_requested() is True
+
+
+def test_successful_hand_load_does_not_recycle(no_recycle):
+    lazy = decimer.LazySavedModel(lambda path: object(), "/m/DECIMER_HandDrawn_model")
+    lazy.ensure_loaded()
+    assert lazy.loaded is True
+    assert no_recycle.recycle_requested() is False
+
+
+def test_recycle_handler_connected_to_task_postrun():
+    from celery.signals import task_postrun
+
+    from marcus.workers import runtime
+
+    assert _connected(task_postrun, runtime.recycle_if_requested)
+
+
+def test_recycle_handler_exits_the_pool_process_only_when_marked(no_recycle, monkeypatch):
+    exits = []
+
+    def fake_exit(code):
+        exits.append(code)
+        raise SystemExit(code)
+
+    monkeypatch.setattr(no_recycle.os, "_exit", fake_exit)
+    monkeypatch.setattr(no_recycle, "in_pool_process", lambda: True)
+
+    no_recycle.recycle_if_requested(sender=None)  # not marked: nothing
+    assert exits == []
+
+    no_recycle.request_recycle("interrupted model load")
+    with pytest.raises(SystemExit):
+        no_recycle.recycle_if_requested(sender=None)
+    assert exits == [0]
+
+
+def test_recycle_handler_never_exits_outside_a_pool_process(no_recycle, monkeypatch):
+    exits = []
+    monkeypatch.setattr(no_recycle.os, "_exit", lambda code: exits.append(code))
+    no_recycle.request_recycle("x")
+    assert no_recycle.in_pool_process() is False
+    no_recycle.recycle_if_requested(sender=None)
+    assert exits == []

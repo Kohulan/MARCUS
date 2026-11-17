@@ -33,6 +33,7 @@ from pathlib import Path
 
 from marcus.core.enums import Engine
 from marcus.core.settings import get_settings
+from marcus.workers import runtime
 from marcus.workers.ocsr.base import OcsrResult, register_engine
 
 log = logging.getLogger(__name__)
@@ -58,7 +59,14 @@ class LazySavedModel:
         with self._lock:
             if self._model is None:
                 start = time.monotonic()
-                self._model = self._load_fn(self.path)
+                try:
+                    self._model = self._load_fn(self.path)
+                except BaseException:
+                    # An interrupted load (soft time limit) leaves the half-built graph's
+                    # memory behind (+1.4 GB per interruption measured): replace the process
+                    # after this task; the next one loads in a clean process.
+                    runtime.request_recycle(f"interrupted load of {self.path}")
+                    raise
                 self.load_seconds = time.monotonic() - start
                 log.info("loaded %s in %.1f s", self.path, self.load_seconds)
             return self._model

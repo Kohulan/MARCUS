@@ -52,3 +52,24 @@ def test_time_limits_cover_every_kind():
     assert TIME_LIMITS[StepKind.DOCLING] == (300, 360)
     assert TIME_LIMITS[StepKind.ANNOTATE] == (120, 150)
     assert all(s < h for s, h in TIME_LIMITS.values())
+
+
+def test_queue_wait_covers_every_queue():
+    """Queued steps wait up to QUEUE_WAIT_S[queue], independent of the run limit: model
+    queues cover a worker (re)start with its model preload (decimer ~85-105 s on CPU)."""
+    assert set(queues.QUEUE_WAIT_S) == set(SLOTS)
+    for q in ("q.segment", "q.decimer", "q.molnextr", "q.molscribe", "q.llm"):
+        assert queues.QUEUE_WAIT_S[q] == 300
+    assert queues.QUEUE_WAIT_S["q.cpu"] == 120
+    assert queues.QUEUE_WAIT_S["q.fake"] == 120
+
+
+def test_queue_wait_env_override(monkeypatch):
+    monkeypatch.setenv("MARCUS_QUEUE_WAIT_S_Q_DECIMER", "600")
+    try:
+        importlib.reload(queues)
+        assert queues.QUEUE_WAIT_S["q.decimer"] == 600
+        assert queues.QUEUE_WAIT_S["q.segment"] == 300
+    finally:
+        monkeypatch.undo()
+        importlib.reload(queues)

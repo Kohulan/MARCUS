@@ -37,6 +37,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from celery.exceptions import SoftTimeLimitExceeded
+from celery.signals import task_postrun
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -318,3 +319,35 @@ def abort_worker() -> None:
     cannot run must not exist."""
     os.kill(os.getppid(), signal.SIGQUIT)
     os._exit(1)
+
+
+# --- recycling a pool process after a failure that may leave memory behind ---------------
+
+_recycle_reason: str | None = None
+
+
+def request_recycle(reason: str) -> None:
+    """Replace this pool process once the current task has finished (e.g. a model load was
+    interrupted by the soft time limit: TensorFlow keeps the half-built graph's memory)."""
+    global _recycle_reason
+    _recycle_reason = reason
+    log.warning("pool process %d will be replaced after this task: %s", os.getpid(), reason)
+
+
+def recycle_requested() -> bool:
+    return _recycle_reason is not None
+
+
+@task_postrun.connect
+def recycle_if_requested(**_) -> None:
+    """After the task returned (run_step has recorded the step's result or failure in the
+    database), leave the pool process if a recycle was requested; billiard starts a fresh one
+    (worker_process_init preloads again).
+
+    The parent sees the child exit before the task's result and, with acks_late +
+    reject_on_worker_lost, requeues the message once. That redelivery carries a spent attempt
+    token, so the runtime's attempt fence drops it (claim() returns None)."""
+    if _recycle_reason is None or not in_pool_process():
+        return
+    log.warning("recycling pool process %d: %s", os.getpid(), _recycle_reason)
+    os._exit(0)
