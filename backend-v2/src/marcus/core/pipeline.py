@@ -92,12 +92,34 @@ def start_paper(
     engine: Engine,
     ocsr_mode: str,
 ) -> Paper:
-    """Store the PDF and create the paper plus its check_pdf step. Caller commits."""
+    """Create the paper plus its check_pdf step, then store the PDF. Caller commits.
+
+    The API runs the two halves itself (new_paper, then store_pdf in a thread) so the hash and
+    the file write do not block its event loop."""
+    paper = new_paper(
+        session, owner, hashlib.sha256(data).hexdigest(), len(data), display_name, engine,
+        ocsr_mode,
+    )  # fmt: skip
+    store_pdf(paper.id, data)
+    return paper
+
+
+def new_paper(
+    session: Session,
+    owner: Owner,
+    pdf_sha256: str,
+    size: int,
+    display_name: str,
+    engine: Engine,
+    ocsr_mode: str,
+) -> Paper:
+    """The paper row and its check_pdf step (flushed: the paper has its id). Its PDF must be
+    stored (store_pdf) before the commit."""
     paper = Paper(
         owner_id=owner.id,
         display_name=display_name,
-        pdf_sha256=hashlib.sha256(data).hexdigest(),
-        bytes=len(data),
+        pdf_sha256=pdf_sha256,
+        bytes=size,
         engine=Engine(engine).value,
         ocsr_mode=ocsr_mode,
         status=PaperStatus.CHECKING.value,
@@ -105,13 +127,6 @@ def start_paper(
     )
     session.add(paper)
     session.flush()  # assigns paper.id
-
-    path = storage.pdf_path(paper.id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(data)
-
     session.add(
         Step(
             paper_id=paper.id,
@@ -125,25 +140,48 @@ def start_paper(
     return paper
 
 
+def store_pdf(paper_id: uuid.UUID, data: bytes) -> None:
+    """Write a new paper's PDF (owner-only mode; refuses to overwrite an existing file)."""
+    path = storage.pdf_path(paper_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+
+
 def start_image_job(
     session: Session, owner: Owner, png: bytes, display_name: str, engine: Engine
 ) -> ImageJob:
-    """Store the normalised PNG and create the image job plus its ocsr step. Caller commits."""
+    """Create the image job plus its ocsr step, then store the normalised PNG. Caller commits.
+
+    The API runs the two halves itself (new_image_job, then store_image in a thread)."""
+    job = new_image_job(session, owner, hashlib.sha256(png).hexdigest(), display_name, engine)
+    store_image(job.id, png)
+    return job
+
+
+def store_image(job_id: uuid.UUID, png: bytes) -> None:
+    """Write a new image job's PNG (owner-only mode). The temp name `<id>.png.tmp` is the one
+    retention sweeps after a crash (one writer per new job)."""
+    storage.write_atomic(storage.image_job_path(job_id), png, 0o600, unique=False)
+
+
+def new_image_job(
+    session: Session, owner: Owner, image_sha256: str, display_name: str, engine: Engine
+) -> ImageJob:
+    """The image job row and its ocsr step (flushed: the job has its id). Its PNG must be
+    stored (store_image) before the commit."""
     engine = Engine(engine)
     job = ImageJob(
         owner_id=owner.id,
         display_name=display_name,
-        image_sha256=hashlib.sha256(png).hexdigest(),
+        image_sha256=image_sha256,
         engine=engine.value,
         status=ImageJobStatus.QUEUED.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
     )
     session.add(job)
     session.flush()  # assigns job.id
-
-    # `<id>.png.tmp`: the name retention sweeps after a crash (one writer per new job)
-    storage.write_atomic(storage.image_job_path(job.id), png, 0o600, unique=False)
-
     session.add(
         Step(
             image_job_id=job.id,
@@ -668,12 +706,14 @@ def fail_step(
     session.flush()
 
 
-def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
+def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = True) -> None:
     """Cancel all active steps, mark the paper deleted and remove its files. Caller commits.
 
     A running step's late result is dropped by complete_step / fail_step. A file that cannot
     be removed (any OSError) is logged and does not abort the transaction: the paper is
     deleted either way, and the retention purge's orphan sweep removes the leftovers later.
+    `remove_files=False`: the caller runs remove_paper_files itself (the API: after its commit,
+    in a thread).
     """
     paper = _lock(session, Paper, paper_id)
     if paper is None:
@@ -686,6 +726,12 @@ def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
     )
     paper.status = PaperStatus.DELETED.value
     session.flush()
+    if remove_files:
+        remove_paper_files(paper_id)
+
+
+def remove_paper_files(paper_id: uuid.UUID) -> None:
+    """Remove a deleted paper's directory; an OSError is logged, not raised (retention retries)."""
     try:
         shutil.rmtree(storage.paper_dir(paper_id))
     except FileNotFoundError:

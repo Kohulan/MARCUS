@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from typing import Literal
 
@@ -11,6 +12,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +36,7 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.models import Owner, Paper
-from marcus.core.pipeline import cancel_paper, start_paper
+from marcus.core.pipeline import cancel_paper, new_paper, remove_paper_files, store_pdf
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -57,7 +59,10 @@ async def upload_paper(
     sniff_pdf(data)
     name = sanitize_display_name(file.filename)
 
-    paper = await db.run_sync(lambda s: start_paper(s, owner, data, name, engine, ocsr))
+    # hash and file write in a thread: up to max_upload_bytes must not block the event loop
+    sha = await run_in_threadpool(lambda: hashlib.sha256(data).hexdigest())
+    paper = await db.run_sync(lambda s: new_paper(s, owner, sha, len(data), name, engine, ocsr))
+    await run_in_threadpool(store_pdf, paper.id, data)  # before the commit, as start_paper
     await db.commit()
     return {"paper_id": str(paper.id), "status": PaperStatus.CHECKING.value}
 
@@ -119,11 +124,12 @@ async def delete_paper(
 ) -> None:
     paper = await get_owned_paper(db, owner, paper_id)
     try:
-        await db.run_sync(lambda s: cancel_paper(s, paper.id))
+        await db.run_sync(lambda s: cancel_paper(s, paper.id, remove_files=False))
     except ValueError:
         await db.rollback()
         raise not_found() from None  # removed meanwhile
     await db.commit()
+    await run_in_threadpool(remove_paper_files, paper.id)  # page PNGs and crops: off the loop
 
 
 @router.get("/papers/{paper_id}/pages/{n}/image")
