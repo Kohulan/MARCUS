@@ -41,6 +41,9 @@ for (const file of ["index.html", "app/index.html"]) {
     fail(`dist/${file}: design contract (6b4eb402) missing`);
   }
 }
+if (has("index.html") && !read("index.html").includes("FORM: Survey Sheet")) {
+  fail("dist/index.html: Survey Sheet contract (FORM: Survey Sheet) missing");
+}
 if (has("index.html") && !read("index.html").includes("Every molecule has a source.")) {
   fail("dist/index.html: landing headline not pre-rendered");
 }
@@ -55,6 +58,22 @@ for (const file of existsSync(dist) ? htmlFiles(dist) : []) {
     if (!/\ssrc=/i.test(tag)) fail(`dist/${file}: inline <script> (CSP script-src 'self'): ${tag}`);
   }
   if (/<style\b/i.test(html)) fail(`dist/${file}: inline <style> block (CSP style-src 'self')`);
+  // Light mode only (spec §7 decision 5): no theme script, no theme switch.
+  if (html.includes("theme.js")) fail(`dist/${file}: references theme.js (light mode only)`);
+  if (html.includes("data-theme")) fail(`dist/${file}: data-theme (light mode only)`);
+}
+
+if (has("theme.js")) fail("dist/theme.js exists (light mode only)");
+
+// Survey Sheet fonts only (Geist, Geist Mono, Gmarket mark) and no dark rules.
+const dropped = /bricolage|hanken|jetbrains/i;
+const assets = join(dist, "assets");
+for (const name of existsSync(assets) ? readdirSync(assets) : []) {
+  if (dropped.test(name)) fail(`dist/assets/${name}: a dropped font (Bricolage, Hanken, JetBrains)`);
+  if (!name.endsWith(".css")) continue;
+  const css = read(join("assets", name));
+  if (dropped.test(css)) fail(`dist/assets/${name}: names a dropped font (Bricolage, Hanken, JetBrains)`);
+  if (css.includes("prefers-color-scheme")) fail(`dist/assets/${name}: prefers-color-scheme (light mode only)`);
 }
 
 if (failures.length > 0) {

@@ -65,4 +65,4 @@ The whole pipeline in one open tool: segment, recognise with several engines (DE
 
 ## Accessibility & Inclusion
 
-WCAG 2.2 AA for landing and tool; full keyboard path through review; visible focus; light and dark mode both first-class; respect reduced motion.
+WCAG 2.2 AA for landing and tool; full keyboard path through review; visible focus; light mode only; respect reduced motion.

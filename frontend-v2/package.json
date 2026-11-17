@@ -14,9 +14,8 @@
     "serve:stop": "docker rm -f marcus-ui-dev"
   },
   "dependencies": {
-    "@fontsource/bricolage-grotesque": "5.3.0",
-    "@fontsource/hanken-grotesk": "5.3.0",
-    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/geist": "5.3.0",
+    "@fontsource/geist-mono": "5.3.0",
     "events": "3.3.0",
     "ketcher-core": "3.18.0",
     "ketcher-react": "3.18.0",

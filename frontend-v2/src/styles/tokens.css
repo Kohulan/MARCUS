@@ -1,104 +1,57 @@
 /*
- * Field Sheet design tokens (spec §7, seed key 6b4eb402).
+ * Survey Sheet design tokens (spec §7 decision 8, seed key 6b4eb402). Light only.
  *
- * Light values are fixed by the plan's Global Constraints. Dark values are the
- * builder's call in the same world: a deep green-black base, paper surfaces as
- * dark green-grey, state colours lightened. Every text pair is WCAG AA (4.5:1)
- * on paper, surface and sunken; the ratios are in the F1 report.
- *
- * Dark mode applies when the system asks for it and the visitor has not picked
- * light, or when the visitor picked dark (public/theme.js sets data-theme).
+ * Every value is fixed by the plan's Global Constraints. Contrast (WCAG 2.x) is
+ * pinned in styles.test.ts. Notes for use:
+ * - line is about 1.7:1 on paper: hairlines and frames only, never a control edge
+ *   (controls use control-border, 3.3:1 or more on every ground).
+ * - orange is 3.4:1 on paper: shapes only (markers, outlines, fills). Small orange
+ *   text is orange-ink; text on an orange fill is on-orange.
+ * - accepted is 4.4:1 on sunken: accepted text sits on paper or surface only.
+ * - States always pair a colour with a word and a shape, never colour alone.
  */
 
 :root {
   color-scheme: light;
 
   /* Grounds */
-  --paper: #fafaf7;
-  --surface: #ffffff;
-  --sunken: #f4f6f2;
+  --paper: #F4F3EA;
+  --surface: #FFFFFF;
+  --sunken: #ECEBE1;
 
   /* Text */
-  --ink: #15241b;
-  --text-2: #3e5044;
-  --muted: #55675a;
+  --ink: #1C211D;
+  --text-2: #3F443D;
+  --muted: #5E625B;
 
-  /* Rules and actions */
-  --line: #dce3da;
-  --green: #1e4d33;
+  /* Drawing-sheet rules: frame, inner hairline, ruler ticks, failed-ground stripes */
+  --line: #B9BCB2;
+  --hair: #D9DACF;
+  --tick: #9FA398;
+  --hatch: #E6E5DC;
 
-  /* States: always paired with a word and a shape, never colour alone */
-  --accepted: #2d7a46;
-  --to-check: #9a5b0c;
-  --rejected: #b23a2a;
-  --failed-bg: #f7eeeb;
-  --failed-ink: #7a3b30;
+  /* Every control edge: inputs, checkboxes, selects, the solid clear button */
+  --control-border: #7E8279;
 
-  /* Text set on a filled green, state or ink bar (buttons, label headers) */
-  --on-green: #ffffff;
-  --on-ink: #ffffff;
+  /* Green leads; orange asks; charcoal for rejected and failed */
+  --green: #1E4D33;
+  --accepted: #2D7A46;
+  --orange: #FA3600;
+  --orange-ink: #B82800;
+  --charcoal: #1C211D;
+
+  /* Text set on a filled ground */
+  --on-green: #FFFFFF;
+  --on-orange: #141414;
+  --on-charcoal: #F4F3EA;
 
   /* Browser surfaces */
   --focus: var(--green);
-  --selection: #dcebdf;
+  --selection: #DCEBDF;
 
   /* Type */
-  --font-head: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-text: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-text: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-mark: "Gmarket Sans", var(--font-text);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-
-    --paper: #0f1712;
-    --surface: #17211b;
-    --sunken: #0b110d;
-
-    --ink: #e5ece6;
-    --text-2: #c3cfc6;
-    --muted: #9aaa9e;
-
-    --line: #2b3a31;
-    --green: #8ccb9f;
-
-    --accepted: #6cc489;
-    --to-check: #e3a857;
-    --rejected: #f2907f;
-    --failed-bg: #2b1a16;
-    --failed-ink: #f0b7ab;
-
-    --on-green: #0f1712;
-    --on-ink: #0f1712;
-
-    --selection: #2e4a37;
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --paper: #0f1712;
-  --surface: #17211b;
-  --sunken: #0b110d;
-
-  --ink: #e5ece6;
-  --text-2: #c3cfc6;
-  --muted: #9aaa9e;
-
-  --line: #2b3a31;
-  --green: #8ccb9f;
-
-  --accepted: #6cc489;
-  --to-check: #e3a857;
-  --rejected: #f2907f;
-  --failed-bg: #2b1a16;
-  --failed-ink: #f0b7ab;
-
-  --on-green: #0f1712;
-  --on-ink: #0f1712;
-
-  --selection: #2e4a37;
 }

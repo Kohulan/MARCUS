@@ -1,7 +1,9 @@
 /*
- * Base layer: element defaults on the Field Sheet tokens. No components here;
- * those bring their own CSS. Every browser surface (selection, caret, focus,
- * scrollbars, underlines, numerals) is themed from the palette.
+ * Base layer: element defaults and the drawing-sheet primitives on the Survey
+ * Sheet tokens (spec §7; values from frontend-v2/reference/survey-sheet-board.html).
+ * No components here; those bring their own CSS. Every browser surface (selection,
+ * caret, focus, scrollbars, underlines, numerals) is themed from the palette.
+ * Headings are UPPERCASE through CSS only; the source text stays in sentence case.
  */
 
 *,
@@ -24,6 +26,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-text);
+  font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
   font-synthesis-weight: none;
@@ -39,14 +42,17 @@ h4 {
   margin: 0;
   font-family: var(--font-head);
   font-weight: 700;
-  line-height: 1.1;
-  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
   text-wrap: balance;
 }
 
 h1 {
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  color: var(--green);
+  letter-spacing: -0.035em;
+  line-height: 0.92;
 }
 
 p {
@@ -107,6 +113,13 @@ textarea {
   color: inherit;
 }
 
+/* Every control edge is control-border (3.3:1 or more); line never marks a control. */
+input,
+select,
+textarea {
+  border: 1px solid var(--control-border);
+}
+
 ::placeholder {
   color: var(--muted);
   opacity: 1;
@@ -117,10 +130,74 @@ hr {
   border-top: 1px solid var(--line);
 }
 
+/* Drawing-sheet primitives -------------------------------------------------- */
+
+/* The hairline frame around a sheet and its cells. */
+.sheet {
+  border: 1px solid var(--line);
+}
+
+/* Ruler ticks: one 1 px tick every 8 px, 7 px deep (horizontal and vertical). */
+.ticks {
+  height: 7px;
+  background-image: repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 8px);
+}
+
+.vticks {
+  width: 7px;
+  background-image: repeating-linear-gradient(180deg, var(--tick) 0 1px, transparent 1px 8px);
+}
+
+/* The "+" corner mark; set aria-hidden="true" on it in markup. */
+.corner {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--ink);
+  user-select: none;
+}
+
+/* Mono uppercase label: sheet captions, readouts, tag rows. */
+.mono-label {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* The failed ground: 135° stripes. */
+.hatch {
+  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
+}
+
+/*
+ * Rejected: one diagonal 2 px charcoal line across the box. Drawn on top of the
+ * content (a depiction with its own white ground would hide a background line).
+ */
+.strike {
+  position: relative;
+}
+
+.strike::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    var(--charcoal) calc(50% - 1px),
+    var(--charcoal) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
 .wordmark {
   font-family: var(--font-mark);
   font-weight: 300;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   color: var(--ink);
 }
 

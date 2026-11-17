@@ -78,17 +78,8 @@ export async function uploadPaperViaApi(
   return body.paper_id;
 }
 
-/** Runs axe on the current page; fails on any serious or critical violation. */
-export async function expectNoA11yViolations(
-  page: Page,
-  opts: { theme?: "light" | "dark" } = {},
-): Promise<void> {
-  if (opts.theme) {
-    await page.emulateMedia({ colorScheme: opts.theme });
-    await page.evaluate((theme) => {
-      document.documentElement.dataset.theme = theme;
-    }, opts.theme);
-  }
+/** Runs axe on the current page (light mode only); fails on any serious or critical violation. */
+export async function expectNoA11yViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page }).analyze();
   const bad = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
