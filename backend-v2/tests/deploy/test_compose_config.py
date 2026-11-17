@@ -524,3 +524,101 @@ def test_nginx_re_resolves_the_api_quickly_and_retries_only_idempotent_requests(
         assert "non_idempotent" not in value  # POST/PATCH (uploads) are never sent twice
     tries = re.findall(r"^\s*proxy_next_upstream_tries\s+(\d+);", conf, re.M)
     assert tries and all(1 < int(t) <= 5 for t in tries)
+
+
+# --- upload buffering is bounded (review I7) --------------------------------------------------
+
+
+def _size_bytes(text: str) -> int:
+    m = re.fullmatch(r"(\d+)([kmg])", text.strip().lower())
+    assert m, text
+    return int(m.group(1)) * {"k": 2**10, "m": 2**20, "g": 2**30}[m.group(2)]
+
+
+@pytest.mark.parametrize("name", ["nginx", "api"])
+def test_upload_spool_tmpfs_is_sized_and_inside_the_memory_limit(compose, name):
+    """nginx spools request bodies and Starlette spools uploads to /tmp, a tmpfs (memory): each
+    has a size, and the container a memory limit above it, so a slow-body flood fills a bounded
+    tmpfs (that upload fails) instead of the host's memory."""
+    svc = compose["services"][name]
+    (tmp,) = [t for t in svc["tmpfs"] if t.split(":")[0] == "/tmp"]
+    opts = dict(o.split("=", 1) for o in tmp.split(":", 1)[1].split(",")) if ":" in tmp else {}
+    assert "size" in opts, tmp
+    assert "mem_limit" in svc, name
+    assert _size_bytes(opts["size"]) < _size_bytes(svc["mem_limit"])
+
+
+def test_nginx_limits_connections_and_uploads_per_address():
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    zones = dict(re.findall(r"^\s*limit_conn_zone\s+(\$\w+)\s+zone=(\w+):\w+;", conf, re.M))
+    assert zones.get("$binary_remote_addr") == "perip"
+    # uploads: only POST /api/v2/papers and /api/v2/images bodies, keyed by address
+    assert zones.get("$upload_key") == "uploads"
+    assert re.search(r'"~\^POST:/api/v2/\(papers\|images\)\$"\s+\$binary_remote_addr;', conf)
+    # the values come from the environment at start (docker/nginx-edge.sh), included by exact
+    # path inside the server block: nginx does not start without them
+    assert re.search(r"^\s{8}include /tmp/nginx/limits\.conf;", conf, re.M)
+    script = (ROOT / "docker" / "nginx-edge.sh").read_text()
+    assert 'conn="${MARCUS_NGINX_CONN_PER_IP:-64}"' in script
+    assert 'uploads="${MARCUS_NGINX_UPLOADS_PER_IP:-4}"' in script
+    assert re.search(r"^\s*limit_conn_status\s+429;", conf, re.M)
+    timeout = re.search(r"^\s*client_body_timeout\s+(\d+)s;", conf, re.M)
+    assert timeout and int(timeout.group(1)) <= 20
+
+
+def test_nginx_edge_script_is_mounted_executable_into_the_entrypoint(compose):
+    nginx = compose["services"]["nginx"]
+    assert "./docker/nginx-edge.sh:/docker-entrypoint.d/25-marcus-edge.sh:ro" in nginx["volumes"]
+    assert os.access(ROOT / "docker" / "nginx-edge.sh", os.X_OK)
+    env = nginx["environment"]
+    assert env["MARCUS_NGINX_CONN_PER_IP"] == "${MARCUS_NGINX_CONN_PER_IP:-64}"
+    assert env["MARCUS_NGINX_UPLOADS_PER_IP"] == "${MARCUS_NGINX_UPLOADS_PER_IP:-4}"
+
+
+# --- the nginx container itself (docker; skipped without it) ----------------------------------
+
+NGINX_IMAGE = "nginxinc/nginx-unprivileged:1.27-alpine"
+
+
+def _docker_or_skip() -> str:
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("docker CLI not available")
+    probe = subprocess.run([docker, "image", "inspect", NGINX_IMAGE], capture_output=True)
+    if probe.returncode != 0:
+        pytest.skip(f"{NGINX_IMAGE} not pulled")
+    return docker
+
+
+def _nginx_run(env: dict[str, str], *cmd: str) -> subprocess.CompletedProcess:
+    """The production nginx config in the production image (read-only root, tmpfs /tmp, no
+    network), its entrypoint scripts included, running `cmd` instead of the server."""
+    docker = _docker_or_skip()
+    args = [
+        docker, "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+        "--add-host", "api:127.0.0.1",
+        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
+        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+    ]  # fmt: skip
+    for key, value in env.items():
+        args += ["-e", f"{key}={value}"]
+    args += [NGINX_IMAGE, *cmd]
+    return subprocess.run(args, capture_output=True, text=True, timeout=120)
+
+
+def test_nginx_starts_with_the_default_limits():
+    out = _nginx_run({}, "nginx", "-T")
+    assert out.returncode == 0, out.stderr
+    assert "limit_conn perip 64;" in out.stdout and "limit_conn uploads 4;" in out.stdout
+
+
+def test_nginx_limits_follow_the_environment_and_refuse_garbage():
+    out = _nginx_run(
+        {"MARCUS_NGINX_CONN_PER_IP": "500", "MARCUS_NGINX_UPLOADS_PER_IP": "50"}, "nginx", "-T"
+    )
+    assert out.returncode == 0, out.stderr
+    assert "limit_conn perip 500;" in out.stdout and "limit_conn uploads 50;" in out.stdout
+    for bad in ("0", "-1", "64;", "lots"):
+        out = _nginx_run({"MARCUS_NGINX_UPLOADS_PER_IP": bad}, "nginx", "-T")
+        assert out.returncode != 0, bad
+        assert "MARCUS_NGINX_UPLOADS_PER_IP must be a positive integer" in out.stdout + out.stderr
