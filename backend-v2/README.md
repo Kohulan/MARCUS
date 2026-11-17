@@ -9,6 +9,12 @@ FastAPI + Celery + Postgres. One Python distribution `marcus` (`src/marcus/`).
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 ```
 
+### nginx and api restarts
+
+nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,
+...) on a connection error or timeout, never uploads. `python ops/check_api_recreate.py [-f ...]`
+recreates the api container and reports the longest stretch of 5xx answers through nginx.
+
 ## Test
 
 ```bash

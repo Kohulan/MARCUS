@@ -2,6 +2,7 @@
 
 import ipaddress
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -182,3 +183,20 @@ def test_dashboard_never_rates_windowed_series():
             if "marcus_" in e and not e.startswith("marcus_dispatcher"):
                 assert "rate(" not in e and "increase(" not in e, e
     assert "marcus_step_failures_total" not in json.dumps(dash)
+
+
+# --- nginx: re-resolve the api quickly, retry idempotent requests ------------------------------
+
+
+def test_nginx_re_resolves_the_api_quickly_and_retries_only_idempotent_requests():
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    resolver = re.search(r"^\s*resolver\s+127\.0\.0\.11\s+valid=(\d+)s", conf, re.M)
+    assert resolver and int(resolver.group(1)) <= 2
+    assert re.search(r"server api:8000 [^;]*\bresolve\b", conf)
+    nexts = re.findall(r"^\s*proxy_next_upstream\s+([^;]+);", conf, re.M)
+    assert nexts, "proxy_next_upstream not set"
+    for value in nexts:
+        assert {"error", "timeout"} <= set(value.split()), value
+        assert "non_idempotent" not in value  # POST/PATCH (uploads) are never sent twice
+    tries = re.findall(r"^\s*proxy_next_upstream_tries\s+(\d+);", conf, re.M)
+    assert tries and all(1 < int(t) <= 5 for t in tries)
