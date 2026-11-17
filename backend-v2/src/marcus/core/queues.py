@@ -37,15 +37,15 @@ _DEFAULT_SLOTS = {
 }
 
 
-def _load_slots() -> dict[str, int]:
-    slots = {}
-    for queue, default in _DEFAULT_SLOTS.items():
-        env = "MARCUS_SLOTS_" + queue.replace(".", "_").upper()
-        slots[queue] = int(os.environ.get(env, default))
-    return slots
+def _per_queue_env(prefix: str, defaults: dict[str, int]) -> dict[str, int]:
+    """Per-queue ints, each overridable by env `<prefix><QUEUE>` (q.cpu -> Q_CPU)."""
+    return {
+        queue: int(os.environ.get(prefix + queue.replace(".", "_").upper(), default))
+        for queue, default in defaults.items()
+    }
 
 
-SLOTS: dict[str, int] = _load_slots()
+SLOTS: dict[str, int] = _per_queue_env("MARCUS_SLOTS_", _DEFAULT_SLOTS)
 
 # q.cpu slots docling may never take: docling runs for minutes per paper, so without a reserve
 # four papers in docling would make a new upload's check_pdf (and render_page, doi) wait for one
@@ -76,15 +76,7 @@ _DEFAULT_QUEUE_WAIT_S = {
 }
 
 
-def _load_queue_wait() -> dict[str, int]:
-    waits = {}
-    for queue, default in _DEFAULT_QUEUE_WAIT_S.items():
-        env = "MARCUS_QUEUE_WAIT_S_" + queue.replace(".", "_").upper()
-        waits[queue] = int(os.environ.get(env, default))
-    return waits
-
-
-QUEUE_WAIT_S: dict[str, int] = _load_queue_wait()
+QUEUE_WAIT_S: dict[str, int] = _per_queue_env("MARCUS_QUEUE_WAIT_S_", _DEFAULT_QUEUE_WAIT_S)
 
 # Synchronous tools (depict, MCS, ...): not a pipeline queue, so no dispatcher slots.
 TOOLS_QUEUE = "q.tools"
