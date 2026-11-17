@@ -10,12 +10,18 @@
 # (docker/MODEL_PINS.md).
 #
 # GPU memory budgets (one card, four processes; tests/deploy keeps the sum under 20 GB):
-#   worker-segment    TensorFlow  MARCUS_GPU_MEM_MB 6144 (one logical device, memory_limit)
+#   worker-segment    TensorFlow  MARCUS_GPU_MEM_MB 2048 (one logical device, memory_limit). Measured on the
+#                     jarvis V100 (D4 fix round 1): TF allocator peak 896-982 MiB over 44 pages at 300 dpi
+#                     (synth_015, synth_190, two gold-set papers), the same speed and segments with a 1024 MiB
+#                     cap; 2048 is about twice the peak (the spec's first guess was 6 GB).
 #   worker-decimer    TensorFlow  MARCUS_GPU_MEM_MB 4096
 #   worker-molnextr   torch       MARCUS_TORCH_MEM_FRACTION 0.09 (about 2.9 GB of 32 GB)
-#   worker-molscribe  torch       MARCUS_TORCH_MEM_FRACTION 0.09; the device stays
-#                     MARCUS_MOLSCRIBE_DEVICE (cpu by default, as v1) until D4 shows that cuda
-#                     loses nothing against v1; the reservation and budget are ready for it.
+#   worker-molscribe  torch       MARCUS_TORCH_MEM_FRACTION 0.09, on the GPU
+#                     (MARCUS_MOLSCRIBE_DEVICE cuda here; v1 and the CPU stack run it on cpu).
+#                     Spec §3 allows the move only without loss on the fixture judge: D4 (jarvis
+#                     V100, 2026-11-17) gave the same SMILES on 205 of 205 fixture crops as cpu,
+#                     the same exact matches, and 0.66 s instead of 1.08 s per structure
+#                     (judges/results/2026-11-17-gpu-session.md).
 # The budgets cap the frameworks' allocators; every process's CUDA context (a few hundred MB)
 # comes on top. Each value can be changed from the environment without editing this file.
 #
@@ -53,7 +59,7 @@ services:
   worker-segment:
     <<: [*gpu, *tf-cuda]
     environment:
-      MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-6144}
+      MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-2048}
 
   worker-decimer:
     <<: [*gpu, *tf-cuda]
@@ -69,6 +75,7 @@ services:
     <<: [*gpu, *torch-cuda]
     environment:
       MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION:-0.09}
+      MARCUS_MOLSCRIBE_DEVICE: ${MARCUS_MOLSCRIBE_DEVICE:-cuda}
 
   # GPU metrics (utilisation, memory, temperature, ...) on :9400 for Prometheus, internal network
   # only (no published port). Default capabilities: without CAP_SYS_ADMIN the profiling (DCP)

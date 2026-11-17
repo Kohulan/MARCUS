@@ -295,7 +295,7 @@ services:
       # TF CPU thread pools (x-tf-threads): one worker must not take every core next to docling.
       <<: [*env, *seg-version, *tf-threads]
       # GPU budget in MiB for TensorFlow (marcus.workers.gpu), set per service; empty = no
-      # limit / CPU only (docker-compose.gpu.yml sets 6144).
+      # limit / CPU only (docker-compose.gpu.yml sets 2048).
       MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-}
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
@@ -341,7 +341,7 @@ services:
     <<: [*app, *torch-image]
     # ocsr steps of the engine molscribe (q.molscribe), same torch image. ONE prefork process
     # (= q.molscribe slots), model loaded at pool process start like worker-molnextr. Device:
-    # MARCUS_MOLSCRIBE_DEVICE, cpu by default (v1 forces CPU).
+    # MARCUS_MOLSCRIBE_DEVICE, cpu by default (v1 forces CPU); docker-compose.gpu.yml sets cuda.
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molscribe",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
               "-n", "molscribe@%h", "--loglevel", "INFO"]

@@ -33,11 +33,12 @@ docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -
 The override builds the CUDA images (`VARIANT=cuda`: `marcus-v2-tf:cuda`, `marcus-v2-torch:cuda`;
 the CPU images keep their `:local` tags), reserves the GPU for worker-segment, worker-decimer,
 worker-molnextr and worker-molscribe, and sets their memory budgets: TensorFlow
-`MARCUS_GPU_MEM_MB` 6144 (segment) and 4096 (decimer), torch `MARCUS_TORCH_MEM_FRACTION` 0.09
+`MARCUS_GPU_MEM_MB` 2048 (segment, measured peak under 1 GB) and 4096 (decimer), torch `MARCUS_TORCH_MEM_FRACTION` 0.09
 each (about 2.9 GB of the 32 GB card); the sum stays under 20 GB (deploy test). Each budget can be
 overridden from the environment (`MARCUS_SEGMENT_GPU_MEM_MB`, `MARCUS_DECIMER_GPU_MEM_MB`,
-`MARCUS_MOLNEXTR_TORCH_MEM_FRACTION`, `MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION`). MolScribe keeps
-`MARCUS_MOLSCRIBE_DEVICE=cpu` (v1 runs it on CPU) until a GPU run shows no loss against v1.
+`MARCUS_MOLNEXTR_TORCH_MEM_FRACTION`, `MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION`). MolScribe runs on
+the GPU here (`MARCUS_MOLSCRIBE_DEVICE=cuda`; v1 and the CPU stack use cpu): the D4 fixture judge
+showed no loss (the same SMILES on 205 of 205 crops).
 CUDA library versions: `docker/MODEL_PINS.md`.
 
 Host requirements: NVIDIA driver with CUDA 12.8 support, the NVIDIA Container Toolkit, and the
@@ -99,10 +100,10 @@ switch that did not take fails the unit. It is not installed by anything here. O
   buffering off or `X-Accel-Buffering: no` honoured), and where TLS ends (the owner cookie is
   `Secure`; the browser must see https).
 - The Exclusive_Process setter (`nvidia-v100-setup.sh`, above) must be changed before the reboot test.
-- GPU findings to close before the switch (judges/results/2026-11-17-gpu-session.md):
-  worker-segment cannot start with its TensorFlow memory budget (decimer_segmentation calls
-  `set_memory_growth` at import), and dcgm-exporter exports no GPU metrics as configured (its DCGM
-  host engine refuses to watch fields when not root).
+- GPU finding to close before the switch (judges/results/2026-11-17-gpu-session.md):
+  dcgm-exporter exports no GPU metrics as configured (its DCGM host engine refuses to watch fields
+  when not root). (Fixed in D4 fix round 1: worker-segment now keeps its TensorFlow budget,
+  measured at 2048 MiB; MolScribe runs on cuda.)
 
 ### nginx and api restarts
 

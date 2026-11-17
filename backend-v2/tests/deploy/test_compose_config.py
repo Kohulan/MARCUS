@@ -368,10 +368,12 @@ def test_gpu_override_budget_under_20gb():
     config = _compose_config("docker-compose.yml", GPU)
     services = config["services"]
     env = {name: services[name]["environment"] for name in GPU_SERVICES}
-    assert env["worker-segment"]["MARCUS_GPU_MEM_MB"] == "6144"
+    assert env["worker-segment"]["MARCUS_GPU_MEM_MB"] == "2048"  # D4: peak < 1 GB
     assert env["worker-decimer"]["MARCUS_GPU_MEM_MB"] == "4096"
     assert env["worker-molnextr"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
     assert env["worker-molscribe"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
+    # D4: no loss on the fixture judge, so MolScribe runs on the GPU in the GPU stack
+    assert env["worker-molscribe"]["MARCUS_MOLSCRIBE_DEVICE"] == "cuda"
     budget = int(env["worker-segment"]["MARCUS_GPU_MEM_MB"])
     budget += int(env["worker-decimer"]["MARCUS_GPU_MEM_MB"])
     for name in ("worker-molnextr", "worker-molscribe"):
