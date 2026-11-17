@@ -237,6 +237,92 @@ async def test_curation_molfile_must_parse(app, async_db_session):
     assert (await _curation_row(db, seg)).molfile == good
 
 
+async def test_curation_smiles_cap_matches_the_tools_routes(app, async_db_session):
+    """Review I4: curation SMILES are capped like the tools routes (2000 characters)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    too_long = ".".join(["C"] * 1001)  # 2001 characters, valid SMILES
+    r = await _curate(app, token, seg, {"status": "accepted", "smiles": too_long})
+    assert r.status_code == 422
+    ok = ".".join(["C"] * 1000)  # 1999 characters
+    assert (await _curate(app, token, seg, {"status": "accepted", "smiles": ok})).status_code == 200
+
+
+async def test_curation_molfile_atom_cap(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    big = Chem.MolToMolBlock(Chem.MolFromSmiles(".".join(["C"] * 1001)))
+    assert len(big.encode()) < 200 * 1024
+    r = await _curate(app, token, seg, {"status": "accepted", "molfile": big})
+    assert r.status_code == 422 and "atoms" in json.dumps(r.json()["detail"])
+
+
+async def test_curation_of_a_foreign_segment_is_404_before_any_parse(app, async_db_session):
+    """The owner check runs first: another owner's segment gives the shared 404, even for a
+    body that would not parse (no RDKit work for someone else's segment)."""
+    db = async_db_session
+    alice, _ = await new_owner(db)
+    _, bob_token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    r = await _curate(app, bob_token, seg, {"status": "accepted", "smiles": "C1CC(("})
+    assert r.status_code == 404 and r.json() == {"detail": "not found"}
+
+
+async def test_curation_parse_runs_off_the_event_loop(app, async_db_session, monkeypatch):
+    """RDKit holds the GIL while it parses, so a thread would stall the loop just the same:
+    the parse runs in a separate process (marcus.api.chempool). While a slow parse runs, the
+    loop keeps serving."""
+    import asyncio
+
+    from marcus.api import chempool
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    # warm the pool (process start and RDKit import are not what is measured)
+    assert (await _curate(app, token, seg, {"status": "accepted", "smiles": "CC"})).status_code == 200
+
+    real = chempool.CHEM.run
+
+    async def slow_run(fn, *args):
+        import time
+
+        await real(time.sleep, 0.6)  # stands in for a long parse, in the same pool
+        return await real(fn, *args)
+
+    monkeypatch.setattr(chempool.CHEM, "run", slow_run)
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    t = asyncio.ensure_future(ticker())
+    try:
+        r = await _curate(app, token, seg, {"status": "accepted", "smiles": "CCO"})
+    finally:
+        t.cancel()
+    assert r.status_code == 200
+    assert ticks >= 20  # ~60 ticks of 10 ms while the 0.6 s job ran in the other process
+
+
+def test_curation_check_in_the_worker_process():
+    from marcus.api.chem import curation_error
+
+    assert curation_error("CCO", None) is None
+    assert curation_error("C1CC((", None) == ("smiles", "SMILES could not be parsed")
+    assert curation_error(None, "not a molfile") == ("molfile", "molfile could not be parsed")
+    assert curation_error(None, None) is None
+
+
 # --- predictions --------------------------------------------------------------------------
 
 

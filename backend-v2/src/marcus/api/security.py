@@ -18,6 +18,7 @@ without the security headers.
 import logging
 import math
 import re
+import shutil
 import time
 import uuid
 from collections import deque
@@ -155,7 +156,8 @@ class SecurityMiddleware:
 
 
 def _add_owner_cookie(scope: Scope, headers: MutableHeaders) -> None:
-    """The one place a new owner's cookie is set: on any response (error, file, stream)."""
+    """The one place the owner cookie is set (new or renewed): on any response (error, file,
+    stream)."""
     token = scope.get("state", {}).get(NEW_OWNER_TOKEN)
     if not token:
         return
@@ -303,9 +305,23 @@ async def _owner_limit(request: Request, owner: Owner, scope: str, fail_open: bo
         )
 
 
+def _disk_is_full() -> bool:
+    """Free bytes on the data volume below Settings.min_free_disk_bytes (an unreadable volume
+    counts as full: an upload could not be stored either)."""
+    settings = get_settings()
+    try:
+        return shutil.disk_usage(settings.data_root).free < settings.min_free_disk_bytes
+    except OSError:
+        return True
+
+
 async def upload_limit(request: Request, owner: Owner = Depends(current_owner)) -> None:
-    """10 uploads (papers + images) per owner per minute; fails closed while the breaker is
-    open."""
+    """503 while the data volume is below its free-space floor (new work only: accepted papers
+    go on); then 10 uploads (papers + images) per owner per minute, failing closed while the
+    breaker is open."""
+    if _disk_is_full():
+        log.warning("upload refused: data volume below its free-space floor")
+        raise HTTPException(status_code=503, detail="storage is full, try again later")
     await _owner_limit(request, owner, "upload", fail_open=False)
 
 

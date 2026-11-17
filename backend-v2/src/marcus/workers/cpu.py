@@ -8,18 +8,20 @@ marcus.workers.retention and is registered by the import below.
 
 import logging
 import re
+import shutil
 
 from sqlalchemy import select
 
 from marcus.core.enums import StepKind
 from marcus.core.models import Paper
 from marcus.core.queues import time_limits_for
+from marcus.core.settings import get_settings
 from marcus.core.storage import page_image_path, paper_dir, pdf_path
 from marcus.workers import (
     pdfsafe,
     retention,  # noqa: F401  (registers the purge task in worker-cpu)
 )
-from marcus.workers.runtime import register
+from marcus.workers.runtime import StorageFull, register
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +42,16 @@ def check_pdf(step, session) -> dict:
 
 
 def render_page(step, session) -> dict:
+    """Render one page (pdfsafe child). Below the free-space floor of the data volume nothing is
+    written and the step fails retryable (StorageFull): accepted papers must not fill the disk
+    once uploads are refused."""
+    settings = get_settings()
+    try:
+        free = shutil.disk_usage(settings.data_root).free
+    except OSError:
+        free = 0
+    if free < settings.min_free_disk_bytes:
+        raise StorageFull("data volume below its free-space floor")
     pdfsafe.render_page_png(
         pdf_path(step.paper_id),
         step.page,

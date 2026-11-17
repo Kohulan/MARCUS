@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +17,8 @@ COOKIE_NAME = "marcus_owner"
 COOKIE_MAX_AGE = 30 * 24 * 3600
 COOKIE_PATH = "/api/v2"
 UNKNOWN_IP = "unknown"
-# request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out
+# request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out.
+# Set for a new owner and, to renew the cookie's Max-Age (sliding expiry), for a known one.
 NEW_OWNER_TOKEN = "new_owner_token"
 TOUCH_EVERY = timedelta(seconds=60)  # last_seen_at is written at most this often
 IPV6_RATE_PREFIX = 64  # one IPv6 client usually holds a whole /64
@@ -99,6 +100,55 @@ def owners_from_ip(ip: str):
     return and_(Owner.kind == OwnerKind.BROWSER.value, where)
 
 
+def _used():
+    """SQL condition: the owner was used after the request that created it: it came back with
+    its cookie (last_seen_at moved, see `_touch`) or has a paper or an image job (a cookie-less
+    upload creates both in one request). A new browser's parallel first requests each create
+    an owner, but the browser keeps one cookie: the others are never used, and only the total
+    cap (ip_max_new_sessions_per_hour) counts them."""
+    return or_(
+        Owner.last_seen_at > Owner.created_at,
+        exists().where(Paper.owner_id == Owner.id),
+        exists().where(ImageJob.owner_id == Owner.id),
+    )
+
+
+TOO_MANY_SESSIONS = "Too many new sessions from this address"
+
+
+async def _lock_address(db: AsyncSession, ip: str) -> None:
+    """Serialize owner creation and first use per address bucket (until the commit)."""
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
+
+
+async def _check_first_use(db: AsyncSession, owner: Owner) -> None:
+    """An unused owner coming back for the first time becomes used: refuse (429, as at
+    creation) if its address already has ip_max_new_owners_per_hour used owners created in the
+    last hour. Without this, owners collected unused (only the total cap applies) could all be
+    used later. An owner already used (a cookie-less upload gave it a paper) or created over an
+    hour ago is not counted again. The caller's commit (the touch) ends the lock."""
+    since = datetime.now(UTC) - timedelta(hours=1)
+    if owner.created_at < since:
+        return
+    ip = str(owner.created_ip) if owner.created_ip is not None else UNKNOWN_IP
+    await _lock_address(db, ip)
+    already = (
+        await db.execute(select(func.count()).select_from(Owner).where(Owner.id == owner.id, _used()))
+    ).scalar_one()
+    if already:
+        return
+    used = (
+        await db.execute(
+            select(func.count())
+            .select_from(Owner)
+            .where(owners_from_ip(ip), Owner.created_at >= since, Owner.id != owner.id, _used())
+        )
+    ).scalar_one()
+    if used >= get_settings().ip_max_new_owners_per_hour:
+        await db.rollback()
+        raise HTTPException(status_code=429, detail=TOO_MANY_SESSIONS)
+
+
 def _bearer(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     scheme, _, token = auth.partition(" ")
@@ -107,17 +157,26 @@ def _bearer(request: Request) -> str | None:
     return None
 
 
-async def _touch(db: AsyncSession, owner: Owner) -> None:
-    """Record activity at most once a minute (no write per request)."""
+async def _touch(db: AsyncSession, owner: Owner) -> bool:
+    """Record activity at most once a minute (no write per request). True if it wrote.
+
+    The first return of an owner is always recorded (last_seen_at moves past created_at): that
+    marks it as used for the new-owner limit (`_used`)."""
     now = datetime.now(UTC)
-    if owner.last_seen_at is not None and now - owner.last_seen_at < TOUCH_EVERY:
-        return
+    first_return = owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at
+    if (
+        owner.last_seen_at is not None
+        and not first_return
+        and now - owner.last_seen_at < TOUCH_EVERY
+    ):
+        return False
     owner.last_seen_at = now
     await db.commit()
+    return True
 
 
 def owner_cookie_header(token: str) -> str:
-    """The `Set-Cookie` value for a new browser owner's token."""
+    """The `Set-Cookie` value for a browser owner's token (new, or renewed on use)."""
     response = Response()
     response.set_cookie(
         COOKIE_NAME,
@@ -132,10 +191,15 @@ def owner_cookie_header(token: str) -> str:
 
 
 async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner:
-    """The caller's owner: API key, else browser cookie, else a new browser owner.
+    """The caller's owner: API key, else browser cookie, else a new browser owner (limits per
+    client address and hour: ip_max_new_owners_per_hour used owners, ip_max_new_sessions_per_hour
+    owner rows in all).
 
     A new owner's token goes on `request.state`; SecurityMiddleware sets the cookie on the
     response, whatever it is (an error, a file, a stream), not only on a route's own one.
+    A known browser owner's cookie is sent again with a fresh Max-Age whenever its activity is
+    recorded (at most once a minute), so the cookie expires 30 days after the last use, not
+    after the first visit.
     """
     settings = get_settings()
 
@@ -166,24 +230,30 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
             )
         ).scalar_one_or_none()
         if owner is not None:
-            await _touch(db, owner)
+            if owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at:
+                await _check_first_use(db, owner)  # its first return makes it a used owner
+            if await _touch(db, owner):
+                setattr(request.state, NEW_OWNER_TOKEN, cookie)  # sliding expiry
             return owner
 
     ip = client_ip(request)
     ip_valid = _parse_ip(ip) is not None
     # Serialize per-IP creation: the lock lives until the commit that inserts the owner.
     # An unknown address is one shared bucket (fail closed), not a free pass.
-    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
+    await _lock_address(db, ip)
     since = datetime.now(UTC) - timedelta(hours=1)
-    recent = (
+    total, used = (
         await db.execute(
-            select(func.count())
+            select(func.count(), func.count().filter(_used()))
             .select_from(Owner)
             .where(owners_from_ip(ip), Owner.created_at >= since)
         )
-    ).scalar_one()
-    if recent >= settings.ip_max_new_owners_per_hour:
-        raise HTTPException(status_code=429, detail="Too many new sessions from this address")
+    ).one()
+    if (
+        used >= settings.ip_max_new_owners_per_hour
+        or total >= settings.ip_max_new_sessions_per_hour
+    ):
+        raise HTTPException(status_code=429, detail=TOO_MANY_SESSIONS)
 
     token = new_token()
     owner = Owner(

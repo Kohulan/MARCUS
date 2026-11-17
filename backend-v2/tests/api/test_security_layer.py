@@ -626,6 +626,7 @@ async def test_unknown_peers_share_one_new_owner_bucket(app):
     for i in range(10):
         async with client(app, (f"peer-{i}", 1)) as c:
             assert (await c.get("/api/v2/papers")).status_code == 200
+            assert (await c.get("/api/v2/papers")).status_code == 200  # used: it came back
     async with client(app, ("another-name", 1)) as c:
         r = await c.get("/api/v2/papers")
     assert r.status_code == 429
@@ -677,6 +678,7 @@ async def test_ipv6_new_owner_limit_is_per_64(app):
     for i in range(10):
         async with client(app, (f"2001:db8:5:6::{i + 1:x}", 1)) as c:
             assert (await c.get("/api/v2/papers")).status_code == 200
+            assert (await c.get("/api/v2/papers")).status_code == 200  # used: it came back
     async with client(app, ("2001:db8:5:6:abcd::1", 1)) as c:
         r = await c.get("/api/v2/papers")
     assert r.status_code == 429

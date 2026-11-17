@@ -185,6 +185,12 @@ services:
     # proxies = nginx). --forwarded-allow-ips= (empty) means uvicorn trusts no peer and never
     # rewrites the socket peer from X-Forwarded-For: gunicorn's default 127.0.0.1,::1 would let
     # an in-container loopback peer pick its client IP (R19). The app must see the real peer.
+    # Starlette spools uploads over 1 MB to /tmp (tmpfs = memory): sized, and inside mem_limit
+    # (with 2 workers, their chem processes and image decodes), so a flood of slow uploads
+    # fails those uploads instead of filling the host's memory (review I7).
+    tmpfs:
+      - /tmp:size=1g
+    mem_limit: 6g
     command:
       - gunicorn
       - marcus.api.main:create_app(json_logs=True)
@@ -392,14 +398,24 @@ services:
     image: nginxinc/nginx-unprivileged:1.27-alpine
     restart: unless-stopped
     read_only: true
+    # Request bodies over 1 MB spool to /tmp/client_temp (tmpfs = memory): sized and inside
+    # mem_limit; nginx.conf also caps connections and concurrent uploads per address.
     tmpfs:
-      - /tmp
+      - /tmp:size=1g
+    mem_limit: 1536m
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx-edge.sh:/docker-entrypoint.d/25-marcus-edge.sh:ro
+    # Read by docker/nginx-edge.sh at start: per-address caps on requests and uploads in progress.
+    environment:
+      MARCUS_NGINX_CONN_PER_IP: ${MARCUS_NGINX_CONN_PER_IP:-64}
+      MARCUS_NGINX_UPLOADS_PER_IP: ${MARCUS_NGINX_UPLOADS_PER_IP:-4}
+      # Switch day: the outer proxy's address(es); empty = off (README, docker/nginx-edge.sh).
+      MARCUS_REAL_IP_FROM: ${MARCUS_REAL_IP_FROM:-}
     ports:
       - "127.0.0.1:18090:8080"
     # egress: a published port needs a non-internal network.

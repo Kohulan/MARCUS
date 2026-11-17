@@ -53,10 +53,9 @@ def _monotonic() -> float:
 
 def inspect_live_queues() -> set[str]:
     """Names of the queues that at least one live worker consumes (blocking broadcast)."""
-    from marcus.core.celery_app import celery_app
+    from marcus.core.celery_app import live_queue_names
 
-    replies = celery_app.control.inspect(timeout=INSPECT_TIMEOUT_S).active_queues() or {}
-    return {q["name"] for queues in replies.values() for q in (queues or []) if q.get("name")}
+    return live_queue_names(INSPECT_TIMEOUT_S)
 
 
 class LiveQueues:

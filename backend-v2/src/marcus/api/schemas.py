@@ -6,11 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from marcus.api.chem import parse_molfile, parse_smiles
 from marcus.core.enums import Engine
 
 MAX_MOLFILE_BYTES = 200 * 1024
-MAX_SMILES_CHARS = 10_000
+MAX_SMILES_CHARS = 2000  # as the tools routes; RDKit parses run in marcus.api.chempool
 MAX_NOTE_CHARS = 2000
 
 CurationStatus = Literal["unchecked", "accepted", "rejected"]
@@ -128,19 +127,14 @@ class CurationIn(BaseModel):
     def _molfile_size(cls, value: str | None) -> str | None:
         if value is not None and len(value.encode("utf-8")) > MAX_MOLFILE_BYTES:
             raise ValueError(f"molfile must be at most {MAX_MOLFILE_BYTES} bytes")
-        if value is not None and parse_molfile(value) is None:
-            raise ValueError("molfile could not be parsed")
         return value
 
     @field_validator("smiles")
     @classmethod
-    def _smiles_parses(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if parse_smiles(value) is None:
-            raise ValueError("SMILES could not be parsed")
-        return value
+    def _smiles_strip(cls, value: str | None) -> str | None:
+        # Whether RDKit can read the SMILES / molfile is checked by the route, after the owner
+        # check and outside the event loop (marcus.api.chem.curation_error).
+        return value.strip() if value is not None else None
 
 
 class QueuePaper(BaseModel):

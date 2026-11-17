@@ -1,4 +1,8 @@
-"""Small RDKit helpers for the API (validation and export). RDKit's log spam is blocked."""
+"""Small RDKit helpers for the API (validation and export). RDKit's log spam is blocked.
+
+RDKit holds the GIL while it parses, so the API never calls these on its event loop or in a
+thread: request-time calls go through marcus.api.chempool (a separate process).
+"""
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -19,6 +23,24 @@ def parse_molfile(molfile: str) -> Chem.Mol | None:
         return None
     _block = BlockLogs()  # noqa: F841
     return Chem.MolFromMolBlock(molfile, sanitize=True)
+
+
+MAX_CURATION_ATOMS = 1000  # bounds the parse time of one curated molfile (~0.1 s)
+
+
+def curation_error(smiles: str | None, molfile: str | None) -> tuple[str, str] | None:
+    """(field, message) for the first curated value RDKit refuses, else None. CPU-bound: run
+    it in marcus.api.chempool."""
+    if smiles is not None and parse_smiles(smiles) is None:
+        return "smiles", "SMILES could not be parsed"
+    if molfile is not None:
+        _block = BlockLogs()  # noqa: F841
+        raw = Chem.MolFromMolBlock(molfile, sanitize=False)  # cheap; counts atoms first
+        if raw is not None and raw.GetNumAtoms() > MAX_CURATION_ATOMS:
+            return "molfile", f"molfile must have at most {MAX_CURATION_ATOMS} atoms"
+        if raw is None or parse_molfile(molfile) is None:
+            return "molfile", "molfile could not be parsed"
+    return None
 
 
 def mol_for_sdf(smiles: str | None, molfile: str | None) -> Chem.Mol | None:
