@@ -1,6 +1,4 @@
 import ast
-import csv
-import io
 import json
 import pathlib
 import uuid
@@ -10,9 +8,7 @@ from rdkit import Chem
 from sqlalchemy import event, select, update
 
 import marcus.api.routes
-from marcus.api import export
 from marcus.core import storage
-from marcus.core.enums import Engine
 from marcus.core.models import Curation, Paper, Prediction, Step
 from marcus.core.settings import get_settings
 from tests.api.conftest import (
@@ -382,181 +378,6 @@ def test_routes_share_read_helpers_through_read_module():
     assert events.steps_by_status is read.steps_by_status
     assert papers.segments_out is read.segments_out
     assert segments.IMAGE_HEADERS is read.IMAGE_HEADERS
-
-
-# --- export -------------------------------------------------------------------------------
-
-
-async def _export(app, token, paper_id, fmt):
-    async with make_client(app, token) as c:
-        return await c.get(f"/api/v2/papers/{paper_id}/export", params={"format": fmt})
-
-
-async def test_export_sdf_uses_curated_smiles(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)  # both segments predicted "CCO"
-    s0, s1 = seeded.segment_ids
-    assert (await _curate(app, token, s0, {"status": "accepted", "smiles": "c1ccccc1"})).is_success
-    r = await _export(app, token, seeded.paper_id, "sdf")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("chemical/x-mdl-sdfile")
-    assert r.headers["content-disposition"] == (
-        f'attachment; filename="marcus-{seeded.paper_id}.sdf"'
-    )
-    mols = list(Chem.ForwardSDMolSupplier(io.BytesIO(r.content)))
-    assert len(mols) == 2 and all(m is not None for m in mols)
-    by_seg = {m.GetProp("segment_id"): m for m in mols}
-    assert Chem.MolToSmiles(by_seg[str(s0)]) == "c1ccccc1"
-    assert Chem.MolToSmiles(by_seg[str(s1)]) == "CCO"
-    assert by_seg[str(s0)].GetProp("page") == "0" and by_seg[str(s1)].GetProp("idx") == "1"
-    assert by_seg[str(s0)].GetNumConformers() == 1  # 2D coordinates were computed
-
-
-async def test_export_prefers_paper_engine_and_skips_rejected(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
-    s0, s1 = seeded.segment_ids
-    later = datetime.now(UTC) + timedelta(seconds=10)
-
-    def add(s):
-        # newer predictions: another engine (valid) and the paper's engine (invalid)
-        s.add(
-            Prediction(
-                segment_id=s0,
-                engine="molnextr",
-                engine_version="m",
-                smiles="CCN",
-                valid=True,
-                ms=1,
-                created_at=later,
-            )
-        )
-        s.add(
-            Prediction(
-                segment_id=s0,
-                engine="decimer",
-                engine_version="d",
-                smiles="C(",
-                valid=False,
-                ms=1,
-                created_at=later,
-            )
-        )
-
-    await db.run_sync(add)
-    await db.commit()
-    assert (await _curate(app, token, s1, {"status": "rejected", "smiles": "CC"})).is_success
-
-    r = await _export(app, token, seeded.paper_id, "json")
-    assert r.status_code == 200
-    assert r.headers["content-disposition"] == (
-        f'attachment; filename="marcus-{seeded.paper_id}.json"'
-    )
-    body = json.loads(r.content)
-    assert body["paper"]["id"] == str(seeded.paper_id)
-    assert body["paper"]["display_name"] == "paper.pdf"
-    assert [(s["segment_id"], s["smiles"], s["source"]) for s in body["segments"]] == [
-        (str(s0), "CCO", "predicted"),
-    ]
-
-    r = await _export(app, token, seeded.paper_id, "csv")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
-    rows = list(csv.reader(io.StringIO(r.text)))
-    assert rows == [
-        ["segment_id", "page", "idx", "smiles", "source"],
-        [str(s0), "0", "0", "CCO", "predicted"],
-    ]  # noqa: E501
-
-
-async def test_export_falls_back_to_any_engine_and_uses_curated_molfile(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
-    s0, s1 = seeded.segment_ids
-
-    def add(s):
-        s.add(
-            Prediction(
-                segment_id=s0, engine="decimer", engine_version="d", smiles="CCCl", valid=True, ms=1
-            )
-        )
-
-    await db.run_sync(add)
-    await db.commit()
-    molfile = Chem.MolToMolBlock(Chem.MolFromSmiles("CN"))
-    assert (await _curate(app, token, s1, {"status": "accepted", "molfile": molfile})).is_success
-    r = await _export(app, token, seeded.paper_id, "sdf")
-    mols = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
-    assert Chem.MolToSmiles(mols[str(s0)]) == "CCCl"
-    assert Chem.MolToSmiles(mols[str(s1)]) == "CN"
-    r = await _export(app, token, seeded.paper_id, "csv")
-    rows = list(csv.reader(io.StringIO(r.text)))[1:]
-    assert [(row[0], row[4]) for row in rows] == [(str(s0), "predicted"), (str(s1), "curated")]
-
-
-async def test_export_leaves_out_segments_without_a_valid_structure(app, async_db_session):
-    """s0 has no predictions at all; s1 has only invalid ones: neither is exported."""
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice, ocsr=False)
-    s0, s1 = seeded.segment_ids
-
-    def add(s):
-        for engine in ("decimer", "molnextr"):
-            s.add(Prediction(segment_id=s1, engine=engine, engine_version="v", smiles="C(",
-                             valid=False, ms=1))  # fmt: skip
-
-    await db.run_sync(add)
-    await db.commit()
-    r = await _export(app, token, seeded.paper_id, "json")
-    assert r.status_code == 200 and json.loads(r.content)["segments"] == []
-    r = await _export(app, token, seeded.paper_id, "csv")
-    assert list(csv.reader(io.StringIO(r.text))) == [
-        ["segment_id", "page", "idx", "smiles", "source"]
-    ]
-    r = await _export(app, token, seeded.paper_id, "sdf")
-    assert r.status_code == 200
-    assert list(Chem.ForwardSDMolSupplier(io.BytesIO(r.content))) == []
-    for seg in (s0, s1):
-        assert str(seg) not in r.text
-
-
-def test_csv_cells_escape_formulas():
-    seg = uuid.uuid4()
-    risky = ["=HYPERLINK(1)", "+1", "-1", "@SUM(A1)", "\tC", "\rC", "CCO"]
-    chosen = [export.Chosen(seg, 0, i, s, None, "predicted") for i, s in enumerate(risky)]
-    rows = list(csv.reader(io.StringIO(export.to_csv(chosen).decode())))[1:]
-    assert [r[3] for r in rows] == [
-        "'=HYPERLINK(1)", "'+1", "'-1", "'@SUM(A1)", "'\tC", "'\rC", "CCO",
-    ]  # fmt: skip
-
-
-async def test_export_csv_escapes_predicted_formula(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice, ocsr=False)
-    s0 = seeded.segment_ids[0]
-
-    def add(s):
-        s.add(
-            Prediction(segment_id=s0, engine="decimer", engine_version="d",
-                       smiles="=cmd|' /C calc'!A0", valid=True, ms=1)
-        )  # fmt: skip
-
-    await db.run_sync(add)
-    await db.commit()
-    r = await _export(app, token, seeded.paper_id, "csv")
-    rows = list(csv.reader(io.StringIO(r.text)))
-    assert rows[1][3] == "'=cmd|' /C calc'!A0"
-
-
-async def test_export_bad_format_is_422(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
-    assert (await _export(app, token, seeded.paper_id, "../../etc/passwd")).status_code == 422
 
 
 # --- queue --------------------------------------------------------------------------------

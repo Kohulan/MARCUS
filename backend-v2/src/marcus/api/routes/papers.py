@@ -226,13 +226,14 @@ async def paper_text(
 async def export_paper(
     paper_id: uuid.UUID,
     format: export.ExportFormat = Query("json"),
+    status: export.ExportStatus | None = Query(None),
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
-    content = await CHEM.run(export.build, format, paper, segments, curations, predictions)
+    content = await CHEM.run(export.build, format, paper, segments, curations, predictions, status)
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],
