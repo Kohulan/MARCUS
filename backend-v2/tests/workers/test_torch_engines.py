@@ -73,6 +73,7 @@ def stubs(monkeypatch, tmp_path):
 
     class Singleton:
         instance = None
+        device_type = "cpu"  # torch.device(...).type of the model's device
         device_name = "CPU"
 
         @classmethod
@@ -83,7 +84,7 @@ def stubs(monkeypatch, tmp_path):
 
         @classmethod
         def get_device(cls):
-            return "cpu", cls.device_name
+            return types.SimpleNamespace(type=cls.device_type), cls.device_name
 
     def get_predictions(*args, **kwargs):
         raise AssertionError("get_predictions (reload on error) must not be used")
@@ -269,7 +270,7 @@ def test_molnextr_cpu_fallback_with_cuda_visible_is_refused(stubs, monkeypatch):
     stubs.bake("molnextr", "molnextr_best.pth")
     monkeypatch.setattr(stubs.singleton, "device_name", "CPU (fallback)")
     stubs.torch.cuda.is_available = lambda: True
-    with pytest.raises(RuntimeError, match="fell back to CPU"):
+    with pytest.raises(RuntimeError, match="not on the GPU although CUDA is visible"):
         molnextr.MolnextrEngine().load()
     assert molnextr._model is None
 
@@ -285,6 +286,27 @@ def test_molnextr_cpu_fallback_aborts_the_worker_at_preload(stubs, monkeypatch):
     monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
     base.preload_engines(sender=None)
     assert aborted == [True]
+
+
+def test_molnextr_cpu_after_a_failed_cuda_smoke_test_is_refused(stubs, monkeypatch):
+    """After a failed CUDA smoke test MolNexTR's device name is plain "CPU", not "CPU
+    (fallback)": the guard reads the device type, not the name."""
+    stubs.bake("molnextr", "molnextr_best.pth")
+    monkeypatch.setattr(stubs.singleton, "device_type", "cpu")
+    monkeypatch.setattr(stubs.singleton, "device_name", "CPU")
+    stubs.torch.cuda.is_available = lambda: True
+    with pytest.raises(RuntimeError, match="not on the GPU although CUDA is visible"):
+        molnextr.MolnextrEngine().load()
+    assert molnextr._model is None
+
+
+def test_molnextr_on_cuda_with_cuda_visible_is_fine(stubs, monkeypatch):
+    stubs.bake("molnextr", "molnextr_best.pth")
+    monkeypatch.setattr(stubs.singleton, "device_type", "cuda")
+    monkeypatch.setattr(stubs.singleton, "device_name", "NVIDIA GPU (Tesla V100)")
+    stubs.torch.cuda.is_available = lambda: True
+    molnextr.MolnextrEngine().load()
+    assert molnextr._model is not None
 
 
 def test_molnextr_cpu_without_cuda_is_fine(stubs):

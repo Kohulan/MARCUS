@@ -14,9 +14,11 @@ models (OOM under MARCUS_TORCH_MEM_FRACTION) or meets a sticky CUDA error, after
 `_initialize_model` silently falls back to CPU for good. Here an error reaches the step, whose
 retry-once handles it.
 
-Device as in v1: the singleton picks CUDA when torch sees a GPU, else CPU. If its model setup
-fails on the GPU, the library falls back to CPU ("CPU (fallback)"); with CUDA visible that load
-is refused (the worker stops; compose restarts it) instead of serving silently from the CPU.
+Device as in v1: the singleton picks CUDA when torch sees a GPU, else CPU. The library falls
+back to CPU silently (a failed GPU model setup: "CPU (fallback)"), and its names are not reliable
+(after a failed CUDA smoke test the name is plain "CPU" whatever the device). So the guard reads
+the type of the device the model was built on: with CUDA visible, anything but "cuda" is refused
+(the worker stops; compose restarts it) instead of serving silently from the CPU.
 
 The checkpoint is baked into the image where the singleton looks first
 (`pystow.join("molnextr")/molnextr_best.pth`, PYSTOW_HOME=/opt/pystow); a missing file stops the
@@ -45,8 +47,6 @@ CHECKPOINT = "molnextr_best.pth"  # MolNexTRSingleton._initialize_model
 
 _lock = threading.Lock()
 _model = None  # MolNexTR.model.molnextr instance held by MolNexTRSingleton
-
-FALLBACK_DEVICE = "CPU (fallback)"  # MolNexTRSingleton's name after a failed GPU setup
 
 
 def checkpoint_path() -> Path:
@@ -83,9 +83,10 @@ def _load() -> None:
         )
         instance = module.MolNexTRSingleton.get_instance()
         device, device_name = module.MolNexTRSingleton.get_device()
-        if device_name.startswith(FALLBACK_DEVICE) and torch.cuda.is_available():
+        if device.type != "cuda" and torch.cuda.is_available():
             raise RuntimeError(
-                "MolNexTR fell back to CPU although CUDA is visible (GPU model setup failed)"
+                f"MolNexTR model is not on the GPU although CUDA is visible ({device_name}: "
+                "CUDA smoke test or GPU model setup failed)"
             )
         _model = instance
         log.info(
