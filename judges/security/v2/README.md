@@ -7,7 +7,7 @@ that replaced the v1 one. Every test asserts the SAFE behaviour.
 
 **No vacuous passes.** Each test first calls its v2 route with a valid request and asserts a 2xx
 (`helpers.expect_ok`, "EXISTENCE CHECK FAILED ..."), inside the test body, so a missing route
-fails the test. Run against v1 (which has no `/api/v2`), all 18 runnable tests fail at that check.
+fails the test. Run against v1 (which has no `/api/v2`), all 19 runnable tests fail at that check.
 
 ## Running
 
@@ -19,14 +19,15 @@ MARCUS_BACKEND_URL=http://localhost:18090 MARCUS_FS_PROBE=docker:marcus-v2-api-1
     uv run pytest security/v2 -v
 ```
 
-Expected: 18 passed, 1 skipped (`needs_frontend`). About 4 minutes, most of it the fake pipeline
+Expected: 19 passed, 1 skipped (`needs_frontend`). About 6 minutes, most of it the fake pipeline
 (one paper is about 35 s, mostly docling) and the XFF test, which waits for the start of a
 rate-limit window and, after its burst, for the next one.
 
 - `common/target.py` picks the URL and refuses production hosts (the `backend` fixture).
 - `MARCUS_FS_PROBE=docker:<v2 api container>` is required (the v1 `fs_probe.py`). Beyond file
   checks, the docker probe is used to read the API's effective limits (`effective_settings`) and
-  to send raw requests straight to the API inside its container (`direct_get_many`,
+  to list the API's real route table (`route_table`), to burst straight at the API from an
+  untrusted peer (`direct_burst`), and to send raw requests straight to the API inside its container (`direct_get_many`,
   `127.0.0.1:8000`), so nginx's own URI handling cannot be what stops an attack.
 - Owner cookie: the server issues `marcus_owner` as HttpOnly, SameSite=Strict, Path=/api/v2 and
   Secure. httpx does not send a Secure cookie over `http://localhost`, so `helpers.V2Owner`
@@ -35,6 +36,14 @@ rate-limit window and, after its burst, for the next one.
   here: v1's `/health` does not exist on v2, and a missing v2 route must fail each test's
   existence check, not error the session. `__init__.py` makes the files `v2.test_*`, so they
   do not clash with the v1 files of the same name.
+- Direct bursts go to the api container's own network address, not 127.0.0.1: gunicorn runs
+  with `--forwarded-allow-ips=127.0.0.1`, so uvicorn itself rewrites a loopback peer from
+  X-Forwarded-For before the app sees it (measured: 6104 spoofed loopback requests, no 429;
+  the same without X-Forwarded-For, 429 at 6001). Only processes inside the container can
+  connect from loopback, so this is not reachable from outside.
+- Uploads are retried (twice, 6 s apart) on 503 `{"detail":"service unavailable"}`: one Redis
+  timeout (0.5 s) opens the limiter's circuit breaker, and uploads fail closed for 5 s by design.
+  Seen once in these runs (one Redis timeout in the ip scope, no load from the judge at the time).
 - Each run creates a few dozen owners from one IP. That is far under the fake stack's raised
   1000 new owners per hour, but over the real 10. Against a stack with real limits, expect 429s
   (which is the designed limit working, not a judge result).
@@ -48,12 +57,12 @@ rate-limit window and, after its burst, for the next one.
 | 3 | `test_upload_filename_traversal::test_pdf_upload_filename_cannot_escape_pdf_dir[extract_text]` | `POST /latest/docling_conversion/extract_text` | `...[store-upload]` | `POST /api/v2/papers` (the API stores the upload) | 4 escaping filenames (`../`, absolute, `..\`, `../data/`): no file named with the canary under `/tmp` or `/data`; `display_name` is a bare basename |
 | 4 | `test_upload_filename_traversal::test_pdf_upload_filename_cannot_escape_pdf_dir[extract_doi]` | `POST /latest/decimer/extract_doi` | `...[doi-pipeline]` | `POST /api/v2/papers` + the `check_pdf`, `docling`, `doi` worker steps (checked via `GET /papers/{id}/steps`) | the same, after the full pipeline ran |
 | 5 | `test_upload_filename_traversal::test_ocsr_upload_filename_cannot_escape_images_dir` | `POST /latest/ocsr/generate_smiles` (`image_file`) | same | `POST /api/v2/images` (fake OCSR runs to `done`) | the same for image jobs |
-| 6 | `test_ocsr_image_path_oracle::test_ocsr_image_path_is_not_an_existence_oracle` | `POST /latest/ocsr/generate_smiles` (`image_path` form field) | same | `POST /api/v2/segments/{id}/predictions`, `POST /api/v2/images` | another owner's segment gets the byte-identical 404 as a random id; an `image_path` field is ignored (existing vs missing path: identical answers, with and without a file) |
+| 6 | `test_ocsr_image_path_oracle::test_ocsr_image_path_is_not_an_existence_oracle` | `POST /latest/ocsr/generate_smiles` (`image_path` form field) | same | `POST /api/v2/segments/{id}/predictions`, `POST /api/v2/images` + `GET /api/v2/images/{id}` | another owner's segment gets the byte-identical 404 as a random id; an `image_path` field is ignored: identical answers without a file, and with a file the FINISHED jobs (status, error, prediction) for an existing and a missing path both equal a plain upload of the same image |
 | 7 | `test_highlighted_page_traversal::test_highlighted_page_pdf_filename_is_not_an_existence_oracle` | `GET /latest/decimer/get_highlighted_page/{f}?pdf_filename=` | same | `GET /api/v2/papers/{id}/pages/{n}/image` | existing vs missing target, byte-identical answers for: `pdf_filename` query, traversal in `n`, traversal in the paper id, pages past the end (via nginx and direct); another owner's existing page vs a random id give the same 404 |
 | 8 | `test_rate_limit_and_session_bypass::test_burst_requests_eventually_get_rate_limited` | `GET /latest/decimer/health` burst | same | `POST /api/v2/tools/smiles-to-molfile` burst (tools 60/min per owner) | 429 `{"detail": "rate limited"}` with `Retry-After` within 2×60+1 calls; another owner is not limited by it |
 | 9 | `test_rate_limit_and_session_bypass::test_api_calls_without_any_session_are_rejected` | `GET /latest/docling_conversion/list_pdfs` with no session | same | `GET /api/v2/papers` with no credential, with a forged cookie, with a forged `mk_` key | v2 does not 401 a credential-less call by design: it becomes a NEW empty owner (cookie HttpOnly, SameSite=Strict, Path=/api/v2, Secure), sees nothing of anyone, never shares an owner with another credential-less call; a forged cookie is a new owner; a forged API key is 401 |
 | 10 | `test_no_auth_session_and_listings::test_session_cannot_be_removed_by_an_unrelated_caller` | `DELETE /session/remove/{id}` | same | `DELETE /api/v2/papers/{id}` | another owner and a credential-less caller get the byte-identical 404 as a random id; the paper is untouched; a deleted paper gets the same 404 as a missing one |
-| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | (none: purge and key revocation are the `marcus` CLI only) + `DELETE /api/v2/papers/{id}` for the existence check | 11 global/admin shapes (`/session/reset`, `DELETE /api/v2/papers`, `/purge`, `/admin/purge`, `/apikeys`, `/owners` ...) are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
+| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | the API's real route table (`create_app()` inside the api container) + `DELETE /api/v2/papers/{id}` for the existence check | the route table equals the reviewed allowlist (22 routes; a new route fails until reviewed and listed); every route but `GET /health` and `GET /ready` depends on `current_owner`; 11 global/admin shapes are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
 | 12 | `test_no_auth_session_and_listings::test_uploaded_pdf_is_not_listed_to_an_unrelated_caller` | `GET /latest/docling_conversion/list_pdfs` | same | `GET /api/v2/papers`, `GET /api/v2/queue`, and 12 per-resource routes incl. the new `GET /api/v2/papers/{id}/steps` (R18), `/events`, `/text`, `/export`, `/segments/{id}/image`, `POST .../predictions`, `PUT .../curation`, `GET /api/v2/images/{id}` | another owner and a credential-less caller: not listed, not in `/queue`, and every route gives the byte-identical 404 as a random id |
 | 13 | `test_upload_size_limit::test_oversized_image_upload_is_rejected_by_the_backend_directly` | `POST /latest/ocsr/generate_smiles` 20 MB + 1 | same | `POST /api/v2/images` and `POST /api/v2/papers`, 20 MiB + 1 byte | the API itself answers 413 `{"detail": "File too large"}` (JSON, so not nginx's HTML 413; nginx's cap is 21 MiB) |
 | 14 | `test_stored_xss_frontend::test_extracted_text_html_does_not_execute_in_browser` | the Vue UI (`v-html`) | same, **skipped** (`needs_frontend`) | the React UI (does not exist yet) | browser flow: no script from extracted text runs |
@@ -61,7 +70,7 @@ rate-limit window and, after its burst, for the next one.
 | 15 | `test_security_headers::test_frontend_sends_content_security_policy` | frontend `GET /` (:18080) | same | the v2 edge (:18090): 200 JSON, 200 PNG, owned 404, unknown-route 404, 422, nginx's own 404 | CSP on all |
 | 16 | `test_security_headers::test_frontend_sends_nosniff` | same | same | same | `X-Content-Type-Options: nosniff` on all |
 | 17 | `test_security_headers::test_frontend_restricts_framing` | same | same | same | `frame-ancestors` or `X-Frame-Options` DENY/SAMEORIGIN on all |
-| new | (v1 README: "worth a judge test once claim 5 is fixed") | | `test_rate_limit_and_session_bypass::test_xff_spoof_cannot_escape_rate_limit` | every counted route (burst to an unknown `/api/v2` path, then `GET /api/v2/papers`) | a burst with a different spoofed `X-Forwarded-For`/`X-Real-IP`/`CF-Connecting-IP`/`True-Client-IP`/`Forwarded` per request, and no cookie, still hits the per-IP limit within limit + 9 requests in one window |
+| new | (v1 README: "worth a judge test once claim 5 is fixed") | | `test_rate_limit_and_session_bypass::test_xff_spoof_cannot_escape_rate_limit[via-nginx]` and `[direct-to-api]` | every counted route (burst to an unknown `/api/v2` path) | a burst with a different spoofed `X-Forwarded-For`/`X-Real-IP`/`CF-Connecting-IP`/`True-Client-IP`/`Forwarded` per request, and no cookie, still hits the per-IP limit in one window: through nginx within limit + 9, and straight to the API from an untrusted peer on the Docker network at exactly limit + 1 (the API's own trusted-proxy check, which nginx's X-Forwarded-For rewrite would otherwise hide) |
 
 ## Which limits the tests meet
 

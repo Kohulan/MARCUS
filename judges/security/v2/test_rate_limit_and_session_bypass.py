@@ -16,8 +16,12 @@ SameSite=Strict cookie) that owns nothing; a bad API key is 401.
 docker-compose.fake.yml raises the per-IP limits (single-IP e2e): ip 6000/min, 1000 new owners
 per hour, 100 active papers. The burst test meets the real tools limit (60, not raised); the
 XFF test reads the API's effective ip limit and goes past it, so it is not vacuous on either
-stack. The real 300/min, 10 new owners/hour and 6 active papers per IP are unit-tested in
-backend-v2/tests/api (test_security_layer.py, test_owner_auth.py).
+stack. It runs twice: through nginx (the deployed edge, which overwrites X-Forwarded-For but
+passes X-Real-IP / Forwarded / ... through), and straight to the API from an untrusted peer
+inside the Docker network (the container's own address), so the API's own trusted-proxy check
+is what must hold, not nginx's header rewrite. The real 300/min, 10 new owners/hour and 6
+active papers per IP are unit-tested in backend-v2/tests/api (test_security_layer.py,
+test_owner_auth.py).
 """
 from __future__ import annotations
 
@@ -34,6 +38,7 @@ from v2.helpers import (
     API,
     OWNER_COOKIE,
     describe,
+    direct_burst,
     effective_settings,
     expect_ok,
     upload_paper,
@@ -144,15 +149,32 @@ def ip_bucket_restored():
         time.sleep(WINDOW_S - (time.time() % WINDOW_S) + 1)
 
 
-def test_xff_spoof_cannot_escape_rate_limit(new_owner, fs_probe, ip_bucket_restored):
+@pytest.mark.parametrize("route", ["via-nginx", "direct-to-api"])
+def test_xff_spoof_cannot_escape_rate_limit(new_owner, fs_probe, ip_bucket_restored, route):
     owner = new_owner()
     expect_ok(owner.get(f"{API}/papers"), "GET /api/v2/papers")
     limit = effective_settings(fs_probe, "rate_limit_ip_per_min")["rate_limit_ip_per_min"]
     budget = limit + 50  # past the limit, whatever else counted in this window
+    threads = 8
 
     _wait_for_window_start()
     ip_bucket_restored["burst_started"] = True
     window = int(time.time()) // WINDOW_S
+
+    if route == "direct-to-api":
+        res = direct_burst(fs_probe, f"{API}/judge-xff-probe", budget, threads)
+        crossed = res["window_end"] != res["window_start"]
+        first = res["first_429"]
+        assert first is not None, (
+            f"{res['sent']} requests from untrusted peer {res['host']} straight to the API, each "
+            f"with a different spoofed X-Forwarded-For / X-Real-IP / Forwarded, were never rate "
+            f"limited (effective ip limit {limit}/min; status counts {res['codes']}"
+            + ("; the burst crossed a window boundary, rerun" if crossed else "") + ")")
+        assert first["body"] == '{"detail":"rate limited"}', first
+        assert first["at"] <= limit + 1, (first, limit)  # one peer, its own bucket: exact
+        print(f"direct: ip limit {limit}/min, first 429 at request {first['at']}")
+        return
+
     stop = threading.Event()
     lock = threading.Lock()
     sent, first_429 = [0], [None]
@@ -169,7 +191,6 @@ def test_xff_spoof_cannot_escape_rate_limit(new_owner, fs_probe, ip_bucket_resto
                     first_429[0] = resp
                     stop.set()
 
-    threads = 8
     with ThreadPoolExecutor(threads) as pool:
         for f in [pool.submit(worker, budget // threads + 1) for _ in range(threads)]:
             f.result()
@@ -182,7 +203,7 @@ def test_xff_spoof_cannot_escape_rate_limit(new_owner, fs_probe, ip_bucket_resto
         + ("; the burst crossed a window boundary, rerun" if crossed else "") + ")")
     assert limited.json() == {"detail": "rate limited"}, describe(limited)
     assert sent[0] <= limit + 1 + threads, (sent[0], limit)
-    print(f"ip limit {limit}/min: first 429 after {sent[0]} spoofed requests in one window")
+    print(f"via nginx: ip limit {limit}/min, first 429 after {sent[0]} spoofed requests")
 
     # Still limited for a brand-new caller with yet another spoofed address, on a real route.
     resp = new_owner(anonymous=True).get(f"{API}/papers", headers=_spoof_headers())

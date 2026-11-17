@@ -118,9 +118,26 @@ def judge_png(size: int = 64) -> bytes:
     return minimal_png(size)
 
 
+# The upload limiter fails CLOSED: after one Redis timeout (0.5 s) its circuit breaker answers
+# every upload 503 {"detail": "service unavailable"} for 5 s (marcus.api.security). That is an
+# availability answer, not a security result, so an upload is retried after the breaker window.
+BREAKER_RETRY_S = 6.0
+BREAKER_RETRIES = 2
+
+
+def _upload(owner: V2Owner, path: str, **kw) -> httpx.Response:
+    for _ in range(BREAKER_RETRIES):
+        resp = owner.post(path, **kw)
+        if not (resp.status_code == 503 and resp.content == b'{"detail":"service unavailable"}'):
+            return resp
+        time.sleep(BREAKER_RETRY_S)
+    return owner.post(path, **kw)
+
+
 def post_paper(owner: V2Owner, *, filename="judge.pdf", data: bytes | None = None,
                engine="fake", ocsr="auto") -> httpx.Response:
-    return owner.post(
+    return _upload(
+        owner,
         f"{API}/papers",
         files={"file": (filename, data if data is not None else judge_pdf(), "application/pdf")},
         data={"engine": engine, "ocsr": ocsr},
@@ -134,7 +151,8 @@ def upload_paper(owner: V2Owner, *, what="POST /api/v2/papers", **kw) -> str:
 
 def post_image(owner: V2Owner, *, filename="judge.png", data: bytes | None = None,
                engine="fake", extra: dict | None = None) -> httpx.Response:
-    return owner.post(
+    return _upload(
+        owner,
         f"{API}/images",
         files={"file": (filename, data if data is not None else judge_png(), "image/png")},
         data={"engine": engine, **(extra or {})},
@@ -261,3 +279,101 @@ def direct_get_many(fs_probe, raw_paths: list[str], cookie: str | None = None) -
         raise ProbeError(f"direct API request in {probe.container} failed: {r.stderr[-500:]}")
     return [DirectResponse(d["status"], d["ctype"], base64.b64decode(d["body"]))
             for d in json.loads(r.stdout)]
+
+
+# --- spoofed-header burst straight to the API ----------------------------------------------
+
+_BURST = r'''
+import http.client, json, random, socket, sys, threading, time
+req = json.loads(sys.stdin.read())
+host = req["host"] or socket.gethostbyname(socket.gethostname())
+n, threads = req["n"], req["threads"]
+lock = threading.Lock(); stop = threading.Event()
+state = {"sent": 0, "first_429": None, "codes": {}}
+def ip():
+    return ".".join(str(random.randint(1, 254)) for _ in range(4))
+def work(k):
+    c = http.client.HTTPConnection(host, 8000, timeout=30)
+    for _ in range(k):
+        if stop.is_set(): return
+        a = ip()
+        c.request("GET", req["path"], headers={"X-Forwarded-For": f"{a}, {ip()}", "X-Real-IP": a,
+                  "CF-Connecting-IP": a, "True-Client-IP": a, "Forwarded": f"for={a}"})
+        r = c.getresponse(); body = r.read()
+        with lock:
+            state["sent"] += 1
+            state["codes"][r.status] = state["codes"].get(r.status, 0) + 1
+            if r.status == 429 and state["first_429"] is None:
+                state["first_429"] = {"at": state["sent"], "body": body.decode(),
+                                      "window": int(time.time()) // 60}
+                stop.set()
+ts = [threading.Thread(target=work, args=(n // threads + 1,)) for _ in range(threads)]
+w0 = int(time.time()) // 60
+for t in ts: t.start()
+for t in ts: t.join()
+state["host"] = host; state["window_start"] = w0; state["window_end"] = int(time.time()) // 60
+print(json.dumps(state))
+'''
+
+
+def direct_burst(fs_probe, path: str, n: int, threads: int = 8) -> dict:
+    """Send up to `n` GETs of `path` straight to the API from inside its container, each with a
+    different spoofed X-Forwarded-For / X-Real-IP / CF-Connecting-IP / True-Client-IP /
+    Forwarded; stop at the first 429. Returns {"sent", "first_429": {"at", "body", "window"} or
+    None, "codes", "host", "window_start", "window_end"}.
+
+    The request goes to the container's own network address, not 127.0.0.1: gunicorn runs with
+    --forwarded-allow-ips=127.0.0.1, so uvicorn itself rewrites a loopback peer from
+    X-Forwarded-For before the app sees it (only processes inside the container can connect
+    from loopback). From the container's own address the peer is an ordinary untrusted client,
+    which is what an attacker reaching the API without nginx would be.
+    """
+    probe = docker_probe(fs_probe)
+    r = subprocess.run(
+        ["docker", "exec", "-i", probe.container, "python", "-c", _BURST],
+        input=json.dumps({"host": None, "n": n, "threads": threads, "path": path}),
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise ProbeError(f"direct burst in {probe.container} failed: {r.stderr[-500:]}")
+    return json.loads(r.stdout)
+
+
+# --- the API's real route table ------------------------------------------------------------
+
+_ROUTES = r'''
+import json
+from marcus.api.deps import current_owner
+from marcus.api.main import create_app
+
+def calls(dependant):
+    for d in dependant.dependencies:
+        yield d.call
+        yield from calls(d)
+
+out = []
+def walk(routes):
+    for r in routes:
+        if hasattr(r, "effective_route_contexts"):  # FastAPI's lazily included router
+            walk(list(r.effective_route_contexts()))
+        elif hasattr(r, "methods") and hasattr(r, "dependant"):
+            owner = any(c is current_owner for c in calls(r.dependant))
+            out.extend([m, r.path, owner] for m in sorted(r.methods) if m != "HEAD")
+        else:  # a mount, a plain Starlette route, a websocket: always reported
+            out.append([type(r).__name__, getattr(r, "path", repr(r)), False])
+walk(create_app().routes)
+print(json.dumps(out))
+'''
+
+
+def route_table(fs_probe) -> list[tuple[str, str, bool]]:
+    """(method, path, depends on current_owner) for every route of the API as the running
+    container builds it (same code and environment as the served app)."""
+    probe = docker_probe(fs_probe)
+    r = subprocess.run(
+        ["docker", "exec", probe.container, "python", "-c", _ROUTES],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise ProbeError(f"could not list routes in {probe.container}: {r.stderr[-500:]}")
+    return [tuple(x) for x in json.loads(r.stdout)]
