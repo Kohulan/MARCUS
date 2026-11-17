@@ -2,13 +2,13 @@ import asyncio
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import client_ip, current_owner, get_owned_image_job
+from marcus.api.deps import client_ip, current_owner, get_owned_image_job, require_engine_enabled
 from marcus.api.limits import enforce_active_limits
 from marcus.api.security import upload_limit
 from marcus.api.uploads import normalize_to_png, read_limited, sanitize_display_name, sniff_image
@@ -64,8 +64,7 @@ async def upload_image(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     settings = get_settings()
-    if engine == Engine.FAKE and not settings.enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(engine)
     await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)

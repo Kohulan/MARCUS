@@ -40,7 +40,7 @@ from marcus.core.models import (
     Step,
 )
 from marcus.core.queues import queue_for
-from marcus.core.settings import get_settings
+from marcus.core.settings import fake_enabled, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -709,7 +709,7 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
     engine = Engine(engine)
-    if engine == Engine.FAKE and not get_settings().enable_fake_engines:
+    if engine == Engine.FAKE and not fake_enabled():
         raise ValueError("engine 'fake' is disabled")
     segment = session.get(Segment, segment_id)
     if segment is None:

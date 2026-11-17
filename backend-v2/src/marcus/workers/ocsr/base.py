@@ -17,7 +17,7 @@ from typing import Protocol
 from celery.signals import worker_process_init
 
 from marcus.core.enums import Engine
-from marcus.core.settings import get_settings
+from marcus.core.settings import fake_enabled
 from marcus.workers.runtime import abort_worker, in_pool_process
 
 log = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ FACTORIES["fake"] = _fake_factory
 
 def _checked_key(name: Engine | str) -> str:
     key = str(Engine(name))
-    if key == Engine.FAKE and not get_settings().enable_fake_engines:
+    if key == Engine.FAKE and not fake_enabled():
         raise RuntimeError("fake engine is disabled (MARCUS_ENABLE_FAKE_ENGINES is not set)")
     return key
 

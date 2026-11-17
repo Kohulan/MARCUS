@@ -8,9 +8,9 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.core.db import get_db
-from marcus.core.enums import OwnerKind, PaperStatus, PriorityClass
+from marcus.core.enums import Engine, OwnerKind, PaperStatus, PriorityClass
 from marcus.core.models import ImageJob, Owner, Paper, Segment
-from marcus.core.settings import get_settings
+from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.tokens import hash_token, new_token
 
 COOKIE_NAME = "marcus_owner"
@@ -276,6 +276,12 @@ NOT_FOUND = "not found"
 def not_found() -> HTTPException:
     """The one 404 for missing, deleted and other owners' resources (no existence oracle)."""
     return HTTPException(status_code=404, detail=NOT_FOUND)
+
+
+def require_engine_enabled(engine: Engine) -> None:
+    """422 for the fake engine unless fake engines are enabled (every route that takes one)."""
+    if engine == Engine.FAKE and not fake_enabled():
+        raise HTTPException(status_code=422, detail="Engine not available")
 
 
 def paper_visible() -> tuple:

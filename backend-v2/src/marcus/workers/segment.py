@@ -21,7 +21,7 @@ from celery.signals import worker_process_init
 from PIL import Image, ImageDraw
 
 from marcus.core.enums import StepKind
-from marcus.core.settings import get_settings
+from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.storage import page_image_path, segment_crop_path
 from marcus.workers.runtime import BadInput, register
 from marcus.workers.runtime import abort_worker as _abort_worker
@@ -179,7 +179,7 @@ def get_segmenter() -> Segmenter:
     with _lock:
         if _segmenter is None:
             name = os.environ.get("MARCUS_SEGMENTER", "decimer")
-            if name == "fake" and not get_settings().enable_fake_engines:
+            if name == "fake" and not fake_enabled():
                 raise RuntimeError("fake segmenter is disabled (MARCUS_ENABLE_FAKE_ENGINES)")
             factory = SEGMENTERS.get(name)
             if factory is None:

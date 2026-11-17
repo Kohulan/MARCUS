@@ -6,7 +6,6 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -18,7 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
 from marcus.api.chempool import CHEM
-from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found, paper_visible
+from marcus.api.deps import (
+    client_ip,
+    current_owner,
+    get_owned_paper,
+    not_found,
+    paper_visible,
+    require_engine_enabled,
+)
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
 from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList, StepList
@@ -44,8 +50,7 @@ async def upload_paper(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     settings = get_settings()
-    if engine == Engine.FAKE and not settings.enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(engine)
     await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)

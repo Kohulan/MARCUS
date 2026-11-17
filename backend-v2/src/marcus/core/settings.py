@@ -117,3 +117,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def fake_enabled() -> bool:
+    """The fake OCSR engine and fake segmenter may run (tests and the fake stack only). Every
+    entry point refuses them otherwise: the API (deps.require_engine_enabled), the planner and
+    the workers."""
+    return get_settings().enable_fake_engines

@@ -8,15 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import curation_error
 from marcus.api.chempool import CHEM
-from marcus.api.deps import current_owner, get_owned_segment, not_found
+from marcus.api.deps import current_owner, get_owned_segment, not_found, require_engine_enabled
 from marcus.api.read import IMAGE_HEADERS
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, StepKind
+from marcus.core.enums import StepKind
 from marcus.core.models import Curation, Owner, Step
 from marcus.core.pipeline import ACTIVE, request_ocsr
-from marcus.core.settings import get_settings
 
 router = APIRouter()
 
@@ -42,8 +41,7 @@ async def run_prediction(
     db: AsyncSession = Depends(get_db),
 ) -> StepAccepted:
     segment, _ = await get_owned_segment(db, owner, segment_id)
-    if body.engine == Engine.FAKE and not get_settings().enable_fake_engines:
-        raise HTTPException(status_code=422, detail="Engine not available")
+    require_engine_enabled(body.engine)
     # A request for a segment and engine that is still waiting returns that step instead of
     # queueing another one (repeat clicks must not flood the queue).
     waiting = await db.scalar(
