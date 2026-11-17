@@ -14,7 +14,7 @@ import pytest
 from celery.signals import worker_process_init
 
 from marcus.core.enums import Engine
-from marcus.workers import ocsr
+from marcus.workers import ocsr, runtime
 from marcus.workers.ocsr import base, decimer
 from marcus.workers.ocsr.base import OcsrResult
 
@@ -108,9 +108,9 @@ def test_preload_loads_preload_engines_only(monkeypatch):
     base.register_engine(Engine.DECIMER, lambda: normal)
     base.register_engine(Engine.DECIMER_HAND, lambda: hand, preload=False)
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", "decimer,decimer-hand")
-    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
-    monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
 
     base.preload_engines(sender=None)
 
@@ -123,7 +123,7 @@ def test_preload_loads_preload_engines_only(monkeypatch):
 def test_preload_skips_registered_but_unconfigured_engines(monkeypatch):
     normal = StubEngine("decimer")
     base.register_engine(Engine.DECIMER, lambda: normal)
-    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     base.preload_engines(sender=None)  # MARCUS_OCSR_ENGINES unset
     assert normal.loaded == 0
 
@@ -134,9 +134,9 @@ def test_preload_failure_stops_the_worker(monkeypatch):
 
     base.register_engine(Engine.DECIMER, broken)
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", "decimer")
-    monkeypatch.setattr(base, "in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
-    monkeypatch.setattr(base, "abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     base.preload_engines(sender=None)
     assert aborted == [True]
 
@@ -145,8 +145,8 @@ def test_preload_does_nothing_outside_a_pool_process(monkeypatch):
     called = []
     base.register_engine(Engine.DECIMER, lambda: called.append("load"))
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", "decimer")
-    monkeypatch.setattr(base, "abort_worker", lambda: called.append("abort"))
-    assert base.in_pool_process() is False  # pytest runs in billiard's MainProcess
+    monkeypatch.setattr(runtime, "abort_worker", lambda: called.append("abort"))
+    assert runtime.in_pool_process() is False  # pytest runs in billiard's MainProcess
     base.preload_engines(sender=None)
     assert called == []
 

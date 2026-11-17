@@ -335,6 +335,19 @@ def abort_worker() -> None:
     os._exit(1)
 
 
+def preload_on_worker_init(load: Callable[[], object], what: str) -> None:
+    """The body of a model worker's worker_process_init hook: in a Celery pool process only,
+    run `load` (so the first step does not pay the model load against its time limit); any
+    failure, SystemExit from a library included, stops the whole worker (abort_worker)."""
+    if not in_pool_process():
+        return
+    try:
+        load()
+    except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
+        log.exception("%s failed to load; stopping the worker", what)
+        abort_worker()
+
+
 # --- recycling a pool process after a failure that may leave memory behind ---------------
 
 _recycle_reason: str | None = None

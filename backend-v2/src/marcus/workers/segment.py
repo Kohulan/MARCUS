@@ -23,9 +23,7 @@ from PIL import Image, ImageDraw
 from marcus.core.enums import StepKind
 from marcus.core.settings import fake_enabled
 from marcus.core.storage import page_image_path, segment_crop_path, write_atomic
-from marcus.workers.runtime import BadInput, register
-from marcus.workers.runtime import abort_worker as _abort_worker
-from marcus.workers.runtime import in_pool_process as _in_pool_process
+from marcus.workers.runtime import BadInput, preload_on_worker_init, register
 
 log = logging.getLogger(__name__)
 
@@ -179,15 +177,11 @@ def preload_segmenter(**_) -> None:
     Only in a Celery pool process: the signal can also be sent elsewhere (tests send it to
     exercise other workers' hooks), and there the parent is not a Celery worker.
     """
-    if not _in_pool_process():
-        return
-    try:
-        seg = get_segmenter()
-    except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
-        log.exception("segmenter failed to load; stopping the worker")
-        _abort_worker()
-        return
-    log.info("segmenter %s loaded", seg.version)
+    preload_on_worker_init(_load_segmenter, "segmenter")
+
+
+def _load_segmenter() -> None:
+    log.info("segmenter %s loaded", get_segmenter().version)
 
 
 def _write_crop(paper_id, array: np.ndarray) -> str:

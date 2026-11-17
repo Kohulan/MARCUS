@@ -16,7 +16,7 @@ from PIL import Image
 from marcus.core.enums import StepKind
 from marcus.core.settings import get_settings
 from marcus.core.storage import page_image_path, segment_crop_path
-from marcus.workers import gpu, segment
+from marcus.workers import gpu, runtime, segment
 from marcus.workers.runtime import HANDLERS
 from tests.workers.helpers import view
 
@@ -338,13 +338,13 @@ def test_preload_hook_connected_to_worker_process_init():
 
 
 def test_preload_loads_the_segmenter(monkeypatch):
-    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     stub = StubSegmenter([])
     aborted = []
     monkeypatch.setattr(segment, "_segmenter", None)
     monkeypatch.setattr(segment, "SEGMENTERS", {"decimer": lambda: stub})
     monkeypatch.delenv("MARCUS_SEGMENTER", raising=False)
-    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     segment.preload_segmenter(sender=None)
     assert stub.loaded == 1 and segment._segmenter is stub and not aborted
     segment.get_segmenter()  # later tasks reuse it: no second load
@@ -353,14 +353,14 @@ def test_preload_loads_the_segmenter(monkeypatch):
 
 
 def test_preload_failure_stops_the_worker(monkeypatch):
-    monkeypatch.setattr(segment, "_in_pool_process", lambda: True)
+    monkeypatch.setattr(runtime, "in_pool_process", lambda: True)
     aborted = []
 
     def broken():
         raise OSError("weights missing")
 
     monkeypatch.setattr(segment, "get_segmenter", broken)
-    monkeypatch.setattr(segment, "_abort_worker", lambda: aborted.append(True))
+    monkeypatch.setattr(runtime, "abort_worker", lambda: aborted.append(True))
     segment.preload_segmenter(sender=None)
     assert aborted == [True]
 
@@ -370,8 +370,8 @@ def test_preload_does_nothing_outside_a_pool_process(monkeypatch):
     model nor signal the parent."""
     called = []
     monkeypatch.setattr(segment, "get_segmenter", lambda: called.append("load"))
-    monkeypatch.setattr(segment, "_abort_worker", lambda: called.append("abort"))
-    assert segment._in_pool_process() is False  # pytest runs in billiard's MainProcess
+    monkeypatch.setattr(runtime, "abort_worker", lambda: called.append("abort"))
+    assert runtime.in_pool_process() is False  # pytest runs in billiard's MainProcess
     segment.preload_segmenter(sender=None)
     assert called == []
 
@@ -383,9 +383,9 @@ def test_abort_worker_cold_stops_parent_and_exits_nonzero(monkeypatch):
         exits.append(code)
         raise SystemExit(code)
 
-    monkeypatch.setattr(segment.os, "kill", lambda pid, sig: killed.append((pid, sig)))
-    monkeypatch.setattr(segment.os, "_exit", fake_exit)
+    monkeypatch.setattr(runtime.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(runtime.os, "_exit", fake_exit)
     with pytest.raises(SystemExit):
-        segment._abort_worker()
+        runtime.abort_worker()
     assert killed == [(os.getppid(), signal.SIGQUIT)]
     assert exits == [1]
