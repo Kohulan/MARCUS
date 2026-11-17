@@ -622,3 +622,78 @@ def test_nginx_limits_follow_the_environment_and_refuse_garbage():
         out = _nginx_run({"MARCUS_NGINX_UPLOADS_PER_IP": bad}, "nginx", "-T")
         assert out.returncode != 0, bad
         assert "MARCUS_NGINX_UPLOADS_PER_IP must be a positive integer" in out.stdout + out.stderr
+
+
+# --- switch day: client addresses behind the outer proxy (review I9) ---------------------------
+
+
+def _client_seen_by_nginx(env: dict[str, str], xff: str) -> str:
+    """Start the production nginx (fake outer proxy = a request from 127.0.0.1 inside the
+    container carrying `xff`) and return the client address nginx logs (= the address it sends
+    the API in X-Forwarded-For)."""
+    docker = _docker_or_skip()
+    name = f"marcus-realip-test-{os.getpid()}-{abs(hash((tuple(env.items()), xff)))}"
+    args = [
+        docker, "run", "-d", "--name", name, "--network", "none", "--read-only",
+        "--tmpfs", "/tmp", "--add-host", "api:127.0.0.1",
+        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
+        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+    ]  # fmt: skip
+    for key, value in env.items():
+        args += ["-e", f"{key}={value}"]
+    started = subprocess.run([*args, NGINX_IMAGE], capture_output=True, text=True, timeout=60)
+    assert started.returncode == 0, started.stderr
+    try:
+        for _ in range(50):
+            ready = subprocess.run(
+                [docker, "exec", name, "sh", "-c", "test -f /tmp/nginx.pid"], capture_output=True
+            )
+            if ready.returncode == 0:
+                break
+            subprocess.run(["sleep", "0.1"])
+        subprocess.run(
+            [docker, "exec", name, "wget", "-q", "-O", "/dev/null", "--header",
+             f"X-Forwarded-For: {xff}", "http://127.0.0.1:8080/not-api"],
+            capture_output=True, timeout=30,
+        )  # fmt: skip  (404 by design: wget exits 1)
+        logs = subprocess.run([docker, "logs", name], capture_output=True, text=True, timeout=30)
+        lines = [ln for ln in logs.stdout.splitlines() if '"GET /not-api ' in ln]
+        assert len(lines) == 1, logs.stdout + logs.stderr
+        return lines[0].split(" ", 1)[0]
+    finally:
+        subprocess.run([docker, "rm", "-f", name], capture_output=True, timeout=60)
+
+
+def test_real_ip_switch_is_off_by_default():
+    """Off: X-Forwarded-For from the peer is ignored, the socket peer is the client."""
+    assert _client_seen_by_nginx({}, "203.0.113.7") == "127.0.0.1"
+
+
+def test_real_ip_from_the_configured_proxy_only():
+    on = {"MARCUS_REAL_IP_FROM": "127.0.0.1"}
+    assert _client_seen_by_nginx(on, "203.0.113.7") == "203.0.113.7"
+    # a client-sent entry in front of the proxy's own is never taken
+    assert _client_seen_by_nginx(on, "198.51.100.9, 203.0.113.7") == "203.0.113.7"
+    # a peer that is not the configured proxy cannot pick its address
+    other = {"MARCUS_REAL_IP_FROM": "10.1.2.3"}
+    assert _client_seen_by_nginx(other, "203.0.113.7") == "127.0.0.1"
+    # several hops (a proxy on the host behind the outer one), comma-separated
+    hops = {"MARCUS_REAL_IP_FROM": "10.1.2.3,127.0.0.1"}
+    assert _client_seen_by_nginx(hops, "203.0.113.7, 10.1.2.3") == "203.0.113.7"
+
+
+@pytest.mark.parametrize(
+    "bad", ["proxy.example", "10.0.0.0/8", "0.0.0.0/0", "1.2.3", "1.2.3.4;", "256.1.1.1", "::"]
+)
+def test_real_ip_refuses_names_ranges_and_garbage(bad):
+    out = _nginx_run({"MARCUS_REAL_IP_FROM": bad}, "nginx", "-T")
+    assert out.returncode != 0, bad
+
+
+def test_real_ip_switch_is_wired_in_compose_and_documented(compose):
+    nginx = compose["services"]["nginx"]
+    assert nginx["environment"]["MARCUS_REAL_IP_FROM"] == "${MARCUS_REAL_IP_FROM:-}"
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    assert re.search(r"^\s{4}include /tmp/nginx/real_ip\.conf;", conf, re.M)
+    readme = (ROOT / "README.md").read_text()
+    assert "MARCUS_REAL_IP_FROM" in readme

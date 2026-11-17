@@ -410,6 +410,8 @@ services:
     environment:
       MARCUS_NGINX_CONN_PER_IP: ${MARCUS_NGINX_CONN_PER_IP:-64}
       MARCUS_NGINX_UPLOADS_PER_IP: ${MARCUS_NGINX_UPLOADS_PER_IP:-4}
+      # Switch day: the outer proxy's address(es); empty = off (README, docker/nginx-edge.sh).
+      MARCUS_REAL_IP_FROM: ${MARCUS_REAL_IP_FROM:-}
     ports:
       - "127.0.0.1:18090:8080"
     # egress: a published port needs a non-internal network.
