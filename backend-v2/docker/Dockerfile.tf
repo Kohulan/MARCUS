@@ -160,8 +160,8 @@ USER marcus
 # limits need it. The model loads when the pool process starts (after the fork, ~32 s on CPU:
 # hence the 300 s proc-alive timeout), never in the parent; a failed load stops the worker.
 CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment", "-c", "1", \
-     "--pool", "prefork", "--include", "marcus.workers.segment", "-n", "segment@%h", \
-     "--loglevel", "INFO"]
+     "--pool", "prefork", "--include", "marcus.workers.segment", "--max-tasks-per-child", "200", \
+     "-n", "segment@%h", "--loglevel", "INFO"]
 
 FROM runtime AS test
 USER root

@@ -195,6 +195,16 @@ def test_worker_cpu_has_one_process_more_than_its_slots(compose):
     assert f'"-c", "{expected}"' in cmd_line
 
 
+def test_segment_worker_recycles_its_process(compose):
+    """D4: the segmentation library leaks ~3 MiB of GPU memory per page; a budgeted process ran
+    out after ~390 pages. The pool process is replaced every 200 pages (compose and image CMD)."""
+    cmd = _command(compose["services"]["worker-segment"])
+    assert cmd[cmd.index("--max-tasks-per-child") + 1] == "200"
+    assert _concurrency(cmd) == 1
+    dockerfile = (ROOT / "docker" / "Dockerfile.tf").read_text()
+    assert '"--max-tasks-per-child", "200"' in dockerfile
+
+
 def test_exactly_one_service_runs_celery_beat(compose):
     fake = yaml.safe_load(FAKE.read_text())
     services = {**compose["services"]}

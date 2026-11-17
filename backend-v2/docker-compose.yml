@@ -288,9 +288,13 @@ services:
     # (= q.segment slots): one model per process, loaded when the pool process starts (after the
     # fork; ~32 s on CPU, hence the long proc-alive timeout). A failed load stops the container
     # (exit 1) and compose restarts it.
+    # --max-tasks-per-child 200: the segmentation library leaks GPU memory, about 3 MiB per page
+    # (TensorFlow allocator in use grew 281 -> 684 MiB over 131 pages on the jarvis V100, D4), so a
+    # budgeted process ran out after ~390 pages and then failed every page. A fresh pool process
+    # (model reload ~10 s on the GPU) every 200 pages keeps it under ~1.4 GB of its 2048 MiB budget.
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
-              "-n", "segment@%h", "--loglevel", "INFO"]
+              "--max-tasks-per-child", "200", "-n", "segment@%h", "--loglevel", "INFO"]
     environment:
       # TF CPU thread pools (x-tf-threads): one worker must not take every core next to docling.
       <<: [*env, *seg-version, *tf-threads]
