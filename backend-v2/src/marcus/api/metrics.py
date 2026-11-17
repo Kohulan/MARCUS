@@ -9,16 +9,19 @@ timeout, all queries inside it. The result is cached for CACHE_S seconds, so a f
 several) cannot load the database. If the read fails (down, or a query over the timeout) the
 DB series are left out and `marcus_scrape_db_ok` is 0; the Redis/disk gauges still answer.
 
-Series (histograms and failure counts come from the `steps` table; histograms cover the last
-hour; every known queue / error class has a series, 0 when idle):
+Every DB-derived windowed value is a gauge (never a counter: rows age out, so a counter would
+read as resets). The three histograms are gauge histograms (OpenMetrics type `gaugehistogram`,
+buckets plus _gcount/_gsum): use histogram_quantile on the raw buckets, never rate(). The text
+exposition is negotiated per request (Prometheus asks for OpenMetrics).
+
+Series (histograms and failure counts come from the `steps` table, last hour; every known queue / error class has a series, 0 when idle):
 
     marcus_queue_pending{queue}            steps pending or queued (waiting for a worker)
     marcus_queue_running{queue}            steps running
     marcus_step_seconds{kind,engine}       finished_at - started_at of steps done in the last hour
     marcus_wait_seconds{queue}             queued_at - created_at of steps queued in the last hour
     marcus_first_smiles_seconds            first prediction - paper upload, papers of the last hour
-    marcus_step_failures_total{error_class}  failed steps still stored (resets when retention
-                                           purges old steps: use increase(), not the raw value)
+    marcus_steps_failed{error_class}       gauge: failed steps finished in the last hour
     marcus_disk_free_bytes{path="/data"}
     marcus_dispatcher_heartbeat_age_seconds  +Inf when the heartbeat key is absent
     marcus_scrape_db_ok                    1 if the database read worked
@@ -32,12 +35,12 @@ import time
 
 import anyio
 import redis
-from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
+from prometheus_client import CollectorRegistry
 from prometheus_client.core import (
-    CounterMetricFamily,
+    GaugeHistogramMetricFamily,
     GaugeMetricFamily,
-    HistogramMetricFamily,
 )
+from prometheus_client.exposition import choose_encoder
 from sqlalchemy import create_engine, func, literal_column, select, text
 from sqlalchemy.engine import Connection
 from starlette.responses import JSONResponse, PlainTextResponse, Response
@@ -55,6 +58,7 @@ log = logging.getLogger(__name__)
 PORT = 9100
 CACHE_S = 10.0
 STATEMENT_TIMEOUT_MS = 2000
+TOTAL_DEADLINE_S = 7.5  # the whole database read; Prometheus scrape_timeout is 10 s
 WINDOW = "1 hour"
 BUCKETS = (0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0)
 WAITING = (StepStatus.PENDING.value, StepStatus.QUEUED.value)
@@ -71,11 +75,11 @@ def _histogram_columns(seconds):
     return [*cols, func.count(), func.coalesce(func.sum(seconds), 0.0)]
 
 
-def _add_histogram(family: HistogramMetricFamily, labels: list[str], row) -> None:
+def _add_histogram(family: GaugeHistogramMetricFamily, labels: list[str], row) -> None:
     *counts, total, summed = row
     buckets = [(repr(b), float(c)) for b, c in zip(BUCKETS, counts, strict=True)]
     buckets.append(("+Inf", float(total)))
-    family.add_metric(labels, buckets, float(summed))
+    family.add_metric(labels, buckets, gsum_value=float(summed))
 
 
 class MarcusCollector:
@@ -87,6 +91,7 @@ class MarcusCollector:
         self._at: float | None = None
         self._families: list = []
         self._engine = None
+        self._deadline = math.inf
 
     # -- sources ------------------------------------------------------------------------------
 
@@ -115,9 +120,19 @@ class MarcusCollector:
             return math.inf
         return math.inf if age is None else age
 
+    def _budget(self, conn: Connection) -> None:
+        """Before each query: statement timeout = min(2 s, time left of the total deadline)."""
+        left_ms = int((self._deadline - _monotonic()) * 1000)
+        if left_ms <= 0:
+            raise TimeoutError("metrics read exceeded its total deadline")
+        conn.execute(
+            text(f"SET LOCAL statement_timeout = {min(int(STATEMENT_TIMEOUT_MS), left_ms)}")
+        )
+
     def _snapshot(self, conn: Connection) -> list:
         """All database series, read inside the caller's one read-only transaction."""
         fams = []
+        self._budget(conn)
         pending = GaugeMetricFamily("marcus_queue_pending", "Steps waiting.", labels=["queue"])
         running = GaugeMetricFamily("marcus_queue_running", "Steps running.", labels=["queue"])
         counts = {
@@ -136,10 +151,11 @@ class MarcusCollector:
 
         since = text(f"now() - interval '{WINDOW}'")
         run_s = func.extract("epoch", Step.finished_at - Step.started_at)
-        step_h = HistogramMetricFamily(
-            "marcus_step_seconds", "Step run time, last hour.", labels=["kind", "engine"]
+        step_h = GaugeHistogramMetricFamily(
+            "marcus_step_seconds", "Step run time (last-hour window; do not rate()).", labels=["kind", "engine"]
         )
         engine_col = literal_column("coalesce(steps.engine, '')").label("engine")
+        self._budget(conn)
         for kind, engine, *rest in conn.execute(
             select(Step.kind, engine_col, *_histogram_columns(run_s))
             .where(
@@ -154,10 +170,12 @@ class MarcusCollector:
         fams.append(step_h)
 
         wait_s = func.extract("epoch", Step.queued_at - Step.created_at)
-        wait_h = HistogramMetricFamily(
-            "marcus_wait_seconds", "Queue wait (queued_at - created_at), last hour.",
+        wait_h = GaugeHistogramMetricFamily(
+            "marcus_wait_seconds",
+            "Queue wait, queued_at - created_at (last-hour window; do not rate()).",
             labels=["queue"],
         )  # fmt: skip
+        self._budget(conn)
         for queue, *rest in conn.execute(
             select(Step.queue, *_histogram_columns(wait_s))
             .where(Step.queued_at.is_not(None), Step.queued_at >= since)
@@ -181,20 +199,24 @@ class MarcusCollector:
             .subquery()
         )
         secs = literal_column("secs")
+        self._budget(conn)
         first_row = conn.execute(select(*_histogram_columns(secs)).select_from(first)).one()
-        first_h = HistogramMetricFamily(
-            "marcus_first_smiles_seconds", "Upload to first SMILES per paper, last hour."
+        first_h = GaugeHistogramMetricFamily(
+            "marcus_first_smiles_seconds",
+            "Upload to first SMILES per paper (last-hour window; do not rate())."
         )
         _add_histogram(first_h, [], first_row)
         fams.append(first_h)
 
-        failures = CounterMetricFamily(
-            "marcus_step_failures", "Failed steps by error class.", labels=["error_class"]
-        )
+        failures = GaugeMetricFamily(
+            "marcus_steps_failed", "Failed steps finished in the last hour.",
+            labels=["error_class"],
+        )  # fmt: skip
+        self._budget(conn)
         by_class = dict(
             conn.execute(
                 select(Step.error_class, func.count())
-                .where(Step.status == StepStatus.FAILED.value)
+                .where(Step.status == StepStatus.FAILED.value, Step.finished_at >= since)
                 .group_by(Step.error_class)
             ).all()
         )
@@ -207,10 +229,11 @@ class MarcusCollector:
 
     def _read_db(self) -> list | None:
         try:
+            self._deadline = _monotonic() + TOTAL_DEADLINE_S  # connect time counts too
             with self._db().connect() as conn:
                 # One transaction, read-only, bounded: nothing here can write or run long.
                 conn.execute(text("SET TRANSACTION READ ONLY"))
-                conn.execute(text(f"SET LOCAL statement_timeout = {int(STATEMENT_TIMEOUT_MS)}"))
+                self._budget(conn)
                 fams = self._snapshot(conn)
                 conn.rollback()
                 return fams
@@ -231,19 +254,21 @@ class MarcusCollector:
             disk.add_metric([DISK_PATH_LABEL], float(shutil.disk_usage(get_settings().data_root).free))
         except OSError as exc:
             log.warning("metrics: disk_usage failed: %s", type(exc).__name__)
-        beat = GaugeMetricFamily(
-            "marcus_dispatcher_heartbeat_age_seconds",
-            "Seconds since the dispatcher's last heartbeat (+Inf when absent).",
-        )
-        beat.add_metric([], self._heartbeat_age())
-        return [*(db or []), disk, beat, ok]
+        return [*(db or []), disk, ok]
 
     def collect(self):
         with self._lock:  # one scrape reads the DB; concurrent ones wait for its result
             if self._at is None or _monotonic() - self._at >= self.cache_s:
                 self._families = self._build()
                 self._at = _monotonic()
-            return list(self._families)
+            families = list(self._families)
+        # outside the cache: a stale heartbeat age would hide a dead dispatcher for 10 s
+        beat = GaugeMetricFamily(
+            "marcus_dispatcher_heartbeat_age_seconds",
+            "Seconds since the dispatcher's last heartbeat (+Inf when absent).",
+        )
+        beat.add_metric([], self._heartbeat_age())
+        return [*families, beat]
 
 
 # --- the internal HTTP app -----------------------------------------------------------------------
@@ -262,8 +287,10 @@ def build_app(collector: MarcusCollector | None = None):
             if method != "GET":
                 response = PlainTextResponse("method not allowed", status_code=405)
             else:
-                body = await anyio.to_thread.run_sync(generate_latest, registry)
-                response = Response(body, media_type=CONTENT_TYPE_LATEST)
+                accept = dict(scope["headers"]).get(b"accept", b"").decode("latin-1")
+                encoder, content_type = choose_encoder(accept)
+                body = await anyio.to_thread.run_sync(encoder, registry)
+                response = Response(body, headers={"content-type": content_type})
         elif path == "/health" and method == "GET":
             response = JSONResponse({"status": "ok"})
         else:

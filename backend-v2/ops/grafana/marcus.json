@@ -226,7 +226,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Failed steps by class (per hour)",
+      "title": "Failed steps by class (finished in the last hour)",
       "datasource": {
         "type": "prometheus",
         "uid": "marcus-prometheus"
@@ -246,7 +246,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "increase(marcus_step_failures_total[1h])",
+          "expr": "marcus_steps_failed",
           "legendFormat": "{{error_class}}",
           "datasource": {
             "type": "prometheus",

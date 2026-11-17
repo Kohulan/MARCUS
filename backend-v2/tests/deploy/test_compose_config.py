@@ -167,7 +167,18 @@ def test_dashboard_covers_the_required_panels():
     for needle in (
         "marcus_queue_pending", "marcus_queue_running", "marcus_wait_seconds_bucket",
         "marcus_step_seconds_bucket", "marcus_first_smiles_seconds_bucket",
-        "marcus_step_failures_total", "marcus_disk_free_bytes",
+        "marcus_steps_failed", "marcus_disk_free_bytes",
         "marcus_dispatcher_heartbeat_age_seconds",
     ):  # fmt: skip
         assert needle in exprs, needle
+
+
+def test_dashboard_never_rates_windowed_series():
+    """Last-hour windows are gauges: rate()/increase() on them would read the drops as resets."""
+    dash = json.loads((ROOT / "ops" / "grafana" / "marcus.json").read_text())
+    for p in dash["panels"]:
+        for t in p["targets"]:
+            e = t["expr"]
+            if "marcus_" in e and not e.startswith("marcus_dispatcher"):
+                assert "rate(" not in e and "increase(" not in e, e
+    assert "marcus_step_failures_total" not in json.dumps(dash)

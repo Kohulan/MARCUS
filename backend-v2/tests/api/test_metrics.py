@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from prometheus_client import CollectorRegistry
-from prometheus_client.parser import text_string_to_metric_families
 from sqlalchemy import text
 
 from marcus.api import metrics as m
@@ -16,14 +15,6 @@ from tests.api.conftest import make_client
 from tests.factories import make_paper
 
 NOW = datetime.now(UTC)
-
-
-def parse(body: str) -> dict[str, list]:
-    out: dict[str, list] = {}
-    for fam in text_string_to_metric_families(body):
-        for s in fam.samples:
-            out.setdefault(s.name, []).append(s)
-    return out
 
 
 def value(samples: dict, name: str, **labels) -> float:
@@ -38,12 +29,23 @@ def collector(migrated_db, tmp_path, monkeypatch):
     return c
 
 
-def scrape(collector) -> dict[str, list]:
+def exposition(collector) -> str:
+    """The OpenMetrics text (what Prometheus negotiates): gauge histograms keep their type."""
+    from prometheus_client.openmetrics.exposition import generate_latest
+
     reg = CollectorRegistry()
     reg.register(collector)
-    from prometheus_client import generate_latest
+    return generate_latest(reg).decode()
 
-    return parse(generate_latest(reg).decode())
+
+def scrape(collector) -> dict[str, list]:
+    from prometheus_client.openmetrics.parser import text_string_to_metric_families as om
+
+    out: dict[str, list] = {}
+    for fam in om(exposition(collector)):
+        for s in fam.samples:
+            out.setdefault(s.name, []).append(s)
+    return out
 
 
 def bare_paper(db_session):
@@ -103,12 +105,12 @@ def test_step_seconds_histogram_per_kind_and_engine(collector, db_session):
     db_session.commit()
     samples = scrape(collector)
     lab = dict(kind="ocsr", engine="decimer")
-    assert value(samples, "marcus_step_seconds_count", **lab) == 2
-    assert value(samples, "marcus_step_seconds_sum", **lab) == pytest.approx(5.5, abs=0.01)
+    assert value(samples, "marcus_step_seconds_gcount", **lab) == 2
+    assert value(samples, "marcus_step_seconds_gsum", **lab) == pytest.approx(5.5, abs=0.01)
     assert value(samples, "marcus_step_seconds_bucket", le="2.0", **lab) == 1
     assert value(samples, "marcus_step_seconds_bucket", le="5.0", **lab) == 2
     assert value(samples, "marcus_step_seconds_bucket", le="+Inf", **lab) == 2
-    assert value(samples, "marcus_step_seconds_count", kind="ocsr", engine="molscribe") == 1
+    assert value(samples, "marcus_step_seconds_gcount", kind="ocsr", engine="molscribe") == 1
 
 
 def test_wait_seconds_histogram_per_queue(collector, db_session):
@@ -119,8 +121,8 @@ def test_wait_seconds_histogram_per_queue(collector, db_session):
     add_step(db_session, paper, n=2, status="pending", created_at=created)  # never queued: skip
     db_session.commit()
     samples = scrape(collector)
-    assert value(samples, "marcus_wait_seconds_count", queue="q.cpu") == 1
-    assert value(samples, "marcus_wait_seconds_sum", queue="q.cpu") == pytest.approx(3.0, abs=0.01)
+    assert value(samples, "marcus_wait_seconds_gcount", queue="q.cpu") == 1
+    assert value(samples, "marcus_wait_seconds_gsum", queue="q.cpu") == pytest.approx(3.0, abs=0.01)
 
 
 def test_first_smiles_seconds_per_paper(collector, db_session):
@@ -140,21 +142,51 @@ def test_first_smiles_seconds_per_paper(collector, db_session):
     bare_paper(db_session)  # a paper without predictions: not counted
     db_session.commit()
     samples = scrape(collector)
-    assert samples["marcus_first_smiles_seconds_count"][0].value == 1
-    assert samples["marcus_first_smiles_seconds_sum"][0].value == pytest.approx(30.0, abs=0.5)
+    assert samples["marcus_first_smiles_seconds_gcount"][0].value == 1
+    assert samples["marcus_first_smiles_seconds_gsum"][0].value == pytest.approx(30.0, abs=0.5)
 
 
-def test_failures_by_error_class(collector, db_session):
+def test_failures_gauge_counts_only_the_last_hour(collector, db_session):
     paper = bare_paper(db_session)
-    add_step(db_session, paper, status="failed", error_class="timeout", n=1)
-    add_step(db_session, paper, status="failed", error_class="timeout", n=2)
-    add_step(db_session, paper, status="failed", error_class="bad_input", n=3)
+    recent, old = NOW - timedelta(minutes=5), NOW - timedelta(hours=2)
+    add_step(db_session, paper, status="failed", error_class="timeout", n=1, finished_at=recent)
+    add_step(db_session, paper, status="failed", error_class="timeout", n=2, finished_at=recent)
+    add_step(db_session, paper, status="failed", error_class="bad_input", n=3, finished_at=recent)
+    add_step(db_session, paper, status="failed", error_class="timeout", n=4, finished_at=old)
     db_session.commit()
     samples = scrape(collector)
-    assert value(samples, "marcus_step_failures_total", error_class="timeout") == 2
-    assert value(samples, "marcus_step_failures_total", error_class="bad_input") == 1
-    classes = {s.labels["error_class"] for s in samples["marcus_step_failures_total"]}
+    assert value(samples, "marcus_steps_failed", error_class="timeout") == 2
+    assert value(samples, "marcus_steps_failed", error_class="bad_input") == 1
+    classes = {s.labels["error_class"] for s in samples["marcus_steps_failed"]}
     assert classes == {e.value for e in ErrorClass}  # zero series exist for the others
+
+
+def test_windowed_values_are_gauges_never_counters_or_histograms(collector):
+    text_ = exposition(collector)
+    types = dict(
+        line.split()[2:4] for line in text_.splitlines() if line.startswith("# TYPE ")
+    )
+    for name in ("marcus_step_seconds", "marcus_wait_seconds", "marcus_first_smiles_seconds"):
+        assert types[name] == "gaugehistogram", name
+    assert types["marcus_steps_failed"] == "gauge"
+    assert "counter" not in types.values() and "histogram" not in types.values()
+    assert "last-hour window; do not rate()" in text_
+    assert "failed steps finished in the last hour" in text_.lower()
+
+
+def test_heartbeat_age_is_fresh_on_a_cached_scrape(collector, monkeypatch):
+    ages = iter([1.0, 2.0])
+    monkeypatch.setattr(collector, "_heartbeat_age", lambda: next(ages))
+    first = scrape(collector)
+    second = scrape(collector)  # DB part cached, heartbeat read again
+    assert first["marcus_dispatcher_heartbeat_age_seconds"][0].value == 1.0
+    assert second["marcus_dispatcher_heartbeat_age_seconds"][0].value == 2.0
+
+
+def test_total_deadline_stops_the_read(collector, monkeypatch):
+    monkeypatch.setattr(m, "TOTAL_DEADLINE_S", -1.0)
+    samples = scrape(collector)
+    assert samples["marcus_scrape_db_ok"][0].value == 0
 
 
 def test_disk_and_heartbeat_gauges(collector):
@@ -163,6 +195,10 @@ def test_disk_and_heartbeat_gauges(collector):
     assert disk.labels == {"path": "/data"} and disk.value > 0
     assert samples["marcus_dispatcher_heartbeat_age_seconds"][0].value == 7.0
     assert samples["marcus_scrape_db_ok"][0].value == 1
+
+
+def test_deadline_constant_is_under_8_seconds():
+    assert 0 < m.TOTAL_DEADLINE_S < 8
 
 
 def test_cache_holds_for_10_seconds(collector, db_session, monkeypatch):
@@ -234,6 +270,9 @@ async def test_internal_app_serves_metrics_and_nothing_else(collector):
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/plain")
         assert "marcus_queue_pending" in r.text
+        om = await c.get("/metrics", headers={"Accept": "application/openmetrics-text"})
+        assert om.headers["content-type"].startswith("application/openmetrics-text")
+        assert "gaugehistogram" in om.text
         assert (await c.get("/health")).status_code == 200
         assert (await c.get("/api/v2/papers")).status_code == 404
         assert (await c.post("/metrics")).status_code == 405
