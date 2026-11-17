@@ -1,0 +1,115 @@
+== [2026-11-17T13:15:11Z] containers
+marcus-v2-test-api-1 marcus-v2-api:local Up 7 seconds (healthy)
+marcus-v2-test-api-migrate-1 marcus-v2-api:local Exited (0) 8 seconds ago
+marcus-v2-test-dcgm-exporter-1 nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubuntu22.04 Up 16 seconds
+marcus-v2-test-dispatcher-1 marcus-v2-api:local Up 7 seconds (healthy)
+marcus-v2-test-metrics-1 marcus-v2-api:local Up 7 seconds (healthy)
+marcus-v2-test-nginx-1 nginxinc/nginx-unprivileged:1.27-alpine Up 1 second (health: starting)
+marcus-v2-test-postgres-1 postgres:16-alpine Up 16 seconds (healthy)
+marcus-v2-test-redis-1 redis:7-alpine Up 16 seconds (healthy)
+marcus-v2-test-worker-cpu-1 marcus-v2-cpu:local Up 7 seconds
+marcus-v2-test-worker-decimer-1 marcus-v2-tf:cuda Up 7 seconds
+marcus-v2-test-worker-molnextr-1 marcus-v2-torch:cuda Up 7 seconds
+marcus-v2-test-worker-molscribe-1 marcus-v2-torch:cuda Up 7 seconds
+marcus-v2-test-worker-segment-1 marcus-v2-tf:cuda Up 7 seconds
+marcus-v2-test-worker-tools-1 marcus-v2-tools:local Up 7 seconds
+== nvidia-smi
+Tue Nov 17 14:15:11 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.178.04             Driver Version: 580.178.04     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           Off |   00000000:65:00.0 Off |                    0 |
+| N/A   51C    P0             43W /  250W |    1186MiB /  32768MiB |      3%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A         3135732      C   /app/.venv/bin/python                   564MiB |
+|    0   N/A  N/A         3135737      C   /app/.venv/bin/python                   310MiB |
+|    0   N/A  N/A         3135738      C   /app/.venv/bin/python                   308MiB |
++-----------------------------------------------------------------------------------------+
+== compute apps
+pid, process_name, used_gpu_memory [MiB]
+3135737, /app/.venv/bin/python, 310 MiB
+3135738, /app/.venv/bin/python, 308 MiB
+3135732, /app/.venv/bin/python, 564 MiB
+== worker-segment log (device lines)
+== CUDA ==
+CUDA Version 11.8.0
+2026-11-17 13:15:06.988468: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-11-17 13:15:06.988512: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-11-17 13:15:06.989895: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+{"ts": "2026-11-17T13:15:07.647Z", "level": "INFO", "service": "worker-segment", "logger": "celery.apps.worker", "msg": "segment@91ea6b63d1a3 ready."}
+{"ts": "2026-11-17T13:15:08.701Z", "level": "INFO", "service": "worker-segment", "logger": "marcus.workers.gpu", "msg": "TensorFlow threads: intra-op 4, inter-op 2"}
+== worker-decimer log (device lines)
+== CUDA ==
+CUDA Version 11.8.0
+2026-11-17 13:15:07.261453: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-11-17 13:15:07.261490: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-11-17 13:15:07.262770: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+{"ts": "2026-11-17T13:15:07.879Z", "level": "INFO", "service": "worker-decimer", "logger": "celery.apps.worker", "msg": "decimer@7bc3d854d2a0 ready."}
+{"ts": "2026-11-17T13:15:08.909Z", "level": "INFO", "service": "worker-decimer", "logger": "marcus.workers.gpu", "msg": "TensorFlow threads: intra-op 4, inter-op 2"}
+{"ts": "2026-11-17T13:15:09.021Z", "level": "INFO", "service": "worker-decimer", "logger": "marcus.workers.gpu", "msg": "TensorFlow limited to 4096 MiB on /physical_device:GPU:0"}
+{"ts": "2026-11-17T13:15:09.252Z", "level": "INFO", "service": "worker-decimer", "logger": "marcus.workers.ocsr.decimer", "msg": "GPU memory budget set: skipping decimer's set_memory_growth(True)"}
+== worker-molnextr log (device lines)
+{"ts": "2026-11-17T13:15:07.858Z", "level": "INFO", "service": "worker-molnextr", "logger": "celery.apps.worker", "msg": "molnextr@a01132e4a9e8 ready."}
+{"ts": "2026-11-17T13:15:08.330Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.gpu", "msg": "torch threads: intra-op 4, inter-op 1"}
+{"ts": "2026-11-17T13:15:08.354Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.gpu", "msg": "torch limited to 9% of GPU memory"}
+{"ts": "2026-11-17T13:15:11.184Z", "level": "WARNING", "service": "worker-molnextr", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_activations.py:47: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.\n  @custom_fwd\n"}
+{"ts": "2026-11-17T13:15:11.185Z", "level": "WARNING", "service": "worker-molnextr", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_activations.py:67: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.\n  @custom_bwd\n"}
+{"ts": "2026-11-17T13:15:11.186Z", "level": "WARNING", "service": "worker-molnextr", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_losses.py:12: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.\n  @custom_fwd\n"}
+{"ts": "2026-11-17T13:15:11.187Z", "level": "WARNING", "service": "worker-molnextr", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_losses.py:36: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.\n  @custom_bwd\n"}
+2026-11-17 13:15:11,195 - molnextr_singleton - INFO - CUDA available: True
+{"ts": "2026-11-17T13:15:11.195Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "CUDA available: True"}
+2026-11-17 13:15:11,195 - molnextr_singleton - INFO - Running CUDA device test...
+{"ts": "2026-11-17T13:15:11.195Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "Running CUDA device test..."}
+2026-11-17 13:15:11,282 - molnextr_singleton - INFO - ✅ Successfully initialized GPU acceleration: Tesla V100-PCIE-32GB
+{"ts": "2026-11-17T13:15:11.282Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "✅ Successfully initialized GPU acceleration: Tesla V100-PCIE-32GB"}
+2026-11-17 13:15:11,283 - molnextr_singleton - INFO - 🔄 Initializing MolNexTR model on NVIDIA GPU (Tesla V100-PCIE-32GB)
+{"ts": "2026-11-17T13:15:11.283Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "🔄 Initializing MolNexTR model on NVIDIA GPU (Tesla V100-PCIE-32GB)"}
+2026-11-17 13:15:11,283 - molnextr_singleton - INFO - Creating MolNexTR model with device cuda...
+{"ts": "2026-11-17T13:15:11.283Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "Creating MolNexTR model with device cuda..."}
+2026-11-17 13:15:11,283 - molnextr_singleton - INFO - CUDA memory before model init: 0.00 MB
+{"ts": "2026-11-17T13:15:11.283Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "CUDA memory before model init: 0.00 MB"}
+== worker-molscribe log (device lines)
+{"ts": "2026-11-17T13:15:07.582Z", "level": "INFO", "service": "worker-molscribe", "logger": "celery.apps.worker", "msg": "molscribe@1e70675c69ca ready."}
+{"ts": "2026-11-17T13:15:08.067Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.gpu", "msg": "torch threads: intra-op 4, inter-op 1"}
+{"ts": "2026-11-17T13:15:08.107Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.gpu", "msg": "torch limited to 9% of GPU memory"}
+{"ts": "2026-11-17T13:15:10.953Z", "level": "WARNING", "service": "worker-molscribe", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_activations.py:47: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.\n  @custom_fwd\n"}
+{"ts": "2026-11-17T13:15:10.954Z", "level": "WARNING", "service": "worker-molscribe", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_activations.py:67: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.\n  @custom_bwd\n"}
+{"ts": "2026-11-17T13:15:10.955Z", "level": "WARNING", "service": "worker-molscribe", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_losses.py:12: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.\n  @custom_fwd\n"}
+{"ts": "2026-11-17T13:15:10.956Z", "level": "WARNING", "service": "worker-molscribe", "logger": "py.warnings", "msg": "/app/.venv/lib/python3.11/site-packages/onmt/modules/sparse_losses.py:36: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.\n  @custom_bwd\n"}
+== dcgm-exporter log
+time=2026-11-17T13:14:55.857Z level=INFO msg="Attempting to initialize DCGM."
+time=2026-11-17T13:14:55.904Z level=INFO msg="Initialized DCGM Fields module."
+time=2026-11-17T13:14:55.904Z level=INFO msg="DCGM successfully initialized!"
+time=2026-11-17T13:14:55.904Z level=INFO msg="Attempting to initialize NVML library."
+time=2026-11-17T13:14:55.904Z level=INFO msg="NVML provider successfully initialized!"
+time=2026-11-17T13:14:56.266Z level=INFO msg="Collecting DCP Metrics"
+time=2026-11-17T13:14:56.266Z level=INFO msg="Falling back to metric file '/etc/dcgm-exporter/default-counters.csv'"
+time=2026-11-17T13:14:56.266Z level=INFO msg="Initializing system entities of type 'GPU'"
+time=2026-11-17T13:14:56.305Z level=INFO msg="Initializing system entities of type 'NvSwitch'"
+time=2026-11-17T13:14:56.305Z level=INFO msg="Not collecting NvSwitch metrics; no switches to monitor"
+time=2026-11-17T13:14:56.305Z level=INFO msg="Initializing system entities of type 'NvLink'"
+time=2026-11-17T13:14:56.305Z level=INFO msg="Not collecting NvLink metrics; no switches to monitor"
+time=2026-11-17T13:14:56.305Z level=INFO msg="Initializing system entities of type 'CPU'"
+time=2026-11-17T13:14:56.375Z level=INFO msg="Not collecting CPU metrics; error retrieving DCGM CPU hierarchy: This request is serviced by a module of DCGM that is not currently loaded"
+time=2026-11-17T13:14:56.375Z level=INFO msg="Initializing system entities of type 'CPU Core'"
+time=2026-11-17T13:14:56.375Z level=INFO msg="Not collecting CPU Core metrics; error retrieving DCGM CPU hierarchy: This request is serviced by a module of DCGM that is not currently loaded"
+time=2026-11-17T13:14:56.389Z level=ERROR msg="DCGM collector for entity type 'GPU' cannot be initialized; err: error watching fields: Host engine is running as non-root"
+time=2026-11-17T13:14:56.390Z level=INFO msg="Starting webserver"
+time=2026-11-17T13:14:56.391Z level=INFO msg="Listening on" address=[::]:9400
+time=2026-11-17T13:14:56.391Z level=INFO msg="TLS is disabled." http2=false address=[::]:9400
+== dcgm-exporter metrics (from the metrics container, internal network)
+0 lines
+== tf device check in worker-segment
+2.15.1 [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+OrderedDict([('cpu_compiler', '/usr/lib/llvm-17/bin/clang'), ('cuda_compute_capabilities', ['sm_50', 'sm_60', 'sm_70', 'sm_75', 'compute_80']), ('cuda_version', '12.2'), ('cudnn_version', '8'), ('is_cuda_build', True), ('is_rocm_build', False), ('is_tensorrt_build', True)])

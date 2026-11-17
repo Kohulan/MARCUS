@@ -58,6 +58,21 @@ switch that did not take fails the unit. It is not installed by anything here. O
    systemctl cat nvidia-persistenced.service    # nvidia-persistenced options
    ```
 
+   **Found on jarvis (D4 GPU session, 2026-11-17, read-only; nothing changed).** The setter is
+   `nvidia-v100-setup.service` (`/etc/systemd/system/`, enabled, `Type=oneshot`,
+   `After=multi-user.target`), which runs `/usr/local/bin/nvidia-v100-setup.sh` (root, dated
+   2025-03-19). The script loads the modules, makes the device nodes, then runs
+   `nvidia-smi -pm 1` and `nvidia-smi -c 3` (`# Set compute mode to COMPUTE_EXCLUSIVE_PROCESS`).
+   The grep above misses it: it does not search `/usr/local/bin` (add it:
+   `grep -rlnE "nvidia-smi.*-c|--compute-mode" /etc /usr/local/bin /usr/local/sbin /opt` finds it).
+   Order matters: that unit runs after `multi-user.target`, i.e. after Docker and after
+   `nvidia-compute-default.service` (`Before=docker.service`), so it would set Exclusive_Process
+   again after our unit set Default. `After=nvidia-v100-setup.service` in our unit would form an
+   ordering cycle with `Before=docker.service` (Docker is part of `multi-user.target`). The owner's
+   switch-day choice: change the script's `nvidia-smi -c 3` to `nvidia-smi -c DEFAULT` (then the
+   boot unit is only a check), or drop that line and keep the boot unit. The mode is Default
+   today (set by hand on 2026-11-16) until the next reboot.
+
 2. Install and start:
 
    ```bash
@@ -73,6 +88,21 @@ switch that did not take fails the unit. It is not installed by anything here. O
    nvidia-smi --query-gpu=compute_mode --format=csv    # Default
    systemctl status nvidia-compute-default.service     # active (exited)
    ```
+
+### Switch day: open items (from the D4 GPU session, 2026-11-17)
+
+- **Outer reverse proxy (141.35.136.10) not read yet: no access.** Production `marcus.decimer.ai`
+  sits behind it. Before v2 takes public traffic, read its setup (read only) and write the values
+  here: the address it connects from (that is what `MARCUS_TRUSTED_PROXIES` / nginx must trust for
+  `X-Forwarded-For`, never a CIDR), its body size limit (must allow 20 MB uploads; v2's nginx caps at
+  21 MiB, v1's at 10 MB), whether it buffers responses (SSE at `/api/v2/papers/{id}/events` needs
+  buffering off or `X-Accel-Buffering: no` honoured), and where TLS ends (the owner cookie is
+  `Secure`; the browser must see https).
+- The Exclusive_Process setter (`nvidia-v100-setup.sh`, above) must be changed before the reboot test.
+- GPU findings to close before the switch (judges/results/2026-11-17-gpu-session.md):
+  worker-segment cannot start with its TensorFlow memory budget (decimer_segmentation calls
+  `set_memory_growth` at import), and dcgm-exporter exports no GPU metrics as configured (its DCGM
+  host engine refuses to watch fields when not root).
 
 ### nginx and api restarts
 

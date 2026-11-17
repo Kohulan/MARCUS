@@ -1,0 +1,1063 @@
+{
+ "scenario": "S1",
+ "target": "jarvis",
+ "client": "v1",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T11:42:04+00:00",
+ "config": {
+  "target": "jarvis",
+  "client": "v1",
+  "base_url": "http://127.0.0.1:19000",
+  "scenarios": [
+   "S1"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "depict_period_s": 2.0,
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "allow_warm_cache": false,
+  "tag": "d4"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   2.72,
+   1.46,
+   1.67
+  ],
+  "end": [
+   2.56,
+   1.86,
+   1.77
+  ]
+ },
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected": 15,
+  "engines": {
+   "decimer": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "decimer",
+      "wall_ms": 51082.3,
+      "segment_ms": 10676.0,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": false,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 17,
+      "rate_limit_events": 0,
+      "server_segment_s": [
+       10.67
+      ],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 614.3,
+       "p50": 2368.1,
+       "p95": 4933.6,
+       "max": 5135.2,
+       "mean": 2686.3
+      },
+      "fixture_recall_skeleton": 0.867,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 4364.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 4847.2,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 3214.6,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 988.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 614.3,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 1525.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 2368.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 1570.2,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 623.8,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 4225.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 1263.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 623.3,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 5135.2,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 4666.4,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 4264.2,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 109.5,
+        "ms": 10676.0,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__fe35cce6e3d5/all_segments",
+        "status": 200,
+        "t_ms": 10785.5,
+        "ms": 2.4,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 10788.1,
+        "ms": 4364.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 15152.6,
+        "ms": 4846.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 19999.8,
+        "ms": 3214.4,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 23214.4,
+        "ms": 987.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 24202.4,
+        "ms": 614.2,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 24816.8,
+        "ms": 1524.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 26341.8,
+        "ms": 2368.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 28709.9,
+        "ms": 1570.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 30280.2,
+        "ms": 623.6,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 30904.0,
+        "ms": 4225.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 35129.9,
+        "ms": 1262.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 36393.0,
+        "ms": 623.2,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 37016.4,
+        "ms": 5134.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 42151.6,
+        "ms": 4666.1,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 46818.0,
+        "ms": 4264.0,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 4541.8,
+     "status": 200
+    }
+   },
+   "molnextr": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "molnextr",
+      "wall_ms": 94996.7,
+      "segment_ms": 10077.9,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": false,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 17,
+      "rate_limit_events": 0,
+      "server_segment_s": [
+       10.07
+      ],
+      "n_segments": 15,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 15,
+       "min": 3588.6,
+       "p50": 5736.2,
+       "p95": 8305.9,
+       "max": 8929.6,
+       "mean": 5658.8
+      },
+      "fixture_recall_skeleton": 0.933,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 7241.6,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 8038.6,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_2",
+        "page": 2,
+        "ocsr_ms": 4203.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 3849.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 5736.2,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 4578.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 3588.6,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 4530.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_2",
+        "page": 0,
+        "ocsr_ms": 5793.4,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 4898.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 6124.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 3839.7,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 5873.8,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 7656.5,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 8929.6,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 32.8,
+        "ms": 10077.8,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__bc41bd3dba29/all_segments",
+        "status": 200,
+        "t_ms": 10110.7,
+        "ms": 3.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 10114.1,
+        "ms": 7241.4,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 17355.8,
+        "ms": 8038.1,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 25394.4,
+        "ms": 4203.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 29598.0,
+        "ms": 3848.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 33447.0,
+        "ms": 5736.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 39183.2,
+        "ms": 4577.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 43761.4,
+        "ms": 3588.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 47350.0,
+        "ms": 4530.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 51880.5,
+        "ms": 5793.3,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 57674.0,
+        "ms": 4898.6,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 62573.0,
+        "ms": 6123.9,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 68697.1,
+        "ms": 3839.6,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 72536.8,
+        "ms": 5873.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 78410.6,
+        "ms": 7656.2,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 86067.1,
+        "ms": 8929.3,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 6564.5,
+     "status": 200
+    }
+   },
+   "molscribe": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "molscribe",
+      "wall_ms": 43709.4,
+      "segment_ms": 9924.8,
+      "segments_reported": 9,
+      "segments_listed": 9,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 3,
+      "page_errors": [
+       {
+        "page": 0,
+        "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+        "kind": "exception"
+       },
+       {
+        "page": 2,
+        "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+        "kind": "exception"
+       }
+      ],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": false,
+      "listed_pages": [
+       1,
+       3,
+       4
+      ],
+      "http_calls": 11,
+      "rate_limit_events": 0,
+      "server_segment_s": [
+       9.92
+      ],
+      "n_segments": 9,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 9,
+       "min": 2170.8,
+       "p50": 3049.0,
+       "p95": 5420.5,
+       "max": 5434.9,
+       "mean": 3749.6
+      },
+      "fixture_recall_skeleton": 0.533,
+      "lost_pages": [
+       0,
+       2
+      ],
+      "segments": [
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 3049.0,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 5398.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 2605.8,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 4785.4,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_4_2",
+        "page": 4,
+        "ocsr_ms": 2855.1,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 2425.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_2",
+        "page": 1,
+        "ocsr_ms": 2170.8,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_2",
+        "page": 3,
+        "ocsr_ms": 5434.9,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 5020.8,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 34.3,
+        "ms": 9924.7,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__dec1426e1cf7/all_segments",
+        "status": 200,
+        "t_ms": 9959.2,
+        "ms": 3.4,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 9962.8,
+        "ms": 3048.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 13011.8,
+        "ms": 5398.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 18410.7,
+        "ms": 2605.6,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 21016.5,
+        "ms": 4785.1,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 25801.9,
+        "ms": 2855.0,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 28657.0,
+        "ms": 2425.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 31082.9,
+        "ms": 2170.7,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 33253.7,
+        "ms": 5434.6,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 38688.6,
+        "ms": 5020.5,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 2260.5,
+     "status": 200
+    }
+   }
+  }
+ },
+ "summary": {
+  "decimer": [
+   {
+    "wall_s": 51.1,
+    "segment_s": 10.7,
+    "ocsr_p50_ms": 2368.1,
+    "ocsr_p95_ms": 4933.6,
+    "segments": 15,
+    "recall_skel": 0.867,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 15,
+    "backend_crash": false
+   }
+  ],
+  "molnextr": [
+   {
+    "wall_s": 95.0,
+    "segment_s": 10.1,
+    "ocsr_p50_ms": 5736.2,
+    "ocsr_p95_ms": 8305.9,
+    "segments": 15,
+    "recall_skel": 0.933,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 15,
+    "backend_crash": false
+   }
+  ],
+  "molscribe": [
+   {
+    "wall_s": 43.7,
+    "segment_s": 9.9,
+    "ocsr_p50_ms": 3049.0,
+    "ocsr_p95_ms": 5420.5,
+    "segments": 9,
+    "recall_skel": 0.533,
+    "page_errors": 2,
+    "lost_pages": [
+     0,
+     2
+    ],
+    "listed": 9,
+    "backend_crash": false
+   }
+  ]
+ },
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 7,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16245,
+  "max_gpu_used_mib": 16250,
+  "events": [
+   {
+    "t": "2026-11-17T11:42:04+00:00",
+    "scenario": "S1",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:42:34+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 13,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:43:04+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16251,
+    "gpu_used_mib": 16244,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:43:34+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 14,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:44:04+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 14,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:44:34+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:45:04+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:45:27+00:00",
+    "scenario": "S1",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T11:45:27+00:00",
+ "duration_s": 203.7
+}

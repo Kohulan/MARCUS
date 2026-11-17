@@ -1,0 +1,60 @@
+# Override for the v2 TEST stack on jarvis (Task D4 GPU session). Not production.
+#
+# Built and run from a copy of branch v2-backend in ~/Project_MARCUS/v2-test/ (never from the production clone
+# ~/Project_MARCUS/MARCUS). Compose project `marcus-v2-test`: its own containers (marcus-v2-test-*), volumes and
+# networks, so nothing is shared with production (`marcus`, ports 8080/9000) or with the v1 judge copy
+# (`marcus-judge`, 127.0.0.1:19000).
+#
+#   cd ~/Project_MARCUS/v2-test/backend-v2
+#   # GPU mode (load, accuracy, robustness): real engines on the V100
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.gpu.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml up -d
+#   # security mode (the security v2 suite uploads with engine "fake"): fake segment/OCSR workers, no GPU
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.fake.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml up -d
+#   # stop and remove (keeps the images)
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.gpu.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml down -v
+#
+# Ports: the only published port is nginx's 127.0.0.1:18090 from docker-compose.yml (loopback only; not 8080 or
+# 9000, which the maintenance page holds). dcgm-exporter, metrics, API, Postgres and Redis publish nothing.
+# The OCSR cache clear of the load judge (R21) needs the Postgres container name: marcus-v2-test-postgres-1.
+#
+# Judge-friendly limits (the D2/R20 ruling): every judge request comes from one client IP (the Docker gateway),
+# so the PER-IP limits are raised exactly as docker-compose.fake.yml raises them; otherwise the security suite
+# (dozens of owners per run) and the load scenarios (one owner per paper) hit "10 new owners per IP per hour" and
+# "6 active papers per IP" within minutes. Per-OWNER limits (3 active papers, 10 uploads per minute, 60 tool calls
+# per minute) and every other setting stay as in production.
+#
+#   limit                                   production   this stack
+#   MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR       10           1000
+#   MARCUS_IP_MAX_ACTIVE_PAPERS             6            100
+#   MARCUS_RATE_LIMIT_IP_PER_MIN            300          6000
+#
+# Fake engines stay OFF in GPU mode (MARCUS_ENABLE_FAKE_ENGINES from docker-compose.yml, default 0); security
+# mode turns them on through docker-compose.fake.yml only.
+#
+# MolScribe device: MARCUS_MOLSCRIBE_DEVICE=cpu (as v1) unless set in the environment of the `up` command; D4
+# measured cuda against cpu with the fixture judge (judges/results/2026-11-17-gpu-session.md).
+
+#
+# D4 WORKAROUND (finding, not a fix): worker-segment runs WITHOUT its TensorFlow memory budget in GPU mode.
+# With MARCUS_GPU_MEM_MB=6144 (docker-compose.gpu.yml) marcus.workers.gpu.limit_tf_memory configures a logical
+# device, and importing decimer_segmentation then calls tf.config.experimental.set_memory_growth
+# (decimer_segmentation/mrcnn/model.py:51, configure_gpu at import) -> "ValueError: Cannot set memory growth on
+# device when virtual devices configured": the segmenter fails to load and the worker exits (restart loop).
+# worker-decimer already guards the same call (marcus/workers/ocsr/decimer.py: set_memory_growth is patched out
+# while decimer imports); marcus/workers/segment.py does not. An empty value disables the budget (the env var's
+# `:-6144` default in docker-compose.gpu.yml cannot be emptied from the shell, hence this file), so TensorFlow uses
+# memory growth as in v1. Remove this block once segment.py guards the import like decimer.py.
+
+services:
+  api:
+    environment:
+      MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
+      MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
+      MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
+
+  worker-segment:
+    environment:
+      MARCUS_GPU_MEM_MB: ""

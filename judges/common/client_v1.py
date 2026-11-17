@@ -325,6 +325,8 @@ def run_paper(
 
         # ---------------------------------------------------------------- OCSR loop (sequential)
         include_molfile = engine in ("molnextr", "molscribe")  # structures.js turns this on for these engines
+        # "decimer-hand" (v2's engine name) is v1's DECIMER with the API's hand_drawn flag; the Vue UI never sets it
+        v1_engine, hand_drawn = ("decimer", "true") if engine == "decimer-hand" else (engine, "false")
         ocsr_t = time.perf_counter()
         structures = []
         for n, it in enumerate(items):
@@ -334,8 +336,8 @@ def run_paper(
                    "page": it["page"], "page_number": (it["page"] + 1) if it["page"] is not None else None,
                    "filename": it["filename"], "smiles": "", "ocsr_ms": None, "error": None,
                    "fallback": False, "t_start_ms": round((time.perf_counter() - t0) * 1000, 1)}
-            form = {"image_path": image_path, "engine": engine, "output_type": "both" if include_molfile else "smiles",
-                    "hand_drawn": "false", "depict_engine": "rdkit", "depict_width": "512", "depict_height": "512",
+            form = {"image_path": image_path, "engine": v1_engine, "output_type": "both" if include_molfile else "smiles",
+                    "hand_drawn": hand_drawn, "depict_engine": "rdkit", "depict_width": "512", "depict_height": "512",
                     "depict_format": "svg"}
             ts = time.perf_counter()
             n429 = len(calls.rate_limit_events)
@@ -348,7 +350,7 @@ def run_paper(
                 first_err = _err_text(e1)
                 row["first_error"] = first_err
                 try:  # UI fallback: generateBoth
-                    fb = {"image_path": image_path, "engine": engine, "hand_drawn": "false"}
+                    fb = {"image_path": image_path, "engine": v1_engine, "hand_drawn": hand_drawn}
                     resp = call("ocsr_fallback", "POST", f"{API}/ocsr/generate_both", timeout=ocsr_timeout_s, files=_multipart(fb)).json()
                     row["fallback"] = True
                 except Aborted:
