@@ -6,9 +6,15 @@ Before a scenario and every 30 s during it the guard checks, read-only over SSH:
   2. free GPU memory:    nvidia-smi --query-gpu=memory.free ...                         >= 3 GiB
 
 If either fails (or the check itself cannot run: fail closed) the guard trips at once: it sets
-``guard.abort`` (an Event the scenarios and client_v1.run_paper watch), closes every open HTTP client
-of client_v1 and writes the reason to ``load/results/guard_events.jsonl``. Scenarios must stop sending
+``guard.abort`` (an Event the scenarios and client_v1/client_v2.run_paper watch), closes every open HTTP client
+of client_v1 and client_v2 and writes the reason to ``load/results/guard_events.jsonl``. Scenarios must stop sending
 work and record ``guard.tripped`` in their result.
+
+Production-stopped mode (``prod_expected="stopped"``, scenarios.py ``--prod-stopped``) is ONLY for the owner's GPU test
+window, when ``marcus-backend`` was stopped on purpose (Task D4): check 1 becomes
+``docker inspect -f '{{.State.Status}}' marcus-backend`` in (exited, created), i.e. production must stay stopped, so
+nothing of ours shares the GPU with it; a production that runs again trips the guard. Check 2 and the ledger are the
+same in both modes.
 
 It also keeps a ledger of GPU test time (``load/results/gpu_time_ledger.json``); a new guard on jarvis
 refuses to start when the ledger is over the budget (default 45 min, env JUDGE_GPU_BUDGET_S).
@@ -17,7 +23,7 @@ The guard never starts, stops, restarts or changes a container. Only the command
 ``common/remote.py`` can be sent. For a non-jarvis target the guard is a no-op that still provides
 ``abort`` and an events list, so scenario code is the same for both targets.
 
-CLI:  uv run python load/guard_jarvis.py --check        # one check against jarvis, prints JSON
+CLI:  uv run python load/guard_jarvis.py --check [--prod-stopped]   # one check against jarvis, prints JSON
 """
 from __future__ import annotations
 
@@ -31,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import client_v1, remote  # noqa: E402
+from common import client_v1, client_v2, remote  # noqa: E402
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MIN_FREE_MIB = 3 * 1024
@@ -54,15 +60,26 @@ def _utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def real_check() -> dict:
-    """One production-health + GPU check over SSH (read-only). Raises on ssh errors."""
+PROD_MODES = ("running", "stopped")
+PROD_STOPPED_STATES = ("exited", "created")
+
+
+def real_check(prod_expected: str = "running") -> dict:
+    """One production + GPU check over SSH (read-only). Raises on ssh errors."""
+    if prod_expected == "stopped":
+        status = remote.ssh_ro(f"docker inspect -f '{{{{.State.Status}}}}' {PROD}").strip()
+        return {"prod_status": status, **remote.gpu_stats(remote=True)}
     health = remote.ssh_ro(f"docker inspect -f '{{{{.State.Health.Status}}}}' {PROD}").strip()
     return {"prod_health": health, **remote.gpu_stats(remote=True)}
 
 
-def evaluate(sample: dict, min_free_mib: int = MIN_FREE_MIB) -> str | None:
+def evaluate(sample: dict, min_free_mib: int = MIN_FREE_MIB, prod_expected: str = "running") -> str | None:
     """Return a human reason if the sample violates the rules, else None."""
-    if sample.get("prod_health") != "healthy":
+    if prod_expected == "stopped":
+        if sample.get("prod_status") not in PROD_STOPPED_STATES:
+            return (f"production container marcus-backend is {sample.get('prod_status')!r}; the GPU window mode "
+                    f"(--prod-stopped) needs it stopped ({'/'.join(PROD_STOPPED_STATES)})")
+    elif sample.get("prod_health") != "healthy":
         return f"production container marcus-backend health is {sample.get('prod_health')!r}, not 'healthy'"
     if sample.get("gpu_free_mib", 0) < min_free_mib:
         return f"free GPU memory {sample.get('gpu_free_mib')} MiB is below {min_free_mib} MiB"
@@ -74,13 +91,16 @@ class Guard:
 
     def __init__(self, base_url: str, scenario: str, *, interval_s: float = INTERVAL_S,
                  min_free_mib: int = MIN_FREE_MIB, checker=None, enabled: bool | None = None,
-                 use_ledger: bool = True):
+                 use_ledger: bool = True, prod_expected: str = "running"):
+        if prod_expected not in PROD_MODES:
+            raise ValueError(f"prod_expected must be one of {PROD_MODES}, not {prod_expected!r}")
+        self.prod_expected = prod_expected
         self.base_url = base_url
         self.scenario = scenario
         self.interval_s = interval_s
         self.min_free_mib = min_free_mib
         self.enabled = is_jarvis_url(base_url) if enabled is None else enabled
-        self.checker = checker or real_check  # injectable for tests
+        self.checker = checker or (lambda: real_check(prod_expected))  # injectable for tests
         self.use_ledger = use_ledger and self.enabled
         self.abort = threading.Event()
         self.events: list[dict] = []
@@ -107,7 +127,7 @@ class Guard:
         if sample is None:
             ev.update(ok=False, reason=f"guard check could not run: {err}")
         else:
-            reason = evaluate(sample, self.min_free_mib)
+            reason = evaluate(sample, self.min_free_mib, self.prod_expected)
             ev.update(sample)
             ev.update(ok=reason is None, reason=reason)
         self.events.append(ev)
@@ -121,7 +141,7 @@ class Guard:
             return
         self.tripped_reason = reason
         self.abort.set()
-        closed = client_v1.abort_all()
+        closed = client_v1.abort_all() + client_v2.abort_all()  # both builds' paper clients
         RESULTS.mkdir(exist_ok=True)
         with open(RESULTS / "guard_events.jsonl", "a") as f:
             f.write(json.dumps({"t": _utc(), "scenario": self.scenario, "event": "TRIPPED", "reason": reason,
@@ -165,7 +185,7 @@ class Guard:
     def summary(self) -> dict:
         free = [e["gpu_free_mib"] for e in self.events if "gpu_free_mib" in e]
         return {
-            "enabled": self.enabled, "checks": len(self.events), "tripped": self.tripped,
+            "enabled": self.enabled, "prod_expected": self.prod_expected, "checks": len(self.events), "tripped": self.tripped,
             "trip_reason": self.tripped_reason, "min_gpu_free_mib": min(free) if free else None,
             "max_gpu_used_mib": max((e["gpu_used_mib"] for e in self.events if "gpu_used_mib" in e), default=None),
             "events": self.events,
@@ -201,10 +221,12 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="run one check against jarvis and print it")
+    ap.add_argument("--prod-stopped", action="store_true", help="GPU window mode: production must be stopped")
     a = ap.parse_args()
     if a.check:
-        s = real_check()
-        s["violation"] = evaluate(s)
+        mode = "stopped" if a.prod_stopped else "running"
+        s = real_check(mode)
+        s["violation"] = evaluate(s, prod_expected=mode)
         s["gpu_time_used_s"] = ledger_total()
         print(json.dumps(s, indent=1))
     else:

@@ -4,7 +4,8 @@ Question: how long does a paper take, and does a small paper wait behind a big o
 against v1 today and against the rebuilt service (v2) later; only the client adapter (`common/client_v1.py`
 vs a future `common/client_v2.py`) and the target change.
 
-Everything here is **v1 only today**. First measurements are in the last section.
+`scenarios.py --client v2` runs the same scenarios against backend-v2 (`v2_adapter.py` maps each v1 call, see
+"v2" below). First v1 measurements are in the last sections.
 
 ## Files
 
@@ -15,13 +16,14 @@ Everything here is **v1 only today**. First measurements are in the last section
 | `guard_jarvis.py` | safety guard for jarvis (below). |
 | `make_fixtures.py` | synthetic PDFs with a known number of RDKit-drawn structures: 15, 190, 2,020 (`data/fixtures/`, plus a `.json` sidecar with the expected structure of every slot). |
 | `run_goldset.py` | gold-set papers x engines through the client into `runs/<name>.jsonl`; resumable. |
-| `scenarios.py` | S1 to S5. Raw results in `results/<target>_<scenario>_<time>.json`. |
+| `scenarios.py` | S1 to S5, `--client v1|v2`. Raw results in `results/<target>[_v2]_<scenario>_<time>.json`. |
+| `v2_adapter.py` | the scenarios' calls in v2 form (owner cookie, `/images`, `/tools/depict`, `/api/v2/health`); papers via `../common/client_v2.py`. |
 | `report.py` | Markdown tables from the newest result files (`uv run python load/report.py jarvis`). |
 | `count_segments_offline.py` | counts segments of a big PDF with one process per page, inside the image, no HTTP (used for the 2,020 fixture). |
 | `docker-compose.local-private.yml` | a private local copy of the backend image on :19100 (see "Local copy"). |
 | `docker-compose.jarvis-single-thread.yml` | optional override for the jarvis judge copy (owner decides), see "Jarvis runbook". |
 | `shim/sitecustomize.py` | makes v1 segment with one thread (see "Local copy"). |
-| `test_guard.py`, `test_client_v1.py` | offline tests: guard, ssh whitelist, log parser, client call sequence (`uv run pytest load -q`). |
+| `test_guard.py`, `test_client_v1.py`, `test_client_v2.py`, `test_v2_adapter.py` | offline tests: guard, ssh whitelist, log parser, client call sequence (`uv run pytest load -q`). |
 
 `data/` is git-ignored; `results/` holds the JSON (commit what you want to keep).
 
@@ -94,6 +96,44 @@ Examples: 15 structures = 17 core / 49 with extras; the production median paper 
 190 structures = 192 / 574; 2,020 structures = 2,022 / 6,064. Heartbeats (websocket or HTTP every 15 s) are not
 counted. The UI's own order is also reproduced: segments are processed in the order the server lists them
 (no sorting), one at a time.
+
+## v2 (`--client v2`, `v2_adapter.py`)
+
+```bash
+# fake stack (backend-v2: docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d)
+uv run python load/scenarios.py --target local --client v2 --engines fake --engine fake --scenarios S1 --tag fake
+uv run python load/scenarios.py --target local --client v2 --engine fake --scenarios S2 S3 S4 S5
+# real engines (stack without the fake override), S1 only on CPU
+uv run python load/scenarios.py --target local --client v2 --scenarios S1
+# jarvis (D4): the guard runs for --target jarvis on any tunnel port. In the owner's GPU window with v1 production
+# stopped on purpose add --prod-stopped: the guard then requires marcus-backend to STAY stopped (State.Status exited/
+# created) instead of healthy; free GPU memory >= 3 GiB and the GPU-time ledger (JUDGE_GPU_BUDGET_S) still apply.
+uv run python load/scenarios.py --target jarvis --client v2 --base-url http://localhost:<port> --prod-stopped --scenarios S1 S2 S3 S4 S5
+```
+
+Default base URLs: local `http://localhost:18090` (the v2 nginx), jarvis `http://localhost:29090` (pass `--base-url`).
+Results: `results/<target>_v2_<scenario>_<time>.json`; the S2 slowdown uses the newest v2 S1 of the same engine.
+
+| v1 call (scenarios.py) | v2 form |
+|---|---|
+| `GET /health` | `GET /api/v2/health` |
+| `POST /session/create` | a browser owner: `GET /api/v2/papers` without a cookie, cookie `marcus_owner` from Set-Cookie (Secure, so sent by hand) |
+| `POST /session/heartbeat/{sid}` | `GET /api/v2/papers` with the owner cookie |
+| `DELETE /session/remove/{sid}` | none (no sessions) |
+| `POST /latest/ocsr/generate_smiles` | `POST /api/v2/images` + `GET /api/v2/images/{id}` every 0.25 s until done/failed |
+| `client_v1.run_paper` | `client_v2.run_paper` (`POST /api/v2/papers`, SSE events, `GET /papers/{id}`, `GET /papers/{id}/steps`) |
+| page errors from docker logs | failed `render_page` / `segment_page` steps in each record |
+| (v2 only) | `POST /api/v2/tools/depict` probe every `--depict-period-s` (2 s) in S2, S3, S5: `depict_p95_ms` |
+
+Differences: S2's big paper runs full OCSR (`--big-cap` ignored, logged); S3 and S4 use `--engine`; S4 runs the full
+pipeline (spec: two papers at once must finish faster than one after the other); every paper is its own owner; the S5
+script user moves to a new owner before its 10th upload per owner (the per-owner limit is 10 uploads per minute; v1's
+script user had its own rate-limit bucket for the same reason). New fields: `first_segment_start_s`, `first_smiles_s`,
+`ocsr_done_s` (v1-comparable end: a v2 paper's `wall_s` also includes docling, about 55-65 s on CPU),
+`segment_compute_s`, `ocsr_compute_p50_ms`, `ocsr_cache_hits`, `depict_p95_ms`, probe `n_503`, `host_load`
+(1/5/15-min load average at start and end), `v2_http_errors` (every answer >= 400 the adapter saw) and `v2_breaker_503`
+(`503 {"detail": "service unavailable"}`: the rate limiter's circuit breaker was open). The fake stack makes 2
+segments per page (the 15-structure fixture gives 10, the 190 one 48), so fake-stack segment counts are not recall.
 
 ## Guard (`guard_jarvis.py`)
 

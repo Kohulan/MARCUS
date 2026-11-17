@@ -110,3 +110,34 @@ def test_parse_server_log():
     assert p["page_errors"][1]["error"].startswith("(empty message")
     assert p["server_segment_s"] == [24.5]
     assert p["keyword_counts"]["PyramidROIAlign"] >= 2
+
+
+# ---------------------------------------------------------------- owner's GPU window: production stopped on purpose (D4)
+def test_evaluate_prod_stopped_mode():
+    """With production stopped for a GPU test window, a RUNNING production is the violation (it would share the GPU)."""
+    stopped = {"prod_status": "exited", "gpu_free_mib": 20000}
+    assert gj.evaluate(stopped, prod_expected="stopped") is None
+    assert gj.evaluate({"prod_status": "created", "gpu_free_mib": 20000}, prod_expected="stopped") is None
+    assert "running" in gj.evaluate({"prod_status": "running", "gpu_free_mib": 20000}, prod_expected="stopped")
+    assert gj.evaluate({"prod_status": "exited", "gpu_free_mib": 100}, prod_expected="stopped")  # GPU rule still holds
+    # the default mode is unchanged: a stopped production fails it
+    assert gj.evaluate({"prod_health": "unhealthy", "gpu_free_mib": 20000}) is not None
+
+
+def test_prod_stopped_check_uses_the_whitelisted_status_command(monkeypatch):
+    sent = []
+    monkeypatch.setattr(gj.remote, "ssh_ro", lambda cmd: sent.append(cmd) or "exited\n")
+    monkeypatch.setattr(gj.remote, "gpu_stats", lambda remote: {"gpu_free_mib": 20000})
+    s = gj.real_check(prod_expected="stopped")
+    assert s["prod_status"] == "exited" and sent == ["docker inspect -f '{{.State.Status}}' marcus-backend"]
+    assert all(gj.remote.is_allowed(c) for c in sent)
+
+
+def test_guard_in_prod_stopped_mode(monkeypatch):
+    g = gj.Guard("http://localhost:29090", "S1", enabled=True, use_ledger=False, prod_expected="stopped",
+                 checker=lambda: {"prod_status": "exited", "gpu_free_mib": 20000})
+    with g:
+        pass
+    assert not g.tripped and g.summary()["prod_expected"] == "stopped"
+    with pytest.raises(ValueError):
+        gj.Guard("http://x", "S1", prod_expected="maybe")

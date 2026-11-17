@@ -32,6 +32,12 @@ timestamps are the server's clock, only differences of them are used). SSE is us
                       (keyed by the crop image). Accuracy is unaffected. There is deliberately no bypass switch.
   page_errors         one entry per failed render_page / segment_page step: {page, error, kind, error_class}.
   t_start_ms          per segment: ocsr started_at minus the paper's first step created_at (server clock only).
+  first_segment_start_ms  v2 only: client upload round trip + (first segment_page started_at - paper's first
+                      step created_at): when the paper's segmentation began, measured like segment_ms (spec §3 Fair).
+  first_smiles_ms     v2 only: same origin, to the first ocsr step that finished ``done`` (first SMILES shown).
+  ocsr_done_ms        v2 only: same origin, to the last ocsr step's finished_at (any final status). The v1-comparable
+                      end of a paper: v1's wall_ms stops at the last OCSR answer, a v2 paper's wall_ms also waits
+                      for its docling and doi steps.
 
 Differences from v1 inputs: ``on_429``, ``max_429_retries``, ``ui_extras`` and ``log_source`` are v1-only
 (no UI call sequence, page errors come from step events, not docker logs): accepted and ignored. Keys with
@@ -174,6 +180,7 @@ def run_paper(
     rec: dict = {
         "paper_id": paper_id, "pdf_sha256": pdf_sha, "engine": engine, "build": f"v2-{git_short_hash()}",
         "started_at": started_at, "wall_ms": None, "segment_ms": None, "segment_compute_ms": None, "ocsr_cache_hits": 0,
+        "first_segment_start_ms": None, "first_smiles_ms": None, "ocsr_done_ms": None,
         "pages_total": count_pdf_pages(pdf_path), "pages_with_segments": 0,
         "page_errors": [], "segments": [],
         "client": "client_v2", "base_url": base_url, "tag": tag, "upload_name": up_name, "upload_sha256": up_sha,
@@ -311,6 +318,7 @@ def run_paper(
         up = call("upload", "POST", f"{API}/papers", files={"file": (up_name, data, "application/pdf")},
                   data={"engine": v2_engine, "ocsr": "auto" if max_segments is None else "off"})
         upload_ms = (time.perf_counter() - t_up) * 1000
+        rec["timings_ms"]["upload"] = round(upload_ms, 1)
         pid = up.json()["paper_id"]
         rec["v2_paper_id"] = pid
 
@@ -419,6 +427,15 @@ def run_paper(
             seg_ms = upload_ms + (max(ends) - origin) * 1000
             rec["segment_ms"] = round(seg_ms, 1)
             rec["exceeds_ui_segment_timeout"] = seg_ms > segment_timeout_s * 1000
+    if origin is not None and upload_ms is not None:
+        if starts:
+            rec["first_segment_start_ms"] = round(upload_ms + (min(starts) - origin) * 1000, 1)
+        smiles_ends = [st["_end"] for st in step_rows if st["kind"] == "ocsr" and st["status"] == "done" and st["_end"]]
+        if smiles_ends:
+            rec["first_smiles_ms"] = round(upload_ms + (min(smiles_ends) - origin) * 1000, 1)
+        ocsr_ends = [st["_end"] for st in step_rows if st["kind"] == "ocsr" and st["_end"]]
+        if ocsr_ends:
+            rec["ocsr_done_ms"] = round(upload_ms + (max(ocsr_ends) - origin) * 1000, 1)
     rstarts = [st["_start"] for st in step_rows if st["kind"] == "render_page" and st["_start"]]
     rends = [st["_end"] for st in step_rows if st["kind"] == "render_page" and st["_end"]]
     if rstarts and rends:

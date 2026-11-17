@@ -250,3 +250,34 @@ def test_ocsr_cache_hits_are_counted(monkeypatch, pdf):
     assert r["ocsr_cache_hits"] == 1 and [s["cached"] for s in r["segments"]] == [True, False]
     patch(monkeypatch, FakeV2([], [], steps=[]))
     assert client_v2.run_paper(pdf, "decimer", base_url="http://x")["ocsr_cache_hits"] == 0
+
+
+def test_first_segment_start_and_first_smiles_are_upload_relative(monkeypatch, pdf):
+    """D3 (spec §3 Fair): when the paper's first segment_page started and its first SMILES arrived, measured like
+    segment_ms (client upload round trip + server-clock delta from the paper's first step)."""
+    steps = ok_steps()
+    steps.append(_row("ocsr", 2, S2, t0=10, t1=10.5, created=9.5, status="failed", error_class="engine_error"))
+    fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO")), _seg(S1, 2, 1, _pred("CCN"))], steps=steps)
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    # origin 1.0 s (check_pdf created); first segment_page started 4.0 s -> 3000 ms + upload round trip
+    assert 3000.0 <= r["first_segment_start_ms"] < 3200.0
+    # first DONE ocsr step finished at 11.25 s (the failed one at 10.5 s is not a SMILES) -> 10250 ms + upload
+    assert 10250.0 <= r["first_smiles_ms"] < 10450.0
+    assert r["timings_ms"]["upload"] < 200.0
+
+
+def test_first_times_are_none_without_steps(monkeypatch, pdf):
+    patch(monkeypatch, FakeV2([], [_seg(S0, 0, 0, _pred("CCO"))], steps_status=404))
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert r["first_segment_start_ms"] is None and r["first_smiles_ms"] is None
+
+
+def test_ocsr_done_ms_is_the_v1_comparable_end(monkeypatch, pdf):
+    """v1 wall_ms ends at the last OCSR answer; a v2 paper ends after docling/doi too. ocsr_done_ms = upload round
+    trip + (last ocsr step finished_at, any final status - first step created_at)."""
+    steps = ok_steps() + [_row("docling", t0=1.5, t1=60.0)]
+    fake = FakeV2(ok_events(), [_seg(S0, 0, 0, _pred("CCO")), _seg(S1, 2, 1, _pred("CCN"))], steps=steps)
+    patch(monkeypatch, fake)
+    r = client_v2.run_paper(pdf, "decimer", base_url="http://x")
+    assert 10750.0 <= r["ocsr_done_ms"] < 10950.0  # last ocsr finished 11.75 s, origin 1.0 s

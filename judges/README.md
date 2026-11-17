@@ -58,6 +58,9 @@ The same key means the same thing in both builds; numbers only v2 can give have 
 | `segments[].ocsr_ms` | client round trip of the OCSR call (incl. fallback, 429 waits) | newest `ocsr` step created_at to finished_at: queue wait, retries, timeouts included. None when the timing is missing; never replaced by the engine time |
 | `segments[].ocsr_compute_ms` | None | the engine's own ms (0 for a cache hit) |
 | `ocsr_cache_hits` | 0 | predictions served from the v2 OCSR cache (`cached` flag on the prediction) |
+| `first_segment_start_ms` | None | client upload round trip + (first `segment_page` started_at - paper's first step created_at): when segmentation began (spec §3 Fair) |
+| `first_smiles_ms` | None | same origin, to the first `ocsr` step finished `done` (first SMILES shown) |
+| `ocsr_done_ms` | None (v1's `wall_ms` already ends at the last OCSR answer) | same origin, to the last `ocsr` step's finished_at. Compare THIS with v1 `wall_ms`: a v2 paper's `wall_ms` also waits for its docling and doi steps |
 
 **v2 timing runs need a cold OCSR cache.** The cache is keyed by the crop image, engine and engine version, so
 re-running a paper with the same engine (or `run_goldset --retry-failed`) serves OCSR from the cache in about
