@@ -1,6 +1,7 @@
 """Offline tests for load/v2_adapter.py (the v1 -> v2 call mapping of the load scenarios) and the --client switch
 of load/scenarios.py. Fake v2 API through httpx.MockTransport; no network, no docker."""
 import re
+import socket
 import sys
 import threading
 import time
@@ -356,8 +357,10 @@ def test_cache_clear_failure_is_loud(monkeypatch):
 # ------------------------------------------------------------------ D3b item 4: remote docker hosts
 @pytest.fixture(autouse=True)
 def _local_docker(monkeypatch):
-    """CacheClear asks where `docker exec` goes: the local socket unless a test says otherwise."""
+    """CacheClear asks where `docker exec` goes: the local socket and this machine's daemon unless a
+    test says otherwise."""
     monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+    monkeypatch.setattr(v2_adapter, "docker_daemon_name", socket.gethostname)
 
 
 @pytest.mark.parametrize("host", [
@@ -411,6 +414,28 @@ def test_cache_clear_refuses_when_the_docker_host_is_unknown(monkeypatch, outcom
     monkeypatch.setattr(v2_adapter.subprocess, "run", run)
     with pytest.raises(SystemExit, match="remote"):
         v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+
+
+@pytest.mark.parametrize("daemon,match", [("jarvis", "jarvis"), ("jarvis.ian.uni-jena.de", "jarvis"),
+                                           ("other-box", "remote"), ("", "remote")])
+def test_cache_clear_refuses_a_local_socket_that_reaches_another_daemon(monkeypatch, daemon, match):
+    """Review D3b M5: a unix socket can be an SSH-forwarded remote docker (ssh -L /tmp/x.sock:...).
+    The daemon's own host name (`docker info`) must be this machine's."""
+    monkeypatch.setenv("DOCKER_HOST", "unix:///tmp/fwd.sock")
+    monkeypatch.setattr(v2_adapter, "docker_daemon_name", lambda: daemon)
+    with pytest.raises(SystemExit, match=match):
+        v2_adapter.CacheClear("marcus-v2-postgres-1", "local")
+    assert v2_adapter.CacheClear("marcus-v2-test-postgres-1", "local").container == "marcus-v2-test-postgres-1"
+
+
+def test_docker_daemon_name_asks_docker_info(monkeypatch):
+    sent = []
+    monkeypatch.undo()  # the real function, not the autouse stand-in
+    monkeypatch.setattr(v2_adapter.subprocess, "run", lambda argv, **kw: sent.append(argv) or _Ctx("vm1\n"))
+    assert v2_adapter.docker_daemon_name() == "vm1"
+    assert sent == [["docker", "info", "--format", "{{.Name}}"]]
+    monkeypatch.setattr(v2_adapter.subprocess, "run", lambda argv, **kw: _Ctx("", 1))
+    assert v2_adapter.docker_daemon_name() == ""
 
 
 def test_each_script_call_sends_different_image_bytes(api):

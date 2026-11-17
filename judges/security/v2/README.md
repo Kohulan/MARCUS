@@ -41,9 +41,11 @@ rate-limit window and, after its burst, for the next one.
   uvicorn rewrote a loopback peer from X-Forwarded-For before the app saw it (measured: 6104 spoofed loopback requests, no 429;
   the same without X-Forwarded-For, 429 at 6001). Only processes inside the container can
   connect from loopback, so this is not reachable from outside.
-- Uploads are retried (twice, 6 s apart) on 503 `{"detail":"service unavailable"}`: one Redis
-  timeout (0.5 s) opens the limiter's circuit breaker, and uploads fail closed for 5 s by design.
-  Seen once in these runs (one Redis timeout in the ip scope, no load from the judge at the time).
+- Uploads are retried (twice, 6 s apart) on 503 `{"detail":"service unavailable"}`: 3 failed
+  Redis calls within 5 s (an error, or slower than `rate_limit_redis_timeout_s`, default 1.0 s)
+  open the limiter's circuit breaker, and uploads fail closed for 5 s by design. Before D3b one
+  0.5 s timeout was enough; that was seen once in these runs (one Redis timeout in the ip scope,
+  no load from the judge at the time).
 - Each run creates a few dozen owners from one IP. That is far under the fake stack's raised
   1000 new owners per hour, but over the real 10. Against a stack with real limits, expect 429s
   (which is the designed limit working, not a judge result).

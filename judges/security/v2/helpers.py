@@ -118,9 +118,10 @@ def judge_png(size: int = 64) -> bytes:
     return minimal_png(size)
 
 
-# The upload limiter fails CLOSED: after one Redis timeout (0.5 s) its circuit breaker answers
-# every upload 503 {"detail": "service unavailable"} for 5 s (marcus.api.security). That is an
-# availability answer, not a security result, so an upload is retried after the breaker window.
+# The upload limiter fails CLOSED while its circuit breaker is open: 3 failed Redis calls (error, or
+# slower than rate_limit_redis_timeout_s, default 1.0 s) within 5 s open it, and then every upload
+# gets 503 {"detail": "service unavailable"} for 5 s (marcus.api.security). That is an availability
+# answer, not a security result, so an upload is retried after the breaker window.
 BREAKER_RETRY_S = 6.0
 BREAKER_RETRIES = 2
 

@@ -45,6 +45,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -108,14 +109,34 @@ def docker_host() -> str:
     return (p.stdout or "").strip() if p.returncode == 0 else ""
 
 
+def docker_daemon_name() -> str:
+    """The host name the docker daemon reports (`docker info`, same DOCKER_HOST / context as `docker exec`).
+    '' when it cannot be found out."""
+    try:
+        p = subprocess.run(["docker", "info", "--format", "{{.Name}}"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return (p.stdout or "").strip() if p.returncode == 0 else ""
+
+
 def _docker_host_refusal() -> str | None:
-    """Why a container without the test prefix may not be cleared on this docker host (None = local)."""
+    """Why a container without the test prefix may not be cleared on this docker host (None = local).
+
+    Local means both: a local socket endpoint, and a daemon that reports this machine's host name. The second
+    check catches a unix socket that is really a forwarded remote docker (`ssh -L /tmp/x.sock:/var/run/docker.sock`).
+    Limit: a remote daemon whose host name equals this machine's would still count as local."""
     host = docker_host()
+    only = f"only the {TEST_PROJECT_PREFIX} project's Postgres may be cleared"
     if _JARVIS_HOST.search(host):
-        return f"the docker host {host!r} is jarvis: only the {TEST_PROJECT_PREFIX} project's Postgres may be cleared"
+        return f"the docker host {host!r} is jarvis: {only}"
     if not host.startswith(_LOCAL_DOCKER_SCHEMES):  # tcp://, ssh://, or unknown ('') count as remote
-        return (f"the docker host {host or '(unknown)'!r} is remote (or unknown): only the "
-                f"{TEST_PROJECT_PREFIX} project's Postgres may be cleared there")
+        return f"the docker host {host or '(unknown)'!r} is remote (or unknown): {only} there"
+    daemon, me = docker_daemon_name(), socket.gethostname()
+    if _JARVIS_HOST.search(daemon):
+        return f"the docker daemon behind {host!r} is jarvis ({daemon!r}): {only}"
+    if daemon != me:
+        return (f"the docker daemon behind {host!r} reports host {daemon or '(unknown)'!r}, not this machine "
+                f"({me!r}), so it is remote (or unknown): {only} there")
     return None
 
 _events: list[dict] = []
