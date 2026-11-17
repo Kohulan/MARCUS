@@ -1,5 +1,6 @@
 """Every owned resource of another owner gives the same 404 as a missing (or deleted) one."""
 
+import json
 import uuid
 
 import pytest
@@ -24,12 +25,19 @@ ROUTES = [
     ("GET", "/api/v2/segments/{s}/image", None),
     ("POST", "/api/v2/segments/{s}/predictions", {"engine": "molnextr"}),
     ("PUT", "/api/v2/segments/{s}/curation", {"status": "accepted", "smiles": "CC"}),
+    (
+        "PUT",
+        "/api/v2/papers/{p}/curation",
+        {"items": [{"segment_id": "{s}", "status": "accepted"}]},
+    ),
 ]
 IDS = [f"{m} {p}" for m, p, _ in ROUTES]
 
 
 async def call(c, method, template, body, p, s):
     url = template.format(p=p, s=s)
+    if body is not None:  # {s} is filled inside JSON bodies too
+        body = json.loads(json.dumps(body).replace("{s}", str(s)))
     return await c.request(method, url, json=body)
 
 

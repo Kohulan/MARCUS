@@ -63,6 +63,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/segments/{segment_id}/image"),
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
     ("PUT", "/api/v2/segments/{segment_id}/curation"),
+    ("PUT", "/api/v2/papers/{paper_id}/curation"),
     ("GET", "/api/v2/queue"),
     ("POST", "/api/v2/tools/depict"),
     ("POST", "/api/v2/tools/smiles-to-molfile"),

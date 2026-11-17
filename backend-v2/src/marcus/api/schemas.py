@@ -144,6 +144,46 @@ class CurationIn(BaseModel):
         return value.strip() if value is not None else None
 
 
+MAX_BULK_ITEMS = 500
+
+
+class BulkCurationItem(BaseModel):
+    """Status for one segment. A `note` key that is absent keeps the stored note; a present
+    one (a string or null) replaces it. smiles and molfile are never touched."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: uuid.UUID
+    status: CurationStatus
+    note: str | None = Field(None, max_length=MAX_NOTE_CHARS)
+
+    @field_validator("note")
+    @classmethod
+    def _clean(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if "\x00" in value:
+            raise ValueError("must not contain NUL characters")
+        return value if value.strip() else None
+
+
+class BulkCurationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[BulkCurationItem] = Field(min_length=1, max_length=MAX_BULK_ITEMS)
+
+    @field_validator("items")
+    @classmethod
+    def _unique(cls, items: list[BulkCurationItem]) -> list[BulkCurationItem]:
+        if len({i.segment_id for i in items}) != len(items):
+            raise ValueError("segment_id appears more than once")
+        return items
+
+
+class BulkCurationOut(BaseModel):
+    updated: int
+
+
 class QueuePaper(BaseModel):
     id: uuid.UUID
     steps_ahead_by_queue: dict[str, int]

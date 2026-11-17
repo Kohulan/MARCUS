@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import (
@@ -37,13 +38,21 @@ from marcus.api.read import (
     steps_by_status,
     steps_out,
 )
-from marcus.api.schemas import Counts, PaperDetail, PaperList, SegmentList, StepList
+from marcus.api.schemas import (
+    BulkCurationIn,
+    BulkCurationOut,
+    Counts,
+    PaperDetail,
+    PaperList,
+    SegmentList,
+    StepList,
+)
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
-from marcus.core.models import Owner, Paper
+from marcus.core.models import Curation, Owner, Paper, Segment
 from marcus.core.pipeline import cancel_paper, new_paper, remove_paper_files, store_pdf
 from marcus.core.settings import get_settings
 
@@ -115,6 +124,46 @@ async def get_segments(
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id)
     return SegmentList(segments=await segments_out(db, paper.id))
+
+
+@router.put("/papers/{paper_id}/curation", response_model=BulkCurationOut)
+async def put_bulk_curation(
+    paper_id: uuid.UUID,
+    body: BulkCurationIn,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> BulkCurationOut:
+    """Status (and note, when the key is present) for many segments of one paper, atomically."""
+    paper = await get_owned_paper(db, owner, paper_id)
+    ids = [item.segment_id for item in body.items]
+    locked = set(
+        (
+            await db.execute(
+                select(Segment.id)
+                .where(Segment.paper_id == paper.id, Segment.id.in_(ids))
+                .with_for_update()
+            )
+        ).scalars()
+    )
+    if len(locked) != len(ids):
+        await db.rollback()
+        raise not_found()
+    rows = {
+        c.segment_id: c
+        for c in (await db.execute(select(Curation).where(Curation.segment_id.in_(ids)))).scalars()
+    }
+    now = datetime.now(UTC)
+    for item in body.items:
+        cur = rows.get(item.segment_id)
+        if cur is None:
+            cur = Curation(segment_id=item.segment_id)
+            db.add(cur)
+        cur.status = item.status
+        if "note" in item.model_fields_set:
+            cur.note = item.note
+        cur.updated_at = now
+    await db.commit()
+    return BulkCurationOut(updated=len(ids))
 
 
 @router.get("/papers/{paper_id}/steps", response_model=StepList)
