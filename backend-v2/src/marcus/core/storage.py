@@ -1,5 +1,6 @@
 """Server-made filesystem paths. Only uuid.UUID identifiers are accepted."""
 
+import os
 import re
 import uuid
 from pathlib import Path
@@ -45,3 +46,28 @@ def segment_crop_path(paper_id: uuid.UUID, sha256: str) -> Path:
     if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
         raise ValueError("sha256 must be 64 lowercase hex characters")
     return paper_dir(paper_id) / "segments" / "by-sha" / f"{sha256}.png"
+
+
+def write_atomic(path: Path, data: bytes, mode: int | None = None, *, unique: bool = True) -> None:
+    """Write `data` to `path` via a temp file and os.replace: a reader sees the old file or the
+    whole new one, never a part. `mode`: the new file's permission bits (default: the umask's).
+
+    The temp file sits next to `path` and ends in `.tmp`; it is removed on any failure, and a
+    crash's leftover is removed by retention (with its paper dir, or as `<image job>.png.tmp`).
+    Its name is unique per call (`<name>.<pid>.<random>.tmp`), so concurrent writers of one
+    path (a content-addressed crop) never share it. `unique=False` names it `<name>.tmp`: only
+    for a path a single writer owns (a new image job's file, whose leftover retention sweeps).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    name = f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp" if unique else f"{path.name}.tmp"
+    tmp = path.with_name(name)
+    try:
+        if mode is None:
+            tmp.write_bytes(data)
+        else:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)

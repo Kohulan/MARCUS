@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw
 
 from marcus.core.enums import StepKind
 from marcus.core.settings import fake_enabled, get_settings
-from marcus.core.storage import page_image_path, segment_crop_path
+from marcus.core.storage import page_image_path, segment_crop_path, write_atomic
 from marcus.workers.runtime import BadInput, register
 from marcus.workers.runtime import abort_worker as _abort_worker
 from marcus.workers.runtime import in_pool_process as _in_pool_process
@@ -220,14 +220,7 @@ def _write_crop(paper_id, array: np.ndarray) -> str:
     Image.fromarray(array).save(buf, format="PNG")
     data = buf.getvalue()
     sha = hashlib.sha256(data).hexdigest()
-    dest = segment_crop_path(paper_id, sha)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    try:
-        tmp.write_bytes(data)
-        os.replace(tmp, dest)
-    finally:
-        tmp.unlink(missing_ok=True)
+    write_atomic(segment_crop_path(paper_id, sha), data)
     return sha
 
 

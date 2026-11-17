@@ -134,13 +134,8 @@ def start_image_job(
     session.add(job)
     session.flush()  # assigns job.id
 
-    path = storage.image_job_path(job.id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(png)
-    os.replace(tmp, path)
+    # `<id>.png.tmp`: the name retention sweeps after a crash (one writer per new job)
+    storage.write_atomic(storage.image_job_path(job.id), png, 0o600, unique=False)
 
     session.add(
         Step(
@@ -554,13 +549,7 @@ def _copy_crop(session: Session, paper_id: uuid.UUID, sha: str) -> bool:
             continue  # gone (deleted or purged meanwhile)
         if hashlib.sha256(data).hexdigest() != sha:
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_name(f"{dest.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
-        try:
-            tmp.write_bytes(data)
-            os.replace(tmp, dest)
-        finally:
-            tmp.unlink(missing_ok=True)
+        storage.write_atomic(dest, data)
         return True
     return False
 
