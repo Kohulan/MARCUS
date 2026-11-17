@@ -13,16 +13,30 @@ dependencies = []
 api = [
   "fastapi", "uvicorn[standard]", "gunicorn", "sqlalchemy[asyncio]", "asyncpg",
   "psycopg[binary]", "alembic", "redis", "celery[redis]", "python-multipart",
-  "pydantic-settings", "rdkit", "prometheus-client", "pillow", "numpy", "pymupdf",
+  "pydantic-settings", "rdkit", "prometheus-client", "pillow", "numpy", "pymupdf==1.26.7",
 ]
+# PyMuPDF 1.26.7: v1's page renderer (ruling R12); api pins the same. torch / torchvision are
+# docling's; listed here only so the cpu extra takes the CPU-only builds (sources below, R9).
 cpu = [
-  "pymupdf", "docling", "pdf2doi", "sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]",
-  "redis", "pydantic-settings", "rdkit",
+  "pymupdf==1.26.7", "docling", "pdf2doi", "sqlalchemy[asyncio]", "psycopg[binary]",
+  "celery[redis]", "redis", "pydantic-settings", "rdkit", "torch", "torchvision",
 ]
 tools = ["jpype1==1.5.2", "rdkit", "celery[redis]", "redis", "pydantic-settings"]
 tf = ["sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
 torch = ["sqlalchemy[asyncio]", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
 dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "fakeredis"]
+
+# The cpu worker runs docling on CPU only: torch and torchvision from the PyTorch CPU index (no
+# CUDA libraries in the image). The tf / torch images install their model stacks themselves
+# (docker/Dockerfile.tf, Dockerfile.torch), so no other extra resolves torch.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", extra = "cpu" }]
+torchvision = [{ index = "pytorch-cpu", extra = "cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [project.scripts]
 marcus = "marcus.cli:main"

@@ -118,3 +118,14 @@ Runtime differences from v1 (same weights, same library calls):
 
 Kept from v1 as is (library behaviour): MolNexTR logs `name 'rdFMCS' is not defined` for some
 structures (an unimported name in an exception path of its post-processing; output unchanged).
+
+
+## CPU worker image (`docker/Dockerfile.cpu`)
+
+torch / torchvision for docling are the CPU-only builds (`2.15.0+cpu` / `0.29.2+cpu` from
+`download.pytorch.org/whl/cpu`, uv source for the `cpu` extra; ruling R9) and PyMuPDF is 1.26.7, v1's
+page renderer (R12; the `api` extra pins the same, the universal lock has one PyMuPDF). The relock
+also dropped PyMuPDF 2.x's `pymupdf4llm` / `pymupdf-layout` and with them `onnxruntime`: docling's
+automatic OCR then selects RapidOCR on its torch backend, which is also what v1 (docling 2.70.0, no
+onnxruntime) selects. Image `marcus-v2-cpu:local`: 13.4 GB -> 5.67 GB on disk (content 4.80 GB ->
+1.93 GB).

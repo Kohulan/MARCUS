@@ -3,8 +3,9 @@
 # PDF parsing runs in `python -I -m marcus.workers.pdfsafe_child` subprocesses with RLIMIT_AS
 # 32 GiB (docling/torch map ~24 GiB of address space); real memory is bounded by the
 # container's mem_limit in docker-compose.yml.
-# torch comes from uv.lock as locked (PyPI wheel incl. its CUDA libraries), so this image is
-# large; it is only ever run on CPU here.
+# torch / torchvision (docling's) are the CPU-only builds from the PyTorch CPU index, locked in
+# uv.lock for the cpu extra (pyproject [tool.uv.sources], ruling R9): no CUDA libraries. PyMuPDF
+# is 1.26.7, v1's page renderer (R12).
 # Docling's models are downloaded at BUILD time into /opt/docling-models and used through
 # DOCLING_ARTIFACTS_PATH, so a worker never fetches models at runtime.
 # Build context: backend-v2/.
