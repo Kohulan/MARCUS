@@ -14,8 +14,8 @@ import redis.asyncio as aioredis
 
 from marcus.api.deps import COOKIE_NAME
 from marcus.api.routes import events as events_route
-from marcus.core.events import paper_channel
-from marcus.core.pipeline import cancel_paper
+from marcus.core.events import image_channel, paper_channel
+from marcus.core.pipeline import cancel_paper, complete_step
 from marcus.core.settings import Settings, get_settings
 from tests.api.conftest import (
     finish,
@@ -25,6 +25,7 @@ from tests.api.conftest import (
     seed_paper,
     steps_of,
 )
+from tests.factories import make_image_job
 
 WAIT = 5.0
 
@@ -402,3 +403,52 @@ def test_events_redis_pool_is_bounded(monkeypatch):
         assert events_route.redis_client().connection_pool.max_connections == 7
     finally:
         events_route.redis_client.cache_clear()
+
+
+async def test_image_events_stream_and_end(app, async_db_session, redis_server, fast_ping):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    job, step = await db.run_sync(lambda s: make_image_job(s, alice))
+    await db.commit()
+    channel = image_channel(job.id)
+
+    sse = SSE(app, f"/api/v2/images/{job.id}/events", token)
+    head = await sse.start()
+    assert head["status"] == 200
+    assert head["headers"]["content-type"].startswith("text/event-stream")
+    assert parse_snapshot(await sse.chunk()) == {"status": "queued"}
+    assert subscribers(redis_server, channel) == 1
+
+    event = {"step_id": str(step.id), "kind": "ocsr", "status": "running"}
+    fakeredis.FakeRedis(server=redis_server).publish(channel, json.dumps(event))
+    assert await sse.chunk() == f"data: {json.dumps(event)}\n\n"
+    assert await sse.chunk() == ": ping\n\n"
+
+    await sse.disconnect()  # the stream shares the test's session: stop it before writing
+    assert subscribers(redis_server, channel) == 0
+
+    def done(s):
+        step.status = "running"
+        step.attempts += 1
+        s.flush()
+        complete_step(s, step.id, ocsr_result())
+
+    await db.run_sync(done)
+    await db.commit()
+    sse = SSE(app, f"/api/v2/images/{job.id}/events", token)
+    assert (await sse.start())["status"] == 200
+    tail = await sse.rest()
+    assert parse_snapshot(tail.split("event: end")[0]) == {"status": "done"}
+    assert tail.endswith(END_DONE)
+    assert subscribers(redis_server, channel) == 0
+
+
+async def test_image_events_not_owned_is_404(app, async_db_session, redis_server):
+    db = async_db_session
+    alice, _ = await new_owner(db)
+    _, bob_token = await new_owner(db)
+    job, _ = await db.run_sync(lambda s: make_image_job(s, alice))
+    await db.commit()
+    async with make_client(app, bob_token) as c:
+        r = await c.get(f"/api/v2/images/{job.id}/events")
+    assert r.status_code == 404 and r.json() == {"detail": "not found"}

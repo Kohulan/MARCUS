@@ -13,6 +13,7 @@ from marcus.core.pipeline import (
     cancel_paper,
     complete_step,
     fail_step,
+    request_image_ocsr,
     request_ocsr,
 )
 from tests.factories import make_image_job, make_paper
@@ -616,3 +617,37 @@ def test_malformed_doi_result_changes_nothing(db_session, result):
 
 def test_bad_result_is_a_value_error():
     assert issubclass(BadResult, ValueError)
+
+
+def test_request_image_ocsr_reopens_done_job(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    finish(s, step, OCSR)
+    s.refresh(job)
+    assert job.status == "done"
+    new = request_image_ocsr(s, job.id, Engine.MOLNEXTR)
+    s.refresh(job)
+    assert job.status == "queued"
+    assert (new.kind, new.engine, new.status, new.image_job_id, new.seq) == (
+        "ocsr",
+        "molnextr",
+        "pending",
+        job.id,
+        1,
+    )
+    finish(s, new, OCSR)
+    s.refresh(job)
+    assert job.status == "done"
+
+
+def test_request_image_ocsr_refuses_deleted_and_unknown(db_session):
+    import uuid
+
+    s = db_session
+    job, _ = make_image_job(s)
+    job.status = "deleted"
+    s.flush()
+    with pytest.raises(ValueError):
+        request_image_ocsr(s, job.id, Engine.DECIMER)
+    with pytest.raises(ValueError):
+        request_image_ocsr(s, uuid.uuid4(), Engine.DECIMER)

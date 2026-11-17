@@ -193,3 +193,47 @@ class QueuePaper(BaseModel):
 class QueueOut(BaseModel):
     papers: list[QueuePaper]
     estimate_s: float
+
+
+class ImagePrediction(_Orm):
+    smiles: str
+    molfile: str | None
+    valid: bool
+    engine: str
+    engine_version: str
+    ms: int
+
+
+class ImageStepOut(BaseModel):
+    """One ocsr step of an image job. No error text: only the coarse `error_class`."""
+
+    engine: str
+    status: str
+    error_class: str | None
+
+
+class ImageJobSummary(BaseModel):
+    id: uuid.UUID
+    display_name: str
+    status: str
+    engine: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class ImageJobList(BaseModel):
+    jobs: list[ImageJobSummary]
+
+
+class ImageJobOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    engine: str
+    display_name: str
+    created_at: datetime
+    expires_at: datetime
+    prediction: ImagePrediction | None  # the newest one
+    predictions: list[PredictionOut]  # all, newest first
+    error_class: str | None  # of the newest failed step
+    steps: list[ImageStepOut]  # newest first
+    error: str | None  # kept for API compatibility; the UI never shows it

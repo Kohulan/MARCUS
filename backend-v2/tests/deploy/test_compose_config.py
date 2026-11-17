@@ -79,11 +79,14 @@ def test_trusted_proxies_is_exactly_nginx(compose):
 def _dockerfile_api_cmd() -> list[str]:
     text = (ROOT / "docker" / "Dockerfile.api").read_text().replace("\\\n", " ")
     line = next(ln for ln in text.splitlines() if ln.startswith("CMD "))
-    return json.loads(line[len("CMD "):])
+    return json.loads(line[len("CMD ") :])
 
 
 def _gunicorn_commands(compose) -> dict[str, list[str]]:
-    return {"compose api": compose["services"]["api"]["command"], "Dockerfile.api": _dockerfile_api_cmd()}
+    return {
+        "compose api": compose["services"]["api"]["command"],
+        "Dockerfile.api": _dockerfile_api_cmd(),
+    }
 
 
 def test_gunicorn_trusts_no_forwarded_headers(compose):
@@ -133,7 +136,11 @@ def test_spoofed_xff_from_loopback_does_not_change_client_ip(compose, monkeypatc
             worker.config.app = app
             worker.config.load()
             scope = {
-                "type": "http", "scheme": "http", "method": "GET", "path": "/", "query_string": b"",
+                "type": "http",
+                "scheme": "http",
+                "method": "GET",
+                "path": "/",
+                "query_string": b"",
                 "client": ("127.0.0.1", 40000),
                 "headers": [(b"x-forwarded-for", b"6.6.6.6"), (b"x-forwarded-proto", b"https")],
             }
@@ -238,6 +245,11 @@ def test_metrics_service_is_internal_and_reads_data_read_only(compose):
     assert svc["image"] == compose["services"]["api"]["image"]
 
 
+def test_nginx_sse_location_covers_images():
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    assert "location ~ ^/api/v2/(papers|images)/[^/]+/events$ {" in conf
+
+
 def test_nginx_never_proxies_metrics():
     conf = (ROOT / "docker" / "nginx.conf").read_text()
     assert "metrics" not in conf and "9100" not in conf
@@ -311,11 +323,12 @@ def test_prometheus_alerts_on_low_disk():
 
     floor = Settings.model_fields["min_free_disk_bytes"].default
     assert f"< {floor}" in full["expr"]
-    assert alerts["MarcusMetricsDown"]["expr"].startswith("up{job=\"marcus\"}")
+    assert alerts["MarcusMetricsDown"]["expr"].startswith('up{job="marcus"}')
     mon = yaml.safe_load(MONITORING.read_text())
-    assert "./ops/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro" in mon["services"][
-        "prometheus"
-    ]["volumes"]
+    assert (
+        "./ops/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro"
+        in mon["services"]["prometheus"]["volumes"]
+    )
 
 
 def test_prometheus_negotiates_openmetrics_first():
@@ -662,9 +675,20 @@ def _client_seen_by_nginx(env: dict[str, str], xff: str) -> str:
                 break
             subprocess.run(["sleep", "0.1"])
         subprocess.run(
-            [docker, "exec", name, "wget", "-q", "-O", "/dev/null", "--header",
-             f"X-Forwarded-For: {xff}", "http://127.0.0.1:8080/not-api"],
-            capture_output=True, timeout=30,
+            [
+                docker,
+                "exec",
+                name,
+                "wget",
+                "-q",
+                "-O",
+                "/dev/null",
+                "--header",
+                f"X-Forwarded-For: {xff}",
+                "http://127.0.0.1:8080/not-api",
+            ],
+            capture_output=True,
+            timeout=30,
         )  # fmt: skip  (404 by design: wget exits 1)
         logs = subprocess.run([docker, "logs", name], capture_output=True, text=True, timeout=30)
         lines = [ln for ln in logs.stdout.splitlines() if '"GET /not-api ' in ln]
@@ -728,9 +752,13 @@ def nginx_url():
     started = subprocess.run(args, capture_output=True, text=True, timeout=60)
     assert started.returncode == 0, started.stderr
     try:
-        port = subprocess.run(
-            [docker, "port", name, "8080/tcp"], capture_output=True, text=True, timeout=30
-        ).stdout.strip().rsplit(":", 1)[1]
+        port = (
+            subprocess.run(
+                [docker, "port", name, "8080/tcp"], capture_output=True, text=True, timeout=30
+            )
+            .stdout.strip()
+            .rsplit(":", 1)[1]
+        )
         url = f"http://127.0.0.1:{port}"
         httpx = pytest.importorskip("httpx")
         for _ in range(50):
@@ -750,7 +778,9 @@ def _send(url: str, method: str, path: str, size: int) -> int | str:
     body = b"%PDF-1.4\n" + b"0" * (size - 9)
     headers = {"Content-Type": "application/pdf"}
     try:
-        return httpx.request(method, url + path, content=body, headers=headers, timeout=30).status_code
+        return httpx.request(
+            method, url + path, content=body, headers=headers, timeout=30
+        ).status_code
     except httpx.HTTPError as exc:
         return f"no answer: {type(exc).__name__}"
 

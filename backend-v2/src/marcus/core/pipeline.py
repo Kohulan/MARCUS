@@ -646,6 +646,33 @@ _AFTER = {
 # --- public API ----------------------------------------------------------------------------
 
 
+def _settle_image_job(session: Session, job: ImageJob, error: str | None = None) -> None:
+    """Image job status after one of its ocsr steps finished (flushes).
+
+    While any ocsr step of the job is active it is `queued`; when the last one finishes it is
+    `done` if the job has a prediction, else `failed` (with `error`). A failed extra engine
+    therefore never turns a job with a good result into `failed`."""
+    session.flush()
+    active = session.execute(
+        select(func.count())
+        .select_from(Step)
+        .where(Step.image_job_id == job.id, Step.status.in_(ACTIVE))
+    ).scalar_one()
+    if active:
+        job.status = ImageJobStatus.QUEUED.value
+        return
+    predicted = session.execute(
+        select(func.count()).select_from(Prediction).where(Prediction.image_job_id == job.id)
+    ).scalar_one()
+    if predicted:
+        job.status = ImageJobStatus.DONE.value
+        job.error = None
+    else:
+        job.status = ImageJobStatus.FAILED.value
+        job.error = error
+    session.flush()
+
+
 def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[Step]:
     """Mark a step done, store its result rows and return the new successor steps.
 
@@ -668,9 +695,7 @@ def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[St
 
     if job is not None:
         session.add(_prediction(step, result))
-        job.status = ImageJobStatus.DONE.value
-        job.error = None
-        session.flush()
+        _settle_image_job(session, job)
         return []
 
     new = _AFTER.get(step.kind, _no_successors)(session, paper, step, result)
@@ -706,8 +731,7 @@ def fail_step(
         step.status = StepStatus.FAILED.value
         step.finished_at = _now()
         if job is not None:
-            job.status = ImageJobStatus.FAILED.value
-            job.error = error
+            _settle_image_job(session, job, error)
     if paper is not None:
         _finish_check(session, paper)
     session.flush()
@@ -777,5 +801,34 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     session.add(step)
     if paper.status == PaperStatus.DONE.value:
         paper.status = PaperStatus.PROCESSING.value
+    session.flush()
+    return step
+
+
+def request_image_ocsr(session: Session, job_id: uuid.UUID, engine: Engine) -> Step:
+    """Create a pending `ocsr` step for an image job with the given engine and reopen the job
+    (status `queued`). Caller commits.
+
+    Raises ValueError for an unknown or deleted image job, or a disabled engine.
+    """
+    engine = Engine(engine)
+    if engine == Engine.FAKE and not fake_enabled():
+        raise ValueError("engine 'fake' is disabled")
+    job = _lock(session, ImageJob, job_id)
+    if job is None or job.status == ImageJobStatus.DELETED.value:
+        raise ValueError("image job not found")
+    seq = session.execute(
+        select(func.count()).select_from(Step).where(Step.image_job_id == job.id)
+    ).scalar_one()
+    step = Step(
+        image_job_id=job.id,
+        kind=StepKind.OCSR.value,
+        queue=queue_for(StepKind.OCSR, engine),
+        engine=engine.value,
+        seq=seq,
+        status=StepStatus.PENDING.value,
+    )
+    session.add(step)
+    job.status = ImageJobStatus.QUEUED.value
     session.flush()
     return step
