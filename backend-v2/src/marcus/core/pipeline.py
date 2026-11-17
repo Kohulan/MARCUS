@@ -396,6 +396,9 @@ def _check_doi_result(result: dict) -> None:
     doi = result["doi"]
     if doi is not None and not _is_text(doi):
         raise BadResult("doi: 'doi' must be a string or null")
+    title = result.get("title")
+    if title is not None and not _is_text(title):
+        raise BadResult("doi: 'title' must be a string or null")
 
 
 def _check_nothing(result: dict) -> None:
@@ -621,6 +624,7 @@ def _after_ocsr(session: Session, paper: Paper, step: Step, result: dict) -> lis
 
 def _after_doi(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     paper.doi = result["doi"]
+    paper.title = result.get("title")
     return []
 
 

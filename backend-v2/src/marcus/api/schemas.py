@@ -25,6 +25,7 @@ class PaperSummary(_Orm):
     status: str
     pages: int | None
     doi: str | None
+    title: str | None
     engine: str
     ocsr_mode: str
     created_at: datetime
