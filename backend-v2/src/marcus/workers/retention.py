@@ -33,7 +33,7 @@ step: no Step row, not seen by the dispatcher.
 import logging
 import shutil
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -77,6 +77,7 @@ class PurgeReport:
     orphan_paper_dirs: int = 0
     orphan_image_files: int = 0
     file_errors: int = 0
+    errors: list[str] = field(default_factory=list)  # phases that failed (logged with traceback)
 
 
 # --- engine versions -------------------------------------------------------------------------
@@ -340,7 +341,9 @@ def purge_expired(
 ) -> PurgeReport:
     """Purge expired papers and image jobs, stale cache rows and orphan files (module doc).
 
-    Commits once per batch. `ocsr_versions` (engine -> current version) defaults to
+    Commits once per batch. Each phase runs on its own: a phase that raises is rolled back,
+    logged and named in `report.errors`, and the next phase still runs (a soft time limit
+    stops them all). `ocsr_versions` (engine -> current version) defaults to
     `current_ocsr_versions()`. `report` is filled as batches commit, so a caller interrupted
     by a time limit still knows what was done.
     """
@@ -350,11 +353,27 @@ def purge_expired(
     versions = current_ocsr_versions() if ocsr_versions is None else ocsr_versions
     cache_cutoff = now - timedelta(days=get_settings().retention_days)
 
-    _purge_papers(session, now, batch_size, report)
-    _purge_image_jobs(session, now, batch_size, report)
-    _purge_seg_cache(session, cache_cutoff, batch_size, report)
-    _purge_ocsr_cache(session, cache_cutoff, versions, batch_size, report)
-    _sweep_orphans(session, now, report)
+    phases = [
+        ("papers", lambda: _purge_papers(session, now, batch_size, report)),
+        ("image_jobs", lambda: _purge_image_jobs(session, now, batch_size, report)),
+        ("seg_cache", lambda: _purge_seg_cache(session, cache_cutoff, batch_size, report)),
+        (
+            "ocsr_cache",
+            lambda: _purge_ocsr_cache(session, cache_cutoff, versions, batch_size, report),
+        ),
+        ("orphans", lambda: _sweep_orphans(session, now, report)),
+    ]
+    for name, run in phases:
+        try:
+            run()
+        except SoftTimeLimitExceeded:
+            raise  # the task's time is up: stop every phase
+        except Exception:
+            # One broken phase must not cost the others their run: roll back its open batch
+            # (committed batches stay), log, record, go on.
+            session.rollback()
+            report.errors.append(name)
+            log.exception("retention purge phase %s failed", name)
     log.info("retention purge done: %s", report)
     return report
 

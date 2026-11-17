@@ -49,7 +49,8 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MARCUS_DATA_ROOT=/data HOME=/tmp XDG_CACHE_HOME=/tmp/cache HF_HOME=/tmp/hf \
     HF_HUB_OFFLINE=1 DOCLING_ARTIFACTS_PATH=/opt/docling-models
 USER marcus
-# q.cpu with 4 processes (= SLOTS["q.cpu"]); -B runs the beat scheduler in this one container.
-CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.cpu", "-c", "4", \
+# q.cpu with 5 processes: SLOTS["q.cpu"] (4) for steps + 1 for the retention purge task;
+# -B runs the beat scheduler in this one container (exactly one replica).
+CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.cpu", "-c", "5", \
      "--include", "marcus.workers.cpu", "-B", "--schedule", "/tmp/celerybeat-schedule", \
      "-n", "cpu@%h", "--loglevel", "INFO"]

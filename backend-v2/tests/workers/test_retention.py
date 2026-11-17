@@ -428,6 +428,29 @@ def test_purge_task_soft_limit_keeps_committed_batches(db_session, monkeypatch, 
     assert "papers=7" in caplog.text
 
 
+def test_a_failing_phase_does_not_skip_the_others(db_session, monkeypatch, caplog):
+    s = db_session
+    paper = make_paper(s)
+    s.commit()
+    finish_all_steps(s, paper.id)
+    expire(s, paper)
+    _seg(s, "a", seg_cache_key("segv-1"), NOW - timedelta(days=31))
+    s.commit()
+
+    def broken(session, *a, **kw):
+        session.execute(select(func.count()).select_from(ImageJob))
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(retention, "_purge_image_jobs", broken)
+    with caplog.at_level("ERROR", logger="marcus.workers.retention"):
+        report = purge(s)
+
+    assert report.errors == ["image_jobs"]
+    assert report.papers == 1 and report.seg_cache == 1  # before and after the broken phase
+    assert "image_jobs" in caplog.text and "disk on fire" in caplog.text
+    assert count(s, Paper) == 0 and count(s, SegCache) == 0
+
+
 @pytest.mark.parametrize("bad", [0, -1])
 def test_batch_size_must_be_positive(db_session, bad):
     with pytest.raises(ValueError):

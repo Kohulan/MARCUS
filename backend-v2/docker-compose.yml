@@ -205,9 +205,14 @@ services:
       context: .
       dockerfile: docker/Dockerfile.cpu
     image: marcus-v2-cpu:local
-    # check_pdf, render_page, docling, doi: 4 processes (= q.cpu slots); -B: beat runs here only.
+    # Exactly ONE replica: it runs Celery beat (-B), and a second beat would schedule every
+    # task twice (never scale this; no other service passes -B).
+    # 5 processes = SLOTS["q.cpu"] (4: check_pdf, render_page, docling, doi, filled by the
+    # dispatcher) + 1 for the daily retention purge, a plain task the dispatcher does not count;
+    # without it a 4th step could wait behind the purge until the watchdog fails it.
+    # tests/deploy/test_compose_config.py pins both.
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.cpu",
-              "-c", "4", "--pool", "prefork", "--include", "marcus.workers.cpu",
+              "-c", "5", "--pool", "prefork", "--include", "marcus.workers.cpu",
               "-B", "--schedule", "/tmp/celerybeat-schedule", "-n", "cpu@%h", "--loglevel", "INFO"]
     environment:
       <<: [*env, *seg-version]

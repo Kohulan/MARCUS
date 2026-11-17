@@ -113,6 +113,45 @@ async def test_per_ip_limit_is_429(app, async_db_session, monkeypatch):
         assert (await upload(c2)).status_code == 429
 
 
+async def _expire_everything(db) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from marcus.core.models import ImageJob
+
+    past = datetime.now(UTC) - timedelta(seconds=1)
+    await db.execute(update(Paper).values(expires_at=past))
+    await db.execute(update(ImageJob).values(expires_at=past))
+    await db.commit()
+
+
+async def test_expired_active_work_does_not_count_for_the_owner(app, async_db_session):
+    """Expired papers/jobs are gone for the client (404) even before the purge: they must not
+    keep holding the owner's active slots either."""
+    from tests.api.test_images import upload_image
+
+    async with make_client(app) as c:
+        for _ in range(2):
+            assert (await upload(c)).status_code == 202
+        assert (await upload_image(c)).status_code == 202
+        assert (await upload(c)).status_code == 429
+        await _expire_everything(async_db_session)
+        assert (await upload(c)).status_code == 202
+
+
+async def test_expired_active_work_does_not_count_for_the_ip(app, async_db_session, monkeypatch):
+    monkeypatch.setenv("MARCUS_IP_MAX_ACTIVE_PAPERS", "2")
+    monkeypatch.setenv("MARCUS_BROWSER_MAX_ACTIVE_PAPERS", "5")
+    get_settings.cache_clear()
+    async with make_client(app) as c1, make_client(app) as c2:
+        assert (await upload(c1)).status_code == 202
+        assert (await upload(c2)).status_code == 202
+        assert (await upload(c2)).status_code == 429
+        await _expire_everything(async_db_session)
+        assert (await upload(c2)).status_code == 202
+
+
 async def test_fake_engine_refused_when_disabled(app, monkeypatch):
     monkeypatch.delenv("MARCUS_ENABLE_FAKE_ENGINES", raising=False)
     get_settings.cache_clear()

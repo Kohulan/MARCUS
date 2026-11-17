@@ -65,12 +65,15 @@ def migrated_db():
 
 
 def _truncate_all(conn) -> None:
+    """Empty every table after a test. DELETE (children first), not TRUNCATE: a test leaves a
+    handful of rows, and TRUNCATE replaces every table's and index's files (IO per relation,
+    ~40 relations), which made teardown the slowest part of most DB tests."""
     from sqlalchemy import text
 
     from marcus.core.db import Base
 
-    names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
-    conn.execute(text(f"TRUNCATE {names} CASCADE"))
+    for table in reversed(Base.metadata.sorted_tables):
+        conn.execute(text(f'DELETE FROM "{table.name}"'))
 
 
 @pytest.fixture

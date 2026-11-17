@@ -534,3 +534,19 @@ async def test_queue_default_duration_and_no_foreign_papers(app, async_db_sessio
     # bob's 2 pending q.cpu steps are ahead; no finished step has timings -> 5 s each
     assert body["papers"][0]["steps_ahead_by_queue"] == {"q.cpu": 2}
     assert body["estimate_s"] == 10.0
+
+
+async def test_queue_ignores_my_expired_papers(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    expired = await seed_paper(db, alice)
+    kept = await seed_paper(db, alice)
+    await db.execute(
+        update(Paper)
+        .where(Paper.id == expired.paper_id)
+        .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    )
+    await db.commit()
+    async with make_client(app, token) as c:
+        body = (await c.get("/api/v2/queue")).json()
+    assert [p["id"] for p in body["papers"]] == [str(kept.paper_id)]

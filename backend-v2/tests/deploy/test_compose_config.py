@@ -71,3 +71,44 @@ def test_fake_stack_seg_version_is_the_fake_segmenter():
     for name in ("api", "worker-cpu", "worker-fake-segment"):
         env = fake["services"][name]["environment"]
         assert env["MARCUS_SEG_VERSION"] == FakeSegmenter.version, name
+
+
+def _command(svc: dict) -> list[str]:
+    cmd = svc.get("command") or []
+    return cmd.split() if isinstance(cmd, str) else list(cmd)
+
+
+def _concurrency(cmd: list[str]) -> int:
+    return int(cmd[cmd.index("-c") + 1])
+
+
+def test_worker_cpu_has_one_process_more_than_its_slots(compose):
+    """The dispatcher fills SLOTS['q.cpu'] = 4 with steps; the daily retention purge (a plain
+    Celery task on q.cpu, no Step row) needs a process of its own, or a 4th step would wait
+    behind it in the broker until the watchdog fails it as worker_lost."""
+    from marcus.core.queues import SLOTS
+
+    expected = SLOTS["q.cpu"] + 1
+    assert _concurrency(_command(compose["services"]["worker-cpu"])) == expected
+    dockerfile = (ROOT / "docker" / "Dockerfile.cpu").read_text()
+    cmd_line = next(line for line in dockerfile.splitlines() if line.startswith("CMD"))
+    assert f'"-c", "{expected}"' in cmd_line
+
+
+def test_exactly_one_service_runs_celery_beat(compose):
+    fake = yaml.safe_load(FAKE.read_text())
+    services = {**compose["services"]}
+    for name, svc in fake["services"].items():
+        services[name] = {**services.get(name, {}), **svc}
+    beat = sorted(name for name, svc in services.items() if "-B" in _command(svc))
+    assert beat == ["worker-cpu"]
+    assert "replicas" not in compose["services"]["worker-cpu"].get("deploy", {})
+
+
+def test_durability_shortcuts_only_on_the_test_database(compose):
+    """fsync=off & co. speed up the throwaway test DB; the real stack must keep durability."""
+    test = yaml.safe_load((ROOT / "docker-compose.test.yml").read_text())
+    assert "fsync=off" in _command(test["services"]["postgres"])
+    for path in (COMPOSE, FAKE, ROOT / "docker-compose.gpu.yml"):
+        if path.exists():
+            assert "fsync" not in path.read_text(), path.name

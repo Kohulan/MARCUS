@@ -58,7 +58,11 @@ async def queue_position(
         (
             await db.execute(
                 select(Paper.id)
-                .where(Paper.owner_id == owner.id, Paper.status.in_(ACTIVE_PAPER))
+                .where(
+                    Paper.owner_id == owner.id,
+                    Paper.status.in_(ACTIVE_PAPER),
+                    Paper.expires_at >= func.now(),  # expired = gone for the client (404)
+                )
                 .order_by(Paper.created_at, Paper.id)
             )
         ).scalars()
