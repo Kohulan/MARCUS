@@ -175,6 +175,96 @@ def test_decimer_load_limits_threads_and_gpu_before_model_import(monkeypatch):
     assert calls == [("threads", 4, 2), ("gpu", 3072)]
 
 
+FAKE_DECIMER_SEGMENTATION = """
+import tensorflow as tf
+
+for gpu in tf.config.experimental.list_physical_devices("GPU"):
+    tf.config.experimental.set_memory_growth(gpu, True)
+
+
+def segment_chemical_structures(image, expand=False, return_bboxes=False):
+    return [], []
+"""
+
+
+class _StubTF(types.ModuleType):
+    """tensorflow stand-in. Like the real one, set_memory_growth raises once a logical device
+    (the GPU budget) is configured."""
+
+    def __init__(self):
+        super().__init__("tensorflow")
+        self.growth = []
+        self.virtual_devices = False
+
+        def set_memory_growth(device, enable):
+            if self.virtual_devices:
+                raise ValueError(
+                    "Cannot set memory growth on device when virtual devices configured"
+                )
+            self.growth.append((device, enable))
+
+        self.real_growth = set_memory_growth
+        self.config = types.SimpleNamespace(
+            experimental=types.SimpleNamespace(
+                list_physical_devices=lambda kind: ["GPU:0"],
+                set_memory_growth=set_memory_growth,
+            )
+        )
+
+
+@pytest.fixture
+def stub_tf_and_library(monkeypatch, tmp_path):
+    """Stub tensorflow + a decimer_segmentation package whose import sets memory growth
+    (decimer_segmentation/mrcnn/model.py:51, configure_gpu at import)."""
+    tf = _StubTF()
+    monkeypatch.setitem(sys.modules, "tensorflow", tf)
+    monkeypatch.delitem(sys.modules, "decimer_segmentation", raising=False)
+    pkg = tmp_path / "decimer_segmentation"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text(FAKE_DECIMER_SEGMENTATION)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(gpu, "limit_tf_threads", lambda intra, inter: None)
+    yield tf
+    sys.modules.pop("decimer_segmentation", None)
+
+
+def test_gpu_budget_skips_the_library_memory_growth_call(stub_tf_and_library, monkeypatch):
+    """F2 (D4): with a budget, the library's import-time set_memory_growth would raise and the
+    segmenter would never load. It is skipped during the import and restored afterwards."""
+    tf = stub_tf_and_library
+
+    def limit(mb):
+        tf.virtual_devices = True  # what limit_tf_memory does to the real TensorFlow
+        return True
+
+    monkeypatch.setattr(gpu, "gpu_mem_mb_from_env", lambda: 6144)
+    monkeypatch.setattr(gpu, "limit_tf_memory", limit)
+    seg = segment.DecimerSegmenter()
+    seg.load()  # raised ValueError before the fix
+
+    assert seg._segment is not None
+    assert tf.growth == []
+    assert tf.config.experimental.set_memory_growth is tf.real_growth  # patch undone
+
+
+def test_without_budget_the_library_keeps_memory_growth(stub_tf_and_library, monkeypatch):
+    tf = stub_tf_and_library
+    monkeypatch.setattr(gpu, "gpu_mem_mb_from_env", lambda: None)
+    monkeypatch.setattr(gpu, "limit_tf_memory", lambda mb: False)
+    segment.DecimerSegmenter().load()
+    assert tf.growth == [("GPU:0", True)]  # v1 behaviour: memory growth on
+
+
+def test_growth_patch_is_undone_when_the_import_fails(stub_tf_and_library, monkeypatch, tmp_path):
+    tf = stub_tf_and_library
+    (tmp_path / "decimer_segmentation" / "__init__.py").write_text("raise ImportError('boom')")
+    monkeypatch.setattr(gpu, "gpu_mem_mb_from_env", lambda: 6144)
+    monkeypatch.setattr(gpu, "limit_tf_memory", lambda mb: True)
+    with pytest.raises(ImportError, match="boom"):
+        segment.DecimerSegmenter().load()
+    assert tf.config.experimental.set_memory_growth is tf.real_growth
+
+
 def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
     pid = uuid.uuid4()
     page = make_page(pid, 0, size=(40, 30))
@@ -200,7 +290,32 @@ def test_decimer_segment_converts_bbox_and_channels(monkeypatch):
     ((array, bbox),) = crops
     assert bbox == (2, 3, 9, 8)  # x0, y0, x1, y1
     assert array.dtype == np.uint8 and array.shape == (5, 7, 3)
-    assert tuple(array[0, 0]) == (10, 20, 30)
+    # red and blue swapped, as v1's cv2.imwrite stores the crop (D4 crop parity)
+    assert tuple(array[0, 0]) == (30, 20, 10)
+
+
+def test_coloured_crop_file_matches_v1(monkeypatch):
+    """D4: v1 saves the library's RGB(A) crop with cv2.imwrite (BGR order), so a red atom label is
+    blue in v1's crop file (measured on jarvis: v1 pixel (0, 0, 255) where the page is red).
+    v2's stored crop must hold the same pixels; black and white stay as they are."""
+    pid = uuid.uuid4()
+    page = make_page(pid, 0, size=(20, 20))
+    Image.new("RGB", (20, 20), (255, 255, 255)).save(page)
+    rgba = np.full((4, 4, 4), 255, np.uint8)
+    rgba[0, 0, :3] = (255, 0, 0)  # red (an O label)
+    rgba[1, 1, :3] = (0, 0, 255)  # blue (an N label)
+    rgba[2, 2, :3] = (0, 0, 0)  # black bond
+    _stub_decimer(monkeypatch, [rgba], [(0, 0, 4, 4)], [])
+    monkeypatch.setattr(gpu, "limit_tf_threads", lambda intra, inter: None)
+    seg = segment.DecimerSegmenter()
+    seg.load()
+    ((array, _),) = seg.segment(page)
+    sha = segment._write_crop(pid, array)
+    with Image.open(segment_crop_path(pid, sha)) as im:
+        stored = np.asarray(im.convert("RGB"))
+    assert tuple(stored[0, 0]) == (0, 0, 255)  # v1's file: red became blue
+    assert tuple(stored[1, 1]) == (255, 0, 0)
+    assert tuple(stored[2, 2]) == (0, 0, 0) and tuple(stored[3, 3]) == (255, 255, 255)
 
 
 def test_decimer_segment_before_load_fails():

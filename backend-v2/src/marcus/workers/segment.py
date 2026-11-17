@@ -86,7 +86,11 @@ class DecimerSegmenter:
 
     The library returns crops as 4-channel arrays in the input's channel order plus alpha
     (every pixel opaque; pixels outside the structure mask are white) and bboxes as
-    (y0, x0, y1, x1). Crops are returned here as RGB (alpha dropped) with (x0, y0, x1, y1).
+    (y0, x0, y1, x1). Crops are returned here with (x0, y0, x1, y1), alpha dropped, and with
+    red and blue SWAPPED, as v1 stores them: v1 writes the RGB crop with `cv2.imwrite`, which
+    takes the array as BGR, so every v1 crop file (shown to users, read by the OCSR engines)
+    has red and blue exchanged. D4 found this as the only crop difference to v1 (the 4 coloured
+    crops of synth_190; one changed a MolNexTR answer). Black-and-white crops are unchanged.
     Like v1, crops and bboxes are paired by position.
     """
 
@@ -103,8 +107,30 @@ class DecimerSegmenter:
         # PYSTOW_HOME (baked into the image).
         settings = get_settings()
         gpu.limit_tf_threads(settings.tf_intra_threads, settings.tf_inter_threads)
-        gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
-        from decimer_segmentation import segment_chemical_structures
+        budget = gpu.limit_tf_memory(gpu.gpu_mem_mb_from_env())
+        if not budget:
+            from decimer_segmentation import segment_chemical_structures
+        else:
+            # The import runs mrcnn/model.py's configure_gpu(memory_growth=True), which
+            # TensorFlow refuses once the budget's logical device exists ("Cannot set memory
+            # growth on device when virtual devices configured"): the load would fail. With a
+            # budget the growth call is skipped during the import (as worker-decimer does).
+            import tensorflow as tf
+
+            real_growth = tf.config.experimental.set_memory_growth
+
+            def no_growth(device, enable):
+                log.info(
+                    "GPU memory budget set: skipping decimer_segmentation's "
+                    "set_memory_growth(%s)",
+                    enable,
+                )
+
+            tf.config.experimental.set_memory_growth = no_growth
+            try:
+                from decimer_segmentation import segment_chemical_structures
+            finally:
+                tf.config.experimental.set_memory_growth = real_growth
 
         self._segment = segment_chemical_structures
 
@@ -120,7 +146,10 @@ class DecimerSegmenter:
             if array.ndim == 2:
                 array = np.stack([array] * 3, axis=-1)
             crops.append(
-                (np.ascontiguousarray(array[:, :, :3]), (int(x0), int(y0), int(x1), int(y1)))
+                (
+                    np.ascontiguousarray(array[:, :, 2::-1]),  # RGB -> v1's file order (B, G, R)
+                    (int(x0), int(y0), int(x1), int(y1)),
+                )
             )
         return crops
 

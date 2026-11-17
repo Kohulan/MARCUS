@@ -78,13 +78,14 @@ def test_crops_are_rgb_uint8_and_bboxes_inside_page(results, pages):
             assert array.shape[:2] == (y1 - y0, x1 - x0)
 
 
-def test_crop_pixels_come_from_the_rgb_page(results, pages):
-    """Channel order: unmasked crop pixels equal the page's RGB pixels (not BGR as in v1's
-    cv2.imwrite files). Pixels outside the structure mask are white in both."""
+def test_crop_pixels_come_from_the_page_in_v1_channel_order(results, pages):
+    """Channel order: unmasked crop pixels equal the page's pixels with red and blue swapped, as
+    in v1's cv2.imwrite crop files (D4: the only crop difference to v1). Pixels outside the
+    structure mask are white in both."""
     crops, page = results[0], pages[0]
     rgb = np.asarray(Image.open(page).convert("RGB"))
     array, (x0, y0, x1, y1) = crops[0]
-    region = rgb[y0:y1, x0:x1]
+    region = rgb[y0:y1, x0:x1, ::-1]
     not_white = np.any(array != 255, axis=2)
     assert not_white.any()
     assert np.array_equal(array[not_white], region[not_white])

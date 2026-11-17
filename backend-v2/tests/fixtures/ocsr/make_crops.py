@@ -1,6 +1,6 @@
 """Regenerate the OCSR fixture crops: v2's DecimerSegmenter on synth_015.pdf (TF image only).
 
-Saves every crop exactly as the segment worker stores it (RGB PNG, segment._write_crop) plus a
+Saves every crop exactly as the segment worker stores it (PNG, segment._write_crop) plus a
 meta.json with page, index (position in the segmenter output), bbox and sha256:
 
   docker run --rm --network none -v $PWD/tests/fixtures/ocsr/make_crops.py:/w/make_crops.py:ro \
