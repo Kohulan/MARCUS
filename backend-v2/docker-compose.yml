@@ -15,15 +15,18 @@
 # dispatcher and workers start only after it completed successfully.
 #
 # Images: api (api, api-migrate, dispatcher), cpu (worker-cpu), tools (worker-tools), tf
-# (worker-segment: DECIMER Segmentation; worker-decimer: DECIMER OCSR, normal and hand-drawn;
-# all weights baked into the image). Every app container runs as uid 10001 with a read-only root
-# filesystem, /tmp on tmpfs and the shared named volume `data` at /data.
+# (worker-segment: DECIMER Segmentation; worker-decimer: DECIMER OCSR, normal and hand-drawn),
+# torch (worker-molnextr: MolNexTR; worker-molscribe: MolScribe); all weights baked into the
+# images. Every app container runs as uid 10001 with a read-only root filesystem, /tmp on tmpfs
+# and the shared named volume `data` at /data.
 #
-# ML tests in the TF image (profile "test", no network, nothing else needed):
+# ML tests in the model images (profile "test", no network, nothing else needed):
 #   docker compose -p marcus-v2 run --rm worker-segment-test
 #   (= pytest -m ml tests/workers/test_decimer_segmenter.py -q)
 #   docker compose -p marcus-v2 run --rm worker-decimer-test
 #   (= pytest -m ml tests/workers/test_decimer_ocsr.py -q -s)
+#   docker compose -p marcus-v2 run --rm worker-torch-test
+#   (= pytest -m ml tests/workers/test_torch_ocsr.py -q -s)
 
 name: marcus-v2
 
@@ -88,6 +91,25 @@ x-tf-test: &tf-test
     MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
   mem_limit: 8g
 
+x-torch-image: &torch-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.torch
+    target: runtime
+    args:
+      # cpu (default) or cu128 (the CUDA 12.8 build v1 runs; GPU override). docker/MODEL_PINS.md
+      TORCH_VARIANT: ${MARCUS_TORCH_VARIANT:-cpu}
+  image: marcus-v2-torch:local
+
+# torch CPU threads, set before the model loads (marcus.workers.gpu.limit_torch_threads). The
+# OpenMP / MKL / OpenBLAS variables must be in the environment before numpy or torch is first
+# imported (the worker's main process imports numpy through RDKit), so compose sets them too.
+x-torch-threads: &torch-threads
+  MARCUS_TORCH_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  OMP_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  MKL_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  OPENBLAS_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -151,7 +173,7 @@ services:
     environment:
       <<: *env
       MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
-      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer}
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe}
       MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
       MARCUS_EXPOSE_DOCS: ${MARCUS_EXPOSE_DOCS:-false}
       MARCUS_CORS_ORIGINS: ${MARCUS_CORS_ORIGINS:-[]}
@@ -242,6 +264,39 @@ services:
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
+  worker-molnextr:
+    <<: [*app, *torch-image]
+    # ocsr steps of the engine molnextr (q.molnextr). ONE prefork process (= q.molnextr slots).
+    # The model loads when the pool process starts (hence the long proc-alive timeout); a
+    # failed load stops the container (exit 1) and compose restarts it. Device as v1: CUDA when
+    # torch sees a GPU, else CPU.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molnextr",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "molnextr@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *torch-threads]
+      MARCUS_OCSR_ENGINES: molnextr
+      # Share of the GPU's memory for this process (torch); empty = no limit / CPU only.
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLNEXTR_TORCH_MEM_FRACTION:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 4g
+
+  worker-molscribe:
+    <<: [*app, *torch-image]
+    # ocsr steps of the engine molscribe (q.molscribe), same torch image. ONE prefork process
+    # (= q.molscribe slots), model loaded at pool process start like worker-molnextr. Device:
+    # MARCUS_MOLSCRIBE_DEVICE, cpu by default (v1 forces CPU).
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molscribe",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "molscribe@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *torch-threads]
+      MARCUS_OCSR_ENGINES: molscribe
+      MARCUS_MOLSCRIBE_DEVICE: ${MARCUS_MOLSCRIBE_DEVICE:-cpu}
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 4g
+
   worker-segment-test:
     <<: *tf-test
     command: ["pytest", "-m", "ml", "tests/workers/test_decimer_segmenter.py", "-q"]
@@ -249,6 +304,29 @@ services:
   worker-decimer-test:
     <<: *tf-test
     command: ["pytest", "-m", "ml", "tests/workers/test_decimer_ocsr.py", "-q", "-s"]
+
+  # Test-only service of the torch image's `test` target (profile "test"), no network at all.
+  worker-torch-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.torch
+      target: test
+      args:
+        TORCH_VARIANT: ${MARCUS_TORCH_VARIANT:-cpu}
+    image: marcus-v2-torch-test:local
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    environment:
+      <<: *torch-threads
+    mem_limit: 8g
+    command: ["pytest", "-m", "ml", "tests/workers/test_torch_ocsr.py", "-q", "-s"]
 
   nginx:
     image: nginxinc/nginx-unprivileged:1.27-alpine

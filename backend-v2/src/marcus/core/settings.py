@@ -1,7 +1,7 @@
 import ipaddress
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # before the model loads (marcus.workers.gpu.limit_tf_threads).
     tf_intra_threads: int | None = Field(None, gt=0)
     tf_inter_threads: int | None = Field(None, gt=0)
+    # torch CPU threads in the torch OCSR workers (None = torch default: every core); applied
+    # before the model loads (marcus.workers.gpu.limit_torch_threads), inter-op threads = 1.
+    torch_threads: int | None = Field(None, gt=0)
+    # MolScribe's torch device. v1 forces CPU; "cuda" only after a parity check on GPU.
+    molscribe_device: Literal["cpu", "cuda"] = "cpu"
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
 

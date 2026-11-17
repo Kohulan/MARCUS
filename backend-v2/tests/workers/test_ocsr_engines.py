@@ -47,6 +47,7 @@ def test_unknown_engine_is_a_config_error(monkeypatch):
 
 
 def test_unbuilt_engine_is_refused_at_start(monkeypatch):
+    monkeypatch.setattr(ocsr, "ENGINE_MODULES", {Engine.DECIMER: "marcus.workers.ocsr.decimer"})
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", "molnextr")
     with pytest.raises(RuntimeError, match="not available in this build"):
         ocsr.register_configured_engines()

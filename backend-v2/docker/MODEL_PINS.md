@@ -1,4 +1,6 @@
-# Model pins (TF image, `docker/Dockerfile.tf`)
+# Model pins
+
+## TF image (`docker/Dockerfile.tf`)
 
 Controller ruling R10: the model stack is pinned to what the shipped v1 image (`marcus-backend:latest`,
 Python 3.10.12) actually runs, from its `pip freeze`. v2 runs Python 3.11; the transitive closure was
@@ -34,3 +36,67 @@ provides `cv2`; decimer declares `opencv-python` too).
 Runtime difference from v1 (same weights, same calls): v1 loads both DECIMER OCSR models when
 `DECIMER` is imported; v2 loads the hand-drawn model on its first `decimer-hand` request
 (`marcus.workers.ocsr.decimer`).
+
+
+## Torch image (`docker/Dockerfile.torch`)
+
+Same rule (R10): the shipped v1 image's `pip freeze`. Installed are torch/torchvision, the two
+OCSR packages (`--no-deps`, as v1's `backend/Dockerfile`) and exactly the packages they import at
+runtime (measured in the v1 image: `sys.modules` after importing both and their predict modules),
+with the closure resolved for Python 3.11 against the v1 freeze (`uv pip compile`). Every version
+is the v1 one.
+
+| package | version / commit | source |
+|---|---|---|
+| MolNexTR (engine `molnextr`, version `fb7505b`) | git `Kohulan/MolNexTR` @ `fb7505bed4774d13e8feae2aafbb57da22114512` (v1's unpinned `git+...MolNexTR.git` resolved to this), `--no-deps` | v1 image freeze |
+| MolNexTR checkpoint `molnextr_best.pth` | Hugging Face dataset `CYF200127/MolNexTR` revision `9ac2da6fa553e1d053af3d8d534b8a6c74b79749`, sha256 `5990bc19aaafa5cf44e9d04e06fb8e2b5aea50c66e1e925f662bdff7d2a6422c` (1,134,334,833 bytes), baked at `/opt/pystow/molnextr/` | the URL `MolNexTRSingleton._initialize_model` downloads at runtime (`.../resolve/main/molnextr_best.pth`); identical (sha256) to v1's runtime-downloaded file in `judges/stack/data/cache/molnextr/` |
+| MolScribe (engine `molscribe`, version `250f683`) | git `CrystalEye42/MolScribe` @ `250f683f52f5050eb624870ccfd04bccbcaa27e1`, `--no-deps` | v1 Dockerfile and freeze |
+| MolScribe checkpoint `swin_base_char_aux_1m.pth` | Hugging Face model `yujieq/MolScribe` revision `a0189776b7415b82795c7ee81eed311bf5c8724b`, sha256 `6f0df56fa32b5ffc21f8c7f311ef333da522f590bf5622e966c6bcb1f2d9ea1d` (1,134,940,406 bytes), baked at `/opt/pystow/molscribe/` | v1's `hf_hub_download("yujieq/MolScribe", "swin_base_char_aux_1m.pth")`; identical (sha256, same revision) to v1's Hugging Face cache in `judges/stack/data/hf/` |
+| torch / torchvision | 2.10.0 / 0.25.0 | v1 image freeze |
+| OpenNMT-py / SmilesPE | 2.2.0 / 0.0.3, `--no-deps` (their other requirements are never imported) | v1 image freeze |
+| timm / albumentations / qudida / torchtext / sentencepiece | 0.4.12 / 1.1.0 / 0.0.4 / 0.5.0 / 0.2.1 | v1 image freeze |
+| rdkit | 2024.9.5 (both libraries build SMILES and molfile with RDKit) | v1 image freeze |
+| numpy / opencv-python-headless / pillow | 1.24.3 / 4.11.0.86 / 11.3.0 | v1 image freeze |
+| scipy / scikit-image / scikit-learn / pandas / matplotlib | 1.13.1 / 0.24.0 / 1.7.2 / 2.2.3 / 3.9.0 | v1 image freeze |
+| pystow / opt-einsum / sympy / networkx | 0.7.0 / 3.4.0 / 1.14.0 / 3.4.2 | v1 image freeze |
+| rest of the closure (joblib, threadpoolctl, imageio, tifffile, ...; 46 pinned packages plus torch and torchvision) | as listed in the Dockerfile | v1 image freeze |
+
+**torch build variant** (build arg `TORCH_VARIANT`, compose `MARCUS_TORCH_VARIANT`):
+
+- `cpu` (default, the image built and tested in B3): `torch==2.10.0+cpu`, `torchvision==0.25.0+cpu`
+  from `download.pytorch.org/whl/cpu`; no CUDA libraries. `marcus-v2-torch:local` is this build.
+- `cu128`: the build v1 runs (`torch.__version__` `2.10.0+cu128`, `torch.version.cuda` `12.8` in
+  `marcus-backend:latest`), from `download.pytorch.org/whl/cu128`, plus the CUDA wheels at the v1
+  versions: nvidia-cublas-cu12 12.8.4.1, nvidia-cuda-cupti-cu12 12.8.90, nvidia-cuda-nvrtc-cu12
+  12.8.93, nvidia-cuda-runtime-cu12 12.8.90, nvidia-cudnn-cu12 9.10.2.21, nvidia-cufft-cu12
+  11.3.3.83, nvidia-cufile-cu12 1.13.1.3, nvidia-curand-cu12 10.3.9.90, nvidia-cusolver-cu12
+  11.7.3.90, nvidia-cusparse-cu12 12.5.8.93, nvidia-cusparselt-cu12 0.7.1, nvidia-nccl-cu12 2.27.5,
+  nvidia-nvjitlink-cu12 12.8.93, nvidia-nvshmem-cu12 3.4.5, nvidia-nvtx-cu12 12.8.90, triton 3.6.0,
+  cuda-bindings 12.9.4, cuda-pathfinder 1.3.3. For the GPU stage (C4). Not built in B3.
+
+Not installed although declared (never imported at runtime; the build's dependency check allows
+exactly these): MolNexTR's `pytorch-lightning`, `pyonmttok` and `opencv-python`; MolScribe's
+`opencv-python` and `rdkit-pypi` (the headless build of the same OpenCV and `rdkit` provide them);
+OpenNMT-py's `configargparse`, `tensorboard`, `flask`, `waitress`, `pyonmttok`; SmilesPE's
+`fastprogress` and `gensim`. MolScribe declares `torch<2.0`; v1 runs it with torch 2.10.0 as well.
+Also not installed: `huggingface-hub` (v1 used it only for `hf_hub_download`; timm imports it
+optionally and, with v1's 0.36.0, treats it as absent anyway). `typing-extensions` stays at the
+uv.lock version 4.16.0, as in the TF image.
+
+Runtime differences from v1 (same weights, same library calls):
+
+- Both libraries convert the decoded graph to SMILES/molfile with
+  `convert_graph_to_smiles(..., num_workers=16)`, a `multiprocessing.Pool` per prediction. That
+  raises `AssertionError: daemonic processes are not allowed to have children` inside a Celery
+  prefork pool process (checked). v2 runs the same per-structure function
+  (`_convert_graph_to_smiles`) in-process, in the same order, then the same `zip` / `np.mean`
+  (`marcus.workers.ocsr.torch_common.serial_graph_conversion`). MolNexTR's own `num_workers <= 1`
+  branch would do the same but raises `NameError: itertools` at the pinned commit (never imported
+  in `MolNexTR/chemical.py`).
+- torch CPU threads are capped (`MARCUS_TORCH_THREADS`, compose default 4, inter-op 1); v1 used
+  torch's default (every core).
+- An empty molfile (v1 returns `""` when the graph could not be converted) is stored as no molfile.
+
+Kept from v1 as is (library behaviour): `MolNexTR.get_predictions` re-creates the model on CPU and
+retries once when a prediction raises; MolNexTR logs `name 'rdFMCS' is not defined` for some
+structures (an unimported name in an exception path of its post-processing; output unchanged).
