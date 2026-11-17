@@ -179,8 +179,5 @@ def gpu_stats(remote: bool) -> dict:
 
 def gpu_free_mib(remote: bool) -> tuple[int, int, int]:
     """(free MiB, used MiB, total MiB) of GPU 0."""
-    q = "nvidia-smi --query-gpu=memory.free,memory.used,memory.total --format=csv,noheader,nounits"
-    out = ssh_ro(q) if remote else local_run(shlex.split(q))
-    first = out.strip().splitlines()[0]
-    free, used, total = (int(float(x)) for x in first.split(","))
-    return free, used, total
+    s = gpu_stats(remote)
+    return s["gpu_free_mib"], s["gpu_used_mib"], s["gpu_total_mib"]

@@ -55,10 +55,10 @@ class Aborted(RuntimeError):
     """The guard (or caller) asked the run to stop."""
 
 
-def abort_all() -> int:
-    """Close every client opened by run_paper (used by guard_jarvis to stop in-flight calls)."""
+def close_all(clients) -> int:
+    """Close every client in ``clients`` (best effort); returns how many closed."""
     n = 0
-    for c in list(_ACTIVE):
+    for c in list(clients):
         try:
             c.close()
             n += 1
@@ -67,16 +67,62 @@ def abort_all() -> int:
     return n
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+def abort_all() -> int:
+    """Close every client opened by run_paper (used by guard_jarvis to stop in-flight calls)."""
+    return close_all(_ACTIVE)
+
+
+def now_iso(timespec: str = "milliseconds") -> str:
+    """The UTC time in ISO 8601 (``timespec`` as datetime.isoformat)."""
+    return datetime.now(timezone.utc).isoformat(timespec=timespec)
 
 
 def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
     with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def prepare_upload(pdf_path: Path, paper_id: str, *, reuse_upload: bool, unique_bytes: bool):
+    """Read the PDF once. Returns (pdf_sha256, upload name, upload bytes, upload sha256).
+
+    The upload name is unique per run, and so are the bytes (a trailing PDF comment) with
+    ``unique_bytes``; ``reuse_upload`` keeps name and bytes stable instead (see run_paper)."""
+    data = Path(pdf_path).read_bytes()
+    pdf_sha = hashlib.sha256(data).hexdigest()
+    safe_id = re.sub(r"[^\w-]", "_", paper_id)
+    if reuse_upload:
+        return pdf_sha, f"{safe_id}__{pdf_sha[:12]}.pdf", data, pdf_sha
+    nonce = uuid.uuid4().hex[:12]
+    if not unique_bytes:
+        return pdf_sha, f"{safe_id}__{nonce}.pdf", data, pdf_sha
+    data = data + b"\n%judge-nonce " + nonce.encode() + b"\n"
+    return pdf_sha, f"{safe_id}__{nonce}.pdf", data, hashlib.sha256(data).hexdigest()
+
+
+def retry_after_s(r: httpx.Response, json_fallback: bool = False) -> float:
+    """How long to wait after a 429: Retry-After (v1 also sends ``retry_after`` in the JSON body
+    with ``json_fallback``), else 20 s; capped at 120 s, plus 0.5 s."""
+    try:
+        ra = float(r.headers.get("Retry-After") or (json_fallback and r.json().get("retry_after")) or 20)
+    except Exception:
+        ra = 20.0
+    return min(ra, 120.0) + 0.5
+
+
+def sleep_abortable(seconds: float, check_abort) -> None:
+    """Sleep ``seconds`` in steps of at most 0.5 s, calling ``check_abort()`` before each."""
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        check_abort()
+        time.sleep(min(0.5, end - time.perf_counter()))
+
+
+def no_keepalive_client(base_url: str, *, max_connections: int = 100, **kw) -> httpx.Client:
+    """An httpx client that opens a new connection per request: the production nginx opens a new
+    connection to the backend for every request (HTTP/1.0 upstream); reusing connections made
+    uvicorn drop in-flight requests ("Server disconnected") on the direct path."""
+    limits = httpx.Limits(max_connections=max_connections, max_keepalive_connections=0)
+    return httpx.Client(base_url=base_url, limits=limits, **kw)
 
 
 def count_pdf_pages(path: Path) -> int | None:
@@ -182,18 +228,9 @@ def run_paper(
     """
     pdf_path = Path(pdf_path)
     paper_id = paper_id or pdf_path.stem
-    pdf_sha = sha256_file(pdf_path)
-    data = pdf_path.read_bytes()
-    nonce = uuid.uuid4().hex[:12]
-    safe_id = re.sub(r"[^\w-]", "_", paper_id)
-    if reuse_upload:
-        up_name = f"{safe_id}__{pdf_sha[:12]}.pdf"
-    else:
-        up_name = f"{safe_id}__{nonce}.pdf"
-        if unique_bytes:
-            data = data + b"\n%judge-nonce " + nonce.encode() + b"\n"
-    up_sha = hashlib.sha256(data).hexdigest()
-    stem = up_name[:-4]
+    pdf_sha, up_name, data, up_sha = prepare_upload(
+        pdf_path, paper_id, reuse_upload=reuse_upload, unique_bytes=unique_bytes
+    )
 
     started_at = now_iso()
     t0 = time.perf_counter()
@@ -215,12 +252,9 @@ def run_paper(
         log_source = default_log_source(base_url)
     mark = log_source.mark() if log_source else None
 
-    client = httpx.Client(
-        base_url=base_url,
+    client = no_keepalive_client(
+        base_url, max_connections=4,
         timeout=httpx.Timeout(connect=15.0, read=max(segment_timeout_s, ocsr_timeout_s), write=120.0, pool=30.0),
-        # no keep-alive: the production nginx opens a new connection to the backend for every request (HTTP/1.0
-        # upstream); reusing connections made uvicorn drop in-flight requests ("Server disconnected") on the direct path
-        limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
     )
     _ACTIVE.add(client)
 
@@ -243,17 +277,10 @@ def run_paper(
             ms = (time.perf_counter() - ts) * 1000
             calls.add(step, method, path, r.status_code, ts, ms, None if r.status_code < 400 else r.text[:120])
             if r.status_code == 429 and on_429 == "retry" and attempts < max_429_retries:
-                try:
-                    ra = float(r.headers.get("Retry-After") or r.json().get("retry_after") or 20)
-                except Exception:
-                    ra = 20.0
-                ra = min(ra, 120.0) + 0.5
+                ra = retry_after_s(r, json_fallback=True)
                 calls.rate_limit_events.append({"step": step, "t_ms": round((ts - t0) * 1000, 1), "wait_s": ra, "attempt": attempts + 1})
                 attempts += 1
-                end = time.perf_counter() + ra
-                while time.perf_counter() < end:
-                    check_abort()
-                    time.sleep(min(0.5, end - time.perf_counter()))
+                sleep_abortable(ra, check_abort)
                 continue
             r.raise_for_status()
             return r

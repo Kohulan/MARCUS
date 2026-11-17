@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -33,15 +33,12 @@ import chem  # noqa: E402
 import make_fixtures  # noqa: E402
 import v2_adapter  # noqa: E402
 from common import client_v1, client_v2, target  # noqa: E402
+from common.client_v1 import now_iso  # noqa: E402
 from guard_jarvis import Guard, GuardTripped  # noqa: E402
 
 RESULTS = HERE / "results"
 ENGINES = ["decimer", "decimer-hand", "molnextr", "molscribe"]
 TIMEOUTS = dict(segment_timeout_s=3600, ocsr_timeout_s=900)
-
-
-def utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def score(rec: dict, meta: dict) -> dict:
@@ -95,7 +92,7 @@ def main(argv=None) -> int:
     out = RESULTS / f"{prefix}_ACC_{datetime.now().strftime('%Y%m%dT%H%M%S')}{('_' + a.tag) if a.tag else ''}.json"
     res = {"kind": "fixture_accuracy", "client": a.client, "target": a.target, "base_url": base_url,
            "build": api.BUILD if a.client == "v1" else f"v2-{client_v2.git_short_hash()}",
-           "started_at": utc(), "config": vars(a), "standardisation": chem.STANDARDISATION, "runs": []}
+           "started_at": now_iso("seconds"), "config": vars(a), "standardisation": chem.STANDARDISATION, "runs": []}
     rc = 0
     try:
         with Guard(base_url, "ACC", enabled=a.target == "jarvis",
@@ -106,7 +103,7 @@ def main(argv=None) -> int:
                     if guard.tripped:
                         break
                     cleared = cache.clear(f"ACC {n} {eng}") if cache else None
-                    print(f"[{utc()}] synth_{n:03d} {eng} ...", flush=True)
+                    print(f"[{now_iso('seconds')}] synth_{n:03d} {eng} ...", flush=True)
                     t0 = time.time()
                     try:
                         rec = api.run_paper(path, eng, base_url=base_url, paper_id=path.stem, abort=guard.abort,
@@ -135,7 +132,7 @@ def main(argv=None) -> int:
     except GuardTripped as e:
         res["guard_refused"] = str(e)
         rc = 3
-    res["finished_at"] = utc()
+    res["finished_at"] = now_iso("seconds")
     res["summary"] = {f"{r['fixture']}/{r['engine']}": {"exact": r["exact"], "expected": r["expected"],
                                                          "skeleton": r["skeleton"], "segments": r["segments"],
                                                          "lost_pages": r["lost_pages"], "fatal": r["fatal_error"]}

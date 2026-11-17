@@ -93,11 +93,8 @@ def http(client: httpx.Client, method: str, url: str, *, tries: int = 5, **kw) -
 
 
 def sha256_file(p: Path) -> str:
-    h = hashlib.sha256()
     with p.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
 # ---- 1. COCONUT -------------------------------------------------------------

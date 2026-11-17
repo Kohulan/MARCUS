@@ -52,14 +52,12 @@ dropped. ``segment_timeout_s`` / ``ocsr_timeout_s`` only flag records (``exceeds
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import subprocess
 import threading
 import time
-import uuid
 import weakref
 from datetime import datetime
 from pathlib import Path
@@ -67,7 +65,17 @@ from pathlib import Path
 import httpx
 
 from . import target
-from .client_v1 import Aborted, count_pdf_pages, now_iso, sha256_file
+from .client_v1 import (
+    Aborted,
+    _err_text,
+    close_all,
+    count_pdf_pages,
+    no_keepalive_client,
+    now_iso,
+    prepare_upload,
+    retry_after_s,
+    sleep_abortable,
+)
 
 API = "/api/v2"
 OWNER_COOKIE = "marcus_owner"
@@ -92,14 +100,7 @@ _REPO = Path(__file__).resolve().parents[2]
 
 def abort_all() -> int:
     """Close every client opened by run_paper (same contract as client_v1.abort_all)."""
-    n = 0
-    for c in list(_ACTIVE):
-        try:
-            c.close()
-            n += 1
-        except Exception:
-            pass
-    return n
+    return close_all(_ACTIVE)
 
 
 def _register(pid: str, base_url: str, cookie: str | None) -> None:
@@ -171,16 +172,6 @@ def _keep_owner_cookie(client: httpx.Client, resp: httpx.Response) -> None:
             client.headers["Cookie"] = f"{OWNER_COOKIE}={m.group(1)}"
 
 
-def _err_text(e: Exception) -> str:
-    if isinstance(e, httpx.HTTPStatusError):
-        try:
-            d = e.response.json().get("detail")
-        except Exception:
-            d = e.response.text[:200]
-        return f"HTTP {e.response.status_code}: {str(d)[:300]}"
-    return f"{type(e).__name__}: {str(e)[:300]}"
-
-
 def _ts(v) -> float | None:
     """ISO-8601 timestamp from the API -> epoch seconds."""
     if not v:
@@ -220,17 +211,9 @@ def run_paper(
 
     pdf_path = Path(pdf_path)
     paper_id = paper_id or pdf_path.stem
-    pdf_sha = sha256_file(pdf_path)
-    data = pdf_path.read_bytes()
-    nonce = uuid.uuid4().hex[:12]
-    safe_id = re.sub(r"[^\w-]", "_", paper_id)
-    if reuse_upload:
-        up_name = f"{safe_id}__{pdf_sha[:12]}.pdf"
-    else:
-        up_name = f"{safe_id}__{nonce}.pdf"
-        if unique_bytes:
-            data = data + b"\n%judge-nonce " + nonce.encode() + b"\n"
-    up_sha = hashlib.sha256(data).hexdigest()
+    pdf_sha, up_name, data, up_sha = prepare_upload(
+        pdf_path, paper_id, reuse_upload=reuse_upload, unique_bytes=unique_bytes
+    )
 
     started_at = now_iso()
     t0 = time.perf_counter()
@@ -254,10 +237,8 @@ def run_paper(
         "failed_steps": [], "cancelled": False,
     }
 
-    client = httpx.Client(
-        base_url=base_url,
-        timeout=httpx.Timeout(connect=15.0, read=60.0, write=120.0, pool=30.0),
-        limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
+    client = no_keepalive_client(
+        base_url, max_connections=4, timeout=httpx.Timeout(connect=15.0, read=60.0, write=120.0, pool=30.0)
     )
     _ACTIVE.add(client)
 
@@ -286,17 +267,10 @@ def run_paper(
                 log.append({"step": step, "method": method, "path": path, "status": r.status_code,
                             "t_ms": round((ts - t0) * 1000, 1), "ms": round((time.perf_counter() - ts) * 1000, 1)})
             if r.status_code == 429 and attempts < max_429_retries:
-                try:
-                    ra = float(r.headers.get("Retry-After") or 20)
-                except Exception:
-                    ra = 20.0
-                ra = min(ra, 120.0) + 0.5
+                ra = retry_after_s(r)
                 rate_events.append({"step": step, "t_ms": round((ts - t0) * 1000, 1), "wait_s": ra, "attempt": attempts + 1})
                 attempts += 1
-                end = time.perf_counter() + ra
-                while time.perf_counter() < end:
-                    check_abort()
-                    time.sleep(min(0.5, end - time.perf_counter()))
+                sleep_abortable(ra, check_abort)
                 continue
             r.raise_for_status()
             _keep_owner_cookie(client, r)

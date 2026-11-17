@@ -9,15 +9,14 @@ import uuid
 from dataclasses import dataclass, field
 
 import httpx
+from common.client_v2 import ACTIVE_STEP as BUSY_STEPS
+from common.client_v2 import OWNER_COOKIE, TERMINAL
 from fs_probe import DockerProbe, ProbeError
 from payloads import minimal_pdf, minimal_png
 
 API = "/api/v2"
-OWNER_COOKIE = "marcus_owner"
 HTTP_TIMEOUT_S = 120
 PAPER_TIMEOUT_S = 300
-TERMINAL = {"done", "failed", "deleted"}
-BUSY_STEPS = ("pending", "queued", "running")
 # The data root inside the API container (MARCUS_DATA_ROOT in backend-v2/docker-compose.yml).
 DATA_ROOT = "/data"
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # global constraints: 20 MB + 1 byte gets 413
