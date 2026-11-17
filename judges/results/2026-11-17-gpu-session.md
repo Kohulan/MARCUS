@@ -1,121 +1,135 @@
-# v1 vs v2 GPU session on jarvis (Task D4, 2026-11-17)
+# v1 vs v2 GPU session on jarvis (Task D4, 2026-11-17, with fix round 1)
 
-One Tesla V100-PCIE-32GB (sm_70, driver 580.178.04, compute mode Default), 32 cores, 376 GB RAM.
-Production v1 was already stopped by the owner (maintenance page `marcus-maintenance` on 8080/9000 since
-09:48:56Z) and stayed stopped; the maintenance page answered 503 on 127.0.0.1:8080 and :9000 after the session.
-The v1 judge copy and the v2 test stack ran one after the other, never together (GPU 0 MiB in between).
+One Tesla V100-PCIE-32GB (sm_70, driver 580.178.04, compute mode Default), 32 cores, 376 GB RAM. Production v1 was
+stopped by the owner before the session (maintenance page `marcus-maintenance` on 8080/9000 since 09:48:56Z) and stayed
+stopped; after the last run the maintenance page answered 503 on 127.0.0.1:8080 and :9000, the GPU was at 0 MiB.
+The v1 judge copy and the v2 test stack never ran at the same time.
+
+**The verdicts below come from fix round 1 (14:40-18:20Z), which reran everything at the shipping configuration.**
+The morning session (11:03-14:19Z) is kept at the end as history: its v2 GPU numbers were taken with worker-segment
+running without its memory budget (F2, since fixed), and its "Not less accurate" verdict compared v2 with v1 runs
+that had not run at all (the v1 copy was still down from a crash; review C1).
 
 | | v1 | v2 |
 |---|---|---|
-| build | `marcus-backend:latest` 976396a5 (production image), judge copy `marcus-judge-backend` on 127.0.0.1:19000 (`judges/stack/docker-compose.yml` + `docker-compose.jarvis.yml`) | branch v2-backend 2eb2c74, built on jarvis in `~/Project_MARCUS/v2-test/` (api, cpu, tools, tf:cuda, torch:cuda), compose project `marcus-v2-test`, nginx on 127.0.0.1:18090 (`backend-v2/docker-compose.yml` + `docker-compose.gpu.yml` + `judges/stack/docker-compose.v2-jarvis.yml`). Run lines say `v2-unknown` (no git on jarvis) = 2eb2c74 |
-| copies | **as shipped** (4 page threads) 11:03-11:46Z; **single-thread** (the judges' shim, v1's own 1-thread path, `judges/load/docker-compose.jarvis-single-thread.yml`) 11:47-12:58Z, because the as-shipped copy crashes on every 24-page PDF | security mode (fake engines, `docker-compose.fake.yml`) 12:58-13:04Z; GPU mode 13:14-14:19Z |
-| deviations | none | (1) `Dockerfile.tf` + `tzdata` (one line; without it no TF worker starts, see F1); (2) worker-segment ran **without** its 6144 MiB TensorFlow budget (F2) |
+| build | `marcus-backend:latest` 976396a5 (the production image) as judge copy `marcus-judge-backend`, 127.0.0.1:19000 (`judges/stack/docker-compose.yml` + `docker-compose.jarvis.yml`) | branch v2-backend at f40a0d0 + the process recycling of 188eecd, built on jarvis in `~/Project_MARCUS/v2-test/`; compose project `marcus-v2-test`, nginx 127.0.0.1:18090 (`backend-v2/docker-compose.yml` + `docker-compose.gpu.yml` + `judges/stack/docker-compose.v2-jarvis.yml`). Run lines: build `v2-r1b-f40a0d0+recycle` |
+| configuration | **as shipped** (4 page threads); the judge copy restarted before EVERY (fixture, engine) run, 14:52-15:45Z. Reported beside it: the **single-thread** copy (the judges' shim, v1's own 1-thread path; morning) | **shipping**: every GPU budget on (segment 2048 MiB, decimer 4096 MiB, torch 0.09 each), MolScribe on cuda, segment process replaced every 200 pages. Only test deviation: per-IP limits raised for the single-IP judges (`docker-compose.v2-jarvis.yml`) |
 
-Judges ran on jarvis against 127.0.0.1 (`judges/` copy, uv env), guard in `--prod-stopped` mode (production must
-stay stopped, free GPU >= 3 GiB), `JUDGE_GPU_BUDGET_S=36000` (R20); on jarvis the guard's read-only ssh commands run
-locally through a shim (`.bin-guard/ssh`, whitelist still enforced in Python). v2 timings on a cold OCSR cache (R21:
-`DELETE FROM ocsr_cache` in `marcus-v2-test-postgres-1` before every scenario, arm and accuracy run); every v2 timing
-in this file has `ocsr_cache_hits == 0` and `timing_valid == true`. `run_goldset.py` runs had no guard (it enables
-it only for port 29000); nothing shared the GPU then. Raw files: `judges/load/results/*20261117T1[2-5]*`,
-`judges/runs/*-d4*.jsonl`, `judges/results/2026-11-17-gpu-session/`.
+Judges ran on jarvis against 127.0.0.1 with the jarvis guard in `--prod-stopped` mode on every run (scenarios,
+fixture accuracy, gold set and robustness; GPU memory >= 3 GiB, production must stay stopped, GPU-time ledger,
+`JUDGE_GPU_BUDGET_S=36000`, R20). The guard's read-only commands run locally through a shim (`.bin-guard/ssh`; the
+whitelist is checked in Python first). Since f40a0d0 `target._check` also refuses ports 8080 and 9000 on any loopback
+address. v2 timings on a cold OCSR cache (R21): every v2 timed run below has `ocsr_cache_hits == 0` and
+`timing_valid == true`.
 
-## Gates (spec §3)
+## Gates (spec §3): v2 at the shipping configuration against v1 as shipped
 
-| Gate | Pass rule | v1 (jarvis GPU) | v2 (jarvis GPU) | Result | Raw files |
+| Gate | Spec rule | v1 as shipped (jarvis GPU) | v1 single-thread (reported) | v2 shipping config (round 1) | Verdict |
 |---|---|---|---|---|---|
-| **Safe** | 17 of 17, each proves its v2 endpoint exists | 0 of 17 (v1 suite on v1, `judges/security/README.md`, not rerun) | **19 passed, 1 skipped** (`needs_frontend`: browser half of #14, no React UI yet); 17 mapped tests: 16 pass + #14 API half pass + browser half skipped; + 2 XFF tests pass | **PASS** (with the expected skip) | `load/results/jarvis_v2_SECURITY_20261117T135859.xml`, `2026-11-17-gpu-session/v2_security.log` |
-| **Fair** | small paper (15) starts segmentation < 10 s and first SMILES < 60 s while a 190-structure paper runs | as shipped: crashes on the 190 paper (S4, ACC); single-thread: start not observable, **first SMILES 100.1 s**, small wall 160.1 s (3.1x its S1) | **start 2.4 s, first SMILES 6.7 s**, small done 36.3 s (wall 37.5 s, 1.2x S1); big paper 190/190 with full OCSR; in S5's S2: 2.7 s / 7.1 s | **PASS** | `jarvis_S2_20261117T134939_d4-single-thread.json`, `jarvis_v2_S2_20261117T142118_d4.json`, `jarvis_v2_S5_20261117T145156_d4.json` |
-| **Responsive** | `/health` p95 < 100 ms during heavy work; depict p95 < 2 s | single-thread: S3 health p95 **78,393 ms** (max 82.5 s, idle 8.3 ms); S2 p95 79,797 ms (97 % > 200 ms); depict not measured on v1 | S3 health p95 **5.6 ms** (max 39.7), heartbeat 15.5 ms; S2 health p95 5.3 ms; depict p95 **35.8 ms** (S3), 46.5 ms (S2), 35.0 ms (S5) | **PASS** | `jarvis_S3_20261117T135813_d4-single-thread.json`, `jarvis_v2_S3_20261117T142402_d4.json`, S2/S5 above |
-| **Robust** | a bad PDF fails only its own paper; no worker crash takes down the API; 0 lost pages on S1 fixture | as shipped: S1 lost pages (molscribe pages 0, 2; ACC decimer 2, 3, molnextr 2, molscribe 0, 2), **5 backend crashes** in the session (24-page fixture, gold-set paper, S4); single-thread: 0 lost pages | 8 adversarial PDFs at once next to a good paper: 1 refused at upload (415, PNG as .pdf), 4 failed alone (garbage, encrypted, zero pages: `check_pdf` bad_input; 200-inch page: `render_page` + `docling` bad_input), 3 harmless ones done (XSS text, 1 GiB flate bomb, truncated PDF); good paper 15/15, no lost page; `/health` 200 on every probe; 0 container restarts. S1 0 lost pages (3 engines), S4 0 lost pages / 0 page errors, all 2,764 OCSR steps first attempt | **PASS** | `jarvis_v2_ROBUST_20261117T151405.json`, `jarvis_v2_S1_20261117T141713_d4.json`, `jarvis_v2_S4_20261117T144605_d4.json`, `jarvis_ACC_20261117T120647_v1gpu.json`, `jarvis_S4_20261117T124539_d4.json` |
-| **Not less accurate** | per engine, exact-match structures on the fixtures >= v1 (as shipped, jarvis GPU, same session) | see table below | see table below | **PASS against v1 as shipped**; against the single-thread copy equal except MolNexTR synth_190 153 vs 154 (F5) | `jarvis_ACC_20261117T120647_v1gpu.json`, `jarvis_ACC_20261117T124813_v1gpu-single-thread.json`, `jarvis_v2_ACC_20261117T145157_v2gpu.json` |
-| gold-set recall (reported, no bar) | 2 papers, all engines | see table below | v2 >= v1 on every paper and engine | reported | `runs/v1-jarvis-gpu-d4.jsonl`, `runs/v2-jarvis-gpu-d4.jsonl`, `2026-11-17-gpu-session/goldset_score_v1_v2.md` |
-| **Throughput** | S4 full pipeline: 2 papers at once faster than one after the other | as shipped: crashed after 10 s (2 fatal, 48 lost pages); v1 serialises requests anyway (local S4) | two 12-page halves of synth_190 (96 + 94 structures): sequential **224.4 s**, concurrent **227.0 s** (0.99x, 2 repeats each, valid); control 8 one-page PDFs: 130.8 s vs 78.7 s (1.66x faster) | **FAIL** (F4) | `jarvis_v2_S4_20261117T144605_d4.json` |
+| **Safe** | 17 of 17, each proves its v2 endpoint exists | 0 of 17 (`judges/security/README.md`) | — | 19 passed, 1 skipped (morning, `jarvis_v2_SECURITY_20261117T135859.xml`); not rerun: round 1 changed no API or nginx code | **PASS except #14 browser half** (`needs_frontend`, deferred to the React UI) |
+| **Fair** | small paper (15) starts segmentation < 10 s and shows first SMILES < 60 s while a 190-structure paper runs | not measurable: the 190-structure paper crashed or wedged v1 as shipped in 5 of 6 attempts this day (see accuracy) | first SMILES 100.1 s, start not observable, small wall 160.1 s | **start 2.1 s, first SMILES 6.5 s**, small done 36.2 s; in S5's S2 2.5 s / 6.0 s; big paper 190/190 with full OCSR | **PASS** |
+| **Responsive** | `/health` p95 < 100 ms during heavy work; depict p95 < 2 s | not measurable as shipped (it crashes on the 24-page paper); single-thread beside | S3 health p95 78,393 ms (max 82.5 s); depict not measured | S3 health p95 **5.8 ms** (max 38.1), heartbeat 13.8 ms; S2 health p95 5.3 ms; depict p95 **35.9 ms** (S3), 61.9 ms (S2), 33.2 ms (S5) | **PASS** |
+| **Robust** | a bad PDF fails only its own paper; no worker crash takes the API down; 0 lost pages on the S1 fixture | lost pages on synth_015 (decimer-hand pages 0-2 this round; decimer 2, 3 / molnextr 2 / molscribe 0, 2 in the morning); 5 crashes and 1 wedge on 24-page PDFs | 0 lost pages | 8 adversarial PDFs next to a good paper: 1 refused (415), 4 failed alone (`check_pdf` / `render_page` + `docling` bad_input), 3 harmless ones done; good paper 15/15; `/health` 200 on 110 of 110 probes; 0 container restarts. S1 0 lost pages (3 engines). Whole run: 541 segment_page and 3,523 OCSR steps, all first attempt, 0 failed | **PASS** |
+| **Not less accurate** | per engine, exact matches on the fixtures >= v1 as shipped (same session) | synth_015 9 / 12 / 12 / 12, synth_190 0 (wedge) / 0 (crash) / 0 (crash) / 128 (best as-shipped measurement per engine, table below) | 9 / 12 / 12 / 12 and 148 / 160 / 154 / 169 | **9 / 12 / 12 / 12 and 148 / 160 / 154 / 169** | **PASS** (v2 >= v1 as shipped for all 8 pairs; v2 = the single-thread copy for all 8) |
+| gold-set recall (reported, no bar) | 2 papers that draw structures, all engines | see table below | — | equal to v1 on every paper and engine; MolScribe PMC7689812 skeleton 1/6 vs 0/6 | reported |
+| **Throughput** | S4 full pipeline: two papers at once finish faster than one after the other | crashed after 10 s (morning; 2 fatal, 48 lost pages) | — | 1 slot (shipping): sequential 226.1 s, concurrent 227.3 s (**0.99×**, slower in both repeats) | **FAIL** at the shipping configuration. With 2 slots (experiment, not shipped): 184.4 s vs 181.6 s (1.02×, faster in both repeats) |
 
-### Fixture accuracy (exact = full InChIKey of a prediction on the slot's page; skeleton = first block)
+Engine order in the accuracy row: decimer / decimer-hand / molnextr / molscribe.
 
-| engine | synth_015 (15) v1 as shipped | v1 single-thread | **v2** | synth_190 (190) v1 as shipped | v1 single-thread | **v2** |
+### Fixture accuracy (exact = full InChIKey of a prediction on the slot's own page; v1 as shipped measured per engine with a restart before each run)
+
+| engine | synth_015 v1 as shipped: round 1 / morning | v1 single-thread | **v2** | synth_190 v1 as shipped (round 1) | v1 single-thread | **v2** |
 |---|---|---|---|---|---|---|
-| decimer | 7 (9 segments, pages 2, 3 lost) | 9 | **9** | 0 (crash after 32 s) | 148 | **148** |
-| decimer-hand | 12 | 12 | **12** | 0 (backend down) | 160 | **160** |
-| molnextr | 10 (page 2 lost) | 12 | **12** | 0 (backend down) | 154 | **153** |
-| molscribe (CPU in v1 and v2) | 7 (pages 0, 2 lost) | 12 | **12** | 0 (backend down) | 169 | **169** |
-| molscribe v2 on **cuda** | | | **12** | | | **169** |
+| decimer | 9 / 7 (pages 2, 3 lost) | 9 | **9** | **0**: wedged; segmentation 243 s with 7 page errors (pages 20, 22, 23 lost), then 163 segments listed and no OCSR answer for 17 min (event loop blocked, unhealthy); the operator restarted it | 148 | **148** |
+| decimer-hand | 4 (pages 0-2 lost) / 12 | 12 | **12** | **0**: crash after 64 s (`RemoteProtocolError`, 4 page errors) | 160 | **160** |
+| molnextr | 12 / 10 (page 2 lost) | 12 | **12** | **0**: crash after 82 s (7 page errors) | 154 | **154** |
+| molscribe (v1 cpu, v2 cuda) | 12 / 7 (pages 0, 2 lost) | 12 | **12** | **128** (145 segments; pages 3, 4, 7, 16, 19 lost) | 169 | **169** |
 
-v2 found every segment (15/15, 190/190) with every engine; v1 single-thread too. Slot by slot, v2 and the v1
-single-thread copy match the same slots for every engine and fixture except MolNexTR slot 154 (F5).
+Per-run files: `jarvis_ACC_20261117T1553..T1633*_v1-asshipped-r1-*.json` (8 files), morning
+`jarvis_ACC_20261117T120647_v1gpu.json` (synth_015 only counts; its synth_190 rows after decimer are connection
+errors, not measurements), `jarvis_ACC_20261117T124813_v1gpu-single-thread.json`, v2
+`jarvis_v2_ACC_20261117T183735_v2gpu-r1b.json`. v1 as shipped is not deterministic: the same engine on the same
+5-page fixture lost different pages in the two runs (decimer-hand 12 then 4).
 
-### Gold set (2 papers that draw structures; recall full / skeleton, segments)
+### Gold set (round 1 v2 vs v1 as shipped; recall full / skeleton, segments)
 
-| engine | PMC6273634 (11 expected) v1 | v2 | PMC7689812 (6 expected) v1 | v2 |
+| engine | PMC6273634 v1 | v2 | PMC7689812 v1 | v2 |
 |---|---|---|---|---|
 | decimer | 5/11, 8/10, 14 seg | 5/11, 8/10, 14 seg | 0/6, 0/6, 8 seg (4 page errors) | 0/6, 0/6, 16 seg |
 | decimer-hand | 6/11, 9/10 | 6/11, 9/10 | 0/6, 0/6, 16 seg | 0/6, 0/6, 16 seg |
 | molnextr | 6/11, 9/10 | 6/11, 9/10 | 0/6, 0/6, 16 seg (2 page errors) | 0/6, 0/6, 16 seg |
-| molscribe | 7/11, 9/10 (2 page errors) | 7/11, 9/10 (cpu and cuda) | 0/6, 0/6, **1 seg** (3 page errors) | 0/6, **1/6**, 16 seg |
+| molscribe | 7/11, 9/10 (2 page errors) | 7/11, 9/10 | 0/6, 0/6, 1 seg (3 page errors) | 0/6, 1/6, 16 seg |
 
-v1 = as shipped (it crashed 3 times during these 8 runs; crashed runs were redone after a restart, the scorer keeps
-the latest line). PMC7689812 (tetrapeptides) scores 0 full for every system: COCONUT's structures are not what the
-paper draws in a readable way; the paper still has 16 drawn structures.
+v1 = the morning as-shipped runs (crashed runs redone after restarts, the scorer keeps the latest line); v2 =
+`runs/v2-jarvis-gpu-d4r1b.jsonl`. Score: `2026-11-17-gpu-session/round1/goldset_score_v1_v2_r1b.md`.
 
-### Times (not gates)
+### Throughput detail (S4, full pipeline, 2 repeats per arm)
 
-| | v1 | v2 |
+| | 1 slot (shipping) | 2 slots for q.segment and q.decimer (`docker-compose.v2-jarvis-2slot.yml`) |
 |---|---|---|
-| S1 synth_015 wall (v1) / OCSR done (v2), decimer / molnextr / molscribe | 51.1 / 95.0 / 43.7 s (as shipped) | 20.9 / 15.5 / 22.4 s (cpu MolScribe), 16.2 s (cuda MolScribe); v2 paper wall incl. docling 29-31 s |
-| first SMILES, synth_015 alone | — | 3.8-4.7 s |
-| OCSR per structure p50 (engine time) | client round trip 2.4 / 5.7 / 3.0 s | engine 0.98 / 0.71 / 1.19 s (cpu), 0.77 s (cuda MolScribe) |
-| synth_190 full run, decimer | 509 s (single-thread; v1 rate limit 20 req/min) | 226 s (paper wall incl. docling) |
-| S5 script user p95 alone / during S2 | 898 ms / 8,386 ms (max 94.9 s) | 1,178 ms / 2,552 ms (max 4.0 s) |
-| first image job of a fresh stack (warm-up) | 4.5 s decimer | 23.3 s decimer (first TF run on the GPU), 0.9 s molnextr, 1.4 s molscribe |
+| two 12-page papers (96 + 94 structures): sequential / concurrent | 227.2, 225.1 / 227.4, 227.2 s: **0.99×** | 185.6, 183.2 / 181.5, 181.6 s: **1.02×** |
+| 8 one-page papers: sequential / concurrent | 130.6 / 78.6 s: 1.66× | 132.9 / 64.4 s: 2.06× |
+| GPU utilisation, mean over the S4 run (nvidia-smi every 2 s) | 16.4 % | 64.5 % |
+| card memory, peak | 8.6 GB | 15.5 GB (2 × 2380 MiB segment, 2 × 4428 MiB decimer, 2 × ~930 MiB torch) |
+| lost pages / page errors / failed steps | 0 / 0 / 0 | 0 / 0 / 0 |
+
+With one slot per GPU queue, a paper's own segmentation and OCSR already overlap, and two papers only share the same
+two processes: each paper's segmentation takes about twice as long, and the pair finishes at the sum. Two slots make
+everything about 19 % faster and give the concurrent pair a small but consistent edge (both repeats); the GPU is
+still idle a third of the time. Files:
+`jarvis_v2_S4_20261117T183144_d4r1b.json`, `jarvis_v2_S4_20261117T191739_d4r1b-2slot.json`; the aborted run
+(below) gave 1.01× (`jarvis_v2_S4_20261117T171736_d4r1.json`).
+
+## What fix round 1 changed and measured
+
+| Item | Result | Evidence |
+|---|---|---|
+| F2: segment worker with its TF budget | fixed (f0e4e8e): the library's import-time `set_memory_growth` is skipped when a budget is set, as worker-decimer does; unit tests incl. a fail-first one. On jarvis: `TensorFlow limited to 2048 MiB`, `skipping decimer_segmentation's set_memory_growth`, segmenter loaded | `round1/v2_r1_gpu_checks.log` |
+| Segment budget | TF allocator peak **896-982 MiB** over 44 pages at 300 dpi (synth_015, synth_190, both gold papers), identical segments and speed with a 6144, 2048 and even 1024 MiB cap. Set to **2048 MiB** (db9ab15) | `round1/seg_peak_*.log` |
+| GPU memory leak (found in round 1) | the library leaks about **3.1 MiB of GPU memory per page** (allocator in use 281 → 583 → 899 → 1214 → 1527 MiB at pages 1/100/200/300/400). With 2048 MiB a process ran out after 390 pages in the stack (first run of round 1, 16:42Z: every later page failed `ResourceExhausted`) and after 394 pages in a stand-alone probe. Fix (188eecd): `--max-tasks-per-child 200` (compose and image CMD, pinned by a compose-config test that failed before the fix). **Long run after the fix: 541 segment_page steps (425 in the 1-slot phase), 0 failed, all first attempt, 0 OOM lines** | `round1/seg_leak_2048_final.log`, `round1/v2_r1b_failed_steps.txt` (only the 5 adversarial failures), `round1/run_logs_excerpt.txt` |
+| F5: 4 of 190 crops differed from v1 | **root cause**: v1 writes the library's RGB crop with `cv2.imwrite`, which takes the array as BGR, so red and blue are swapped in every v1 crop file (shown to users, read by the OCSR engines). The 4 differing crops were exactly the coloured ones (158, 158, 314, 158 pixels with R != B). Fixed (f0e4e8e): crops are stored in v1's channel order; unit tests + the ML test (5 passed in the tf test image). Now **190 of 190 crops pixel-identical to v1**, and MolNexTR synth_190 is 154 = v1 | `jarvis_v2_CROPPARITY_20261117T185245.json`, `round1/ml_segment_test.log` |
+| MolScribe on the GPU | compose default for the GPU stack is now cuda (db9ab15); morning: same SMILES on 205 of 205 crops as cpu; round 1: 12/15 and 169/190 on cuda | `jarvis_v2_ACC_20261117T183735_v2gpu-r1b.json` |
+| I2: guard on every jarvis judge | robustness and gold set now run inside the jarvis guard (`--target jarvis --prod-stopped`), port 8080/9000 refused on loopback (f40a0d0) | result files carry `guard` |
+
+The first run of round 1 (15:46-16:45Z, segment budget 2048 without recycling) is kept as evidence of the leak:
+its S1-S5 and fixture accuracy finished before the leak hit and agree with the final run; its gold set failed from
+page ~390 on (`jarvis_v2_*_d4r1.json`, `round1/v2_r1a_gpu_checks.log`).
 
 ## Checks on the GPU
 
 | Check | Result |
 |---|---|
-| TF 2.15 on the V100 (sm_70) | **Works.** `tf.sysconfig.get_build_info()` in marcus-v2-tf:cuda: TF 2.15.1, CUDA 12.2, cuDNN 8, `cuda_compute_capabilities` sm_50, sm_60, **sm_70**, sm_75, compute_80, so native sm_70 kernels, no PTX JIT. Segmentation and DECIMER (normal and hand-drawn) ran on GPU 0 for the whole session (462 segment_page steps and every decimer / decimer-hand OCSR step, 0 failures). (C4's "sm_75 + compute_80" reading was incomplete.) |
-| MolScribe GPU vs CPU | **No loss: GPU allowed.** cuda vs cpu: the same SMILES on 205 of 205 fixture crops, the same exact counts (12/15, 169/190), the same gold-set result; engine time p50 1.08 s -> 0.66 s (synth_190), paper 240 s -> 159 s. Decision recorded: the spec rule is met, MolScribe may move to `MARCUS_MOLSCRIBE_DEVICE=cuda` (880 MiB on the card). The default in `docker-compose.yml` is unchanged in this task (controller's call). Note for B4 (cache key ignores the device): no CPU/GPU difference was seen for MolScribe. |
-| dcgm-exporter | **Does not work as configured (F3).** It starts and serves :9400, but `DCGM collector for entity type 'GPU' cannot be initialized; err: error watching fields: Host engine is running as non-root`; `/metrics` returned 0 lines (read from the metrics container on the internal network). |
-| docling CPU time per page (v2, CPU, 4 threads, jarvis) | 24-page synth_190: 5.4-6.1 s/page (130-145 s); 12-page halves 6.1-7.4 s/page (two at once); 5-page synth_015: 5.6-7.3 s/page; real papers: PMC6273634 2.8-2.9 s/page, PMC7689812 6.0-6.6 s/page; 1-page PDFs 12-27 s (fixed start cost ~10 s per step). 73 of 74 docling steps done on the first attempt, no timeout; the one failure is the 200-inch adversarial page (bad_input). v1 runs docling on the GPU only on request (not measured; the judge client does not call it). |
-| Exclusive_Process setter (read-only search) | **Found:** `nvidia-v100-setup.service` (enabled, `After=multi-user.target`) runs `/usr/local/bin/nvidia-v100-setup.sh`, which ends with `nvidia-smi -c 3` (EXCLUSIVE_PROCESS). The README's grep misses it (no `/usr/local/bin`); it runs after Docker and after the planned boot unit, so it would undo it. Nothing changed. `2026-11-17-gpu-session/exclusive_process_setter.txt`; switch-day note in `backend-v2/README.md` (F6). |
-| GPU memory (v2, nvidia-smi every 5 s) | peak 21,008 MiB for the whole card; per process: worker-segment 15,690 MiB (no budget, F2), worker-decimer 4,428 MiB (budget 4096 + context), worker-molnextr 880-926 MiB, worker-molscribe (cuda) 880 MiB. GPU utilisation mean 18 % during S4. |
-| watchdog / retries (ledger A6) | 0 steps with attempts > 1, 0 timeouts, 0 watchdog failures in the whole v2 GPU run (2,764 OCSR, 462 segment_page, 74 docling steps). |
+| TF 2.15 on the V100 (sm_70) | works; TF 2.15.1 build has native sm_70 kernels (sm_50, sm_60, sm_70, sm_75, compute_80) |
+| MolScribe GPU vs CPU | no loss (above); moved to cuda |
+| dcgm-exporter | **does not work** as configured: `DCGM collector for entity type 'GPU' cannot be initialized ... Host engine is running as non-root`, `/metrics` returns no GPU metric (F3, open) |
+| docling CPU time per page (morning; unchanged code) | 5.4-7.4 s per page on the fixtures, 2.8-6.6 s per page on the gold papers, 12-27 s for a 1-page PDF (fixed start cost); no docling timeout |
+| Exclusive_Process setter (read-only) | `nvidia-v100-setup.service` runs `/usr/local/bin/nvidia-v100-setup.sh` with `nvidia-smi -c 3`; it runs after `multi-user.target`, i.e. after the planned boot unit, and the README's search missed it (F6, switch day; nothing changed) |
 
-## Findings (each goes back as a task)
+## Findings still open
 
-- **F1 (blocker, one-line fix applied):** `marcus-v2-tf:cuda` has no time-zone data (the nvidia/cuda Ubuntu base has
-  no `tzdata`, the venv no `tzdata` wheel), so `celery` dies at import (`ZoneInfoNotFoundError: 'No time zone found
-  with key UTC'`, kombu timer) and worker-segment and worker-decimer restart forever. Fix: `tzdata` added to the
-  runtime stage's `apt-get install` in `backend-v2/docker/Dockerfile.tf` (separate commit). The CPU variant and the
-  torch image have it. No test runs the CUDA image, so C4 could not see it. Log: `v2_gpu_attempt1_tzdata.log` (not
-  committed), first lines in the report.
-- **F2 (blocker, worked around in the test stack only):** with its budget (`MARCUS_GPU_MEM_MB=6144`, from
-  `docker-compose.gpu.yml`) worker-segment cannot load the segmenter: `limit_tf_memory` configures a logical device,
-  then `import decimer_segmentation` runs `configure_gpu(memory_growth=True)` (`mrcnn/model.py:51`) and TensorFlow
-  raises `ValueError: Cannot set memory growth on device when virtual devices configured`; the worker exits and
-  restarts in a loop. worker-decimer guards the same call (`marcus/workers/ocsr/decimer.py:98-116`), segment.py does
-  not. The session ran the segment worker with no budget (`docker-compose.v2-jarvis.yml`), so TF grew to 15.7 GB.
-  After the fix, the 6 GB budget itself must be measured (Mask R-CNN at 300 dpi may need more).
-- **F3:** dcgm-exporter exports no GPU metrics (non-root DCGM host engine). Needs a decision (run it as root /
-  `SYS_ADMIN`, or drop it and read nvidia-smi / NVML from the metrics service).
-- **F4 (gate FAIL, Throughput):** two papers at once are not faster than one after the other (227.0 s vs 224.4 s).
-  Each paper's segmentation takes 53 s instead of 26 s when two run (one `q.segment` slot), and OCSR has one slot per
-  engine (`q.decimer`), so the pipeline is serial on the GPU work while the GPU is 18 % busy on average. One-page PDFs
-  do gain (1.66x), because their docling/render CPU work overlaps. Candidates: 2 slots (processes) for q.decimer and
-  q.segment within the memory budget, or batching OCSR crops per call.
-- **F5 (accuracy detail):** 4 of 190 synth_190 crops differ between v1 and v2 (158-314 pixels each, same box size;
-  each build is deterministic run to run). MolNexTR reads one of them differently (slot 154), so v2 has 153 vs the v1
-  single-thread copy's 154; the same v2 model on v1's crop gives v1's answer (`crop_diff_molnextr.txt`). Not a gate
-  failure against v1 as shipped, but it is a pre-processing difference (spec anti-goal); cause not found (Mask R-CNN
-  mask on GPU vs v1's process, or the crop/masking step; worker-segment ran without budget, F2).
-- **F6:** the Exclusive_Process setter (above) must be changed on switch day; the README search command misses it.
-- **F7 (open item, no access):** the outer reverse proxy (141.35.136.10) was not read: trusted proxy address, body
-  limit, SSE buffering, TLS end. Written as a switch-day open item in `backend-v2/README.md`.
+- **F4 Throughput FAIL at the shipping configuration** (0.99×). Two slots for q.segment and q.decimer reach 1.02×
+  and 19 % shorter walls, at 15.5 GB peak on the card; whether to ship 2 slots (and whether 1.02× satisfies the spec's
+  "faster") is a decision for the owner/controller.
+- **F3** dcgm-exporter exports no GPU metrics (non-root DCGM).
+- **F6** the Exclusive_Process setter must be changed on switch day; **F7** the outer proxy (141.35.136.10) was not
+  read (no access; open item in `backend-v2/README.md`).
+- The 3.1 MiB/page leak is in the segmentation library (Keras/TF across calls); recycling bounds it but does not
+  remove it. Whether worker-decimer leaks the same way was not measured (it ran 3,523 OCSR steps without a failure).
+- v1 as shipped is not deterministic (page losses differ run to run), so its numbers are a sample, not a constant.
+
+## History: morning session (11:03-14:19Z), superseded for the verdicts
+
+- v1 as shipped: synth_015 7/12/10/7; synth_190 decimer crashed after 32 s, the other three engines got
+  `ConnectError` because the copy was not restarted (not measurements; review C1). Gold set and S1/S4 as above.
+- v1 single-thread: fixture numbers above; S2/S3/S5 numbers used beside the gates.
+- v2 (worker-segment WITHOUT budget, MolScribe cpu, 2eb2c74 + tzdata fix): Fair 2.4 s / 6.7 s; health p95 5.6 ms;
+  Robust all true; fixture 9/12/12/12 and 148/160/153/169 (the 153 was the crop channel order, F5); Throughput 0.99×.
+  Security 19 passed + 1 needs_frontend skip. Blockers then: F1 (no tzdata in tf:cuda, fixed 5a8e5e3) and F2.
+- Files: `jarvis_*_20261117T1[2-5]*` (morning), `2026-11-17-gpu-session/*` (morning logs).
 
 ## How to rerun
 
-On jarvis, `~/Project_MARCUS/v2-test/` (copy of v2-backend + judges, `env.sh`, `run_v1_asshipped.sh`,
-`run_v1_single.sh`, `run_v2_security.sh`, `run_v2_gpu.sh`, logs in `logs/`). New judge tools of this session:
-`judges/load/fixture_accuracy.py` (fixtures x engines, exact/skeleton per slot, v1 or v2, cache cleared per run),
-`judges/load/robustness_v2.py` (adversarial PDFs next to a good paper, health probes, container restarts);
-`client_v1` maps `decimer-hand` to v1's `hand_drawn=true` (the Vue UI never sets it), `run_goldset --engines`
-accepts `decimer-hand`.
+On jarvis, `~/Project_MARCUS/v2-test/`: `run_v1_r1.sh` (v1 as shipped, restart before every engine run),
+`run_v2_gpu_r1b.sh` (all v2 gates at the shipping configuration, then S4 with 2 slots). The probes are copied to
+`2026-11-17-gpu-session/round1/`: `seg_gpu_peak.py` (segmenter memory per page in the tf:cuda image, `MODE=growth`
+or `budget`), `seg_gpu_leak.py` (the same, pages repeated with `REPEAT`), `crop_parity.py` (v2 crops vs v1 crop files).

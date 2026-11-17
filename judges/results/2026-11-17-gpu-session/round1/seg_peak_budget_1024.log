@@ -1,0 +1,49 @@
+/opt/pystow/DECIMER-Segmentation_model
+INFO:decimer_segmentation.decimer_segmentation:Warming up model...
+INFO:decimer_segmentation.decimer_segmentation:Model warmup complete
+INFO:matplotlib.font_manager:generated new fontManager
+{"page": "PMC6273634_p00.png", "segments": 0, "s": 0.4, "peak_mib": 753, "current_mib": 281, "error": null}
+{"page": "PMC6273634_p01.png", "segments": 0, "s": 0.36, "peak_mib": 775, "current_mib": 284, "error": null}
+{"page": "PMC6273634_p02.png", "segments": 14, "s": 2.48, "peak_mib": 750, "current_mib": 288, "error": null}
+{"page": "PMC6273634_p03.png", "segments": 0, "s": 0.35, "peak_mib": 783, "current_mib": 291, "error": null}
+{"page": "PMC6273634_p04.png", "segments": 0, "s": 0.35, "peak_mib": 778, "current_mib": 294, "error": null}
+{"page": "PMC6273634_p05.png", "segments": 0, "s": 0.35, "peak_mib": 779, "current_mib": 297, "error": null}
+{"page": "PMC6273634_p06.png", "segments": 0, "s": 0.35, "peak_mib": 780, "current_mib": 301, "error": null}
+{"page": "PMC6273634_p07.png", "segments": 0, "s": 0.35, "peak_mib": 778, "current_mib": 304, "error": null}
+{"page": "PMC6273634_p08.png", "segments": 0, "s": 0.35, "peak_mib": 779, "current_mib": 307, "error": null}
+{"page": "PMC7689812_p00.png", "segments": 0, "s": 0.35, "peak_mib": 772, "current_mib": 309, "error": null}
+{"page": "PMC7689812_p01.png", "segments": 1, "s": 1.23, "peak_mib": 743, "current_mib": 313, "error": null}
+{"page": "PMC7689812_p02.png", "segments": 8, "s": 1.72, "peak_mib": 753, "current_mib": 317, "error": null}
+{"page": "PMC7689812_p03.png", "segments": 7, "s": 1.83, "peak_mib": 755, "current_mib": 320, "error": null}
+{"page": "PMC7689812_p04.png", "segments": 0, "s": 0.36, "peak_mib": 755, "current_mib": 323, "error": null}
+{"page": "PMC7689812_p05.png", "segments": 0, "s": 0.35, "peak_mib": 756, "current_mib": 326, "error": null}
+{"page": "synth_015_p00.png", "segments": 3, "s": 1.37, "peak_mib": 756, "current_mib": 328, "error": null}
+{"page": "synth_015_p01.png", "segments": 3, "s": 1.23, "peak_mib": 759, "current_mib": 331, "error": null}
+{"page": "synth_015_p02.png", "segments": 3, "s": 1.15, "peak_mib": 762, "current_mib": 334, "error": null}
+{"page": "synth_015_p03.png", "segments": 3, "s": 1.49, "peak_mib": 782, "current_mib": 337, "error": null}
+{"page": "synth_015_p04.png", "segments": 3, "s": 1.31, "peak_mib": 767, "current_mib": 339, "error": null}
+{"page": "synth_190_p00.png", "segments": 8, "s": 1.64, "peak_mib": 820, "current_mib": 343, "error": null}
+{"page": "synth_190_p01.png", "segments": 8, "s": 1.81, "peak_mib": 828, "current_mib": 346, "error": null}
+{"page": "synth_190_p02.png", "segments": 8, "s": 1.66, "peak_mib": 831, "current_mib": 349, "error": null}
+{"page": "synth_190_p03.png", "segments": 8, "s": 1.64, "peak_mib": 832, "current_mib": 352, "error": null}
+{"page": "synth_190_p04.png", "segments": 8, "s": 1.7, "peak_mib": 833, "current_mib": 355, "error": null}
+{"page": "synth_190_p05.png", "segments": 8, "s": 1.66, "peak_mib": 837, "current_mib": 359, "error": null}
+{"page": "synth_190_p06.png", "segments": 8, "s": 1.73, "peak_mib": 839, "current_mib": 361, "error": null}
+{"page": "synth_190_p07.png", "segments": 8, "s": 1.69, "peak_mib": 839, "current_mib": 364, "error": null}
+{"page": "synth_190_p08.png", "segments": 8, "s": 1.71, "peak_mib": 840, "current_mib": 367, "error": null}
+{"page": "synth_190_p09.png", "segments": 8, "s": 1.77, "peak_mib": 847, "current_mib": 370, "error": null}
+{"page": "synth_190_p10.png", "segments": 8, "s": 1.61, "peak_mib": 849, "current_mib": 372, "error": null}
+{"page": "synth_190_p11.png", "segments": 8, "s": 1.64, "peak_mib": 848, "current_mib": 375, "error": null}
+{"page": "synth_190_p12.png", "segments": 8, "s": 1.71, "peak_mib": 855, "current_mib": 378, "error": null}
+{"page": "synth_190_p13.png", "segments": 8, "s": 1.75, "peak_mib": 806, "current_mib": 381, "error": null}
+{"page": "synth_190_p14.png", "segments": 8, "s": 1.66, "peak_mib": 860, "current_mib": 383, "error": null}
+{"page": "synth_190_p15.png", "segments": 8, "s": 1.66, "peak_mib": 845, "current_mib": 387, "error": null}
+{"page": "synth_190_p16.png", "segments": 8, "s": 1.79, "peak_mib": 814, "current_mib": 390, "error": null}
+{"page": "synth_190_p17.png", "segments": 8, "s": 1.4, "peak_mib": 817, "current_mib": 393, "error": null}
+{"page": "synth_190_p18.png", "segments": 8, "s": 1.69, "peak_mib": 822, "current_mib": 395, "error": null}
+{"page": "synth_190_p19.png", "segments": 8, "s": 1.74, "peak_mib": 824, "current_mib": 398, "error": null}
+{"page": "synth_190_p20.png", "segments": 8, "s": 1.67, "peak_mib": 826, "current_mib": 401, "error": null}
+{"page": "synth_190_p21.png", "segments": 8, "s": 1.7, "peak_mib": 975, "current_mib": 404, "error": null}
+{"page": "synth_190_p22.png", "segments": 8, "s": 1.59, "peak_mib": 978, "current_mib": 407, "error": null}
+{"page": "synth_190_p23.png", "segments": 6, "s": 1.58, "peak_mib": 982, "current_mib": 410, "error": null}
+SUMMARY {"mode": "budget", "budget_mb": "1024", "pages": 44, "max_peak_mib": 982, "errors": 0, "segments": 235, "total_s": 58.0}
