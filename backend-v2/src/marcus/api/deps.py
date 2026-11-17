@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +100,19 @@ def owners_from_ip(ip: str):
     return and_(Owner.kind == OwnerKind.BROWSER.value, where)
 
 
+def _used():
+    """SQL condition: the owner was used after the request that created it: it came back with
+    its cookie (last_seen_at moved, see `_touch`) or has a paper or an image job (a cookie-less
+    upload creates both in one request). A new browser's parallel first requests each create
+    an owner, but the browser keeps one cookie: the others are never used, and only the total
+    cap (ip_max_new_sessions_per_hour) counts them."""
+    return or_(
+        Owner.last_seen_at > Owner.created_at,
+        exists().where(Paper.owner_id == Owner.id),
+        exists().where(ImageJob.owner_id == Owner.id),
+    )
+
+
 def _bearer(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     scheme, _, token = auth.partition(" ")
@@ -109,9 +122,17 @@ def _bearer(request: Request) -> str | None:
 
 
 async def _touch(db: AsyncSession, owner: Owner) -> bool:
-    """Record activity at most once a minute (no write per request). True if it wrote."""
+    """Record activity at most once a minute (no write per request). True if it wrote.
+
+    The first return of an owner is always recorded (last_seen_at moves past created_at): that
+    marks it as used for the new-owner limit (`_used`)."""
     now = datetime.now(UTC)
-    if owner.last_seen_at is not None and now - owner.last_seen_at < TOUCH_EVERY:
+    first_return = owner.last_seen_at is not None and owner.last_seen_at <= owner.created_at
+    if (
+        owner.last_seen_at is not None
+        and not first_return
+        and now - owner.last_seen_at < TOUCH_EVERY
+    ):
         return False
     owner.last_seen_at = now
     await db.commit()
@@ -134,7 +155,9 @@ def owner_cookie_header(token: str) -> str:
 
 
 async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner:
-    """The caller's owner: API key, else browser cookie, else a new browser owner.
+    """The caller's owner: API key, else browser cookie, else a new browser owner (limits per
+    client address and hour: ip_max_new_owners_per_hour used owners, ip_max_new_sessions_per_hour
+    owner rows in all).
 
     A new owner's token goes on `request.state`; SecurityMiddleware sets the cookie on the
     response, whatever it is (an error, a file, a stream), not only on a route's own one.
@@ -181,14 +204,17 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
     # An unknown address is one shared bucket (fail closed), not a free pass.
     await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(rate_key_for_ip(ip)))))
     since = datetime.now(UTC) - timedelta(hours=1)
-    recent = (
+    total, used = (
         await db.execute(
-            select(func.count())
+            select(func.count(), func.count().filter(_used()))
             .select_from(Owner)
             .where(owners_from_ip(ip), Owner.created_at >= since)
         )
-    ).scalar_one()
-    if recent >= settings.ip_max_new_owners_per_hour:
+    ).one()
+    if (
+        used >= settings.ip_max_new_owners_per_hour
+        or total >= settings.ip_max_new_sessions_per_hour
+    ):
         raise HTTPException(status_code=429, detail="Too many new sessions from this address")
 
     token = new_token()

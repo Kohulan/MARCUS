@@ -145,9 +145,94 @@ async def test_api_key_owner_and_revoked_key_401(app, async_db_session):
         assert gone.status_code == 401
 
 
+async def _new_used_owner(c) -> None:
+    """A browser that keeps its cookie: first request creates the owner, the second uses it."""
+    c.cookies.clear()
+    first = await c.get("/api/v2/_whoami")
+    assert first.status_code == 200
+    again = await c.get("/api/v2/_whoami")
+    assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+
+
 async def test_eleventh_new_owner_from_one_ip_in_an_hour_is_429(app):
     async with make_client(app) as c:
         for _ in range(10):
+            await _new_used_owner(c)
+        c.cookies.clear()
+        assert (await c.get("/api/v2/_whoami")).status_code == 429
+
+
+async def test_first_return_is_recorded_within_the_minute(app, async_db_session):
+    """The touch throttle must not hide an owner's first return: it marks the owner as used."""
+    async with make_client(app) as c:
+        first = await c.get("/api/v2/_whoami")
+        created = (
+            await async_db_session.execute(
+                select(Owner.created_at, Owner.last_seen_at).execution_options(
+                    populate_existing=True
+                )
+            )
+        ).one()
+        assert created.last_seen_at == created.created_at
+        assert (await c.get("/api/v2/_whoami")).json()["id"] == first.json()["id"]
+    after = (
+        await async_db_session.execute(
+            select(Owner.created_at, Owner.last_seen_at).execution_options(populate_existing=True)
+        )
+    ).one()
+    assert after.last_seen_at > after.created_at
+
+
+async def test_parallel_first_requests_do_not_use_up_new_owner_slots(app, async_db_session):
+    """Review I8: a new browser's first page load fires several requests at once, each without
+    a cookie; each gets an owner and the last cookie wins. The owners whose cookie was dropped
+    never come back and must not count against the 10 new owners per address per hour."""
+    async with make_client(app) as c:
+        for _ in range(3):  # the siblings of one first load (the browser keeps one cookie)
+            c.cookies.clear()
+            assert (await c.get("/api/v2/_whoami")).status_code == 200
+        for _ in range(10):
+            await _new_used_owner(c)
+        c.cookies.clear()
+        assert (await c.get("/api/v2/_whoami")).status_code == 429
+
+
+async def test_an_owner_with_a_paper_counts_as_used(app, async_db_session):
+    """A cookie-less upload creates the owner and its paper in one request: it counts."""
+    db = async_db_session
+    for _ in range(10):
+        owner = Owner(
+            kind=OwnerKind.BROWSER.value,
+            token_hash=hash_token(new_token()),
+            priority_class=int(PriorityClass.BROWSER),
+            created_ip="127.0.0.1",
+        )
+        db.add(owner)
+        await db.commit()
+        await db.run_sync(lambda s, o=owner: _paper_for(s, o))
+        await db.commit()
+    async with make_client(app) as c:
+        assert (await c.get("/api/v2/_whoami")).status_code == 429
+
+
+def _paper_for(session, owner) -> None:
+    from tests.factories import make_paper
+
+    make_paper(session, session.merge(owner))
+
+
+async def test_new_sessions_per_address_have_a_total_cap(app, monkeypatch, clear_settings_cache):
+    """Owners never used are still rows: at most MARCUS_IP_MAX_NEW_SESSIONS_PER_HOUR per address
+    per hour (default ten times the new-owner limit), so a cookie-less scanner cannot grow the
+    owners table without bound."""
+    assert get_settings().ip_max_new_sessions_per_hour == 100
+    monkeypatch.setenv("MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR", "2")
+    clear_settings_cache()
+    assert get_settings().ip_max_new_sessions_per_hour == 20
+    monkeypatch.setenv("MARCUS_IP_MAX_NEW_SESSIONS_PER_HOUR", "5")
+    clear_settings_cache()
+    async with make_client(app) as c:
+        for _ in range(5):
             c.cookies.clear()
             assert (await c.get("/api/v2/_whoami")).status_code == 200
         c.cookies.clear()
@@ -172,7 +257,9 @@ def test_xff_used_from_trusted_proxy(monkeypatch, clear_settings_cache):
     assert client_ip(fake_request("10.0.0.5", "garbage")) == "10.0.0.5"
 
 
-async def test_concurrent_new_owners_respect_the_ip_limit(migrated_db, app, async_db_session):
+async def test_concurrent_new_owners_respect_the_ip_limit(
+    migrated_db, app, async_db_session, monkeypatch, clear_settings_cache
+):
     import asyncio
 
     from sqlalchemy import func
@@ -191,6 +278,9 @@ async def test_concurrent_new_owners_respect_the_ip_limit(migrated_db, app, asyn
         async with maker() as s:
             yield s
 
+    # unused owners count against the total cap; the per-address lock must keep it exact
+    monkeypatch.setenv("MARCUS_IP_MAX_NEW_SESSIONS_PER_HOUR", "10")
+    clear_settings_cache()
     app.dependency_overrides[get_db] = _own_session
     try:
         async with make_client(app) as c:
@@ -225,7 +315,9 @@ async def assert_cookie_maps_to_the_new_owner(c, db) -> None:
     (created,) = await owner_ids(db)
     r = await c.get("/api/v2/_whoami")
     assert r.status_code == 200 and r.json()["id"] == created
-    assert owner_cookies(r) == []  # a known cookie is not re-issued
+    # a known cookie is never swapped for another token (its first return renews it once)
+    token = c.cookies.get(COOKIE)
+    assert all(v.startswith(f"{COOKIE}={token};") for v in owner_cookies(r))
     assert await owner_ids(db) == [created]
 
 
@@ -312,6 +404,11 @@ async def test_last_seen_at_is_throttled(app, async_db_session):
     )
     db.add(owner)
     await db.commit()
+    await db.execute(  # an owner that has been used before (see test_first_return_is_recorded)
+        update(Owner)
+        .where(Owner.id == owner.id)
+        .values(created_at=datetime.now(UTC) - timedelta(days=1))
+    )
     recent = datetime.now(UTC) - timedelta(seconds=30)
     await _set_last_seen(db, owner.id, recent)
     async with make_client(app) as c:

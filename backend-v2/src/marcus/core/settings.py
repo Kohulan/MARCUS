@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
@@ -25,7 +25,12 @@ class Settings(BaseSettings):
     min_free_disk_bytes: int = Field(5 * 2**30, ge=0)
     retention_days: int = 30
     browser_max_active_papers: int = 3
+    # New browser owners per client address per hour that were used (came back with their
+    # cookie, or have a paper or image job). Owners never used again (the dropped cookies of a
+    # new browser's parallel first requests) count only against ip_max_new_sessions_per_hour.
     ip_max_new_owners_per_hour: int = 10
+    # Every owner row created per address per hour, used or not; default 10 x the limit above.
+    ip_max_new_sessions_per_hour: int | None = Field(None, gt=0)
     ip_max_active_papers: int = 6
     fair_window_s: int = 300
     trusted_proxies: list[str] = []
@@ -62,6 +67,12 @@ class Settings(BaseSettings):
     seg_version: str = Field("", max_length=200)
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
+
+    @model_validator(mode="after")
+    def _sessions_default(self):
+        if self.ip_max_new_sessions_per_hour is None:
+            self.ip_max_new_sessions_per_hour = 10 * self.ip_max_new_owners_per_hour
+        return self
 
     @field_validator("trusted_proxies")
     @classmethod
