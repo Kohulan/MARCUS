@@ -12,6 +12,8 @@ error). Papers run one after the other and engines one after the other, exactly 
 Selection:  --papers ids | --split dev|test|all (default all) | --order manifest|pages|bytes | --limit N
             (the limit applies after the split and order). --engines (default decimer molnextr molscribe).
 
+--client v2 drives backend-v2 (common/client_v2.py) and writes the same run lines (build "v2-<git hash>").
+
 Each upload gets a unique file name and unique bytes so every run really segments (see client_v1).
 --reuse-segmentation instead keeps the upload stable per paper: the first engine segments, the next
 engines reuse it (what a user does when switching engine); their segment_ms is then about 0 and
@@ -33,8 +35,8 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
-from common import client_v1, target  # noqa: E402
-from common.client_v1 import run_paper, sha256_file  # noqa: E402
+from common import client_v1, client_v2, target  # noqa: E402
+from common.client_v1 import sha256_file  # noqa: E402
 
 ENGINES = ["decimer", "molnextr", "molscribe"]
 
@@ -87,6 +89,8 @@ def main(argv=None) -> int:
     ap.add_argument("--order", choices=["manifest", "pages", "bytes"], default="manifest")
     ap.add_argument("--limit", type=int, default=0, help="at most this many papers (after split and order)")
     ap.add_argument("--engines", nargs="*", default=ENGINES, choices=ENGINES)
+    ap.add_argument("--client", choices=["v1", "v2"], default="v1",
+                    help="v1: the current build (default); v2: backend-v2 API (default base URL still needs --base-url)")
     ap.add_argument("--retry-failed", action="store_true")
     ap.add_argument("--reuse-segmentation", action="store_true")
     ap.add_argument("--max-segments", type=int, default=None, help="OCSR only the first N segments (smoke tests)")
@@ -96,6 +100,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-logs", action="store_true", help="do not read backend docker logs for page errors")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
+    run_paper = client_v2.run_paper if args.client == "v2" else client_v1.run_paper
 
     base_url = (args.base_url or target.backend_url()).rstrip("/")
     target._check(base_url)  # refuses production hostnames
