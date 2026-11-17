@@ -61,6 +61,7 @@ ALLOWED_ROUTES = {
     ("POST", "/api/v2/images"),
     ("GET", "/api/v2/images/{job_id}"),
     ("GET", "/api/v2/segments/{segment_id}/image"),
+    ("GET", "/api/v2/segments/{segment_id}/depiction"),
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
     ("PUT", "/api/v2/segments/{segment_id}/curation"),
     ("PUT", "/api/v2/papers/{paper_id}/curation"),

@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from marcus.api.routes import tools as tools_route
+from marcus.api import tooling as tools_route  # the tool-call code the routes use
 from tests.api.conftest import make_client
 
 BASE = "/api/v2/tools"

@@ -1,23 +1,30 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import curation_error
 from marcus.api.chempool import CHEM
+from marcus.api.depiction import draw_or_read, shown_structure
 from marcus.api.deps import current_owner, get_owned_segment, not_found, require_engine_enabled
 from marcus.api.read import IMAGE_HEADERS
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import StepKind
-from marcus.core.models import Curation, Owner, Step
+from marcus.core.enums import Engine, StepKind
+from marcus.core.models import Curation, Owner, Prediction, Step
 from marcus.core.pipeline import ACTIVE, request_ocsr
 
 router = APIRouter()
+
+DEPICTION_HEADERS = {
+    "Cache-Control": "private, max-age=86400",  # the client's URL carries v=<structure key>
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+}
 
 
 @router.get("/segments/{segment_id}/image")
@@ -31,6 +38,39 @@ async def segment_image(
     if not path.is_file():
         raise not_found()
     return FileResponse(path, media_type="image/png", headers=IMAGE_HEADERS)
+
+
+@router.get("/segments/{segment_id}/depiction")
+async def segment_depiction(
+    segment_id: uuid.UUID,
+    request: Request,
+    engine: Engine | None = None,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """SVG of the structure the UI shows for this segment (`engine`: that engine's newest valid
+    prediction instead). Drawn once per distinct SMILES and stored (marcus.api.depiction). The
+    client's `v` query parameter only busts its cache; it is ignored here."""
+    segment, paper = await get_owned_segment(db, owner, segment_id)
+    curation = await db.get(Curation, segment.id)
+    predictions = list(
+        (
+            await db.execute(
+                select(Prediction)
+                .where(Prediction.segment_id == segment.id)
+                .order_by(Prediction.created_at.desc(), Prediction.id)
+            )
+        ).scalars()
+    )
+    shown = await shown_structure(paper, segment, curation, predictions, engine)
+    # End the read-only transaction (and free its connection): a miss may wait up to WAIT_S
+    # on the tools worker. commit, not rollback: a rollback would expire `owner`.
+    await db.commit()
+    if shown is None:
+        raise not_found()
+    smiles, source = shown
+    data = await draw_or_read(request, owner, smiles, source)
+    return Response(data, media_type="image/svg+xml", headers=DEPICTION_HEADERS)
 
 
 @router.post("/segments/{segment_id}/predictions", status_code=202, response_model=StepAccepted)

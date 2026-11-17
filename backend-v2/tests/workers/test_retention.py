@@ -116,9 +116,7 @@ def test_expired_paper_with_running_step_is_cancelled_then_purged(db_session, mo
     def spy(session, paper_id):
         real_cancel(session, paper_id)
         session.flush()
-        statuses = session.execute(
-            select(Step.status).where(Step.paper_id == paper_id)
-        ).scalars()
+        statuses = session.execute(select(Step.status).where(Step.paper_id == paper_id)).scalars()
         seen.append((paper_id, sorted(statuses)))
 
     monkeypatch.setattr(retention, "cancel_paper", spy)
@@ -277,9 +275,9 @@ def test_current_ocsr_versions_only_for_installed_engines(monkeypatch):
 
     monkeypatch.setattr(retention, "distribution", fake_distribution)
     monkeypatch.setattr(
-        retention, "_static_version", lambda engine: {"decimer": "2.7", "decimer-hand": "2.7-hand"}[
-            engine.value
-        ]
+        retention,
+        "_static_version",
+        lambda engine: {"decimer": "2.7", "decimer-hand": "2.7-hand"}[engine.value],
     )
     assert retention.current_ocsr_versions() == {"decimer": "2.7", "decimer-hand": "2.7-hand"}
 
@@ -379,6 +377,58 @@ def test_file_error_is_counted_not_raised(db_session, monkeypatch):
     assert s.get(Paper, paper.id) is None  # rows go; the orphan sweep retries the files
 
 
+# --- depictions -----------------------------------------------------------------------
+
+
+def _depiction(sha: str, days_old: float, size: int = 10, suffix: str = ".svg"):
+    path = storage.depiction_path(sha)
+    path = path.with_suffix(suffix)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * size)
+    age(path, days_old * 86400)
+    return path
+
+
+def test_retention_purges_old_depictions(db_session):
+    old = _depiction("a" * 64, 31)
+    old_marker = _depiction("b" * 64, 40, size=0, suffix=".nodraw")
+    old_tmp = _depiction("c" * 64, 31, suffix=".svg.123.abc.tmp")
+    young = _depiction("d" * 64, 29)
+    young_marker = _depiction("e" * 64, 1, size=0, suffix=".nodraw")
+
+    report = purge(db_session)
+
+    assert report.depictions == 3
+    assert not old.exists() and not old_marker.exists() and not old_tmp.exists()
+    assert young.is_file() and young_marker.is_file()
+
+
+def test_retention_depictions_size_cap_oldest_first(db_session, monkeypatch):
+    monkeypatch.setattr(retention, "DEPICTIONS_MAX_BYTES", 250)
+    files = [_depiction(f"{i:x}" * 64, days_old=10 - i, size=100) for i in range(5)]
+    # oldest first: files[0] (10 days) .. files[4] (6 days); 500 bytes, cap 250
+
+    report = purge(db_session)
+
+    assert report.depictions == 3
+    assert [f.exists() for f in files] == [False, False, False, True, True]
+
+
+def test_retention_depictions_symlink_and_strangers_left(db_session, tmp_path):
+    root = get_settings().data_root / "depictions"
+    root.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"keep")
+    link = root / "ab" / ("ab" + "0" * 62 + ".svg")
+    link.parent.mkdir()
+    link.symlink_to(outside)
+    age(outside, 60 * 86400)
+
+    purge(db_session)
+
+    assert outside.read_bytes() == b"keep"
+
+
 # --- celery task and beat ---------------------------------------------------------------
 
 
@@ -410,7 +460,7 @@ def test_purge_task_runs_purge_with_a_fresh_session(db_session, monkeypatch):
     monkeypatch.setattr(retention, "purge_expired", fake_purge)
     before = datetime.now(UTC)
     retention.purge_expired_task.run()
-    (session, now), = calls
+    ((session, now),) = calls
     assert before <= now <= datetime.now(UTC)
     assert session is not db_session
 

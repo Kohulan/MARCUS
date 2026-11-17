@@ -23,6 +23,7 @@ ROUTES = [
     ("GET", "/api/v2/papers/{p}/export?format=sdf", None),
     ("GET", "/api/v2/papers/{p}/events", None),
     ("GET", "/api/v2/segments/{s}/image", None),
+    ("GET", "/api/v2/segments/{s}/depiction", None),
     ("POST", "/api/v2/segments/{s}/predictions", {"engine": "molnextr"}),
     ("PUT", "/api/v2/segments/{s}/curation", {"status": "accepted", "smiles": "CC"}),
     (
