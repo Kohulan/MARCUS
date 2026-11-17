@@ -54,3 +54,12 @@ def test_dispatcher_send_uses_celery_app(monkeypatch):
             },
         )
     ]
+
+
+def test_beat_start_logs_the_schedule(caplog):
+    from marcus.core.celery_app import _log_beat_schedule
+
+    with caplog.at_level("INFO", logger="marcus.core.celery_app"):
+        _log_beat_schedule()
+    assert "retention-purge-daily -> marcus.retention.purge_expired" in caplog.text
+    assert "'queue': 'q.cpu'" in caplog.text

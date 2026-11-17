@@ -52,6 +52,7 @@ class Owner(Base):
     __tablename__ = "owners"
     __table_args__ = (
         CheckConstraint(_in("kind", [k.value for k in OwnerKind]), name="ck_owners_kind"),
+        Index("ix_owners_created_ip_created_at", "created_ip", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -73,6 +74,7 @@ class Paper(Base):
         CheckConstraint(_in("status", [s.value for s in PaperStatus]), name="ck_papers_status"),
         CheckConstraint(_in("engine", ENGINES), name="ck_papers_engine"),
         Index("ix_papers_owner_id_status", "owner_id", "status"),
+        Index("ix_papers_expires_at", "expires_at"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -95,6 +97,8 @@ class ImageJob(Base):
     __table_args__ = (
         CheckConstraint(_in("status", IMAGE_JOB_STATUSES), name="ck_image_jobs_status"),
         CheckConstraint(_in("engine", ENGINES), name="ck_image_jobs_engine"),
+        Index("ix_image_jobs_owner_id", "owner_id"),
+        Index("ix_image_jobs_expires_at", "expires_at"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -140,6 +144,9 @@ class Step(Base):
         ),
         Index("ix_steps_queue_status", "queue", "status"),
         Index("ix_steps_paper_id_status", "paper_id", "status"),
+        Index("ix_steps_segment_id", "segment_id"),
+        Index("ix_steps_image_job_id", "image_job_id"),
+        Index("ix_steps_queue_finished_at", "queue", "finished_at"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -166,7 +173,11 @@ class Step(Base):
 
 class Prediction(Base):
     __tablename__ = "predictions"
-    __table_args__ = (CheckConstraint(_in("engine", ENGINES), name="ck_predictions_engine"),)
+    __table_args__ = (
+        CheckConstraint(_in("engine", ENGINES), name="ck_predictions_engine"),
+        Index("ix_predictions_segment_id", "segment_id"),
+        Index("ix_predictions_image_job_id", "image_job_id"),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     segment_id: Mapped[uuid.UUID | None] = _fk("segments.id", nullable=True)
@@ -200,6 +211,7 @@ class Curation(Base):
 
 class SegCache(Base):
     __tablename__ = "seg_cache"
+    __table_args__ = (Index("ix_seg_cache_created_at", "created_at"),)
 
     pdf_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     seg_version: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -209,6 +221,7 @@ class SegCache(Base):
 
 class OcsrCache(Base):
     __tablename__ = "ocsr_cache"
+    __table_args__ = (Index("ix_ocsr_cache_created_at", "created_at"),)
 
     image_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     engine: Mapped[str] = mapped_column(Text, primary_key=True)

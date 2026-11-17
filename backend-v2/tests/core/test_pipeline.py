@@ -3,6 +3,7 @@ import threading
 import pytest
 from sqlalchemy import func, select
 
+from marcus.core import pipeline as pipeline_module
 from marcus.core import storage
 from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import Engine, ErrorClass
@@ -284,6 +285,24 @@ def test_cancel_paper_with_missing_dir(db_session):
     cancel_paper(s, paper.id)
     s.refresh(paper)
     assert paper.status == "deleted"
+
+
+def test_cancel_paper_file_error_is_logged_not_raised(db_session, monkeypatch, caplog):
+    s = db_session
+    paper = make_paper(s)
+    s.commit()
+
+    def denied(path, *a, **kw):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(pipeline_module.shutil, "rmtree", denied)
+    with caplog.at_level("WARNING", logger="marcus.core.pipeline"):
+        cancel_paper(s, paper.id)
+    s.commit()  # the transaction is intact
+    s.refresh(paper)
+    assert paper.status == "deleted"
+    assert {st.status for st in steps(s, paper)} == {"cancelled"}
+    assert str(paper.id) in caplog.text and "PermissionError" in caplog.text
 
 
 def test_image_job_ocsr_done(db_session):

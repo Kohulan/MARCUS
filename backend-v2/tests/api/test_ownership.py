@@ -81,3 +81,45 @@ async def test_deleted_paper_is_not_listed(app, async_db_session):
         await c.delete(f"/api/v2/papers/{seeded.paper_id}")
         r = await c.get("/api/v2/papers")
     assert r.status_code == 200 and r.json() == {"papers": []}
+
+
+async def _expire_paper(db, paper_id) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from marcus.core.models import Paper
+
+    await db.execute(
+        update(Paper)
+        .where(Paper.id == paper_id)
+        .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    )
+    await db.commit()
+
+
+@pytest.mark.parametrize(("method", "template", "body"), ROUTES, ids=IDS)
+async def test_expired_paper_gets_same_404(app, async_db_session, method, template, body):
+    """Expired but not yet purged: served to nobody, not even its owner."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await _expire_paper(db, seeded.paper_id)
+    async with make_client(app, token) as c:
+        r = await call(c, method, template, body, seeded.paper_id, seeded.segment_ids[0])
+        missing = await call(c, method, template, body, uuid.uuid4(), uuid.uuid4())
+    assert r.status_code == 404 and r.json() == NOT_FOUND
+    assert r.content == missing.content
+    assert (await paper_row(db, seeded.paper_id)).status == "processing"  # DELETE did nothing
+
+
+async def test_expired_paper_is_not_listed(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    expired = await seed_paper(db, alice)
+    kept = await seed_paper(db, alice)
+    await _expire_paper(db, expired.paper_id)
+    async with make_client(app, token) as c:
+        r = await c.get("/api/v2/papers")
+    assert r.status_code == 200
+    assert [p["id"] for p in r.json()["papers"]] == [str(kept.paper_id)]

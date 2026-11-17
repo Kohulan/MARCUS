@@ -644,7 +644,9 @@ def fail_step(
 def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
     """Cancel all active steps, mark the paper deleted and remove its files. Caller commits.
 
-    A running step's late result is dropped by complete_step / fail_step.
+    A running step's late result is dropped by complete_step / fail_step. A file that cannot
+    be removed (any OSError) is logged and does not abort the transaction: the paper is
+    deleted either way, and the retention purge's orphan sweep removes the leftovers later.
     """
     paper = _lock_paper(session, paper_id)
     if paper is None:
@@ -661,6 +663,11 @@ def cancel_paper(session: Session, paper_id: uuid.UUID) -> None:
         shutil.rmtree(storage.paper_dir(paper_id))
     except FileNotFoundError:
         pass
+    except OSError as exc:
+        log.warning(
+            "paper %s: files not removed (%s: %s); the retention sweep retries",
+            paper_id, type(exc).__name__, exc,
+        )
 
 
 def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Step:

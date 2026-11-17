@@ -117,3 +117,92 @@ async def test_async_session_roundtrip(async_db_session):
 
 def test_tables_clean_between_tests(db_session):
     assert db_session.execute(select(Owner)).first() is None
+
+
+def _listener_url() -> str:
+    from sqlalchemy.engine import make_url
+
+    from marcus.core.settings import get_settings
+
+    url = make_url(get_settings().database_url).set(drivername="postgresql")
+    return url.render_as_string(hide_password=False)
+
+
+def test_bbox_of_length_3_is_refused(db_session):
+    paper = _paper(db_session, _owner(db_session))
+    db_session.add(Segment(paper_id=paper.id, page=0, idx=0, bbox=[1, 2, 3], image_sha256="2" * 64))
+    with pytest.raises(IntegrityError, match="ck_segments_bbox_len"):
+        db_session.flush()
+    db_session.rollback()
+
+
+def test_owner_delete_cascades_through_the_whole_tree(db_session):
+    from sqlalchemy import func
+
+    from marcus.core.models import Curation, Prediction
+
+    s = db_session
+    owner = _owner(s)
+    paper = _paper(s, owner)
+    job = _image_job(s, owner)
+    segments = [
+        Segment(paper_id=paper.id, page=0, idx=i, bbox=[0, 0, 1, 1], image_sha256="2" * 64)
+        for i in range(2)
+    ]
+    s.add_all(segments)
+    s.flush()
+    for seg in segments:
+        s.add(Curation(segment_id=seg.id, status="unchecked"))
+        s.add(Prediction(segment_id=seg.id, engine="decimer", engine_version="v", smiles="C",
+                         valid=True, ms=1))  # fmt: skip
+        s.add(Step(paper_id=paper.id, segment_id=seg.id, kind="ocsr", queue="q.decimer",
+                   engine="decimer", seq=seg.idx, status="done"))  # fmt: skip
+    s.add(Step(paper_id=paper.id, kind="check_pdf", queue="q.cpu", seq=0, status="done"))
+    s.add(Step(image_job_id=job.id, kind="ocsr", queue="q.decimer", engine="decimer", seq=0,
+               status="pending"))  # fmt: skip
+    s.add(Prediction(image_job_id=job.id, engine="decimer", engine_version="v", smiles="C",
+                     valid=True, ms=1))  # fmt: skip
+    s.commit()
+
+    def n(model) -> int:
+        return s.execute(select(func.count()).select_from(model)).scalar_one()
+
+    # one segment alone: its ocsr step (via segment_id), prediction and curation go with it
+    s.delete(segments[0])
+    s.commit()
+    assert (n(Segment), n(Curation), n(Step), n(Prediction)) == (1, 1, 3, 2)
+
+    s.delete(owner)
+    s.commit()
+    for model in (Owner, Paper, ImageJob, Segment, Curation, Prediction, Step):
+        assert n(model) == 0, model.__tablename__
+
+
+def test_notify_on_step_insert(db_session):
+    paper = _paper(db_session, _owner(db_session))
+    db_session.commit()
+    with psycopg.connect(_listener_url(), autocommit=True) as listener:
+        listener.execute("LISTEN marcus_steps")
+        db_session.add(
+            Step(paper_id=paper.id, kind="ocsr", queue="q.molnextr", engine="molnextr", seq=0,
+                 status="pending")
+        )  # fmt: skip
+        db_session.commit()
+        notes = list(listener.notifies(timeout=5, stop_after=1))
+    assert [n.payload for n in notes] == ["q.molnextr"]
+
+
+def test_no_notify_when_status_unchanged(db_session):
+    paper = _paper(db_session, _owner(db_session))
+    step = Step(paper_id=paper.id, kind="check_pdf", queue="q.cpu", seq=0, status="pending")
+    db_session.add(step)
+    db_session.commit()
+    with psycopg.connect(_listener_url(), autocommit=True) as listener:
+        listener.execute("LISTEN marcus_steps")
+        # same status written explicitly (the trigger is AFTER UPDATE OF status), other columns
+        db_session.execute(
+            Step.__table__.update().where(Step.id == step.id).values(status="pending", attempts=1)
+        )
+        db_session.commit()
+        notes = list(listener.notifies(timeout=1, stop_after=1))
+    assert notes == []

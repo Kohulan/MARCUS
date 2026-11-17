@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import export
-from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found
+from marcus.api.deps import client_ip, current_owner, get_owned_paper, not_found, paper_visible
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status
 from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList
@@ -64,7 +64,7 @@ async def list_papers(
     papers = (
         await db.execute(
             select(Paper)
-            .where(Paper.owner_id == owner.id, Paper.status != PaperStatus.DELETED.value)
+            .where(Paper.owner_id == owner.id, *paper_visible())
             .order_by(Paper.created_at.desc(), Paper.id)
         )
     ).scalars()

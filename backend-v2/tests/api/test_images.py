@@ -135,6 +135,21 @@ async def test_deleted_job_is_404(app, async_db_session):
         assert (await c.get(f"/api/v2/images/{job_id}")).status_code == 404
 
 
+async def test_expired_job_is_same_404_as_missing(app, async_db_session):
+    """Expired but not yet purged: not served, even to its owner."""
+    from datetime import UTC, datetime, timedelta
+
+    async with make_client(app) as c:
+        job_id = (await upload_image(c)).json()["image_job_id"]
+        job = (await async_db_session.execute(select(ImageJob))).scalar_one()
+        job.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        await async_db_session.commit()
+        expired = await c.get(f"/api/v2/images/{job_id}")
+        missing = await c.get("/api/v2/images/00000000-0000-0000-0000-000000000000")
+    assert expired.status_code == missing.status_code == 404
+    assert expired.content == missing.content
+
+
 async def test_get_returns_prediction_after_complete_step(app, async_db_session):
     async with make_client(app) as c:
         job_id = (await upload_image(c)).json()["image_job_id"]

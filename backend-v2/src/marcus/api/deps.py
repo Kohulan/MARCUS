@@ -208,13 +208,20 @@ def not_found() -> HTTPException:
     return HTTPException(status_code=404, detail=NOT_FOUND)
 
 
+def paper_visible() -> tuple:
+    """Conditions for a paper to be served at all: not deleted and not expired. An expired
+    paper waits for the daily retention purge, but is already gone for every client (the same
+    404 as a missing one)."""
+    return (Paper.status != PaperStatus.DELETED.value, Paper.expires_at >= func.now())
+
+
 async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -> Paper:
     paper = (
         await db.execute(
             select(Paper).where(
                 Paper.id == paper_id,
                 Paper.owner_id == owner.id,
-                Paper.status != PaperStatus.DELETED.value,
+                *paper_visible(),
             )
         )
     ).scalar_one_or_none()
@@ -230,6 +237,7 @@ async def get_owned_image_job(db: AsyncSession, owner: Owner, job_id: uuid.UUID)
                 ImageJob.id == job_id,
                 ImageJob.owner_id == owner.id,
                 ImageJob.status != "deleted",
+                ImageJob.expires_at >= func.now(),
             )
         )
     ).scalar_one_or_none()
@@ -248,7 +256,7 @@ async def get_owned_segment(
             .where(
                 Segment.id == segment_id,
                 Paper.owner_id == owner.id,
-                Paper.status != PaperStatus.DELETED.value,
+                *paper_visible(),
             )
         )
     ).one_or_none()

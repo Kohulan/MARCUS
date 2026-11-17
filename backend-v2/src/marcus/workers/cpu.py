@@ -1,7 +1,9 @@
-"""CPU worker handlers: check_pdf, render_page, docling, doi.
+"""CPU worker handlers: check_pdf, render_page, docling, doi; plus the retention purge task.
 
 Importing this module registers them (the worker-cpu image imports it). Handlers get a
 detached read-only Step view and never write to the database; results are plain dicts.
+The daily purge (`marcus.retention.purge_expired`, a plain Celery task, not a step) lives in
+marcus.workers.retention and is registered by the import below.
 """
 
 import logging
@@ -13,7 +15,10 @@ from marcus.core.enums import StepKind
 from marcus.core.models import Paper
 from marcus.core.queues import time_limits_for
 from marcus.core.storage import page_image_path, paper_dir, pdf_path
-from marcus.workers import pdfsafe
+from marcus.workers import (
+    pdfsafe,
+    retention,  # noqa: F401  (registers the purge task in worker-cpu)
+)
 from marcus.workers.runtime import register
 
 log = logging.getLogger(__name__)
