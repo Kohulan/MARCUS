@@ -431,9 +431,10 @@ def test_docling_never_holds_every_cpu_slot(db_session, monkeypatch):
 
 
 def test_docling_cap_is_at_least_one(monkeypatch):
-    from marcus.core.queues import docling_slots
+    # the module's own SLOTS: another test may have reloaded marcus.core.queues
+    from marcus.core import queues
 
-    monkeypatch.setitem(SLOTS, "q.cpu", 1)
-    assert docling_slots() == 1
-    monkeypatch.setitem(SLOTS, "q.cpu", 6)
-    assert docling_slots() == 4
+    monkeypatch.setitem(queues.SLOTS, "q.cpu", 1)
+    assert queues.docling_slots() == 1
+    monkeypatch.setitem(queues.SLOTS, "q.cpu", 6)
+    assert queues.docling_slots() == 4
