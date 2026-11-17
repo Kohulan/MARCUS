@@ -28,7 +28,15 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from marcus.core import storage
-from marcus.core.enums import Engine, ErrorClass, PaperStatus, StepKind, StepStatus
+from marcus.core.enums import (
+    FINISHED_STEPS,
+    Engine,
+    ErrorClass,
+    ImageJobStatus,
+    PaperStatus,
+    StepKind,
+    StepStatus,
+)
 from marcus.core.models import (
     Curation,
     ImageJob,
@@ -49,7 +57,6 @@ DOI_SEQ = 100_001
 MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
-_FINISHED = (StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value)
 
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
@@ -128,7 +135,7 @@ def start_image_job(
         display_name=display_name,
         image_sha256=hashlib.sha256(png).hexdigest(),
         engine=engine.value,
-        status="queued",
+        status=ImageJobStatus.QUEUED.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
     )
     session.add(job)
@@ -220,10 +227,10 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
             return None
     else:
         job = _lock_image_job(session, parent.image_job_id)
-        if job is None or job.status == "deleted":
+        if job is None or job.status == ImageJobStatus.DELETED.value:
             return None
     step = _lock_step(session, step_id)
-    if step is None or step.status in _FINISHED:
+    if step is None or step.status in FINISHED_STEPS:
         return None
     return step, paper, job
 
@@ -618,7 +625,7 @@ def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[St
 
     if job is not None:
         session.add(_prediction(step, result))
-        job.status = "done"
+        job.status = ImageJobStatus.DONE.value
         job.error = None
         session.flush()
         return []
@@ -656,7 +663,7 @@ def fail_step(
         step.status = StepStatus.FAILED.value
         step.finished_at = _now()
         if job is not None:
-            job.status = "failed"
+            job.status = ImageJobStatus.FAILED.value
             job.error = error
     if paper is not None:
         _finish_check(session, paper)

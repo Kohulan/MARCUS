@@ -8,7 +8,15 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, OwnerKind, PaperStatus, PriorityClass
+from marcus.core.enums import (
+    ACTIVE_IMAGE_STATUSES,
+    ACTIVE_PAPER_STATUSES,
+    Engine,
+    ImageJobStatus,
+    OwnerKind,
+    PaperStatus,
+    PriorityClass,
+)
 from marcus.core.models import ImageJob, Owner, Paper, Segment
 from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.tokens import hash_token, new_token
@@ -284,11 +292,21 @@ def require_engine_enabled(engine: Engine) -> None:
         raise HTTPException(status_code=422, detail="Engine not available")
 
 
-def paper_visible() -> tuple:
-    """Conditions for a paper to be served at all: not deleted and not expired. An expired
-    paper waits for the daily retention purge, but is already gone for every client (the same
-    404 as a missing one)."""
-    return (Paper.status != PaperStatus.DELETED.value, Paper.expires_at >= func.now())
+_DELETED = {Paper: PaperStatus.DELETED.value, ImageJob: ImageJobStatus.DELETED.value}
+_ACTIVE = {Paper: ACTIVE_PAPER_STATUSES, ImageJob: ACTIVE_IMAGE_STATUSES}
+
+
+def visible(model: type[Paper] | type[ImageJob]) -> tuple:
+    """Conditions for a paper or image job to be served at all: not deleted and not expired. An
+    expired one waits for the daily retention purge, but is already gone for every client (the
+    same 404 as a missing one)."""
+    return (model.status != _DELETED[model], model.expires_at >= func.now())
+
+
+def active(model: type[Paper] | type[ImageJob]) -> tuple:
+    """Conditions for active work (papers checking|processing, image jobs queued|processing).
+    Expired work is gone for the client (404) even before the purge, so it is not active."""
+    return (model.status.in_(_ACTIVE[model]), model.expires_at >= func.now())
 
 
 async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -> Paper:
@@ -297,7 +315,7 @@ async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -
             select(Paper).where(
                 Paper.id == paper_id,
                 Paper.owner_id == owner.id,
-                *paper_visible(),
+                *visible(Paper),
             )
         )
     ).scalar_one_or_none()
@@ -312,8 +330,7 @@ async def get_owned_image_job(db: AsyncSession, owner: Owner, job_id: uuid.UUID)
             select(ImageJob).where(
                 ImageJob.id == job_id,
                 ImageJob.owner_id == owner.id,
-                ImageJob.status != "deleted",
-                ImageJob.expires_at >= func.now(),
+                *visible(ImageJob),
             )
         )
     ).scalar_one_or_none()
@@ -332,7 +349,7 @@ async def get_owned_segment(
             .where(
                 Segment.id == segment_id,
                 Paper.owner_id == owner.id,
-                *paper_visible(),
+                *visible(Paper),
             )
         )
     ).one_or_none()

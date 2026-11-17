@@ -20,6 +20,7 @@ from marcus.core.db import Base
 from marcus.core.enums import (
     Engine,
     ErrorClass,
+    ImageJobStatus,
     OwnerKind,
     PaperStatus,
     StepKind,
@@ -35,7 +36,7 @@ def _in(column: str, values) -> str:
 
 
 ENGINES = [e.value for e in Engine]
-IMAGE_JOB_STATUSES = ["queued", "processing", "done", "failed", "deleted"]
+IMAGE_JOB_STATUSES = [s.value for s in ImageJobStatus]
 
 
 def _uuid_pk() -> Mapped[uuid.UUID]:

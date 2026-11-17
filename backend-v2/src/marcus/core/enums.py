@@ -48,6 +48,21 @@ class PaperStatus(StrEnum):
     DELETED = "deleted"
 
 
+class ImageJobStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    DONE = "done"
+    FAILED = "failed"
+    DELETED = "deleted"
+
+
+# Status sets used by more than one module (plain values, for SQL IN lists)
+ACTIVE_PAPER_STATUSES = (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value)
+ACTIVE_IMAGE_STATUSES = (ImageJobStatus.QUEUED.value, ImageJobStatus.PROCESSING.value)
+WAITING_STEPS = (StepStatus.PENDING.value, StepStatus.QUEUED.value)  # not yet started
+FINISHED_STEPS = (StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value)
+
+
 class PriorityClass(IntEnum):
     BROWSER = 0
     API = 1

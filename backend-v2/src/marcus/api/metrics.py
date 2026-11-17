@@ -48,7 +48,7 @@ from starlette.types import Receive, Scope, Send
 
 from marcus.core import heartbeat
 from marcus.core.db import sync_db_url
-from marcus.core.enums import ErrorClass, StepStatus
+from marcus.core.enums import WAITING_STEPS, ErrorClass, StepStatus
 from marcus.core.models import Paper, Prediction, Segment, Step
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
 from marcus.core.settings import get_settings
@@ -61,7 +61,6 @@ STATEMENT_TIMEOUT_MS = 2000
 TOTAL_DEADLINE_S = 7.5  # the whole database read; Prometheus scrape_timeout is 10 s
 WINDOW = "1 hour"
 BUCKETS = (0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0)
-WAITING = (StepStatus.PENDING.value, StepStatus.QUEUED.value)
 DISK_PATH_LABEL = "/data"
 
 
@@ -139,13 +138,13 @@ class MarcusCollector:
             (q, status): n
             for q, status, n in conn.execute(
                 select(Step.queue, Step.status, func.count())
-                .where(Step.status.in_([*WAITING, StepStatus.RUNNING.value]))
+                .where(Step.status.in_([*WAITING_STEPS, StepStatus.RUNNING.value]))
                 .group_by(Step.queue, Step.status)
             )
         }
         queues = sorted({*SLOTS, TOOLS_QUEUE} | {q for q, _ in counts})
         for q in queues:
-            pending.add_metric([q], sum(counts.get((q, s), 0) for s in WAITING))
+            pending.add_metric([q], sum(counts.get((q, s), 0) for s in WAITING_STEPS))
             running.add_metric([q], counts.get((q, StepStatus.RUNNING.value), 0))
         fams += [pending, running]
 

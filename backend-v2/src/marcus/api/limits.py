@@ -4,29 +4,16 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import owners_from_ip, rate_key_for_ip
-from marcus.core.enums import OwnerKind, PaperStatus
+from marcus.api.deps import active, owners_from_ip, rate_key_for_ip
+from marcus.core.enums import OwnerKind
 from marcus.core.models import ImageJob, Owner, Paper
 from marcus.core.quota import pages_used_stmt
 from marcus.core.settings import get_settings
 
-ACTIVE_PAPER = [PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value]
-ACTIVE_IMAGE = ["queued", "processing"]
-
 
 async def _count_active(db: AsyncSession, *filters_paper, ip: str | None = None) -> int:
-    # Expired work is gone for the client (404) even before the daily purge removes it, so it
-    # holds no active slot either.
-    papers = (
-        select(func.count())
-        .select_from(Paper)
-        .where(Paper.status.in_(ACTIVE_PAPER), Paper.expires_at >= func.now())
-    )
-    images = (
-        select(func.count())
-        .select_from(ImageJob)
-        .where(ImageJob.status.in_(ACTIVE_IMAGE), ImageJob.expires_at >= func.now())
-    )
+    papers = select(func.count()).select_from(Paper).where(*active(Paper))
+    images = select(func.count()).select_from(ImageJob).where(*active(ImageJob))
     if ip is None:
         owner_id = filters_paper[0]
         papers = papers.where(Paper.owner_id == owner_id)

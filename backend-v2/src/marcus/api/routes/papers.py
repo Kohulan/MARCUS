@@ -22,8 +22,8 @@ from marcus.api.deps import (
     current_owner,
     get_owned_paper,
     not_found,
-    paper_visible,
     require_engine_enabled,
+    visible,
 )
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
@@ -69,7 +69,7 @@ async def list_papers(
     papers = (
         await db.execute(
             select(Paper)
-            .where(Paper.owner_id == owner.id, *paper_visible())
+            .where(Paper.owner_id == owner.id, *visible(Paper))
             .order_by(Paper.created_at.desc(), Paper.id)
         )
     ).scalars()

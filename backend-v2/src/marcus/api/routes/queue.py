@@ -19,18 +19,16 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from marcus.api.deps import current_owner
+from marcus.api.deps import active, current_owner
 from marcus.api.schemas import QueueOut, QueuePaper
 from marcus.core.db import get_db
-from marcus.core.enums import PaperStatus, StepStatus
+from marcus.core.enums import WAITING_STEPS, StepStatus
 from marcus.core.models import Owner, Paper, Step
 
 router = APIRouter()
 
 DEFAULT_STEP_S = 5.0
 MEDIAN_WINDOW = timedelta(hours=1)
-WAITING = (StepStatus.PENDING.value, StepStatus.QUEUED.value)
-ACTIVE_PAPER = (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value)
 
 
 async def _medians(db: AsyncSession, queues: set[str]) -> dict[str, float]:
@@ -58,11 +56,7 @@ async def queue_position(
         (
             await db.execute(
                 select(Paper.id)
-                .where(
-                    Paper.owner_id == owner.id,
-                    Paper.status.in_(ACTIVE_PAPER),
-                    Paper.expires_at >= func.now(),  # expired = gone for the client (404)
-                )
+                .where(Paper.owner_id == owner.id, *active(Paper))
                 .order_by(Paper.created_at, Paper.id)
             )
         ).scalars()
@@ -72,7 +66,7 @@ async def queue_position(
 
     mine = (
         select(Step.paper_id, Step.queue, func.min(Step.created_at).label("oldest"))
-        .where(Step.paper_id.in_(papers), Step.status.in_(WAITING))
+        .where(Step.paper_id.in_(papers), Step.status.in_(WAITING_STEPS))
         .group_by(Step.paper_id, Step.queue)
         .subquery()
     )
@@ -84,7 +78,7 @@ async def queue_position(
             other,
             and_(
                 other.queue == mine.c.queue,
-                other.status.in_(WAITING),
+                other.status.in_(WAITING_STEPS),
                 other.created_at < mine.c.oldest,
             ),
         )

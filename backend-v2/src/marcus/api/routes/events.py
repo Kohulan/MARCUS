@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.deps import current_owner, get_owned_paper
 from marcus.api.read import steps_by_status
 from marcus.core.db import get_db
-from marcus.core.enums import PaperStatus, StepStatus
+from marcus.core.enums import FINISHED_STEPS, PaperStatus
 from marcus.core.events import paper_channel
 from marcus.core.models import Owner, Paper
 from marcus.core.settings import get_settings
@@ -58,7 +58,6 @@ CLOSE_S = 2.0  # longest wait for unsubscribe + close when the stream ends
 SLOT_TTL_S = 60  # stream slot counter TTL, refreshed on every ping
 RETRY_MS = 15000
 TERMINAL = {PaperStatus.DONE.value, PaperStatus.FAILED.value, PaperStatus.DELETED.value}
-FINISHED_STEP = {StepStatus.DONE.value, StepStatus.FAILED.value, StepStatus.CANCELLED.value}
 TOO_MANY_STREAMS = "Too many open event streams"
 ERROR_FRAME = f"retry: {RETRY_MS}\n\n", 'event: error\ndata: {"detail": "events unavailable"}\n\n'
 
@@ -177,7 +176,7 @@ async def _stream(
                 if event is not None:
                     yield _frame(event)
                     status = event.get("status")
-                    check = isinstance(status, str) and status in FINISHED_STEP
+                    check = isinstance(status, str) and status in FINISHED_STEPS
             if time.monotonic() - last_ping >= ping_s:
                 last_ping = time.monotonic()
                 await _refresh_slot(slot)
