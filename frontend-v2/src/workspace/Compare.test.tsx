@@ -370,6 +370,7 @@ function paper(segments: SegmentOut[]): PaperDetail {
     rejected: 0,
     to_review: segments.length,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments,
   };

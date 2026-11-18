@@ -16,12 +16,16 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** "15 structures · 9 accepted · 2 rejected · 4 to check · 1 failed page" (zeros left out). */
+/**
+ * "15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page" (zeros
+ * left out), in the workspace's order. A failed structure is never counted as to check.
+ */
 export function countsText(p: PaperSummary): string {
   const parts = [plural(p.structures, "structure")];
   if (p.accepted) parts.push(`${p.accepted} accepted`);
-  if (p.rejected) parts.push(`${p.rejected} rejected`);
   if (p.to_review) parts.push(`${p.to_review} to check`);
+  if (p.rejected) parts.push(`${p.rejected} rejected`);
+  if (p.failed) parts.push(`${p.failed} failed`);
   if (p.failed_pages) parts.push(plural(p.failed_pages, "failed page"));
   return parts.join(" · ");
 }

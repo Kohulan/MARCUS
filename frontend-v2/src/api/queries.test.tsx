@@ -32,6 +32,7 @@ function paper(curation: CurationOut | null): PaperDetail {
     rejected: 0,
     to_review: 2,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments: [
       { id: "s1", page: 0, idx: 0, bbox: [0, 0, 1, 1], curation, predictions: [] },

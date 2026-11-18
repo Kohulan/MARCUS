@@ -75,6 +75,7 @@ function paper(segments: SegmentOut[]): PaperDetail {
     rejected: segments.filter((s) => s.curation?.status === "rejected").length,
     to_review: segments.filter((s) => (s.curation?.status ?? "unchecked") === "unchecked").length,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments,
   };

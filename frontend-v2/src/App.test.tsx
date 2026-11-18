@@ -83,6 +83,7 @@ describe("App routes", () => {
       rejected: 0,
       to_review: 0,
       failed_pages: 0,
+      failed: 0,
       counts: { steps_by_status: {} },
       segments: [],
     });

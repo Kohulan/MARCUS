@@ -38,6 +38,8 @@ export interface PaperSummary {
   rejected: number;
   to_review: number;
   failed_pages: number;
+  /** Undecided structures whose read failed (not in to_review). */
+  failed: number;
 }
 
 export interface PaperList {

@@ -71,6 +71,7 @@ function paper(over: Partial<PaperDetail> = {}): PaperDetail {
     rejected: 2,
     to_review: 4,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments: [],
     ...over,

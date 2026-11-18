@@ -35,6 +35,7 @@ class PaperSummary(_Orm):
     rejected: int
     to_review: int
     failed_pages: int
+    failed: int
 
 
 class PaperList(BaseModel):
