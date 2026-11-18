@@ -10,8 +10,9 @@ v2: every resource belongs to an owner (anonymous `marcus_owner` cookie, or an `
                                         proven on the API's REAL route table: it must equal
                                         the reviewed allowlist below, and every route but
                                         health/ready must depend on the owner (current_owner)
-    GET /api/v2/papers (+ every per-paper/segment/image route, incl. the new
-    GET /api/v2/papers/{id}/steps)      my resources only; others' ids get the one 404
+    GET /api/v2/papers, GET /api/v2/images (+ every per-paper/segment/image route, incl.
+    steps, depiction, bulk curation, page retry, the image file, its events and its
+    predictions)                        my resources only; others' ids get the one 404
 """
 from __future__ import annotations
 
@@ -168,6 +169,8 @@ def test_uploaded_pdf_is_not_listed_to_an_unrelated_caller(shared_paper, new_own
     img_owner = new_owner()
     job = upload_image(img_owner)
     wait_image(img_owner, job)
+    own_jobs = expect_ok(img_owner.get(f"{API}/images"), "GET /api/v2/images").json()["jobs"]
+    assert job in {j["id"] for j in own_jobs}, "owner's own image listing misses the job"
 
     # (method, template, json body): {p} paper id, {s} segment id, {j} image job id
     routes = [
@@ -182,7 +185,13 @@ def test_uploaded_pdf_is_not_listed_to_an_unrelated_caller(shared_paper, new_own
         ("GET", "/segments/{s}/image", None),
         ("POST", "/segments/{s}/predictions", {"engine": "fake"}),
         ("PUT", "/segments/{s}/curation", {"status": "accepted"}),
+        ("GET", "/segments/{s}/depiction", None),
+        ("PUT", "/papers/{p}/curation", {"items": [{"segment_id": sid, "status": "accepted"}]}),
+        ("POST", "/papers/{p}/pages/0/retry", None),
         ("GET", "/images/{j}", None),
+        ("GET", "/images/{j}/image", None),
+        ("GET", "/images/{j}/events", None),
+        ("POST", "/images/{j}/predictions", {"engine": "fake"}),
     ]
 
     problems = []
@@ -192,6 +201,10 @@ def test_uploaded_pdf_is_not_listed_to_an_unrelated_caller(shared_paper, new_own
                                             f"GET /api/v2/papers ({who})").json()["papers"]}
         if pid in names:
             problems.append(f"{who}: GET /papers lists the owner's paper")
+        jobs = {j["id"] for j in expect_ok(caller.get(f"{API}/images"),
+                                           f"GET /api/v2/images ({who})").json()["jobs"]}
+        if job in jobs:
+            problems.append(f"{who}: GET /images lists the owner's image job")
         queue = caller.get(f"{API}/queue")
         if pid in queue.text:
             problems.append(f"{who}: GET /queue mentions the owner's paper")

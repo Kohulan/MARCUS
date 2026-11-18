@@ -7,7 +7,7 @@ that replaced the v1 one. Every test asserts the SAFE behaviour.
 
 **No vacuous passes.** Each test first calls its v2 route with a valid request and asserts a 2xx
 (`helpers.expect_ok`, "EXISTENCE CHECK FAILED ..."), inside the test body, so a missing route
-fails the test. Run against v1 (which has no `/api/v2`), all 19 runnable tests fail at that check.
+fails the test. Run against v1 (which has no `/api/v2`), all 20 runnable tests fail at that check.
 
 ## Running
 
