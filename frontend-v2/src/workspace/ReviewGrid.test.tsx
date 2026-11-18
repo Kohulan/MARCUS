@@ -344,6 +344,47 @@ describe("the card menu (More)", () => {
     expect(within(card("[02]")).getByRole("button", { name: "More for [02]" })).toHaveFocus();
   });
 
+  it("holds the structure's actions; a SMILES-only edit never takes the prediction's molfile", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const convert = vi.spyOn(api, "smilesToMolfile").mockResolvedValue("CONVERTED");
+    renderGrid(
+      paper([
+        segment("s1", { predictions: [prediction({ molfile: "PREDICTED" })] }),
+        segment("s2", {
+          curation: curation({ smiles: "CCBr" }),
+          predictions: [prediction({ molfile: "PREDICTED" })],
+        }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    fireEvent.click(within(card("[02]")).getByRole("button", { name: "More for [02]" }));
+    const menu = within(card("[02]")).getByRole("group", { name: "[02] actions" });
+    expect(within(card("[02]")).getAllByRole("button", { name: "Copy SMILES" })).toHaveLength(1);
+    for (const name of ["Download molfile", "Download image", "Look up in PubChem", "Edit", "Compare"]) {
+      expect(within(menu).getByRole("button", { name })).toBeInTheDocument();
+    }
+    fireEvent.click(within(menu).getByRole("button", { name: "Copy molfile" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("CONVERTED"));
+    expect(convert).toHaveBeenCalledWith("CCBr");
+    // The unedited [01] copies its prediction's molfile.
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: "More for [01]" }));
+    fireEvent.click(
+      within(within(card("[01]")).getByRole("group", { name: "[01] actions" })).getByRole("button", {
+        name: "Copy molfile",
+      }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("PREDICTED"));
+  });
+
+  it("Compare in the menu opens Compare engines for that structure", async () => {
+    renderGrid(paper([segment("s1", { curation: curation({ status: "accepted" }) })]));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: "More for [01]" }));
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: "Compare" }));
+    expect(await screen.findByRole("dialog", { name: /Compare engines/ })).toBeInTheDocument();
+  });
+
   it("Escape closes the menu without leaving the page; every card has one", async () => {
     renderGrid(
       paper([

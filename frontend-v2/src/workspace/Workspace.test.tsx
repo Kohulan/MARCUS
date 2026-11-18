@@ -35,6 +35,15 @@ vi.mock("../api/useLiveEvents", () => ({
   },
 }));
 
+// COCONUT's DOI count (src/lookup, tested on its own): no test reaches the real COCONUT.
+const coconut = vi.hoisted(() => ({
+  count: vi.fn<(doi: string, signal?: AbortSignal) => Promise<unknown>>(),
+}));
+vi.mock("../lookup/coconutDoi", async (actual) => ({
+  ...(await actual<typeof import("../lookup/coconutDoi")>()),
+  coconutCountForDoi: coconut.count,
+}));
+
 const XSS = "<img src=x onerror=window.__xss=1>";
 const ID = "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f"; // paper ids are UUIDs
 
@@ -116,6 +125,7 @@ function renderWorkspace(
 const title = () => screen.findByRole("heading", { level: 1 });
 
 beforeEach(() => {
+  coconut.count.mockReset().mockResolvedValue(null);
   live.mode = "live";
   live.reconnect = vi.fn();
   live.mounted = 0;
@@ -155,6 +165,38 @@ describe("header", () => {
     expect(document.querySelector("main img")).toBeNull();
     await new Promise((r) => setTimeout(r, 20));
     expect((window as { __xss?: unknown }).__xss).toBeUndefined();
+  });
+
+  it("links how many structures COCONUT has for the DOI, a known 0 included", async () => {
+    const url = "https://coconut.naturalproducts.net/search?q=10.1039%2Fd5dd00313j&tagType=citations&type=tags&activeTab=citations";
+    coconut.count.mockResolvedValue({ count: 3, more: false, url });
+    const { unmount } = renderWorkspace();
+    const link = await screen.findByRole("link", { name: "3 already in COCONUT" });
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(coconut.count).toHaveBeenCalledWith("10.1039/d5dd00313j", expect.any(AbortSignal));
+    unmount();
+    coconut.count.mockResolvedValue({ count: 0, more: false, url });
+    const second = renderWorkspace();
+    expect(await screen.findByRole("link", { name: "0 already in COCONUT" })).toBeInTheDocument();
+    second.unmount();
+    coconut.count.mockResolvedValue({ count: 20, more: true, url });
+    renderWorkspace();
+    expect(await screen.findByRole("link", { name: "20+ already in COCONUT" })).toBeInTheDocument();
+  });
+
+  it("says nothing about COCONUT when the count is unknown or the paper has no DOI", async () => {
+    const { unmount } = renderWorkspace();
+    await title();
+    await waitFor(() => expect(coconut.count).toHaveBeenCalledTimes(1));
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(screen.queryByRole("link", { name: /in COCONUT/ })).toBeNull();
+    unmount();
+    coconut.count.mockClear();
+    renderWorkspace({ paper: paper({ doi: null }) });
+    await title();
+    expect(coconut.count).not.toHaveBeenCalled();
   });
 
   it("Send N to COCONUT names the accepted count; with none it is disabled with a reason", async () => {

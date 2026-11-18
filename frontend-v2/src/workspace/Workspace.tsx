@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { usePaper } from "../api/queries";
 import type { PaperDetail } from "../api/types";
+import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import ExportMenu from "./ExportMenu";
@@ -16,6 +17,20 @@ import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } fr
 import "./workspace.css";
 
 const name = (p: PaperDetail) => p.title || p.display_name;
+
+/** How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI). */
+function useCoconutCount(doi: string | null): CoconutDoiCount | null {
+  const [found, setFound] = useState<{ doi: string; count: CoconutDoiCount } | null>(null);
+  useEffect(() => {
+    if (!doi) return;
+    const ctl = new AbortController();
+    void coconutCountForDoi(doi, ctl.signal).then((count) => {
+      if (!ctl.signal.aborted) setFound(count ? { doi, count } : null);
+    });
+    return () => ctl.abort();
+  }, [doi]);
+  return found !== null && found.doi === doi ? found.count : null;
+}
 
 // Paper ids are UUIDs. Any other id (a mistyped or cut link) is not a paper: it gets the
 // gone page at once, without a request the API would answer 422.
@@ -116,6 +131,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   };
 
   const accepted = paper.accepted;
+  const inCoconut = useCoconutCount(paper.doi);
   return (
     <main className="ws">
       <header className="ws-head">
@@ -131,6 +147,16 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
                 rel="noopener noreferrer"
               >
                 {paper.doi}
+              </a>
+            )}
+            {inCoconut && (
+              <a
+                className="ws-meta__coconut"
+                href={inCoconut.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {coconutLabel(inCoconut)}
               </a>
             )}
           </p>

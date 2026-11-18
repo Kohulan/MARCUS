@@ -91,6 +91,12 @@ describe("StructureActions", () => {
     expect(await screen.findByText("SMILES copied")).toBeTruthy();
   });
 
+  it("leaves Copy SMILES out where the SMILES has its own Copy", () => {
+    render(<StructureActions {...base} copySmiles={false} />);
+    expect(screen.queryByText("Copy SMILES")).toBeNull();
+    expect(screen.getByText("Copy molfile")).toBeInTheDocument();
+  });
+
   it("saves the depiction svg", async () => {
     const f = vi.fn().mockResolvedValue(new Response("<svg/>"));
     vi.stubGlobal("fetch", f);

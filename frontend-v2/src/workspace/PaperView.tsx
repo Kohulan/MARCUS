@@ -275,6 +275,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   onRun={onRun}
                   onCompare={setComparing}
                   onEdit={setEditing}
+                  paperName={paper.display_name}
                   onHover={onCardHover}
                 />
               );

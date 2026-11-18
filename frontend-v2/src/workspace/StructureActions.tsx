@@ -18,8 +18,13 @@ export type StructureActionsProps = {
   predictionMolfile?: string | null;
   /** api.depictionUrl(...) of the shown structure. */
   depictionUrl: string | null;
-  onEdit?: () => void;
-  onCompare?: () => void;
+  /**
+   * False where a `<Smiles>` with its own Copy is beside these actions (focus mode, the card,
+   * the image page): one "Copy SMILES" per place, not two of the same name.
+   */
+  copySmiles?: boolean;
+  onEdit?: (() => void) | undefined;
+  onCompare?: (() => void) | undefined;
   /** Injectable for tests; defaults to api.smilesToMolfile. */
   convert?: (smiles: string) => Promise<string>;
 };
@@ -57,6 +62,7 @@ export default function StructureActions({
   curatedMolfile,
   predictionMolfile,
   depictionUrl,
+  copySmiles = true,
   onEdit,
   onCompare,
   convert = api.smilesToMolfile,
@@ -144,14 +150,16 @@ export default function StructureActions({
   return (
     <div className="structure-actions">
       <div className="structure-actions__row">
-        <GlassButton
-          tint="clear"
-          size="sm"
-          disabled={!has}
-          onClick={() => void copy(smiles ?? "", "SMILES copied")}
-        >
-          Copy SMILES
-        </GlassButton>
+        {copySmiles && (
+          <GlassButton
+            tint="clear"
+            size="sm"
+            disabled={!has}
+            onClick={() => void copy(smiles ?? "", "SMILES copied")}
+          >
+            Copy SMILES
+          </GlassButton>
+        )}
         <GlassButton
           tint="clear"
           size="sm"

@@ -513,6 +513,16 @@ describe("focus mode", () => {
     expect(await screen.findByRole("dialog", { name: /Compare engines/ })).toBeInTheDocument();
   });
 
+  it("shows the structure actions, with Edit and Compare once (in the decision row)", async () => {
+    renderAt(paper([segment("s1")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    for (const name of ["Copy SMILES", "Copy molfile", "Download image", "Look up in PubChem"]) {
+      expect(within(region).getByRole("button", { name })).toBeInTheDocument(); // one each
+    }
+    expect(within(region).getAllByRole("button", { name: /^Edit/ })).toHaveLength(1);
+    expect(within(region).getAllByRole("button", { name: /^Compare/ })).toHaveLength(1);
+  });
+
   it("a save that fails says so and takes the stamp back", async () => {
     vi.spyOn(api, "putCuration").mockRejectedValue(new Error("down"));
     renderAt(paper([segment("s1")]), "?s=s1&focus=1");

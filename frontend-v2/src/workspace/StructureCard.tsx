@@ -26,6 +26,7 @@ import {
   STATE_WORD,
   type CardState,
 } from "./cardState";
+import StructureActions, { type StructureActionsProps } from "./StructureActions";
 import "./grid.css";
 
 // Depictions load only for cards near the viewport: one IntersectionObserver for the whole
@@ -91,6 +92,8 @@ export type StructureCardProps = {
   onCompare?: ((segmentId: string) => void) | undefined;
   /** Opens the structure editor for the segment (the card menu's Edit). */
   onEdit?: ((segmentId: string) => void) | undefined;
+  /** The paper's file name, for the card menu's downloads (`<name>-<n>.mol`, `.svg`). */
+  paperName?: string;
 
   /**
    * The Paper view's list: the drawing beside the text, no checkbox (no bulk actions
@@ -125,6 +128,7 @@ function StructureCard({
   onRun,
   onCompare,
   onEdit,
+  paperName = "structure",
   compact = false,
   linked = false,
   onHover,
@@ -268,7 +272,19 @@ function StructureCard({
           onRun={onRun}
           onCompare={onCompare}
         />
-        <CardMenu tag={tag} onEdit={onEdit && (() => onEdit(segment.id))} />
+        <CardMenu
+          tag={tag}
+          name={paperName}
+          n={n}
+          smiles={smiles}
+          curatedMolfile={curation?.molfile ?? null}
+          // Only for the prediction shown: an edited structure never takes its molfile.
+          predictionMolfile={edited ? null : (prediction?.molfile ?? null)}
+          depictionUrl={drawable ? api.depictionUrl(segment.id, depictionKey(segment)) : null}
+          copySmiles={false}
+          onEdit={onEdit && (() => onEdit(segment.id))}
+          onCompare={onCompare && (() => onCompare(segment.id))}
+        />
       </div>
     </article>
   );
@@ -471,12 +487,21 @@ function EngineMenu({
 }
 
 /**
- * The card menu ("More", on every card that can be edited): Edit opens the structure
- * editor. It closes the menu first, so the dialog returns focus to "More".
+ * The card menu ("More", on every card): the structure's actions (copy, download, PubChem)
+ * with Edit and Compare. Edit and Compare close the menu first, so the dialog they open
+ * returns focus to "More".
  */
-function CardMenu({ tag, onEdit }: { tag: string; onEdit?: (() => void) | undefined }) {
+function CardMenu({
+  tag,
+  ...actions
+}: { tag: string } & StructureActionsProps) {
   const { open, setOpen, root, button, panelId, close, onKeyDown } = useDisclosure();
-  if (!onEdit) return null;
+  const then = (fn: (() => void) | undefined) =>
+    fn &&
+    (() => {
+      close(true);
+      fn();
+    });
   return (
     <div className="card-menu" ref={root} onKeyDown={onKeyDown}>
       <GlassButton
@@ -492,17 +517,11 @@ function CardMenu({ tag, onEdit }: { tag: string; onEdit?: (() => void) | undefi
       </GlassButton>
       {open && (
         <div id={panelId} className="card-menu__panel" role="group" aria-label={`${tag} actions`}>
-          <button
-            type="button"
-            className="engine-menu__item"
-            aria-haspopup="dialog"
-            onClick={() => {
-              close(true);
-              onEdit();
-            }}
-          >
-            Edit
-          </button>
+          <StructureActions
+            {...actions}
+            onEdit={then(actions.onEdit)}
+            onCompare={then(actions.onCompare)}
+          />
         </div>
       )}
     </div>

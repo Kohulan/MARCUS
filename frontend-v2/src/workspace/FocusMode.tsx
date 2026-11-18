@@ -28,6 +28,7 @@ import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardS
 import { SegmentCompare } from "./Compare";
 import KeyHelp from "./KeyHelp";
 import { SegmentEditor } from "./SegmentEditor";
+import StructureActions from "./StructureActions";
 import { useCardActions } from "./useCardActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
@@ -205,7 +206,8 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     (r) => (r.segmentId === id ? state : r.state) === "to-check",
   ).length;
 
-  const depiction = useDepiction(drawable ? api.depictionUrl(id, depictionKey(segment)) : null);
+  const depictionUrl = drawable ? api.depictionUrl(id, depictionKey(segment)) : null;
+  const depiction = useDepiction(depictionUrl);
   const prediction = shownPrediction(segment, paper.engine);
   const curation = segment.curation;
   const smiles = curation?.smiles ?? (curation?.molfile ? null : (prediction?.smiles ?? null));
@@ -332,6 +334,20 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
             <GlassButton tint="clear" hasPopup="dialog" onClick={() => setComparing(true)}>
               Compare <Kbd>C</Kbd>
             </GlassButton>
+          </div>
+
+          {/* Molfile, image, PubChem (the SMILES has its own Copy). Edit and Compare are in
+              the row above, with their keys. */}
+          <div className="fm-tools">
+            <StructureActions
+              name={paper.display_name}
+              n={row?.n ?? index + 1}
+              smiles={smiles}
+              curatedMolfile={curation?.molfile ?? null}
+              predictionMolfile={edited ? null : (prediction?.molfile ?? null)}
+              depictionUrl={depictionUrl}
+              copySmiles={false}
+            />
           </div>
         </div>
 

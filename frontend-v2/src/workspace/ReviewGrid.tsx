@@ -245,6 +245,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               onRun={onRun}
               onCompare={setComparing}
               onEdit={setEditing}
+              paperName={paper.display_name}
             />
           ))}
         </div>
