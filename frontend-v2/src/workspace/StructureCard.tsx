@@ -175,6 +175,11 @@ function StructureCard({
   const classes = ["card", `card--${state}`];
   if (selected) classes.push("card--selected");
   if (compact) classes.push("card--compact");
+  const stamp = (state === "accepted" || state === "rejected") && (
+    <span className="card__stamp">
+      <Stamp state={state} animate={landed} />
+    </span>
+  );
   if (linked) classes.push("card--linked");
 
   return (
@@ -237,11 +242,7 @@ function StructureCard({
             Crop
           </button>
         )}
-        {(state === "accepted" || state === "rejected") && (
-          <span className="card__stamp">
-            <Stamp state={state} animate={landed} />
-          </span>
-        )}
+        {!compact && stamp}
       </div>
 
       <div className="card__body">
@@ -258,6 +259,8 @@ function StructureCard({
         )}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
+        {/* Compact (Paper view): the stamp sits in the text column, clear of the drawing. */}
+        {compact && stamp}
       </div>
 
       <div className="card__actions">

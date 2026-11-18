@@ -98,9 +98,7 @@
   container-type: inline-size;
   border: 1px solid var(--hair);
   background-color: var(--surface);
-  box-shadow:
-    0 1px 0 var(--hair),
-    0 18px 40px -28px rgba(15, 30, 22, 0.28);
+  box-shadow: 0 1px 0 var(--hair); /* a drawing sheet lies flat */
 }
 
 .xpage__inner {
@@ -108,25 +106,16 @@
   padding: calc(32 * var(--u)) calc(38 * var(--u)) calc(46 * var(--u));
 }
 
-.xpage__title {
-  display: flex;
-  flex-direction: column;
-  gap: calc(10 * var(--u));
-  margin-bottom: calc(36 * var(--u));
-}
-
-.xpage__heading {
-  display: block;
-  height: calc(9 * var(--u));
-  background-color: var(--hair);
-}
-
-.xpage__heading--w62 {
-  width: 62%;
-}
-
-.xpage__heading--w44 {
-  width: 44%;
+.xpage .xpage__title {
+  margin: 0 0 calc(50 * var(--u)); /* clear of the [01] tag above its marker */
+  max-width: 70%;
+  font-family: var(--font-text);
+  font-weight: 600;
+  font-size: calc(11 * var(--u));
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
 }
 
 .xpage__row {
@@ -146,31 +135,18 @@
 }
 
 .xpage__para {
-  margin: calc(28 * var(--u)) 0 calc(24 * var(--u));
+  margin: calc(24 * var(--u)) 0 calc(22 * var(--u));
 }
 
-.lines {
-  display: flex;
-  flex-direction: column;
-  gap: calc(10 * var(--u));
+/* The page's own text, typeset small as on the sheet. */
+.xpage .xpage__text {
+  font-family: var(--font-text);
+  font-weight: 400;
+  font-size: calc(8 * var(--u));
+  line-height: 1.6;
+  text-transform: none;
+  color: var(--text-2);
 }
-
-.lines__bar {
-  display: block;
-  height: calc(8 * var(--u));
-  background-color: var(--hatch);
-}
-
-.lines__bar--w100 { width: 100%; }
-.lines__bar--w92 { width: 92%; }
-.lines__bar--w90 { width: 90%; }
-.lines__bar--w84 { width: 84%; }
-.lines__bar--w80 { width: 80%; }
-.lines__bar--w72 { width: 72%; }
-.lines__bar--w70 { width: 70%; }
-.lines__bar--w66 { width: 66%; }
-.lines__bar--w58 { width: 58%; }
-.lines__bar--w48 { width: 48%; }
 
 /* Markers: [01] found (solid), [02] Reading… (dashed, the dashes run). */
 .marker {
@@ -286,8 +262,19 @@
   grid-area: bbox;
   align-self: end;
   justify-self: start;
-  max-width: 31ch;
   color: var(--muted);
+}
+
+.hero__bbox p {
+  margin: 0;
+  white-space: nowrap; /* one line per box */
+}
+
+/* Below 1280 px the side columns are too narrow for a whole box on one line. */
+@media (max-width: 1279.98px) {
+  .hero__bbox p {
+    white-space: normal;
+  }
 }
 
 .hero__steps {

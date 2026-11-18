@@ -136,16 +136,21 @@
 
 .fm-drawing {
   position: relative;
-  height: clamp(220px, 34vh, 380px);
+  height: clamp(220px, 32vh, 300px);
   padding: 12px;
   border: 1px solid var(--hair);
 }
 
 .fm-stamp {
   position: absolute;
+  z-index: 1; /* over the Rejected strike */
   right: 14px;
   bottom: 14px;
   pointer-events: none;
+}
+
+.fm-stamp .stamp--charcoal {
+  background-color: var(--surface);
 }
 
 .fm-crop {

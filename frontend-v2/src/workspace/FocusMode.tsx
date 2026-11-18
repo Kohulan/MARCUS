@@ -330,22 +330,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
             {state === "failed" && row?.reason && <p className="fm-reason">{sentence(row.reason)}</p>}
           </div>
 
-          {segment.predictions.length > 0 && (
-            <SpecimenLabel title="Engines" rows={engineRows(segment.predictions)} />
-          )}
-
-          <label className="fm-note">
-            <span className="fm-note__label">Note</span>
-            <textarea
-              className="fm-note__field"
-              rows={2}
-              value={text}
-              onChange={(e) => setDraft({ id, text: e.target.value })}
-              onBlur={saveNote}
-              onKeyDown={noteKey}
-            />
-          </label>
-
+          {/* The decision row right under the structure, above the fold. */}
           <div className="fm-actions glassbed">
             <GlassButton
               tint="green"
@@ -364,6 +349,22 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               Compare <Kbd>C</Kbd>
             </GlassButton>
           </div>
+
+          {segment.predictions.length > 0 && (
+            <SpecimenLabel title="Engines" rows={engineRows(segment.predictions)} />
+          )}
+
+          <label className="fm-note">
+            <span className="fm-note__label">Note</span>
+            <textarea
+              className="fm-note__field"
+              rows={2}
+              value={text}
+              onChange={(e) => setDraft({ id, text: e.target.value })}
+              onBlur={saveNote}
+              onKeyDown={noteKey}
+            />
+          </label>
 
           {/* Molfile, image, PubChem (the SMILES has its own Copy). Edit and Compare are in
               the row above, with their keys. */}

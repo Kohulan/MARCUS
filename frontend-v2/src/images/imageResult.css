@@ -19,8 +19,11 @@
   min-width: 0;
 }
 
-.ir-title {
+/* A file name keeps its own case (the tool header's rule). */
+.ir .ir-title {
   min-width: 0;
+  letter-spacing: -0.01em;
+  text-transform: none;
   font-family: var(--font-head);
   font-weight: 700;
   font-size: 28px;

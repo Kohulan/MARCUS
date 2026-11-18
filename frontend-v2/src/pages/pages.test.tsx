@@ -63,7 +63,7 @@ describe("Landing", () => {
     expect(sample).toHaveAttribute("href", "/app?sample=1");
   });
 
-  it("the hero is labelled as an example page, with both tags and the recorded bbox", () => {
+  it("the hero is labelled as an example page, with both tags and a bbox line for each", () => {
     renderAt("/");
     const hero = screen.getByRole("region", { name: "Example: a page read by MARCUS" });
     expect(hero.textContent).toContain("Sheet 01 · Example page · 300 DPI");
@@ -71,6 +71,9 @@ describe("Landing", () => {
     expect(within(hero).getByText("[02] Reading…")).toBeInTheDocument();
     expect(
       within(hero).getByText((_, el) => text(el) === "BBox [01] X0 967 · Y0 671 · X1 1513 · Y1 1120 px" && el?.children.length === 0),
+    ).toBeInTheDocument();
+    expect(
+      within(hero).getByText((_, el) => text(el) === "BBox [02] X0 1410 · Y0 2010 · X1 2190 · Y1 2400 px" && el?.children.length === 0),
     ).toBeInTheDocument();
   });
 
@@ -82,7 +85,7 @@ describe("Landing", () => {
       "Done: 001 Check PDF",
       "Done: 002 Render 5 pages",
       "Done: 003 Find structures · 15",
-      "Running: 004 Reading with DECIMER · 9 / 15…",
+      "Running: 004 Reading with DECIMER · 9 / 15",
       "Not started: 005 Look up DOI",
     ]);
   });

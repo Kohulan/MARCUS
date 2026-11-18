@@ -242,9 +242,14 @@
 
 .card__stamp {
   position: absolute;
+  z-index: 1; /* over the Rejected strike, as a stamp lands on a crossed-out sheet */
   right: 0;
   bottom: 0;
   pointer-events: none;
+}
+
+.card__stamp .stamp--charcoal {
+  background-color: var(--surface);
 }
 
 .card__body {
@@ -331,10 +336,9 @@
   margin-top: 0;
 }
 
-.card--compact .stamp--sm {
-  width: 56px;
-  height: 56px;
-  font-size: 9px;
+.card--compact .card__body {
+  position: relative;
+  min-height: 112px; /* the figure's height: the stamp sits at the row's foot */
 }
 
 /* Selected and keyboard rings sit inside the To check edge (inset 0-2 px), not over it,

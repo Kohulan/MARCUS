@@ -18,9 +18,10 @@ import "./landing.css";
 // Honest example (ruling I12): the hero is labelled "Example page". Marker [01] holds a real
 // crop that DECIMER Segmentation cut from page 1 of the synthetic sample paper (synth_015),
 // with its recorded bbox (backend-v2/tests/fixtures/v1_decimer.json crops[0]); [02] holds our
-// own caffeine drawing in the Reading… state. The steps are that sample paper's (5 pages,
-// 15 structures), "9 / 15" a snapshot of a read in progress. The review preview is labelled
-// "Example". No accuracy, speed or usage numbers.
+// own caffeine drawing in the Reading… state (its bbox is the board's). The page's text is
+// the sample paper's own. The steps are that sample paper's (5 pages, 15 structures), "9 / 15"
+// a snapshot of a read in progress. The review preview is labelled "Example". No accuracy,
+// speed or usage numbers.
 
 export const CITATION_TEXT =
   "Rajan K., Weißenborn V., Lederer L., Zielesny A., Steinbeck C. MARCUS: molecular " +
@@ -42,18 +43,28 @@ const STEPS: [StepState, string][] = [
   ["done", "001 Check PDF"],
   ["done", "002 Render 5 pages"],
   ["done", "003 Find structures · 15"],
-  ["running", "004 Reading with DECIMER · 9 / 15…"],
+  ["running", "004 Reading with DECIMER · 9 / 15"],
   ["todo", "005 Look up DOI"],
 ];
 
-/** Grey text lines on the example page (widths in % of the column; decorative). */
-function Lines({ widths, className }: { widths: number[]; className?: string }) {
+// The sample paper's own text (synth_015 prints the same paragraph on every page), set
+// around the two markers.
+const PAGE_TITLE = "Synthetic paper 0015 structures";
+const LEAD =
+  "Isolation and structural elucidation. The crude extract was fractionated by silica gel " +
+  "column chromatography and purified by semi-preparative HPLC to give the compounds shown below.";
+const PAGE_TEXT = [
+  LEAD,
+  "Structures were assigned by 1D and 2D NMR and HRMS; the numbering follows the text.",
+  LEAD,
+];
+
+/** Text on the example page (decorative: the hero's label says what the page is). */
+function PageText({ text, className }: { text: string; className: string }) {
   return (
-    <div className={className ? `lines ${className}` : "lines"} aria-hidden="true">
-      {widths.map((w, i) => (
-        <span key={i} className={`lines__bar lines__bar--w${w}`} />
-      ))}
-    </div>
+    <p className={`xpage__text ${className}`} aria-hidden="true">
+      {text}
+    </p>
   );
 }
 
@@ -75,10 +86,9 @@ function Hero() {
         <div className="hero__field">
           <div className="xpage">
             <div className="xpage__inner">
-              <div className="xpage__title" aria-hidden="true">
-                <span className="xpage__heading xpage__heading--w62" />
-                <span className="xpage__heading xpage__heading--w44" />
-              </div>
+              <p className="xpage__title" aria-hidden="true">
+                {PAGE_TITLE}
+              </p>
               <div className="xpage__row">
                 <div className="marker marker--found">
                   <img
@@ -91,11 +101,11 @@ function Hero() {
                   <span className="marker__corner marker__corner--start" aria-hidden="true" />
                   <span className="marker__tag marker__tag--charcoal">[01] Structure</span>
                 </div>
-                <Lines widths={[100, 100, 80, 100, 66, 100, 72]} className="xpage__column" />
+                <PageText text={PAGE_TEXT[0]!} className="xpage__column" />
               </div>
-              <Lines widths={[100, 90, 58]} className="xpage__para" />
+              <PageText text={PAGE_TEXT[1]!} className="xpage__para" />
               <div className="xpage__row xpage__row--end">
-                <Lines widths={[100, 84, 100, 70, 92, 48]} className="xpage__column" />
+                <PageText text={PAGE_TEXT[2]!} className="xpage__column" />
                 <div className="marker marker--reading">
                   <img className="marker__img" src={caffeine} alt="Caffeine, being read" />
                   <svg className="marker__ants" aria-hidden="true" focusable="false">
@@ -107,7 +117,10 @@ function Hero() {
               </div>
             </div>
           </div>
-          <p className="readout hero__bbox">BBox [01] X0 967 · Y0 671 · X1 1513 · Y1 1120 px</p>
+          <div className="readout hero__bbox">
+            <p>BBox [01] X0 967 · Y0 671 · X1 1513 · Y1 1120 px</p>
+            <p>BBox [02] X0 1410 · Y0 2010 · X1 2190 · Y1 2400 px</p>
+          </div>
           <ol className="readout hero__steps">
             {STEPS.map(([state, label]) => (
               <li key={label} className={`step step--${state}`}>

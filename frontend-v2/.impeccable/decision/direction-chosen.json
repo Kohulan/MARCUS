@@ -1,11 +1,15 @@
 {
   "decided": "2026-11-17",
   "seed_key": "6b4eb402",
-  "choice": "Remix A - Field Sheet",
-  "source": "owner remix of directions 4 (Specimen Sheet) and 5 (Clean Standard)",
-  "canvas": "https://claude.ai/artifact/XnHN4XgbKyB6ggUfLKTkRC",
-  "board": "project/RemixA.dc.html",
-  "build_path": "code-led (no image generation available)",
-  "palette": {"paper": "#FAFAF7", "ink": "#15241B", "green": "#1E4D33", "accepted": "#2D7A46", "to_check": "#9A5B0C", "rejected": "#B23A2A", "line": "#DCE3DA", "muted": "#55675A"},
-  "fonts": {"headings": "Bricolage Grotesque", "text": "Hanken Grotesk", "smiles": "JetBrains Mono", "wordmark": "Gmarket Sans"}
+  "choice": "Survey Sheet",
+  "source": "owner remix of Field Sheet (itself a remix of directions 4 Specimen Sheet and 5 Clean Standard) with heronaiapp.com; mockup A of three (A Survey Sheet, B Green Ledger, C Night Plate)",
+  "replaces": "Remix A - Field Sheet (board kept for history: reference/field-sheet-board.html)",
+  "kept_from_field_sheet": ["specimen label table (dark header bar, ruled rows)", "round accepted stamp"],
+  "canvas": "https://claude.ai/artifact/FJzPyqJpGLGUCMaCxQeLhs",
+  "board": "reference/survey-sheet-board.html",
+  "critique_reference": "reference/heron-hero.png",
+  "build_path": "code-led (no comp)",
+  "mode": "light only",
+  "palette": {"paper": "#F4F3EA", "surface": "#FFFFFF", "ink": "#1C211D", "green": "#1E4D33", "accepted": "#2D7A46", "orange": "#FA3600", "orange_ink": "#B82800", "charcoal": "#1C211D", "muted": "#5E625B", "line": "#B9BCB2", "hair": "#D9DACF", "control_border": "#7E8279"},
+  "fonts": {"headings": "Geist", "text": "Geist", "mono": "Geist Mono", "wordmark": "Gmarket Sans"}
 }

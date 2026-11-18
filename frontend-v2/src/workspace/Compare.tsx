@@ -8,6 +8,7 @@ import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/typ
 import { GlassButton } from "../ui/GlassButton";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
+import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
@@ -144,7 +145,10 @@ export default function Compare({
                   {r.prediction && r.prediction.smiles !== "" ? (
                     <Smiles value={r.prediction.smiles} />
                   ) : (
-                    <span className="cmp-table__none">None</span>
+                    <span className="cmp-table__none">
+                      <span aria-hidden="true">–</span>
+                      <span className="visually-hidden">None</span>
+                    </span>
                   )}
                 </td>
               ))}
@@ -297,11 +301,11 @@ function CompareDialog({
   );
 }
 
-function resultText(r: EngineRow): string {
+function resultText(r: EngineRow): ReactNode {
   if (r.prediction) return r.prediction.valid ? "Valid" : "Invalid";
   if (r.state === "reading") return "Reading…";
   if (r.state === "failed") return `Failed: ${r.reason}`;
-  return "Not read yet";
+  return <StateBadge state="not-read" />;
 }
 
 function resultTone(r: EngineRow): string {
@@ -320,7 +324,17 @@ function Drawing({
   depict: UseQueryResult<DepictReply> | undefined;
 }) {
   const p = row.prediction;
-  if (!p) return <div className={`cmp-blank cmp-blank--${row.state}`} />;
+  // Not read yet: the word in the blank too (the Result row says it to a screen reader).
+  if (!p)
+    return (
+      <div className={`cmp-blank cmp-blank--${row.state}`}>
+        {row.state === "idle" && (
+          <span aria-hidden="true">
+            <StateBadge state="not-read" />
+          </span>
+        )}
+      </div>
+    );
   if (!p.valid) return <Structure src={null} failed alt="" />;
   if (depict) return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
   return <StoredDrawing segmentId={target.id} prediction={p} alt={`Structure, ${row.label}`} />;

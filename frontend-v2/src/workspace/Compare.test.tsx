@@ -275,6 +275,15 @@ describe("Compare", () => {
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Not read yet");
   });
 
+  it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", () => {
+    renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
+    const smiles = cell("SMILES", "MolNexTR");
+    expect(smiles.textContent).toBe("–None");
+    expect(smiles.querySelector(".cmp-table__none [aria-hidden='true']")?.textContent).toBe("–");
+    expect(cell("Drawing", "MolNexTR").textContent).toBe("□ Not read yet");
+  });
+
   it("a 429 from the tools bucket says when to try again", async () => {
     vi.spyOn(api, "compare").mockRejectedValue(new ApiError(429, "rate limited", 12));
     renderCompare({

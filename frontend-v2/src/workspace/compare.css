@@ -150,6 +150,9 @@
 
 /* No result to draw: a quiet ground in the state's shape (spec §7 state table). */
 .cmp-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 168px;
   background-color: var(--paper);
 }
