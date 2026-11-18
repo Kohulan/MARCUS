@@ -241,6 +241,27 @@ describe("toasts", () => {
     expect(screen.getByText("Upload failed").closest(".toast")).toHaveClass("toast--error");
   });
 
+  it("an error toast is announced assertively, an info toast politely", () => {
+    render(
+      <ToastProvider>
+        <Push msg="Upload failed" tone="error" />
+        <Push msg="Paper deleted" />
+        <ToastHost />
+      </ToastProvider>,
+    );
+    const [error, info] = screen.getAllByRole("button", { name: "push" });
+    fireEvent.click(error!);
+    fireEvent.click(info!);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("aria-live", "assertive");
+    expect(alert).toHaveTextContent("Upload failed");
+    expect(alert).not.toHaveTextContent("Paper deleted");
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent("Paper deleted");
+    expect(status).not.toHaveTextContent("Upload failed");
+  });
+
   it("useToast outside a provider does nothing and does not throw", () => {
     render(<Push msg="x" />);
     expect(() => fireEvent.click(screen.getByRole("button", { name: "push" }))).not.toThrow();

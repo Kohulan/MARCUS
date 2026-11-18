@@ -465,9 +465,21 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
   max-width: calc(100vw - 48px);
   pointer-events: none;
+}
+
+.toasts__region {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Both regions stay in the accessibility tree (never display: none), or the first toast
+   of an empty region might not be announced; an empty one is simply 0 px tall. */
+.toasts__region:not(:empty) + .toasts__region:not(:empty) {
+  margin-top: 8px;
 }
 
 .toast {

@@ -46,13 +46,36 @@ describe("App routes", () => {
     expect(document.title).toBe("Papers · MARCUS");
   });
 
-  it.each([
-    ["/app/papers/p1", "Paper · MARCUS"],
-    ["/app/images/i1", "Image · MARCUS"],
-  ])("%s sets its own title", async (path, title) => {
-    renderAt(path);
+  it("/app/images/i1 sets its own title", async () => {
+    renderAt("/app/images/i1");
     await screen.findByRole("heading", { level: 1 });
-    expect(document.title).toBe(title);
+    expect(document.title).toBe("Image · MARCUS");
+  });
+
+  it("/app/papers/:id is titled with the paper's title (or its file name)", async () => {
+    vi.spyOn(api, "getPaper").mockResolvedValue({
+      id: "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f",
+      display_name: "alkaloids.pdf",
+      status: "done",
+      pages: 1,
+      doi: null,
+      title: null,
+      engine: "decimer",
+      ocsr_mode: "auto",
+      created_at: "2026-11-18T10:00:00Z",
+      expires_at: "2026-12-18T10:00:00Z",
+      structures: 0,
+      accepted: 0,
+      rejected: 0,
+      to_review: 0,
+      failed_pages: 0,
+      counts: { steps_by_status: {} },
+      segments: [],
+    });
+    vi.spyOn(api, "getSteps").mockResolvedValue({ steps: [] });
+    renderAt("/app/papers/3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f");
+    await screen.findByRole("heading", { level: 1, name: "alkaloids.pdf" });
+    expect(document.title).toBe("alkaloids.pdf · MARCUS");
   });
 
   it("below 1024 px /app shows the desktop note and never asks the API", async () => {

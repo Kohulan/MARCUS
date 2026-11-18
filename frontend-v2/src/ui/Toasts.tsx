@@ -48,16 +48,29 @@ export function useToast(): Push {
   return useContext(PushContext);
 }
 
-/** The live region the toasts appear in (bottom of the window). Rendered once, by App. */
+/**
+ * The live regions the toasts appear in (bottom of the window). Rendered once, by App.
+ * Info toasts are polite (role="status"); error toasts interrupt (role="alert", assertive),
+ * so a failed retry or upload is heard at once.
+ */
 export function ToastHost() {
   const toasts = useContext(ListContext);
-  return (
-    <div className="toasts" role="status" aria-live="polite">
-      {toasts.map((t) => (
-        <p key={t.id} className={t.tone === "error" ? "toast toast--error" : "toast"}>
+  const shown = (tone: ToastTone) =>
+    toasts
+      .filter((t) => t.tone === tone)
+      .map((t) => (
+        <p key={t.id} className={tone === "error" ? "toast toast--error" : "toast"}>
           {t.msg}
         </p>
-      ))}
+      ));
+  return (
+    <div className="toasts">
+      <div className="toasts__region" role="status" aria-live="polite">
+        {shown("info")}
+      </div>
+      <div className="toasts__region" role="alert" aria-live="assertive">
+        {shown("error")}
+      </div>
     </div>
   );
 }

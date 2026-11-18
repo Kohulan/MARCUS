@@ -34,7 +34,7 @@ export function deletionText(expiresAt: string, now = Date.now()): string {
 }
 
 /** A paper's or image job's state as its word and its shape. */
-function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
+export function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
   if (status === "failed") return <StateBadge state="failed" />;
   if (status === "done") {
     if (notRead) return <StateBadge state="not-read" />;
