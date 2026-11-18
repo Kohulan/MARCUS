@@ -209,6 +209,6 @@ export type McsReply = {
 /** Only the fields the UI reads of Docling's export_to_dict() (GET /papers/{id}/text). */
 export type DoclingDoc = {
   body?: { children: { $ref: string }[] };
-  texts: { self_ref: string; text: string; label: string }[];
+  texts: { self_ref: string; text: string; label: string; children?: { $ref: string }[] }[];
   groups?: { self_ref: string; children: { $ref: string }[] }[];
 };

@@ -70,6 +70,30 @@ describe("doclingBlocks", () => {
     expect(doclingBlocks(doc)).toEqual([{ kind: "paragraph", text: "Kept." }]);
   });
 
+  it("walks a text item's own children: nested list items under a list_item", () => {
+    const doc: DoclingDoc = {
+      body: { children: [{ $ref: "#/groups/0" }, { $ref: "#/texts/4" }] },
+      texts: [
+        { ...text(0, "list_item", "Outer."), children: [{ $ref: "#/groups/1" }] },
+        text(1, "list_item", "Inner one."),
+        { ...text(2, "list_item", "Inner two."), children: [{ $ref: "#/texts/2" }] },
+        text(3, "list_item", "Outer two."),
+        text(4, "text", "After."),
+      ],
+      groups: [
+        { self_ref: "#/groups/0", children: [{ $ref: "#/texts/0" }, { $ref: "#/texts/3" }] },
+        { self_ref: "#/groups/1", children: [{ $ref: "#/texts/1" }, { $ref: "#/texts/2" }] },
+      ],
+    };
+    expect(doclingBlocks(doc).map((b) => b.text)).toEqual([
+      "Outer.",
+      "Inner one.",
+      "Inner two.",
+      "Outer two.",
+      "After.",
+    ]);
+  });
+
   it("returns plain strings: markup in the text stays text", () => {
     const hostile = "<img src=x onerror=window.__xss=1>";
     const doc: DoclingDoc = { texts: [text(0, "text", hostile)] };

@@ -16,8 +16,9 @@ function block(item: { text: string; label: string } | undefined): TextBlock | n
 }
 
 /**
- * Walks `body.children` in order: `#/texts/<i>` is `texts[i]`, `#/groups/<i>` is walked in
- * turn (lists, inline groups); tables, pictures and refs that point nowhere are skipped.
+ * Walks `body.children` in order: `#/texts/<i>` is `texts[i]` followed by its own `children`
+ * (nested list items under a list_item), `#/groups/<i>` is walked in turn (lists, inline
+ * groups); tables, pictures and refs that point nowhere are skipped.
  * `title` and `section_header` are headings, every other text label is a paragraph.
  * Without a `body`, the texts in array order.
  */
@@ -28,20 +29,22 @@ export function doclingBlocks(doc: DoclingDoc): TextBlock[] {
   }
   const groups = Array.isArray(doc.groups) ? doc.groups : [];
   const out: TextBlock[] = [];
-  const walking = new Set<number>(); // a malformed group that contains itself ends here
+  const walking = new Set<string>(); // a malformed item that contains itself ends here
 
   const walk = (children: Ref[]) => {
     for (const child of children) {
       const m = REF.exec(child?.$ref ?? "");
-      if (!m) continue;
+      if (!m || walking.has(m[0])) continue;
       const i = Number(m[2]);
+      const item = m[1] === "texts" ? texts[i] : groups[i];
       if (m[1] === "texts") {
         const b = block(texts[i]);
         if (b) out.push(b);
-      } else if (!walking.has(i) && Array.isArray(groups[i]?.children)) {
-        walking.add(i);
-        walk(groups[i]!.children);
-        walking.delete(i);
+      }
+      if (Array.isArray(item?.children)) {
+        walking.add(m[0]);
+        walk(item.children);
+        walking.delete(m[0]);
       }
     }
   };
