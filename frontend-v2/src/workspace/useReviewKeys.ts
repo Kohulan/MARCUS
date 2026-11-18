@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { keysHeld } from "../ui/keysHeld";
 
 export type ReviewKeyHandlers = {
@@ -55,11 +55,17 @@ function pick(h: ReviewKeyHandlers, key: string): (() => void) | undefined {
 /**
  * The focus-mode keys (Global Constraints, exact): A accept, R reject, E edit, C compare,
  * ← previous, → next, Esc back to grid, ? key list. One document listener while mounted.
- * Ignored while focus is in an input, textarea, select or the Ketcher iframe, while any
- * dialog is open or the tool is hidden (ui/keysHeld), and when Ctrl, Meta or Alt is held
- * (browser and system shortcuts stay theirs).
+ * Active only while focus is inside `region` (WCAG 2.1.4 "active only on focus": a key
+ * pressed elsewhere on the page, or with focus on the body, does nothing); the region takes
+ * focus when focus mode opens and after each step or decision (FocusMode). Ignored while
+ * focus is in an input, textarea, select or the Ketcher iframe, while any dialog is open or
+ * the tool is hidden (ui/keysHeld), and when Ctrl, Meta or Alt is held (browser and system
+ * shortcuts stay theirs).
  */
-export function useReviewKeys(handlers: ReviewKeyHandlers): void {
+export function useReviewKeys(
+  region: RefObject<HTMLElement | null>,
+  handlers: ReviewKeyHandlers,
+): void {
   const latest = useRef(handlers);
   latest.current = handlers;
 
@@ -67,6 +73,8 @@ export function useReviewKeys(handlers: ReviewKeyHandlers): void {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = region.current;
+      if (!el || !(e.target instanceof Node) || !el.contains(e.target)) return;
       if (typingIn(e.target) || typingIn(document.activeElement)) return;
       // A dialog is open (native or modal div) or the tool is hidden: it owns the keys,
       // wherever focus is. Esc keeps its default, or a native dialog's cancel never fires.
@@ -79,5 +87,5 @@ export function useReviewKeys(handlers: ReviewKeyHandlers): void {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [region]);
 }

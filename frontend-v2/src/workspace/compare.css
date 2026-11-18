@@ -21,6 +21,11 @@
   box-shadow: 0 16px 40px -12px rgb(28 33 29 / 0.35);
 }
 
+/* The box takes focus only so a click inside keeps Esc working; not a control, so no ring. */
+.cmp:focus {
+  outline: none;
+}
+
 .cmp--inline {
   width: 100%;
   max-height: none;

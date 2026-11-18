@@ -64,6 +64,24 @@ test("a whole paper reviewed with the keyboard only", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Keys" })).toHaveCount(0);
   await expect(focus).toBeVisible();
 
+  // A click on plain text in the key list keeps focus in the box: Esc still closes it.
+  await page.keyboard.press("?");
+  const keys = page.getByRole("dialog", { name: "Keys" });
+  await keys.getByText("Compare engines").click();
+  await page.keyboard.press("Escape");
+  await expect(keys).toHaveCount(0);
+  await expect(focus).toBeFocused();
+
+  // The keys act only inside focus mode (WCAG 2.1.4): from the site header, A does nothing.
+  await page.locator(".site-header a").first().focus();
+  await page.keyboard.press("a");
+  await page.keyboard.press("ArrowRight");
+  await expect(focus).toHaveAccessibleName("Focus [01]");
+  await expect(focus.getByRole("img", { name: "Accepted" })).toHaveCount(0);
+  // A click on the region's own text puts focus back in it; the keys work again.
+  await focus.getByText(/^BBOX \[01\]/).click();
+  await expect(focus).toBeFocused();
+
   // Every structure: odd ones accepted, even ones rejected. Each decision moves on to the
   // next structure still to check.
   for (let n = 1; n <= STRUCTURES; n++) {

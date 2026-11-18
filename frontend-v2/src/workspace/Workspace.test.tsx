@@ -355,9 +355,9 @@ describe("view in the URL", () => {
     const segments = Array.from({ length: 20 }, (_, i) => seg(`s${i + 1}`, null));
     const url = vi.spyOn(api, "depictionUrl");
     renderWorkspace({ paper: paper({ segments }), search: "?s=s1&focus=1" });
-    await screen.findByRole("region", { name: /^Focus/ });
+    const region = await screen.findByRole("region", { name: /^Focus/ });
     url.mockClear();
-    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    fireEvent.keyDown(region, { key: "ArrowRight" });
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("s=s2"));
     // Focus mode draws its own structure and the two cards whose `current` changed render
     // again; the other 18 memoised cards stay as they were (41 calls before).

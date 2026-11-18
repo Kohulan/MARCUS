@@ -66,6 +66,8 @@ export default function KeyHelp({ onClose }: { onClose: () => void }) {
         ref={box}
         className="keyhelp__sheet"
         role="dialog"
+        // A click on the list keeps focus in the box (not the body), so Esc still closes it.
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={onKeyDown}

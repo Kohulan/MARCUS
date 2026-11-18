@@ -459,7 +459,10 @@ describe("Compare in the workspace", () => {
     expect(region).toHaveAccessibleName(/\[01\]/);
     expect(screen.queryByRole("dialog", { name: "Keys" })).toBeNull();
 
-    dialog.querySelector("button")!.focus();
+    // A click on plain text in the box (the table) keeps focus in it: Esc still closes.
+    expect(dialog).toHaveAttribute("tabindex", "-1");
+    dialog.focus();
+    expect(dialog).toHaveFocus();
     press("Escape");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("region", { name: /^Focus/ })).toBeInTheDocument();

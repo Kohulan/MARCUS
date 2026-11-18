@@ -125,7 +125,17 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     if (lost) root.current?.focus({ preventScroll: true });
   }, [id, drawable]);
 
+  /**
+   * The review keys act only inside the region (useReviewKeys), so a step or decision made
+   * with focus elsewhere (a click that leaves focus on the page body) brings it back.
+   */
+  const holdFocus = () => {
+    const el = root.current;
+    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+  };
+
   const step = (by: -1 | 1) => {
+    holdFocus();
     const to = rows[index + by];
     if (to) go(to.segmentId);
   };
@@ -147,6 +157,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
   const decide = (status: Decision) => {
     if (status === "accepted" && !drawable) return; // nothing to accept (ruling on F7 M2)
+    holdFocus();
     const n = ++seq.current;
     setLanded({ id, status, seq: n });
     pending.current.add(id);
@@ -199,9 +210,10 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     setComparingId(id);
   };
 
-  // While Keys, Compare or the editor is open, the keys are theirs (ui/keysHeld, one DOM
-  // check in useReviewKeys): these run only with none of them open. Each closes itself.
-  useReviewKeys({
+  // The keys act only while focus is inside this region. While Keys, Compare or the editor
+  // is open, the keys are theirs (ui/keysHeld, one DOM check in useReviewKeys): these run
+  // only with none of them open. Each closes itself.
+  useReviewKeys(root, {
     accept: () => decide("accepted"),
     reject: () => decide("rejected"),
     edit: openEditor,
@@ -387,7 +399,10 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           rows={rows}
           currentState={state}
           tag={tag}
-          onPick={go}
+          onPick={(to) => {
+            holdFocus();
+            go(to);
+          }}
         />
       </div>
 

@@ -455,6 +455,11 @@ button.fm-marker:focus-visible {
   box-shadow: 0 12px 32px rgb(28 33 29 / 0.18);
 }
 
+/* Takes focus only so a click on the list keeps Esc working; not a control, so no ring. */
+.keyhelp__sheet:focus {
+  outline: none;
+}
+
 .keyhelp__head {
   display: flex;
   align-items: center;

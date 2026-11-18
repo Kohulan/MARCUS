@@ -285,6 +285,8 @@ function CompareDialog({
         ref={box}
         className="cmp"
         role="dialog"
+        // A click on the table keeps focus in the box (not the body), so Esc still closes it.
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={onKeyDown}

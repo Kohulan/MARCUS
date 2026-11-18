@@ -329,7 +329,7 @@ describe("focus mode", () => {
     note.focus();
     fireEvent.blur(note);
     // The next decision carries the note.
-    (document.activeElement as HTMLElement | null)?.blur();
+    region.focus(); // back in the region (what Esc in the note does): the keys act there
     press("r");
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
     expect(put.mock.calls[1]![1]).toEqual({
@@ -602,6 +602,19 @@ describe("focus mode", () => {
 });
 
 describe("useReviewKeys", () => {
+  // The keys act only while focus is inside the focus-mode region (WCAG 2.1.4, "active only
+  // on focus"): each test gets a focusable region and sends its keys from there.
+  let region: HTMLElement;
+  beforeEach(() => {
+    region = document.createElement("section");
+    region.tabIndex = -1;
+    document.body.append(region);
+    region.focus();
+  });
+  afterEach(() => region.remove());
+  const keysIn = (h: ReturnType<typeof handlers>) =>
+    renderHook(() => useReviewKeys({ current: region }, h));
+
   function handlers() {
     return {
       accept: vi.fn(),
@@ -617,28 +630,51 @@ describe("useReviewKeys", () => {
 
   it("maps the keys exactly (A R E C ← → Esc ?)", () => {
     const h = handlers();
-    renderHook(() => useReviewKeys(h));
+    keysIn(h);
     for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "Escape", "?"]) {
-      fireEvent.keyDown(document.body, { key });
+      fireEvent.keyDown(region, { key });
     }
     for (const fn of Object.values(h)) expect(fn).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(document.body, { key: "x" });
+    fireEvent.keyDown(region, { key: "x" });
     for (const fn of Object.values(h)) expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing while focus is outside the region (keys active only on focus, 2.1.4)", () => {
+    const h = handlers();
+    keysIn(h);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "Escape", "?"]) {
+        fireEvent.keyDown(outside, { key });
+        fireEvent.keyDown(document.body, { key });
+      }
+      for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
+      // Back inside (a child of the region counts): the keys work again.
+      const inside = document.createElement("button");
+      region.append(inside);
+      inside.focus();
+      fireEvent.keyDown(inside, { key: "a" });
+      expect(h.accept).toHaveBeenCalledTimes(1);
+    } finally {
+      outside.remove();
+    }
   });
 
   it("ignores keys in inputs, textareas, selects and the Ketcher iframe", () => {
     const h = handlers();
-    renderHook(() => useReviewKeys(h));
+    keysIn(h);
     const host = document.createElement("div");
     const select = document.createElement("select");
     select.append(document.createElement("option"));
+    region.append(host);
     host.append(
       document.createElement("input"),
       document.createElement("textarea"),
       select,
       document.createElement("iframe"),
     );
-    document.body.append(host);
     for (const el of [...host.children] as HTMLElement[]) {
       el.focus();
       fireEvent.keyDown(el, { key: "a" });
@@ -649,28 +685,28 @@ describe("useReviewKeys", () => {
 
   it("does nothing, and leaves Esc its default, while a native dialog is open", () => {
     const h = handlers();
-    renderHook(() => useReviewKeys(h));
+    keysIn(h);
     const dialog = document.createElement("dialog");
     dialog.setAttribute("open", "");
     document.body.append(dialog);
     try {
-      // Focus on the page body (a disabled button dropped it): still the dialog's keys.
+      // Focus in the region: still the dialog's keys.
       for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "?"]) {
-        fireEvent.keyDown(document.body, { key });
+        fireEvent.keyDown(region, { key });
       }
-      const esc = fireEvent.keyDown(document.body, { key: "Escape" });
+      const esc = fireEvent.keyDown(region, { key: "Escape" });
       expect(esc).toBe(true); // not default-prevented: the dialog's cancel can fire
       for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
     } finally {
       dialog.remove();
     }
-    fireEvent.keyDown(document.body, { key: "a" });
+    fireEvent.keyDown(region, { key: "a" });
     expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing while a non-native modal (Compare, Keys) is open or the tool is hidden", () => {
     const h = handlers();
-    renderHook(() => useReviewKeys(h));
+    keysIn(h);
     const modal = document.createElement("div");
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
@@ -680,32 +716,32 @@ describe("useReviewKeys", () => {
       document.body.append(el);
       try {
         for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "Escape", "?"]) {
-          fireEvent.keyDown(document.body, { key });
+          fireEvent.keyDown(region, { key });
         }
         for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
       } finally {
         el.remove();
       }
     }
-    fireEvent.keyDown(document.body, { key: "a" });
+    fireEvent.keyDown(region, { key: "a" });
     expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a held key for decisions (no repeat accept)", () => {
     const h = handlers();
-    renderHook(() => useReviewKeys(h));
-    fireEvent.keyDown(document.body, { key: "a", repeat: true });
-    fireEvent.keyDown(document.body, { key: "ArrowRight", repeat: true });
+    keysIn(h);
+    fireEvent.keyDown(region, { key: "a", repeat: true });
+    fireEvent.keyDown(region, { key: "ArrowRight", repeat: true });
     expect(h.accept).not.toHaveBeenCalled();
     expect(h.next).toHaveBeenCalledTimes(1);
   });
 
   it("is removed on unmount", () => {
     const h = handlers();
-    const { unmount } = renderHook(() => useReviewKeys(h));
+    const { unmount } = keysIn(h);
     unmount();
     act(() => {
-      fireEvent.keyDown(document.body, { key: "a" });
+      fireEvent.keyDown(region, { key: "a" });
     });
     expect(h.accept).not.toHaveBeenCalled();
   });
@@ -728,6 +764,65 @@ describe("useSaveCuration counts", () => {
     await act(() => result.current.save("s1", { note: "x" }));
     p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
     expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
+  });
+});
+
+describe("focus mode keys act only inside focus mode (WCAG 2.1.4)", () => {
+  it("a key pressed with focus outside focus mode does nothing", async () => {
+    const put = putSpy();
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    expect(region).toHaveFocus(); // open: the region takes focus, the keys work at once
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      for (const key of ["a", "r", "e", "c", "ArrowRight", "?", "Escape"]) press(key);
+      (document.activeElement as HTMLElement).blur(); // focus on the page body
+      for (const key of ["a", "r", "ArrowRight"]) press(key);
+      await act(() => new Promise((r) => setTimeout(r, 20)));
+      expect(put).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByTestId("where")).toHaveTextContent("?s=s1&focus=1");
+      // Focus back in the region: A accepts.
+      region.focus();
+      press("a");
+      await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("a decision or step made with focus outside brings focus back into the region", async () => {
+    const put = putSpy();
+    renderAt(paper([segment("s1"), segment("s2"), segment("s3")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    // A click that leaves focus on the page body (Safari does not focus a clicked button).
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.click(within(region).getByRole("button", { name: /^Next structure/ }));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?s=s2&focus=1"));
+    expect(region.contains(document.activeElement)).toBe(true);
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.click(within(region).getByRole("button", { name: /^Reject/ }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(region.contains(document.activeElement)).toBe(true);
+    // The next key works with no extra click.
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?s=s3&focus=1"));
+    press("a");
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+  });
+
+  it("Esc closes Keys after a click on plain text inside it (the box takes focus)", async () => {
+    renderAt(paper([segment("s1")]), "?s=s1&focus=1");
+    await focusRegion();
+    press("?");
+    const dialog = await screen.findByRole("dialog", { name: "Keys" });
+    expect(dialog).toHaveAttribute("tabindex", "-1");
+    dialog.focus(); // what a click on the key list does to focus
+    expect(dialog).toHaveFocus();
+    press("Escape");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Keys" })).toBeNull());
+    expect(screen.getByRole("region", { name: /^Focus/ })).toBeInTheDocument();
   });
 });
 
@@ -791,7 +886,7 @@ describe("focus mode follow-ups (F8 review)", () => {
       );
     });
     await waitFor(() => expect(note).toHaveValue("newer"));
-    (document.activeElement as HTMLElement | null)?.blur();
+    region.focus(); // back in the region (what Esc in the note does): the keys act there
     press("a");
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
     expect(put.mock.calls[1]![1]).toMatchObject({ status: "accepted", note: "newer" });
