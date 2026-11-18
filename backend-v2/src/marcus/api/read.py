@@ -9,8 +9,9 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
-from marcus.core.enums import StepKind, StepStatus
+from marcus.core.enums import StepStatus
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.pipeline import PAGE_KINDS, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
@@ -28,8 +29,9 @@ async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uui
 
     structures = segments; accepted / rejected = curations with that status; to_review = the
     rest (every segment has a curation row). failed_pages = distinct pages whose newest
-    render_page or segment_page step (created_at, then seq) is failed: a retry that is done or
-    still active supersedes the failure."""
+    render_page or segment_page step, across both kinds (the order retry_page uses), is failed.
+    A retry in flight (pending, queued, running) is the newest step, so the page is not counted
+    while it runs; retry_page itself still sees the old failure standing and answers "busy"."""
     if not paper_ids:
         return {}
     seg_rows = await db.execute(
@@ -46,15 +48,13 @@ async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uui
     )
     newest = (
         select(Step.paper_id, Step.page, Step.status)
-        .ext(distinct_on(Step.paper_id, Step.page, Step.kind))
+        .ext(distinct_on(Step.paper_id, Step.page))
         .where(
             Step.paper_id.in_(paper_ids),
             Step.page.is_not(None),
-            Step.kind.in_((StepKind.RENDER_PAGE.value, StepKind.SEGMENT_PAGE.value)),
+            Step.kind.in_(PAGE_KINDS),
         )
-        .order_by(
-            Step.paper_id, Step.page, Step.kind, Step.created_at.desc(), Step.seq.desc(), Step.id
-        )
+        .order_by(Step.paper_id, Step.page, *page_step_order(), Step.id)
         .subquery()
     )
     failed_rows = await db.execute(

@@ -4,9 +4,10 @@ import uuid
 
 from sqlalchemy import func, select
 
+from marcus.core import pipeline as pipeline_module
 from marcus.core.enums import ErrorClass
-from marcus.core.models import Step
-from marcus.core.pipeline import fail_step
+from marcus.core.models import Owner, Step
+from marcus.core.pipeline import complete_step, fail_step
 from tests.api.conftest import (
     SEGS,
     finish,
@@ -20,8 +21,6 @@ from tests.factories import make_paper
 
 
 def _failed_page_paper(s, owner_id, pages=1):
-    from marcus.core.models import Owner
-
     paper = make_paper(s, s.get(Owner, owner_id))
     (check,) = steps_of(s, paper.id, "check_pdf")
     finish(s, check, {"pages": pages})
@@ -161,3 +160,51 @@ async def test_retried_page_success_finishes_paper_done(app, async_db_session):
     await db.run_sync(drive)
     await db.commit()
     assert (await paper_row(db, pid)).status == "done"
+
+
+async def _failed_pages(c) -> int:
+    return (await c.get("/api/v2/papers")).json()["papers"][0]["failed_pages"]
+
+
+async def test_failed_pages_follows_newest_step_across_render_and_segment(app, async_db_session):
+    """Failed segment_page -> retry (render in flight: not counted) -> render done and the
+    segmentation served from the cache (no new segment_page): the page is not failed."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+
+    def seed_seg_failed(s):
+        paper = make_paper(s, s.get(Owner, alice.id))
+        (check,) = steps_of(s, paper.id, "check_pdf")
+        finish(s, check, {"pages": 1})
+        (render,) = steps_of(s, paper.id, "render_page")
+        (seg,) = finish(s, render, {})
+        seg.status, seg.attempts = "running", 1
+        s.flush()
+        fail_step(s, seg.id, ErrorClass.ENGINE_ERROR, "crash", retryable=False)
+        return paper.id
+
+    pid = await db.run_sync(seed_seg_failed)
+    await db.commit()
+    async with make_client(app, token) as c:
+        assert await _failed_pages(c) == 1
+        r = await c.post(url(pid))
+        assert r.status_code == 202
+        assert await _failed_pages(c) == 0  # retry in flight
+        assert (await c.post(url(pid))).status_code == 409  # retry_page still says busy
+
+        def cached_segmentation(s):
+            step = s.get(Step, uuid.UUID(r.json()["step_id"]))
+            step.status, step.attempts = "running", 1
+            s.flush()
+            monkey = pipeline_module._cached_page
+            pipeline_module._cached_page = lambda *_a: []  # cache hit: no segment_page step
+            try:
+                complete_step(s, step.id, {})
+            finally:
+                pipeline_module._cached_page = monkey
+
+        await db.run_sync(cached_segmentation)
+        await db.commit()
+        segs = await db.run_sync(lambda s: steps_of(s, pid, "segment_page"))
+        assert [x.status for x in segs] == ["failed"]  # none added by the cached retry
+        assert await _failed_pages(c) == 0

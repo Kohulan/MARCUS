@@ -62,6 +62,10 @@ ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+# One page's render_page and segment_page steps are read newest first in this order (segment_page
+# follows render_page when created_at ties). retry_page and the failed_pages count share it, so
+# "the newest step across both kinds" means the same thing in both.
+PAGE_KINDS = (StepKind.RENDER_PAGE.value, StepKind.SEGMENT_PAGE.value)
 MANUAL_PAGE_RETRIES = 2  # extra render_page steps one page may get through retry_page
 MAX_VERSION_CHARS = 200
 RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of the cache key
@@ -92,6 +96,11 @@ class RetryNotAllowed(Exception):
     def __init__(self, reason: Literal["not_failed", "busy", "limit"]):
         super().__init__(reason)
         self.reason = reason
+
+
+def page_step_order() -> tuple:
+    """ORDER BY terms (newest first) over one page's render_page/segment_page steps."""
+    return Step.created_at.desc(), Step.kind.desc(), Step.seq.desc()
 
 
 def start_paper(
@@ -836,9 +845,9 @@ def retry_page(session: Session, paper_id: uuid.UUID, page: int) -> Step:
         .where(
             Step.paper_id == paper.id,
             Step.page == page,
-            Step.kind.in_([StepKind.RENDER_PAGE.value, StepKind.SEGMENT_PAGE.value]),
+            Step.kind.in_(PAGE_KINDS),
         )
-        .order_by(Step.created_at.desc(), Step.kind.desc())  # segment_page follows render_page
+        .order_by(*page_step_order())
     ).all()
     # the newest step that has finished decides; a pending retry leaves the old failure standing
     settled = [r for r in rows if r.status not in ACTIVE]

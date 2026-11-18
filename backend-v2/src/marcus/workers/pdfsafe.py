@@ -32,8 +32,17 @@ CPU_HEADROOM_THREADS = 2  # RLIMIT_CPU = (threads + 2) x (timeout + 5): stray po
 # virtual limit, so 32 GiB still caps a runaway parse.
 DOCLING_MEM_MB = 32768
 MAX_REPLY_BYTES = 1024 * 1024
-_ENV_KEEP = ("PATH", "HOME", "LANG", "PYTHONHASHSEED", "HF_HOME", "TORCH_HOME",
-             "XDG_CACHE_HOME", "DOCLING_ARTIFACTS_PATH", "OMP_NUM_THREADS")
+_ENV_KEEP = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "PYTHONHASHSEED",
+    "HF_HOME",
+    "TORCH_HOME",
+    "XDG_CACHE_HOME",
+    "DOCLING_ARTIFACTS_PATH",
+    "OMP_NUM_THREADS",
+)
 
 
 class ChildTimeout(Exception):
@@ -95,8 +104,14 @@ def run_op(
     cpu_s = (threads + CPU_HEADROOM_THREADS if threads else 1) * (int(timeout_s) + 5)
     proc = subprocess.Popen(
         [
-            sys.executable, "-I", "-m", "marcus.workers.pdfsafe_child", op,
-            str(mem_mb or 0), str(cpu_s), str(os.getpid()),
+            sys.executable,
+            "-I",
+            "-m",
+            "marcus.workers.pdfsafe_child",
+            op,
+            str(mem_mb or 0),
+            str(cpu_s),
+            str(os.getpid()),
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -153,9 +168,7 @@ def _read_capped(proc: subprocess.Popen, deadline: float) -> bytes:
         sel.close()
 
 
-def _run_pdf(
-    op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None
-):
+def _run_pdf(op: str, args: list, timeout_s: float, mem_mb: int | None, threads: int | None = None):
     """run_op for a step: a wall-time kill is a retryable timeout (StepTimeout); a child killed
     from outside (SIGKILL: the container's OOM killer) is a retryable lost worker (WorkerLost);
     a child that failed otherwise (parse error, RLIMIT_AS / RLIMIT_CPU kill, bad reply) is final
@@ -194,7 +207,11 @@ def render_page_png(
         _run_pdf(
             "render",
             [
-                str(path), page, str(tmp), settings.max_pages, settings.max_page_pixels,
+                str(path),
+                page,
+                str(tmp),
+                settings.max_pages,
+                settings.max_page_pixels,
                 settings.max_page_png_bytes,
             ],
             timeout_s,
@@ -207,5 +224,6 @@ def render_page_png(
 
 def run_docling(path: Path, out_dir: Path, timeout_s: int, mem_mb: int = DOCLING_MEM_MB) -> None:
     """Convert in a child; it writes out_dir/text.json (temp + replace)."""
-    _run_pdf("docling", [str(path), str(out_dir), DOCLING_THREADS], timeout_s, mem_mb, DOCLING_THREADS
+    _run_pdf(
+        "docling", [str(path), str(out_dir), DOCLING_THREADS], timeout_s, mem_mb, DOCLING_THREADS
     )
