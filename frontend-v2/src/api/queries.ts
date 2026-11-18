@@ -4,7 +4,7 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { api, ApiError } from "./client";
 import { curationBody, type CurationChange } from "./curation";
-import type { CurationOut, PaperDetail } from "./types";
+import type { BulkCurationItem, CurationOut, PaperDetail } from "./types";
 
 export const keys = {
   papers: () => ["papers"] as const,
@@ -245,4 +245,107 @@ export function useSaveCuration(paperId: string): {
     [client, paperId],
   );
   return { save };
+}
+
+/** The most items one PUT /papers/{id}/curation takes. */
+export const BULK_CHUNK = 500;
+
+type BulkStatus = BulkCurationItem["status"];
+
+/** The paper with `status` set on the given segments, and its counts moved to match. */
+function withStatuses(
+  paper: PaperDetail,
+  statuses: Map<string, BulkStatus | null>,
+): PaperDetail {
+  const counts = { accepted: paper.accepted, rejected: paper.rejected, to_review: paper.to_review };
+  const bump = (status: BulkStatus, by: number) => {
+    if (status === "accepted") counts.accepted += by;
+    else if (status === "rejected") counts.rejected += by;
+    else counts.to_review += by;
+  };
+  const segments = paper.segments.map((s) => {
+    if (!statuses.has(s.id)) return s;
+    const next = statuses.get(s.id)!;
+    const before = s.curation?.status ?? "unchecked";
+    const after = next ?? "unchecked";
+    if (before === after && (next !== null || s.curation === null)) return s;
+    bump(before, -1);
+    bump(after, 1);
+    const c = s.curation;
+    // null (a rollback): back to no curation, unless a note or structure was stored since
+    const curation: CurationOut | null =
+      next === null && c !== null && !c.smiles && !c.molfile && !c.note
+        ? null
+        : c
+          ? { ...c, status: after }
+          : { status: after, smiles: null, molfile: null, note: null };
+    return { ...s, curation };
+  });
+  return { ...paper, ...counts, segments };
+}
+
+/**
+ * `bulk(items)`: set the status of many segments with PUT /papers/{id}/curation, in chunks
+ * of BULK_CHUNK, one after another. Items carry no `note` key, so the server keeps every
+ * note (and structure). The cache changes at once (optimistic); a chunk that fails, and
+ * every chunk after it, is rolled back (status only) and bulk() rejects. A bulk change waits
+ * for pending single saves of the same segments and later single saves wait for it (the
+ * per-segment chain of useSaveCuration), so a save's reply never lands over it out of order.
+ */
+export function useBulkCuration(paperId: string): {
+  bulk: (items: BulkCurationItem[]) => Promise<void>;
+} {
+  const client = useQueryClient();
+  const bulk = useCallback(
+    (items: BulkCurationItem[]): Promise<void> => {
+      const key = keys.paper(paperId);
+      const map = chainFor(client);
+      const ids = items.map((i) => i.segment_id);
+      const wanted = new Set(ids);
+      const cached = client.getQueryData<PaperDetail>(key);
+      const before = new Map<string, BulkStatus | null>(
+        (cached?.segments ?? [])
+          .filter((s) => wanted.has(s.id))
+          .map((s) => [s.id, s.curation?.status ?? null]),
+      );
+      const apply = (list: BulkCurationItem[], undo: boolean) => {
+        const statuses = new Map(
+          list.map((i) => [i.segment_id, undo ? (before.get(i.segment_id) ?? null) : i.status]),
+        );
+        client.setQueryData<PaperDetail>(key, (old) => (old ? withStatuses(old, statuses) : old));
+      };
+
+      // Taken now, so the chain order is the call order.
+      const prior = ids.map((id) => map.get(id)).filter((p): p is Promise<unknown> => !!p);
+      const run = (async () => {
+        // A fetch already on the wire would bring the old statuses back over the optimistic
+        // ones (and a cancelled one reverts its state): cancel first, then write.
+        await client.cancelQueries({ queryKey: key });
+        apply(items, false);
+        await Promise.allSettled(prior);
+        // A single save that finished meanwhile wrote its reply (with the old status).
+        apply(items, false);
+        for (let i = 0; i < items.length; i += BULK_CHUNK) {
+          try {
+            await api.putBulkCuration(paperId, items.slice(i, i + BULK_CHUNK));
+          } catch (err) {
+            apply(items.slice(i), true);
+            void client.invalidateQueries({ queryKey: key });
+            throw err;
+          }
+        }
+        await client.cancelQueries({ queryKey: key });
+        apply(items, false);
+        void client.invalidateQueries({ queryKey: key }); // the server's counts
+      })();
+      for (const id of ids) map.set(id, run);
+      void run.then(
+        () => ids.forEach((id) => (map.get(id) === run ? map.delete(id) : undefined)),
+        () => ids.forEach((id) => (map.get(id) === run ? map.delete(id) : undefined)),
+      );
+      return run;
+    },
+    [client, paperId],
+  );
+  return { bulk };
 }

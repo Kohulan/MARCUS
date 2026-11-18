@@ -117,6 +117,43 @@ describe("Stamp", () => {
     render(<Stamp state="rejected" />);
     expect(screen.getByRole("img", { name: "Rejected" })).not.toHaveClass("stamp--landing");
   });
+
+  it("200 stamps share one media query and one change listener, and follow a change", () => {
+    const listeners = new Set<() => void>();
+    let reduce = false;
+    const add = vi.fn((_: string, fn: () => void) => listeners.add(fn));
+    window.matchMedia = vi.fn((query: string) => ({
+      get matches() {
+        return reduce;
+      },
+      media: query,
+      onchange: null,
+      addEventListener: add,
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    })) as unknown as typeof window.matchMedia;
+    const { unmount } = render(
+      <>
+        {Array.from({ length: 200 }, (_, i) => (
+          <Stamp key={i} state="accepted" animate />
+        ))}
+      </>,
+    );
+    expect(window.matchMedia).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole("img", { name: "Accepted" })[0]).toHaveClass("stamp--landing");
+    act(() => {
+      reduce = true;
+      for (const fn of listeners) fn();
+    });
+    for (const stamp of screen.getAllByRole("img", { name: "Accepted" })) {
+      expect(stamp).not.toHaveClass("stamp--landing");
+    }
+    unmount();
+    expect(listeners.size).toBe(0);
+  });
 });
 
 describe("structureTag", () => {

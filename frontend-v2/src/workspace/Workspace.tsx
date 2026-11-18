@@ -7,6 +7,7 @@ import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import ExportMenu from "./ExportMenu";
 import GonePage from "./GonePage";
+import ReviewGrid from "./ReviewGrid";
 import StatusBar from "./StatusBar";
 import { useWorkspace, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
@@ -158,7 +159,9 @@ function Frame({ id }: { id: string }) {
       {ws.view === "paper" ? (
         <section className="ws-view" aria-label="Paper view" />
       ) : (
-        <section className="ws-view" aria-label="Review view" />
+        <section className="ws-view ws-view--review" aria-label="Review view">
+          <ReviewGrid ws={ws} />
+        </section>
       )}
     </main>
   );

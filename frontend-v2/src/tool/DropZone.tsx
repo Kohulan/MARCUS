@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
+import { ENGINES } from "../api/engines";
 import type { Engine } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import "./tool.css";
@@ -45,12 +46,6 @@ export function fileKind(file: File): FileKind | null {
   return BY_EXTENSION[ext] ?? null;
 }
 
-export const ENGINES: { value: Engine; label: string }[] = [
-  { value: "decimer", label: "DECIMER" },
-  { value: "decimer-hand", label: "DECIMER hand-drawn" },
-  { value: "molnextr", label: "MolNexTR" },
-  { value: "molscribe", label: "MolScribe" },
-];
 
 type DropZoneProps = {
   engine: Engine;
