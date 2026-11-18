@@ -72,6 +72,36 @@ function fetchingPaper(client: QueryClient, id: string): boolean {
   );
 }
 
+// Curation saves still on the wire, per paper. A refresh read before such a PUT has committed
+// would bring the old curation back over the optimistic one (a stamp that vanishes and lands
+// again), so a refresh waits for them as it waits for a fetch.
+const saving = new WeakMap<QueryClient, Map<string, number>>();
+
+function savingCount(client: QueryClient): Map<string, number> {
+  let map = saving.get(client);
+  if (!map) {
+    map = new Map();
+    saving.set(client, map);
+  }
+  return map;
+}
+
+/** Counts `work` as a save of paper `id` until it settles. */
+function whileSaving<T>(client: QueryClient, id: string, work: Promise<T>): Promise<T> {
+  const map = savingCount(client);
+  map.set(id, (map.get(id) ?? 0) + 1);
+  const done = () => {
+    const n = (map.get(id) ?? 1) - 1;
+    if (n > 0) map.set(id, n);
+    else map.delete(id);
+  };
+  void work.then(done, done);
+  return work;
+}
+
+const busyPaper = (client: QueryClient, id: string) =>
+  fetchingPaper(client, id) || (saving.get(client)?.has(id) ?? false);
+
 /**
  * True when a stream's snapshot ({status, counts: {steps_by_status}}) says what the cached
  * paper and steps already say, so a refetch would bring nothing new.
@@ -110,13 +140,13 @@ export function refreshPaper(client: QueryClient, id: string): void {
     state.timer = setTimeout(() => {
       state.timer = null;
       if (!state.pending) return;
-      if (fetchingPaper(client, id)) schedule(REFRESH_MS);
+      if (busyPaper(client, id)) schedule(REFRESH_MS);
       else run();
     }, delay);
   };
 
   const since = Date.now() - state.last;
-  if (since >= REFRESH_MS && !fetchingPaper(client, id)) run();
+  if (since >= REFRESH_MS && !busyPaper(client, id)) run();
   else schedule(Math.max(REFRESH_MS - since, 0) || REFRESH_MS);
 }
 
@@ -239,8 +269,9 @@ function withCuration(
 /**
  * `save(segmentId, change)`: PUT the full curation built by curationBody from the cached one
  * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved).
- * Optimistic, as bulk() is: the body goes into the ["paper", paperId] cache at once, the
- * reply replaces it, and a failed PUT rolls it back and rejects. The only way the UI writes
+ * Optimistic for status and note, as bulk() is: the body goes into the ["paper", paperId]
+ * cache at once, the reply replaces it, and a failed PUT rolls it back and rejects. A change
+ * of structure is written only with the reply. Refreshes wait while a save is on the wire. The only way the UI writes
  * a single curation (PUT replaces the whole record).
  */
 export function useSaveCuration(paperId: string): {
@@ -268,12 +299,16 @@ export function useSaveCuration(paperId: string): {
             );
             return stale;
           };
-          const cancelled = await write(body);
+          // Optimistic only for status and note. A new structure waits for the reply: its
+          // drawing key would change at once, and the drawing asked for under it would be the
+          // one still stored (the server draws what it has committed).
+          const optimistic = change.structure === undefined;
+          const cancelled = optimistic ? await write(body) : false;
           let out: CurationOut;
           try {
             out = await api.putCuration(segmentId, body);
           } catch (err) {
-            if ((await write(before)) || cancelled) {
+            if ((optimistic && (await write(before))) || cancelled) {
               void client.invalidateQueries({ queryKey: key });
             }
             throw err;
@@ -286,7 +321,7 @@ export function useSaveCuration(paperId: string): {
         () => (map.get(segmentId) === run ? map.delete(segmentId) : undefined),
         () => (map.get(segmentId) === run ? map.delete(segmentId) : undefined),
       );
-      return run;
+      return whileSaving(client, paperId, run);
     },
     [client, paperId],
   );
@@ -394,6 +429,7 @@ export function useBulkCuration(paperId: string): {
         apply(items, false);
         void client.invalidateQueries({ queryKey: key });
       })();
+      void whileSaving(client, paperId, run);
       for (const id of ids) map.set(id, run);
       void run.then(
         () => ids.forEach((id) => (map.get(id) === run ? map.delete(id) : undefined)),

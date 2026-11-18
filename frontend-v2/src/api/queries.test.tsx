@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "./client";
+import { depictionKey } from "./depictionKey";
 import {
   createQueryClient,
   keys,
@@ -125,6 +126,107 @@ describe("useSaveCuration", () => {
     expect(sent).toEqual([
       { id: "s1", body: { status: "accepted", smiles: null, molfile: null, note: null } },
     ]);
+  });
+});
+
+describe("useSaveCuration optimistic write", () => {
+  const cached = (id = "s1") =>
+    client.getQueryData<PaperDetail>(keys.paper("p1"))!.segments.find((s) => s.id === id)!;
+
+  function holdPuts() {
+    const held: { id: string; resolve: () => void; reject: (e: unknown) => void }[] = [];
+    vi.mocked(api.putCuration).mockImplementation(
+      (id, body) =>
+        new Promise((resolve, reject) =>
+          held.push({ id, resolve: () => resolve({ ...body }), reject }),
+        ),
+    );
+    return held;
+  }
+
+  it("a status shows at once and a failed PUT takes it back; another segment keeps its own", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let one!: Promise<unknown>;
+    let two!: Promise<unknown>;
+    await act(async () => {
+      one = result.current.save("s1", { status: "accepted" }).catch((e: unknown) => e);
+      two = result.current.save("s2", { status: "rejected" });
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+    });
+    expect(cached("s1").curation?.status).toBe("accepted");
+    expect(cached("s2").curation?.status).toBe("rejected");
+    await act(async () => {
+      held.find((h) => h.id === "s1")!.reject(new ApiError(500, "boom"));
+      held.find((h) => h.id === "s2")!.resolve();
+      await Promise.all([one, two]);
+    });
+    expect(cached("s1").curation).toBeNull();
+    expect(cached("s2").curation?.status).toBe("rejected");
+  });
+
+  it("a new structure is cached only with the reply; a failed one leaves the drawing key", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const key = depictionKey(cached());
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    const structure = { smiles: "CCN", molfile: null };
+    let first!: Promise<unknown>;
+    await act(async () => {
+      first = result.current.save("s1", { status: "accepted", structure });
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    expect(cached().curation).toBeNull(); // nothing written before the PUT saved
+    await act(async () => {
+      held[0]!.resolve();
+      await first;
+    });
+    expect(cached().curation).toMatchObject({ status: "accepted", smiles: "CCN" });
+
+    const saved = depictionKey(cached());
+    let second!: Promise<unknown>;
+    await act(async () => {
+      second = result.current
+        .save("s1", { structure: { smiles: "CCO", molfile: null } })
+        .catch((e: unknown) => e);
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+    });
+    expect(depictionKey(cached())).toBe(saved);
+    await act(async () => {
+      held[1]!.reject(new ApiError(422, "bad SMILES"));
+      await second;
+    });
+    expect(depictionKey(cached())).toBe(saved);
+    expect(saved).not.toBe(key);
+  });
+
+  it("a refresh asked for while a save is on the wire waits for it", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue(paper(null));
+    const stop = new QueryObserver(client, {
+      queryKey: keys.paper("p1"),
+      queryFn: () => api.getPaper("p1"),
+      staleTime: Infinity,
+    }).subscribe(() => undefined);
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let saving!: Promise<unknown>;
+    await act(async () => {
+      saving = result.current.save("s1", { status: "accepted" });
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    getPaper.mockClear();
+    refreshPaper(client, "p1");
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(getPaper).not.toHaveBeenCalled();
+    expect(cached().curation?.status).toBe("accepted");
+    await act(async () => {
+      held[0]!.resolve();
+      await saving;
+    });
+    await vi.waitFor(() => expect(getPaper).toHaveBeenCalled(), { timeout: 3000 });
+    stop();
   });
 });
 
