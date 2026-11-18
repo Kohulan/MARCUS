@@ -6,13 +6,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, api, depictBlob, svgBlobUrl } from "../api/client";
+import { api, depictBlob, errorText, isGone, isUuid, svgBlobUrl } from "../api/client";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import type { DepictReply, Engine, ImageJobOut, PredictionOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
-import { GlassButton, GlassLink } from "../ui/GlassButton";
+import { GlassButton } from "../ui/GlassButton";
+import GonePage, { OpenFailed } from "../ui/GonePage";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
@@ -61,10 +62,6 @@ const engineName = (p: Pick<PredictionOut, "engine" | "engine_version">) =>
 
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
-// Image job ids are UUIDs. Any other id (a mistyped or cut link) is not a job: it gets the
-// gone page at once, without a request the API would answer 422.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const ACTIVE = new Set(["queued", "processing"]);
 
 /**
@@ -93,43 +90,18 @@ function mainStatus(job: ImageJobOut): "waiting" | "reading" | "failed" | "done"
 
 export default function ImageResult({ compare = COMPARE }: ImageResultProps) {
   const id = useParams().id ?? "";
-  if (!UUID.test(id)) return <NoImage />;
+  if (!isUuid(id)) return <NoImage />;
   return <ImageJobPage key={id} id={id} compare={compare} />;
 }
 
 function NoImage() {
   usePageTitle("Image · MARCUS");
-  return <GonePage />;
-}
-
-/**
- * The one page for an image job the API answers 404 for: deleted, expired, or owned by
- * another browser (the API does not say which, and neither does this page). Never a spinner.
- */
-function GonePage() {
-  return (
-    <main className="ir-gone">
-      <div className="ir-gone__sheet">
-        <span className="corner ir-gone__corner" aria-hidden="true">
-          +
-        </span>
-        <h1 className="ir-gone__title">This image is not here any more.</h1>
-        <p className="ir-gone__why">
-          It was deleted, it expired after 30 days, or it was opened in another browser.
-        </p>
-        <div className="ir-gone__bed glassbed">
-          <GlassLink tint="clear" to="/app">
-            Your papers
-          </GlassLink>
-        </div>
-      </div>
-    </main>
-  );
+  return <GonePage noun="image" />;
 }
 
 /**
  * The job is read first; only a job that exists mounts the result (and with it the live
- * stream). A 404, at first or on a later refresh, shows the gone page and unmounts the
+ * stream). A 404 or 422, at first or on a later refresh, shows the gone page and unmounts the
  * result, so no stream or poll is left behind.
  */
 function ImageJobPage({
@@ -140,28 +112,13 @@ function ImageJobPage({
   compare: ComponentType<ImageCompareProps> | undefined;
 }) {
   const query = useImageJob(id);
-  const gone =
-    query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 422);
+  const gone = isGone(query.error);
   usePageTitle(!gone && query.data ? `${query.data.display_name} · MARCUS` : "Image · MARCUS");
 
-  if (gone) return <GonePage />;
+  if (gone) return <GonePage noun="image" />;
   if (query.data) return <Result job={query.data} compare={compare} />;
   if (query.isError) {
-    return (
-      <main className="ir-gone">
-        <div className="ir-gone__sheet">
-          <h1 className="ir-gone__title">This image could not be opened.</h1>
-          <p className="ir-gone__why">
-            {query.error instanceof ApiError ? query.error.detail : "Something went wrong."}
-          </p>
-          <div className="ir-gone__bed glassbed">
-            <GlassButton tint="clear" onClick={() => void query.refetch()}>
-              Try again
-            </GlassButton>
-          </div>
-        </div>
-      </main>
-    );
+    return <OpenFailed noun="image" error={query.error} onRetry={() => void query.refetch()} />;
   }
   return (
     <main className="ir" aria-busy="true">
@@ -262,7 +219,7 @@ function Result({
       live.reconnect();
       void client.invalidateQueries({ queryKey: keys.image(job.id) }, { cancelRefetch: false });
     } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Something went wrong.", "error");
+      toast(errorText(err), "error");
     } finally {
       setRetrying(false);
     }

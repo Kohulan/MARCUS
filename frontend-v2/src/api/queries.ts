@@ -2,7 +2,7 @@
 // hooks, and the one way the UI writes a single curation.
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { api, ApiError } from "./client";
+import { api, ApiError, errorText } from "./client";
 import { curationBody, type CurationChange } from "./curation";
 import type { BulkCurationItem, CurationOut, CurationStatus, PaperDetail } from "./types";
 
@@ -277,8 +277,9 @@ export class BulkPartialError extends Error {
     readonly total: number,
     override readonly cause: unknown,
   ) {
-    const why = cause instanceof ApiError ? cause.detail : "Something went wrong.";
-    super(`Saved ${saved.toLocaleString("en")} of ${total.toLocaleString("en")}: ${why}`);
+    super(
+      `Saved ${saved.toLocaleString("en")} of ${total.toLocaleString("en")}: ${errorText(cause)}`,
+    );
     this.name = "BulkPartialError";
   }
 }

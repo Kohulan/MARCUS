@@ -1,15 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError } from "../api/client";
+import { isGone, isUuid } from "../api/client";
 import { usePaper } from "../api/queries";
 import type { PaperDetail } from "../api/types";
 import SubmitForm from "../coconut/SubmitForm";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
+import GonePage, { OpenFailed } from "../ui/GonePage";
+import { paperName } from "../ui/tag";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
-import GonePage from "./GonePage";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { coconutStructures, submissionTitle } from "./coconutList";
@@ -18,8 +19,6 @@ import StatusBar from "./StatusBar";
 import { useReviewRows } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
-
-const name = (p: PaperDetail) => p.title || p.display_name;
 
 /** How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI). */
 function useCoconutCount(doi: string | null): CoconutDoiCount | null {
@@ -35,51 +34,31 @@ function useCoconutCount(doi: string | null): CoconutDoiCount | null {
   return found !== null && found.doi === doi ? found.count : null;
 }
 
-// Paper ids are UUIDs. Any other id (a mistyped or cut link) is not a paper: it gets the
-// gone page at once, without a request the API would answer 422.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export default function Workspace() {
   const id = useParams().id ?? "";
-  if (!UUID.test(id)) return <NoPaper />;
+  if (!isUuid(id)) return <NoPaper />;
   return <PaperWorkspace key={id} id={id} />;
 }
 
 function NoPaper() {
   usePageTitle("Paper · MARCUS");
-  return <GonePage />;
+  return <GonePage noun="paper" />;
 }
 
 /**
  * /app/papers/:id. The paper is read first; only a paper that exists mounts the frame (and
- * with it the live stream). A 404, at first or on any later refresh (deleted in another tab,
- * expired), shows the one gone page and unmounts the frame, so no stream or poll is left.
+ * with it the live stream). A 404 or 422, at first or on any later refresh (deleted in another
+ * tab, expired), shows the one gone page and unmounts the frame, so no stream or poll is left.
  */
 function PaperWorkspace({ id }: { id: string }) {
   const query = usePaper(id);
-  // 404: missing, deleted, expired or another browser's (the API does not say which).
-  const gone =
-    query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 422);
-  usePageTitle(!gone && query.data ? `${name(query.data)} · MARCUS` : "Paper · MARCUS");
+  const gone = isGone(query.error);
+  usePageTitle(!gone && query.data ? `${paperName(query.data)} · MARCUS` : "Paper · MARCUS");
 
-  if (gone) return <GonePage />;
+  if (gone) return <GonePage noun="paper" />;
   if (query.data) return <Frame id={id} />;
   if (query.isError) {
-    return (
-      <main className="ws-gone">
-        <div className="ws-gone__sheet">
-          <h1 className="ws-gone__title">This paper could not be opened.</h1>
-          <p className="ws-gone__why">
-            {query.error instanceof ApiError ? query.error.detail : "Something went wrong."}
-          </p>
-          <div className="ws-gone__bed glassbed">
-            <GlassButton tint="clear" onClick={() => void query.refetch()}>
-              Try again
-            </GlassButton>
-          </div>
-        </div>
-      </main>
-    );
+    return <OpenFailed noun="paper" error={query.error} onRetry={() => void query.refetch()} />;
   }
   return (
     <main className="ws" aria-busy="true">
@@ -146,9 +125,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     <main className="ws">
       <header className="ws-head">
         <div className="ws-head__title">
-          <h1 className="ws-title">{name(paper)}</h1>
+          <h1 className="ws-title">{paperName(paper)}</h1>
           <p className="ws-meta">
-            {paper.title && <span className="ws-meta__file">{paper.display_name}</span>}
+            {paper.title?.trim() && <span className="ws-meta__file">{paper.display_name}</span>}
             {paper.doi && (
               <a
                 className="ws-meta__doi"

@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { api, ApiError } from "../api/client";
+import { api, errorText } from "../api/client";
 import { depictionKey } from "../api/depictionKey";
 import { useDepiction } from "../api/depictions";
 import { engineName } from "../api/engines";
@@ -40,8 +40,6 @@ export const ADVANCE_MS = 250;
 
 type Decision = "accepted" | "rejected";
 type Landed = { id: string; status: Decision; seq: number };
-
-const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Something went wrong.");
 
 /** A blank note is no note. */
 const noteOf = (text: string): string | null => (text.trim() === "" ? null : text);
@@ -171,7 +169,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
       (err: unknown) => {
         pending.current.delete(id);
         setLanded((l) => (l !== null && l.seq === n ? null : l));
-        toast(`Not saved: ${detail(err)}`, "error");
+        toast(`Not saved: ${errorText(err)}`, "error");
       },
     );
     clearTimer();
@@ -189,7 +187,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     const typed = text;
     save(id, { note: next }).then(
       () => dropDraft(id, typed),
-      (err: unknown) => toast(`Note not saved: ${detail(err)}`, "error"),
+      (err: unknown) => toast(`Note not saved: ${errorText(err)}`, "error"),
     );
   };
 

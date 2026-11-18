@@ -1,6 +1,6 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { useDepiction } from "../api/depictions";
 import { asEngine } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
@@ -15,7 +15,6 @@ import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import { ocsrSteps } from "./cardState";
 import { trapTab } from "./KeyHelp";
-import { errorDetail } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import {
@@ -100,7 +99,7 @@ export default function Compare({
   ];
   const message =
     tooManyText(runError) ??
-    (runError !== null ? `Not started: ${errorDetail(runError)}` : null) ??
+    (runError !== null ? `Not started: ${errorText(runError)}` : null) ??
     toolErrors.map(tooManyText).find((t) => t !== null) ??
     (common && part.errors.length > 0 ? "Common part unavailable" : null) ??
     (part.none ? "No common part" : null);
@@ -392,7 +391,7 @@ export function SegmentCompare({
       structure: { smiles: p.smiles, molfile: p.molfile ?? null },
     }).then(
       () => onSaved?.(),
-      (err: unknown) => toast(`Not saved: ${errorDetail(err)}`, "error"),
+      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
     );
   };
   return (

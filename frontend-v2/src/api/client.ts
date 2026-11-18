@@ -43,6 +43,24 @@ export class ApiError extends Error {
   }
 }
 
+/** The text to show for a failed request: the API's detail, else a fixed sentence. */
+export function errorText(err: unknown): string {
+  return err instanceof ApiError ? err.detail : "Something went wrong.";
+}
+
+/** Gone: 404 (missing, deleted, expired or another browser's; the API does not say which) or 422. */
+export function isGone(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 422);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Paper and image ids are UUIDs. Any other id (a mistyped or cut link) gets the gone page at
+ * once, without a request the API would answer 422.
+ */
+export const isUuid = (id: string): boolean => UUID.test(id);
+
 function fallbackDetail(status: number): string {
   if (status === 413) return TOO_LARGE;
   if (status === 502 || status === 503 || status === 504) return BUSY;

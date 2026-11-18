@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ApiError, api } from "../api/client";
+import { ApiError, api, errorText } from "../api/client";
 import { keys, refreshPaper, useQueue, useSteps } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import type { PaperDetail, StepOut } from "../api/types";
@@ -83,7 +83,7 @@ export default function StatusBar({ paper, steps, failedPages, checkFailure, liv
       }
       // the 409 details ("Page has not failed", "Page is still running", "No retries left
       // for this page") are written for people
-      toast(error instanceof ApiError ? error.detail : "Something went wrong.", "error");
+      toast(errorText(error), "error");
     }
   }
 

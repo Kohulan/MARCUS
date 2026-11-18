@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
 import { BulkPartialError, useBulkCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
@@ -10,7 +10,7 @@ import { CardCompare } from "./Compare";
 import { CardEditor } from "./SegmentEditor";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
-import { errorDetail as detail, useCardActions } from "./useCardActions";
+import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./grid.css";
@@ -184,7 +184,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
       requestAnimationFrame(() => focusCard(null));
     } catch (err) {
       toast(
-        err instanceof BulkPartialError ? err.message : `Not saved: ${detail(err)}`,
+        err instanceof BulkPartialError ? err.message : `Not saved: ${errorText(err)}`,
         "error",
       );
     } finally {

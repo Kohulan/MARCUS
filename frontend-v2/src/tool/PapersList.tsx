@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ApiError, api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { keys } from "../api/queries";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
 import StateBadge from "../ui/StateBadge";
+import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import "./tool.css";
 
@@ -52,10 +53,6 @@ export function ItemState({ status, notRead }: { status: string; notRead?: boole
   return <StateBadge state="reading" />;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof ApiError ? error.detail : "Something went wrong.";
-}
-
 function PaperRow({ paper }: { paper: PaperSummary }) {
   const client = useQueryClient();
   const toast = useToast();
@@ -92,7 +89,6 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
     }
   }
 
-  const name = paper.title?.trim() || paper.display_name;
   const askId = `ask-${paper.id}`;
 
   return (
@@ -101,7 +97,7 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
       </div>
       <div className="item__main">
-        <p className="item__name">{name}</p>
+        <p className="item__name">{paperName(paper)}</p>
         {paper.title?.trim() ? <p className="item__file">{paper.display_name}</p> : null}
         <p className="item__counts">{countsText(paper)}</p>
       </div>

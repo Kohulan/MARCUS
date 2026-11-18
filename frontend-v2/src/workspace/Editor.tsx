@@ -4,7 +4,7 @@
 // the note; the single-image view keeps it local). Ketcher loads only while this is open:
 // the iframe is created with the dialog.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError } from "../api/client";
+import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
@@ -35,8 +35,6 @@ export function editorChange(
   return { status, structure };
 }
 
-const FALLBACK = "Something went wrong.";
-
 export default function Editor({ initial, onSave, onClose }: EditorProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -60,7 +58,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
       await latest.current.onSave(structure);
       latest.current.onClose();
     } catch (err) {
-      setError(`Save failed: ${err instanceof ApiError ? err.detail : FALLBACK}`);
+      setError(`Save failed: ${errorText(err)}`);
       field.current?.focus(); // the disabled button dropped it; the field is where to fix it
     } finally {
       savingNow.current = false;

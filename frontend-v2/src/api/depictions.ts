@@ -18,7 +18,7 @@
 // The browser HTTP cache still applies (Cache-Control: private, max-age=86400 and the
 // `v=<depictionKey>` in the URL), so a revisit is served from disk.
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, ownerReady, toApiError } from "./client";
+import { isGone, ownerReady, toApiError } from "./client";
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const DEFAULT_WAIT_S = 5;
@@ -122,10 +122,6 @@ export function createDepictionLoader(
 /** The one loader of the tab. */
 export const depictionLoader = createDepictionLoader({ gate: ownerReady });
 
-/** Nothing to draw (no structure, or one CDK cannot draw): a retry would get the same. */
-const nothingToDraw = (err: unknown) =>
-  err instanceof ApiError && (err.status === 404 || err.status === 422);
-
 /**
  * A blob: URL for `<Structure src>` (null while it loads or for a null `url`); `failed` when
  * the drawing cannot be had. `retry` (null otherwise) loads it again when the failure was
@@ -159,7 +155,8 @@ export function useDepiction(url: string | null): {
       },
       (err: unknown) => {
         if (ctrl.signal.aborted) return;
-        setState({ url, tries, src: null, failed: true, again: !nothingToDraw(err) });
+        // Gone (404, 422): nothing to draw, so a retry would get the same.
+        setState({ url, tries, src: null, failed: true, again: !isGone(err) });
       },
     );
     return () => {

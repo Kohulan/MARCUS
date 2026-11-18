@@ -574,3 +574,49 @@
   text-underline-offset: 0.25em;
   color: var(--green);
 }
+
+/* Gone (404), or a paper or image that could not be opened ----------------- */
+
+.gone {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.gone__sheet {
+  position: relative;
+  max-width: 560px;
+  padding: 40px 44px 36px;
+  border: 1px dashed var(--control-border);
+}
+
+.gone__corner {
+  position: absolute;
+  top: -8px;
+  left: -6px;
+  padding: 0 2px;
+  background-color: var(--paper);
+  font-size: 16px;
+}
+
+.gone .gone__title {
+  font-size: 32px;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.gone .gone__why {
+  margin-top: 14px;
+  max-width: 46ch;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.gone__bed {
+  display: inline-flex;
+  margin-top: 24px;
+  padding: 8px;
+}
