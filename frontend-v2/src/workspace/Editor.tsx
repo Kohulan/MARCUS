@@ -106,10 +106,16 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
     [close, save],
   );
 
+  // The field saves only a SMILES the curator changed: saving the starting text would drop
+  // the stored molfile (and accept an unchecked structure) on one stray Enter, since the
+  // dialog opens with the focus in this field.
+  const startSmiles = (initial.smiles ?? "").trim();
+  const fieldValue = smiles.trim();
+  const fieldChanged = fieldValue !== "" && fieldValue !== startSmiles;
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const value = smiles.trim();
-    if (value) void save({ smiles: value, molfile: null });
+    if (fieldChanged) void save({ smiles: fieldValue, molfile: null });
   };
 
   return (
@@ -152,7 +158,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
           autoCapitalize="off"
           autoCorrect="off"
         />
-        <GlassButton tint="green" size="sm" type="submit" disabled={saving || !smiles.trim()}>
+        <GlassButton tint="green" size="sm" type="submit" disabled={saving || !fieldChanged}>
           Save SMILES
         </GlassButton>
       </form>

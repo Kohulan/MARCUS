@@ -151,6 +151,26 @@ describe("Editor", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  it("an unchanged SMILES cannot be saved: the button is off and Enter does nothing", () => {
+    const { onSave } = renderEditor(); // starts with c1ccccc1 and a stored molfile
+    const field = screen.getByLabelText("SMILES");
+    const button = screen.getByRole("button", { name: "Save SMILES" });
+    expect(field).toHaveFocus();
+    expect(button).toBeDisabled();
+    fireEvent.submit(field.closest("form") as HTMLFormElement); // Enter in the field
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "  c1ccccc1 " } }); // only spaces differ
+    expect(button).toBeDisabled();
+    fireEvent.submit(field.closest("form") as HTMLFormElement);
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "c1ccccc1C" } });
+    expect(button).toBeEnabled();
+    fireEvent.change(field, { target: { value: "c1ccccc1" } }); // back to the start
+    expect(button).toBeDisabled();
+  });
+
   it("an empty SMILES field cannot be saved", () => {
     renderEditor({ initial: { smiles: null, molfile: null } });
     expect(screen.getByLabelText("SMILES")).toHaveValue("");
@@ -171,6 +191,7 @@ describe("Editor", () => {
         throw new ApiError(422, "SMILES could not be parsed");
       },
     });
+    fireEvent.change(screen.getByLabelText("SMILES"), { target: { value: "C1CC" } });
     fireEvent.click(screen.getByRole("button", { name: "Save SMILES" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Save failed: SMILES could not be parsed",
@@ -198,6 +219,8 @@ describe("Editor", () => {
     const { onSave } = renderEditor({
       onSave: () => new Promise<void>((resolve) => (finish = resolve)),
     });
+    fireEvent.change(screen.getByLabelText("SMILES"), { target: { value: "CC" } });
+    expect(screen.getByRole("button", { name: "Save SMILES" })).toBeEnabled();
     fromKetcher({ type: "marcus:save", molfile: "M", smiles: "C" });
     fromKetcher({ type: "marcus:save", molfile: "M", smiles: "C" });
     expect(screen.getByRole("button", { name: "Save SMILES" })).toBeDisabled();
