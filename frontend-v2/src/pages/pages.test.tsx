@@ -148,6 +148,10 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain(
       "To show the paper's title, the server looks up its DOI at Crossref or DataCite; only the DOI is sent.",
     );
+    // R-F22: the one request the browser makes to COCONUT without a click
+    expect(container.textContent).toContain(
+      "Opening a paper with a DOI asks COCONUT how many structures it already has for that DOI.",
+    );
   });
 
   it("About and Disclaimer carry v2 facts and nothing about OpenAI", () => {

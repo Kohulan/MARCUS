@@ -72,8 +72,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   // either is open.
   const [comparingId, setComparingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const comparing = comparingId !== null;
-  const editing = editingId !== null;
   const { started } = useCardActions(paper.id, ws.live.reconnect);
   const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
@@ -201,18 +199,17 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     setComparingId(id);
   };
 
-  const held = help || comparing || editing; // a dialog is open over focus mode
+  // While Keys, Compare or the editor is open, the keys are theirs (ui/keysHeld, one DOM
+  // check in useReviewKeys): these run only with none of them open. Each closes itself.
   useReviewKeys({
-    accept: () => !held && decide("accepted"),
-    reject: () => !held && decide("rejected"),
-    edit: () => !held && openEditor(),
-    compare: () => !held && openCompare(),
-    prev: () => !held && step(-1),
-    next: () => !held && step(1),
-    // The editor closes itself (Esc in the dialog never gets here); a stray one leaves it be.
-    close: () =>
-      editing ? undefined : comparing ? setComparingId(null) : help ? setHelp(false) : onClose(id),
-    help: () => !comparing && !editing && setHelp((h) => !h),
+    accept: () => decide("accepted"),
+    reject: () => decide("rejected"),
+    edit: openEditor,
+    compare: openCompare,
+    prev: () => step(-1),
+    next: () => step(1),
+    close: () => onClose(id),
+    help: () => setHelp(true),
   });
 
   const segmentById = (sid: string | null) =>
@@ -369,7 +366,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
           {/* Molfile, image, PubChem (the SMILES has its own Copy). Edit and Compare are in
               the row above, with their keys. */}
-          <div className="fm-tools">
+          <div>
             <StructureActions
               name={paper.display_name}
               n={row?.n ?? index + 1}

@@ -435,10 +435,6 @@
 
 /* The card menu ("More"): last in the row, pushed to the card's right edge; its panel
    opens upwards and to the left, inside the card's width. */
-.card__actions:empty {
-  display: none;
-}
-
 .card-menu {
   position: relative;
   margin-left: auto;

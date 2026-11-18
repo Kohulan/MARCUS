@@ -668,6 +668,29 @@ describe("useReviewKeys", () => {
     expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
+  it("does nothing while a non-native modal (Compare, Keys) is open or the tool is hidden", () => {
+    const h = handlers();
+    renderHook(() => useReviewKeys(h));
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const hidden = document.createElement("div");
+    hidden.setAttribute("data-keys-off", "");
+    for (const el of [modal, hidden]) {
+      document.body.append(el);
+      try {
+        for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "Escape", "?"]) {
+          fireEvent.keyDown(document.body, { key });
+        }
+        for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
+      } finally {
+        el.remove();
+      }
+    }
+    fireEvent.keyDown(document.body, { key: "a" });
+    expect(h.accept).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores a held key for decisions (no repeat accept)", () => {
     const h = handlers();
     renderHook(() => useReviewKeys(h));

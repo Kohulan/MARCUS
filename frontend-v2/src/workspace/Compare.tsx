@@ -210,7 +210,7 @@ export default function Compare({
               tint="clear"
               size="sm"
               disabled={!canCommon}
-              pressed={common}
+              pressed={common && canCommon}
               onClick={() => setCommon((c) => !c)}
             >
               Show common part
@@ -327,7 +327,7 @@ function Drawing({
   // Not read yet: the word in the blank too (the Result row says it to a screen reader).
   if (!p)
     return (
-      <div className={`cmp-blank cmp-blank--${row.state}`}>
+      <div className={`cmp-blank cmp-blank--${row.state}${row.state === "failed" ? " hatch" : ""}`}>
         {row.state === "idle" && (
           <span aria-hidden="true">
             <StateBadge state="not-read" />

@@ -169,17 +169,50 @@ afterEach(() => {
 
 describe("header", () => {
   it("shows the title, the DOI as a text link, the counts and the page title", async () => {
-    renderWorkspace();
+    renderWorkspace({
+      paper: paper({
+        segments: [
+          seg("s1", { status: "accepted" }),
+          seg("s2", { status: "accepted" }),
+          seg("s3", { status: "rejected" }),
+          seg("s4", null),
+        ],
+      }),
+    });
     expect(await title()).toHaveTextContent("Alkaloids from Coffea leaves");
     const doi = screen.getByRole("link", { name: "10.1039/d5dd00313j" });
     expect(doi).toHaveAttribute("href", "https://doi.org/10.1039/d5dd00313j");
     expect(doi).toHaveAttribute("rel", "noopener noreferrer");
     const counts = screen.getByRole("list", { name: "Counts" });
-    expect(counts).toHaveTextContent("15 structures");
-    expect(counts).toHaveTextContent("9 accepted");
-    expect(counts).toHaveTextContent("4 to check");
-    expect(counts).toHaveTextContent("2 rejected");
+    expect(counts).toHaveTextContent("4 structures");
+    expect(counts).toHaveTextContent("2 accepted");
+    expect(counts).toHaveTextContent("1 to check");
+    expect(counts).toHaveTextContent("1 rejected");
+    expect(counts).not.toHaveTextContent("failed");
     await waitFor(() => expect(document.title).toBe("Alkaloids from Coffea leaves · MARCUS"));
+  });
+
+  it("counts as the filters do: a failed structure is Failed, not to check (C-I3)", async () => {
+    const failed = (id: string) =>
+      step({ kind: "ocsr", segment_id: id, status: "failed", engine: "decimer", error_class: "timeout" });
+    renderWorkspace({
+      // the server's to_review counts the failed ones too
+      paper: paper({
+        structures: 5,
+        accepted: 0,
+        rejected: 0,
+        to_review: 5,
+        segments: [seg("s1", null), seg("s2", null), seg("s3", null, []), seg("s4", null, []), seg("s5", null, [])],
+      }),
+      steps: [failed("s3"), failed("s4"), failed("s5")],
+    });
+    await title();
+    const counts = screen.getByRole("list", { name: "Counts" });
+    await waitFor(() => expect(counts).toHaveTextContent("2 to check"));
+    expect(counts).toHaveTextContent("3 failed");
+    const filters = screen.getByRole("group", { name: "Filter" });
+    expect(within(filters).getByRole("button", { name: /To check/ })).toHaveTextContent("2");
+    expect(within(filters).getByRole("button", { name: /Failed/ })).toHaveTextContent("3");
   });
 
   it("falls back to the display name without a title, and leaves the DOI out without one", async () => {
@@ -316,6 +349,19 @@ describe("view in the URL", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(screen.getByRole("region", { name: "Review view" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent(`/app/papers/${ID}?s=g7`);
+  });
+
+  it("→ in focus mode does not re-render the hidden grid's cards", async () => {
+    const segments = Array.from({ length: 20 }, (_, i) => seg(`s${i + 1}`, null));
+    const url = vi.spyOn(api, "depictionUrl");
+    renderWorkspace({ paper: paper({ segments }), search: "?s=s1&focus=1" });
+    await screen.findByRole("region", { name: /^Focus/ });
+    url.mockClear();
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("s=s2"));
+    // Focus mode draws its own structure and the two cards whose `current` changed render
+    // again; the other 18 memoised cards stay as they were (41 calls before).
+    expect(url.mock.calls.length).toBeLessThan(10);
   });
 });
 

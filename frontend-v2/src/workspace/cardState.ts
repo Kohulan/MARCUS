@@ -94,3 +94,19 @@ export function filterOf(state: CardState): Exclude<GridFilter, "all"> {
   if (state === "reading" || state === "not-read") return "to-check";
   return state;
 }
+
+/**
+ * How many structures each filter holds: the grid's filter strip and the workspace header
+ * both count with this, so "N to check" means the same in both (a Failed one is not To check).
+ */
+export function filterCounts(rows: readonly { state: CardState }[]): Record<GridFilter, number> {
+  const c: Record<GridFilter, number> = {
+    all: rows.length,
+    "to-check": 0,
+    accepted: 0,
+    rejected: 0,
+    failed: 0,
+  };
+  for (const r of rows) c[filterOf(r.state)] += 1;
+  return c;
+}

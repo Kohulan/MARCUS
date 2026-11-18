@@ -13,6 +13,7 @@ import GonePage from "./GonePage";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { coconutStructures, submissionTitle } from "./coconutList";
+import { filterCounts } from "./cardState";
 import StatusBar from "./StatusBar";
 import { useReviewRows } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
@@ -110,6 +111,7 @@ function Frame({ id }: { id: string }) {
 function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const reasonId = useId();
   const rows = useReviewRows(paper, ws.segments, ws.steps);
+  const counts = useMemo(() => filterCounts(rows), [rows]);
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -139,7 +141,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     [ws.segments, paper.engine],
   );
   const [sending, setSending] = useState(false);
-  const count = toCoconut.length;
+  const sendCount = toCoconut.length;
   return (
     <main className="ws">
       <header className="ws-head">
@@ -159,7 +161,6 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             )}
             {inCoconut && (
               <a
-                className="ws-meta__coconut"
                 href={inCoconut.url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -174,14 +175,14 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           <div className="ws-send">
             <GlassButton
               tint="green"
-              disabled={count === 0}
-              describedBy={count === 0 ? reasonId : undefined}
+              disabled={sendCount === 0}
+              describedBy={sendCount === 0 ? reasonId : undefined}
               hasPopup="dialog"
               onClick={() => setSending(true)}
             >
-              {`Send ${count} to COCONUT`}
+              {`Send ${sendCount} to COCONUT`}
             </GlassButton>
-            {count === 0 && (
+            {sendCount === 0 && (
               <span id={reasonId} className="ws-send__why">
                 Accept a structure first
               </span>
@@ -204,11 +205,14 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             </button>
           ))}
         </div>
+        {/* From the rows, as the grid's filters count (the server's to_review also holds
+            the failed ones); the tool home, which has no rows, keeps the server's counts. */}
         <ul className="ws-counts" aria-label="Counts">
-          <li>{`${paper.structures} ${paper.structures === 1 ? "structure" : "structures"}`}</li>
-          <li className="ws-counts__accepted">{`${paper.accepted} accepted`}</li>
-          <li className="ws-counts__check">{`${paper.to_review} to check`}</li>
-          <li className="ws-counts__rejected">{`${paper.rejected} rejected`}</li>
+          <li>{`${counts.all} ${counts.all === 1 ? "structure" : "structures"}`}</li>
+          <li className="ws-counts__accepted">{`${counts.accepted} accepted`}</li>
+          <li className="ws-counts__check">{`${counts["to-check"]} to check`}</li>
+          <li className="ws-counts__rejected">{`${counts.rejected} rejected`}</li>
+          {counts.failed > 0 && <li className="ws-counts__failed">{`${counts.failed} failed`}</li>}
         </ul>
       </div>
 

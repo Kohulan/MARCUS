@@ -161,10 +161,6 @@
   border: 1px dashed var(--orange);
 }
 
-.cmp-blank--failed {
-  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
-}
-
 .cmp-blank--idle {
   border: 1px solid var(--hair);
 }

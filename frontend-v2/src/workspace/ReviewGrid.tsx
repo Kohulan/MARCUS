@@ -5,7 +5,7 @@ import { BulkPartialError, useBulkCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
-import { filterOf, hasDrawing, type GridFilter } from "./cardState";
+import { filterCounts, filterOf, hasDrawing, type GridFilter } from "./cardState";
 import { CardCompare } from "./Compare";
 import { CardEditor } from "./SegmentEditor";
 import GridFilters from "./GridFilters";
@@ -68,17 +68,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
 
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
 
-  const counts = useMemo(() => {
-    const c: Record<GridFilter, number> = {
-      all: rows.length,
-      "to-check": 0,
-      accepted: 0,
-      rejected: 0,
-      failed: 0,
-    };
-    for (const r of rows) c[filterOf(r.state)] += 1;
-    return c;
-  }, [rows]);
+  const counts = useMemo(() => filterCounts(rows), [rows]);
 
   const shown = useMemo(
     () => (filter === "all" ? rows : rows.filter((r) => filterOf(r.state) === filter)),
@@ -139,7 +129,11 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   }, []);
 
   // Enter or double-click: focus mode on that structure (a new history entry; Back closes it).
-  const onOpen = openFocus;
+  // Stable for the 200 memoised cards: openFocus changes with every URL change (← / → in
+  // focus mode), so it is read through a ref, as PaperView does.
+  const latestOpen = useRef(openFocus);
+  latestOpen.current = openFocus;
+  const onOpen = useCallback((segmentId: string) => latestOpen.current(segmentId), []);
 
   /** Focus a card of the grid by id (null: the first card, else the filter strip). */
   const focusCard = useCallback((segmentId: string | null) => {

@@ -245,6 +245,40 @@ describe("Compare", () => {
     );
   });
 
+  it("Show common part is not pressed while it is disabled (fewer than 2 valid)", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    vi.spyOn(api, "mcs").mockResolvedValue({
+      mcs_smarts: "[#6]-[#6]",
+      atom_count: 2,
+      bond_count: 1,
+      original_molecules: [],
+    });
+    const two = [
+      prediction({ engine: "decimer", smiles: "CCO" }),
+      prediction({ engine: "molnextr", smiles: "CCN" }),
+    ];
+    const { rerender, props } = renderCompare({ predictions: two });
+    const toggle = screen.getByRole("button", { name: "Show common part" });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    rerender(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Compare {...props} predictions={[two[0]!]} />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    const now = screen.getByRole("button", { name: "Show common part" });
+    expect(now).toBeDisabled();
+    expect(now).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("a common part that fails (not a 429) says so", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,

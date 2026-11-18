@@ -234,7 +234,8 @@
 /* Each count carries its state's shape: round green, square orange, a charcoal cross. */
 .ws-counts__accepted::before,
 .ws-counts__check::before,
-.ws-counts__rejected::before {
+.ws-counts__rejected::before,
+.ws-counts__failed::before {
   display: inline-block;
   margin-right: 7px;
   vertical-align: 1px;
@@ -260,6 +261,15 @@
   content: "✕" / ""; /* decorative: the word follows (older engines keep the line above) */
   vertical-align: 0;
   color: var(--charcoal);
+}
+
+/* Failed: the hatch of a failed card, drawn dark enough to read at 8 px. */
+.ws-counts__failed::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  box-shadow: inset 0 0 0 1px var(--muted);
+  background: repeating-linear-gradient(135deg, var(--muted) 0 1px, var(--paper) 1px 3px);
 }
 
 /* Status bar --------------------------------------------------------------- */

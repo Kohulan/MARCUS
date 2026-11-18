@@ -56,7 +56,7 @@ export default function DesktopOnly({ children }: { children: ReactNode }) {
   if (!mounted) return note;
   return (
     <>
-      {/* data-keys-off: the review keys go inert while the tool is hidden (ui/modal.ts). */}
+      {/* data-keys-off: the review keys go inert while the tool is hidden (ui/keysHeld.ts). */}
       <div className="desktop-only__tool" hidden={!wide} data-keys-off={wide ? undefined : ""}>
         {children}
       </div>

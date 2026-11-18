@@ -57,7 +57,8 @@ export default function Privacy() {
           When you send structures to COCONUT, your browser sends them straight to COCONUT
           with your COCONUT login. MARCUS keeps that login only in the open browser tab and
           never sends it to its own server. Looking a structure up in PubChem or COCONUT sends
-          that structure from your browser to that service.
+          that structure from your browser to that service. Opening a paper with a DOI asks
+          COCONUT how many structures it already has for that DOI.
         </p>
       </InfoSection>
 
