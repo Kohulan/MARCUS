@@ -9,6 +9,8 @@
  *   text is orange-ink; text on an orange fill is on-orange.
  * - accepted is 4.4:1 on sunken: accepted text sits on paper or surface only.
  * - States always pair a colour with a word and a shape, never colour alone.
+ * - The sheet is flat: only what floats above it (glass pills, menus, toasts, dialogs)
+ *   takes a lift, and every dialog dims the page with the one scrim (DESIGN.md Elevation).
  */
 
 :root {
@@ -48,6 +50,19 @@
   /* Browser surfaces */
   --focus: var(--green);
   --selection: #DCEBDF;
+
+  /* Elevation: one green-black ambient family, one lift per kind of floating object */
+  --lift-glass: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+  --lift-menu: 0 12px 28px -10px rgba(15, 30, 22, 0.35);
+  --lift-dialog: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+  --lift-pill-solid: 0 6px 16px -8px rgba(15, 30, 22, 0.35);
+  /* The glass pill's inner light: a top highlight, a soft rim and a bottom shade */
+  --glass-shine:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 3px rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22);
+  --scrim: rgba(28, 33, 29, 0.42);
 
   /* Type */
   --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;

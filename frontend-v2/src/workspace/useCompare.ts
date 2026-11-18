@@ -3,18 +3,17 @@
 // /tools routes (per-owner bucket of 60/min); each is a TanStack Query entry keyed by its
 // inputs with staleTime Infinity, so a second look at the same structures costs nothing.
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, svgBlobUrl } from "../api/client";
+import { useCallback, useState } from "react";
+import { api, ApiError } from "../api/client";
 import { ENGINES, engineName } from "../api/engines";
 import { reasonText } from "../api/reasons";
-import type { CompareReply, DepictReply, Engine, PredictionOut } from "../api/types";
+import { isStepActive } from "../api/status";
+import type { CompareReply, Engine, PredictionOut } from "../api/types";
 
 export type CompareTarget = { kind: "segment" | "image"; id: string };
 
 /** One OCSR step of the target, newest first (paper steps or ImageStepOut). */
 export type CompareStep = { engine: string | null; status: string; error_class: string | null };
-
-const ACTIVE = new Set(["pending", "queued", "running"]);
 
 export type EngineRow = {
   engine: string;
@@ -45,7 +44,7 @@ export function engineRows(
     const label = engineName(engine);
     if (prediction) return { engine, label, prediction, state: "done", reason: null };
     const asked = requested.get(engine);
-    if (own.some((s) => ACTIVE.has(s.status)) || (asked !== undefined && own.length <= asked)) {
+    if (own.some((s) => isStepActive(s.status)) || (asked !== undefined && own.length <= asked)) {
       return { engine, label, prediction, state: "reading", reason: null };
     }
     if (own[0]?.status === "failed") {
@@ -177,26 +176,34 @@ export function useSimilarity(rows: EngineRow[]): Pair[] {
   return pairs;
 }
 
+/** A SMILES as a molfile from /tools/smiles-to-molfile: key ["molfile", smiles]. */
+export function molfileQuery(smiles: string) {
+  return {
+    queryKey: ["molfile", smiles] as const,
+    queryFn: () => api.smilesToMolfile(smiles),
+    staleTime: Infinity,
+  };
+}
+
 /**
- * The common part of the distinct valid SMILES: `smilesToMolfile` per SMILES (["molfile",
- * smiles]), then `mcs` over the molfiles (["mcs", ...sortedMolfiles]). `highlight` is the MCS
- * SMARTS: null while asking, when off, or when there is none (`none`).
+ * The common part of the valid predictions' distinct structures: each one's own molfile, or
+ * `smilesToMolfile` for one sent without (molfileQuery), then `mcs` over the molfiles
+ * (["mcs", ...sortedMolfiles]). `highlight` is the MCS SMARTS: null while asking, when off,
+ * or when there is none (`none`).
  */
 export function useCommonPart(
-  smiles: string[],
+  predictions: Pick<PredictionOut, "smiles" | "molfile">[],
   enabled: boolean,
 ): { highlight: string | null; none: boolean; errors: unknown[] } {
-  const distinct = sorted([...new Set(smiles)]);
+  const own = new Map<string, string | null>();
+  for (const p of predictions) if (!own.get(p.smiles)) own.set(p.smiles, p.molfile || null);
+  const distinct = sorted([...own.keys()]);
   const on = enabled && distinct.length >= 2;
-  const molfiles = useQueries({
-    queries: distinct.map((s) => ({
-      queryKey: ["molfile", s] as const,
-      queryFn: () => api.smilesToMolfile(s),
-      staleTime: Infinity,
-      enabled: on,
-    })),
+  const toConvert = distinct.filter((s) => own.get(s) === null);
+  const converted = useQueries({
+    queries: toConvert.map((s) => ({ ...molfileQuery(s), enabled: on })),
   });
-  const files = molfiles.map((q) => q.data);
+  const files = distinct.map((s) => own.get(s) ?? converted[toConvert.indexOf(s)]?.data);
   const ready = on && files.every((f): f is string => typeof f === "string");
   const key = ready ? sorted(files as string[]) : [];
   const mcs = useQuery({
@@ -209,28 +216,6 @@ export function useCommonPart(
   return {
     highlight: on ? smarts : null,
     none: on && mcs.data !== undefined && smarts === null,
-    errors: [...molfiles.map((q) => q.error), mcs.error].filter((e) => e !== null),
+    errors: [...converted.map((q) => q.error), mcs.error].filter((e) => e !== null),
   };
-}
-
-/** A /tools/depict drawing: key ["depict", smiles, highlight] (null: a plain drawing). */
-export function depictQuery(smiles: string, highlight: string | null) {
-  return {
-    queryKey: ["depict", smiles, highlight] as const,
-    queryFn: (): Promise<DepictReply> =>
-      highlight === null ? api.depict(smiles) : api.depict(smiles, { highlight }),
-    staleTime: Infinity,
-  };
-}
-
-/** A blob: URL for a depict reply (null without one), revoked when it changes or unmounts. */
-export function useReplyUrl(reply: DepictReply | undefined): string | null {
-  const [shown, setShown] = useState<{ reply: DepictReply; url: string } | null>(null);
-  useEffect(() => {
-    if (!reply) return;
-    const url = svgBlobUrl(reply);
-    setShown({ reply, url });
-    return () => URL.revokeObjectURL(url);
-  }, [reply]);
-  return reply !== undefined && shown?.reply === reply ? shown.url : null;
 }

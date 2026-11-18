@@ -122,7 +122,7 @@
   position: relative;
   border: 1px solid var(--hair);
   background-color: var(--surface);
-  box-shadow: 0 1px 2px rgb(28 33 29 / 0.06), 0 10px 24px -14px rgb(28 33 29 / 0.3);
+  box-shadow: 0 1px 0 var(--hair); /* a drawing sheet lies flat */
 }
 
 /* Until it loads, a lazy page holds an A4 page's room (2480 × 3508 px at 300 DPI). */
@@ -183,6 +183,10 @@
 .pv-marker {
   --mark: var(--orange);
   position: absolute;
+  top: var(--t);
+  left: var(--l);
+  width: var(--w);
+  height: var(--h);
   padding: 0;
   border: 0;
   background: none;
@@ -244,6 +248,18 @@
   outline-offset: -1px;
   background-color: var(--paper);
   color: var(--ink);
+}
+
+/* The tag hangs above the box, over the page's own text: the pointer on the marker or its
+   tag fades it, so the words under it can be read. */
+.pv-marker:hover .pv-marker__tag {
+  opacity: 0.15;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pv-marker__tag {
+    transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }
 
 .pv-marker:hover {

@@ -4,11 +4,10 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { api, ApiError } from "../api/client";
+import { api, errorText } from "../api/client";
 import { depictionKey } from "../api/depictionKey";
 import { useDepiction } from "../api/depictions";
 import { engineName } from "../api/engines";
@@ -23,25 +22,28 @@ import Stamp from "../ui/Stamp";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
+import { useFocusRescue } from "../ui/focus";
 import { useToast } from "../ui/Toasts";
-import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardState";
-import { SegmentCompare } from "./Compare";
+import {
+  hasDrawing,
+  metaText,
+  sentence,
+  shownStructure,
+  STATE_WORD,
+  type CardState,
+} from "./cardState";
 import KeyHelp from "./KeyHelp";
-import { SegmentEditor } from "./SegmentEditor";
+import { boxStyle } from "./pageBox";
 import StructureActions from "./StructureActions";
-import { useCardActions } from "./useCardActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./focus.css";
 
 /** After A or R the stamp lands (160 ms), then focus mode moves on (none under reduced motion). */
-export const ADVANCE_MS = 250;
+const ADVANCE_MS = 250;
 
 type Decision = "accepted" | "rejected";
-type Landed = { id: string; status: Decision; seq: number };
-
-const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Something went wrong.");
 
 /** A blank note is no note. */
 const noteOf = (text: string): string | null => (text.trim() === "" ? null : text);
@@ -67,16 +69,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const reduce = usePrefersReducedMotion();
   const root = useRef<HTMLElement>(null);
   const [help, setHelp] = useState(false);
-  // Compare engines (C) and the structure editor (E) over focus mode, each pinned to the
-  // segment it opened on (a pending A/R move must not swap it); the review keys hold while
-  // either is open.
-  const [comparingId, setComparingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const { started } = useCardActions(paper.id, ws.live.reconnect);
-  const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
-  const seq = useRef(0);
-  const pending = useRef(new Set<string>()); // decided, save not answered yet
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -85,8 +78,13 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const index = rows.findIndex((r) => r.segmentId === id);
   const row = rows[index];
   const tag = structureTag(row?.n ?? index + 1);
-  const mine = landed !== null && landed.id === id ? landed : null;
-  const state: CardState = mine?.status ?? row?.state ?? "to-check";
+  // The save is optimistic (useSaveCuration): a decision is in the row at once.
+  const state: CardState = row?.state ?? "to-check";
+  // Each A or R pressed here lands its stamp, also on a structure already decided (a fresh
+  // key per decision); a failed save takes it back.
+  const [landing, setLanding] = useState<{ id: string; n: number } | null>(null);
+  const seq = useRef(0);
+  const mine = landing !== null && landing.id === id ? landing : null;
   const stored = segment.curation?.note ?? null;
   // A structure to accept: a curated one or a valid prediction.
   const drawable = hasDrawing(segment);
@@ -115,15 +113,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
   // After a move (a marker click turns that marker into the current one, a step can disable
   // the focused button), the keyboard stays in focus mode instead of falling to the page.
-  useEffect(() => {
-    const active = document.activeElement;
-    const lost =
-      active === null ||
-      active === document.body ||
-      !active.isConnected ||
-      (active instanceof HTMLButtonElement && active.disabled);
-    if (lost) root.current?.focus({ preventScroll: true });
-  }, [id, drawable]);
+  useFocusRescue(root, [id, drawable]);
 
   /**
    * The review keys act only inside the region (useReviewKeys), so a step or decision made
@@ -147,7 +137,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     const at = list.findIndex((r) => r.segmentId === from);
     for (let k = 1; k < list.length; k++) {
       const r = list[(at + k + list.length) % list.length]!;
-      if (r.segmentId === from || pending.current.has(r.segmentId)) continue;
+      if (r.segmentId === from) continue;
       if (r.state === "to-check") {
         go(r.segmentId);
         return;
@@ -158,20 +148,16 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const decide = (status: Decision) => {
     if (status === "accepted" && !drawable) return; // nothing to accept (ruling on F7 M2)
     holdFocus();
-    const n = ++seq.current;
-    setLanded({ id, status, seq: n });
-    pending.current.add(id);
     const typed = text;
-    // curationBody keeps an edited smiles and molfile; the note goes with the decision.
+    const n = ++seq.current;
+    setLanding({ id, n });
+    // curationBody keeps an edited smiles and molfile; the note goes with the decision. A
+    // failed save rolls the row back.
     save(id, { status, note: noteOf(text) }).then(
-      () => {
-        pending.current.delete(id);
-        dropDraft(id, typed);
-      },
+      () => dropDraft(id, typed),
       (err: unknown) => {
-        pending.current.delete(id);
-        setLanded((l) => (l !== null && l.seq === n ? null : l));
-        toast(`Not saved: ${detail(err)}`, "error");
+        setLanding((l) => (l !== null && l.n === n ? null : l));
+        toast(`Not saved: ${errorText(err)}`, "error");
       },
     );
     clearTimer();
@@ -189,7 +175,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     const typed = text;
     save(id, { note: next }).then(
       () => dropDraft(id, typed),
-      (err: unknown) => toast(`Note not saved: ${detail(err)}`, "error"),
+      (err: unknown) => toast(`Note not saved: ${errorText(err)}`, "error"),
     );
   };
 
@@ -200,14 +186,15 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     root.current?.focus({ preventScroll: true });
   };
 
-  // Opening the editor or Compare cancels the move after A or R: they work on this structure.
+  // Opening the editor or Compare cancels the move after A or R: they work on this structure
+  // (the workspace pins the dialog to it; the review keys hold while it is open).
   const openEditor = () => {
     clearTimer();
-    setEditingId(id);
+    ws.openEditor(id);
   };
   const openCompare = () => {
     clearTimer();
-    setComparingId(id);
+    ws.openCompare(id);
   };
 
   // The keys act only while focus is inside this region. While Keys, Compare or the editor
@@ -224,36 +211,29 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     help: () => setHelp(true),
   });
 
-  const segmentById = (sid: string | null) =>
-    sid === null ? undefined : sid === id ? segment : ws.segments.find((s) => s.id === sid);
-  const comparingSegment = segmentById(comparingId);
-  const editingSegment = segmentById(editingId);
-  // A pinned structure deleted live (another tab): its dialog is gone, so the keys come back.
-  const comparingGone = comparingId !== null && comparingSegment === undefined;
-  const editingGone = editingId !== null && editingSegment === undefined;
-  useEffect(() => {
-    if (comparingGone) setComparingId(null);
-    if (editingGone) setEditingId(null);
-  }, [comparingGone, editingGone]);
-  const tagOf = (sid: string) => {
-    const at = rows.findIndex((r) => r.segmentId === sid);
-    return structureTag(rows[at]?.n ?? at + 1);
-  };
+  const left = rows.filter((r) => r.state === "to-check").length;
 
-  const left = rows.filter(
-    (r) => (r.segmentId === id ? state : r.state) === "to-check",
-  ).length;
-
-  const depictionUrl = drawable ? api.depictionUrl(id, depictionKey(segment)) : null;
+  // Once per segment change, not per keystroke in the note (a curated molfile can be long).
+  const depictionUrl = useMemo(
+    () => (drawable ? api.depictionUrl(id, depictionKey(segment)) : null),
+    [drawable, id, segment],
+  );
   const depiction = useDepiction(depictionUrl);
-  const prediction = shownPrediction(segment, paper.engine);
+  const shown = shownStructure(segment, paper.engine);
+  const { smiles, edited } = shown;
+  const meta = metaText(shown);
   const curation = segment.curation;
-  const smiles = curation?.smiles ?? (curation?.molfile ? null : (prediction?.smiles ?? null));
-  const edited = Boolean(curation?.smiles || curation?.molfile);
   const rejected = state === "rejected";
 
   return (
-    <section ref={root} className="fm" aria-label={`Focus ${tag}`} tabIndex={-1}>
+    <section
+      ref={root}
+      className="fm"
+      aria-label={`Focus ${tag}`}
+      tabIndex={-1}
+      // A dialog whose opener is gone gives focus back here (ui/modal), so the keys stay live.
+      data-focus-home=""
+    >
       <div className="fm-bar">
         <GlassButton tint="clear" size="sm" onClick={() => onClose(id)}>
           Grid <Kbd>Esc</Kbd>
@@ -314,7 +294,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               {(state === "accepted" || state === "rejected") && (
                 <span className="fm-stamp">
                   <Stamp
-                    key={mine ? `landed-${mine.seq}` : "shown"}
+                    key={mine ? `landed-${mine.n}` : "shown"}
                     state={state}
                     size="lg"
                     animate={mine !== null}
@@ -329,14 +309,8 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           </div>
 
           <div className="fm-facts">
-            {smiles !== null && smiles !== "" && <Smiles value={smiles} struck={rejected} />}
-            {(edited || prediction) && (
-              <p className="fm-meta">
-                {edited
-                  ? "Edited"
-                  : `${engineName(prediction!.engine)} · ${prediction!.valid ? "Valid" : "Invalid"}`}
-              </p>
-            )}
+            {smiles !== null && <Smiles value={smiles} struck={rejected} />}
+            {meta !== null && <p className="fm-meta">{meta}</p>}
             {state === "failed" && row?.reason && <p className="fm-reason">{sentence(row.reason)}</p>}
           </div>
 
@@ -384,20 +358,18 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               n={row?.n ?? index + 1}
               smiles={smiles}
               curatedMolfile={curation?.molfile ?? null}
-              predictionMolfile={edited ? null : (prediction?.molfile ?? null)}
+              predictionMolfile={edited ? null : shown.molfile}
               depictionUrl={depictionUrl}
-              copySmiles={false}
             />
           </div>
         </div>
 
-        <PageWithBoxes
+        <FocusPage
           paperId={paper.id}
           pages={paper.pages}
           segment={segment}
           segments={ws.segments}
           rows={rows}
-          currentState={state}
           tag={tag}
           onPick={(to) => {
             holdFocus();
@@ -407,30 +379,8 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
       </div>
 
       {help && <KeyHelp onClose={() => setHelp(false)} />}
-      {comparingSegment && (
-        <SegmentCompare
-          paperId={paper.id}
-          segment={comparingSegment}
-          steps={ws.steps}
-          tag={tagOf(comparingSegment.id)}
-          onStarted={started}
-          onClose={() => setComparingId(null)}
-        />
-      )}
-      {editingSegment && (
-        <SegmentEditor
-          paperId={paper.id}
-          paperEngine={paper.engine}
-          segment={editingSegment}
-          onClose={() => setEditingId(null)}
-        />
-      )}
     </section>
   );
-}
-
-function sentence(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
 /** The newest prediction of each engine (predictions come newest first). */
@@ -453,22 +403,17 @@ function engineRows(predictions: PredictionOut[]): [string, ReactNode][] {
   return out;
 }
 
-const pct = (v: number, total: number) => `${+((v * 100) / total).toFixed(3)}%`;
-const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
-
 /**
  * The page image, scaled to its column, with the structure's box drawn as its marker and
- * `[nn]` tag. `bbox` is [x0, y0, x1, y1] in pixels of the 300 DPI page PNG, which is the
- * image served, so the box is placed in percent of the image's natural size. The page's
- * other structures carry quiet markers; clicking one opens it.
+ * `[nn]` tag (placed as in the Paper view: pageBox). The page's other structures carry
+ * quiet markers; clicking one opens it.
  */
-function PageWithBoxes({
+function FocusPage({
   paperId,
   pages,
   segment,
   segments,
   rows,
-  currentState,
   tag,
   onPick,
 }: {
@@ -477,7 +422,6 @@ function PageWithBoxes({
   segment: SegmentOut;
   segments: SegmentOut[];
   rows: ReviewRow[];
-  currentState: CardState;
   tag: string;
   onPick: (segmentId: string) => void;
 }) {
@@ -493,20 +437,7 @@ function PageWithBoxes({
       .map((s) => ({ segment: s, row: byId.get(s.id) }));
   }, [segments, rows, segment.page]);
 
-  const box = (s: SegmentOut): CSSProperties | undefined => {
-    if (!natural) return undefined;
-    const [a, b, c, d] = s.bbox;
-    const left = clamp(Math.min(a, c), natural.w);
-    const top = clamp(Math.min(b, d), natural.h);
-    const right = clamp(Math.max(a, c), natural.w);
-    const bottom = clamp(Math.max(b, d), natural.h);
-    return {
-      "--l": pct(left, natural.w),
-      "--t": pct(top, natural.h),
-      "--w": pct(right - left, natural.w),
-      "--h": pct(bottom - top, natural.h),
-    } as CSSProperties;
-  };
+  const box = (s: SegmentOut) => boxStyle(s.bbox, natural!.w, natural!.h);
 
   const label = `Page ${segment.page + 1}`;
   return (
@@ -529,7 +460,7 @@ function PageWithBoxes({
         {natural &&
           onPage.map(({ segment: s, row }) => {
             const current = s.id === segment.id;
-            const state = current ? currentState : (row?.state ?? "to-check");
+            const state = row?.state ?? "to-check";
             const t = structureTag(row?.n ?? 0);
             const cls = `fm-marker fm-marker--${state}${current ? " fm-marker--current" : ""}`;
             return current ? (

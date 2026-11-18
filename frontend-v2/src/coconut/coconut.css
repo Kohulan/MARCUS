@@ -18,11 +18,11 @@
   border: 1px solid var(--charcoal);
   background-color: var(--paper);
   color: var(--ink);
-  box-shadow: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+  box-shadow: var(--lift-dialog);
 }
 
 .coconut::backdrop {
-  background-color: rgba(28, 33, 29, 0.42);
+  background-color: var(--scrim);
 }
 
 .coconut[open]:not(:modal) {
@@ -95,6 +95,17 @@
 
 .coconut .coconut-field__label {
   color: var(--text-2);
+}
+
+/* "Required" beside the label: the same mono label, quieter (no asterisk). */
+.coconut-field__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.coconut .coconut-field__req {
+  color: var(--muted);
 }
 
 .coconut-input {

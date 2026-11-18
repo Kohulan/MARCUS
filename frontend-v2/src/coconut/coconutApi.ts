@@ -2,6 +2,7 @@
 // (CSP connect-src allows only https://coconut.naturalproducts.net for this). The token lives
 // in sessionStorage (memory when storage is blocked), goes only to COCONUT, never to /api/v2,
 // and is never logged. Every reply is third-party data: validated, and shown as text only.
+import { isRecord } from "../lookup/fetchJson";
 import type {
   OrganismDraft,
   Organism,
@@ -65,10 +66,6 @@ export function clearToken() {
 export class CoconutLoginError extends Error {}
 
 const JSON_HEADERS = { "Content-Type": "application/json", Accept: "application/json" };
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 async function readJson(res: Response): Promise<unknown> {
   try {

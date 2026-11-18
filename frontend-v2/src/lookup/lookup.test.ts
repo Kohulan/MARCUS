@@ -10,12 +10,15 @@ function json(body: unknown, status = 200) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("pubchemBySmiles", () => {
-  it("encodes # and + in the SMILES", async () => {
+  const found = (props: unknown[]) => json({ PropertyTable: { Properties: props } });
+
+  it("asks once, with # and + in the SMILES encoded", async () => {
     const f = vi.fn().mockResolvedValue(json({}, 404));
     vi.stubGlobal("fetch", f);
     await pubchemBySmiles("C#C[N+]=O");
+    expect(f).toHaveBeenCalledTimes(1);
     expect(f.mock.calls[0]![0]).toBe(
-      "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/cids/JSON?smiles=C%23C%5BN%2B%5D%3DO",
+      "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/property/Title/JSON?smiles=C%23C%5BN%2B%5D%3DO",
     );
   });
 
@@ -24,47 +27,30 @@ describe("pubchemBySmiles", () => {
     expect(await pubchemBySmiles("CCO")).toBeNull();
   });
 
-  it("returns the CID, title and url", async () => {
-    const f = vi
-      .fn()
-      .mockResolvedValueOnce(json({ IdentifierList: { CID: [2519] } }))
-      .mockResolvedValueOnce(
-        json({
-          PropertyTable: { Properties: [{ CID: 2519, Title: "Caffeine" }] },
-        }),
-      );
+  it("returns the CID, title and url from the one reply", async () => {
+    const f = vi.fn().mockResolvedValue(found([{ CID: 2519, Title: "Caffeine" }]));
     vi.stubGlobal("fetch", f);
     expect(await pubchemBySmiles("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")).toEqual({
       cid: 2519,
       name: "Caffeine",
       url: "https://pubchem.ncbi.nlm.nih.gov/compound/2519",
     });
-    expect(f.mock.calls[1]![0]).toBe(
-      "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/2519/property/Title/JSON",
-    );
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the CID when the title fails or is malformed", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(json({ IdentifierList: { CID: [7] } }))
-        .mockRejectedValueOnce(new Error("x")),
-    );
-    expect((await pubchemBySmiles("C"))?.name).toBeNull();
+  it("keeps the CID when the title is missing or malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(found([{ CID: 7, Title: 42 }])));
+    expect(await pubchemBySmiles("C")).toEqual({
+      cid: 7,
+      name: null,
+      url: "https://pubchem.ncbi.nlm.nih.gov/compound/7",
+    });
   });
 
   it("rejects bad shapes and the 0 placeholder", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(json({ IdentifierList: { CID: [0] } })),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(found([{ CID: 0 }])));
     expect(await pubchemBySmiles("C")).toBeNull();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(json({ IdentifierList: { CID: ["<img>"] } })),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(found([{ CID: "<img>" }])));
     expect(await pubchemBySmiles("C")).toBeNull();
   });
 

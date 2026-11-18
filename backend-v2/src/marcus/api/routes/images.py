@@ -17,7 +17,7 @@ from marcus.api.deps import (
     visible,
 )
 from marcus.api.limits import enforce_active_limits
-from marcus.api.read import IMAGE_HEADERS
+from marcus.api.read import IMAGE_HEADERS, waiting_ocsr_step
 from marcus.api.schemas import (
     ImageJobList,
     ImageJobOut,
@@ -34,7 +34,7 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, StepKind
 from marcus.core.models import ImageJob, Owner, Prediction, Step
-from marcus.core.pipeline import ACTIVE, new_image_job, request_image_ocsr, store_image
+from marcus.core.pipeline import new_image_job, request_image_ocsr, store_image
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -85,19 +85,7 @@ async def list_image_jobs(
             .order_by(ImageJob.created_at.desc(), ImageJob.id)
         )
     ).scalars()
-    return ImageJobList(
-        jobs=[
-            ImageJobSummary(
-                id=j.id,
-                display_name=j.display_name,
-                status=j.status,
-                engine=j.engine,
-                created_at=j.created_at,
-                expires_at=j.expires_at,
-            )
-            for j in rows
-        ]
-    )
+    return ImageJobList(jobs=[ImageJobSummary.model_validate(j) for j in rows])
 
 
 @router.get("/images/{job_id}/image")
@@ -122,22 +110,14 @@ async def run_image_prediction(
 ) -> StepAccepted:
     job = await get_owned_image_job(db, owner, job_id)
     require_engine_enabled(body.engine)
-    # Same duplicate-click guard as POST /segments/{id}/predictions.
-    waiting = await db.scalar(
-        select(Step.id)
-        .where(
-            Step.image_job_id == job.id,
-            Step.kind == StepKind.OCSR.value,
-            Step.engine == body.engine.value,
-            Step.status.in_(ACTIVE),
-        )
-        .limit(1)
-    )
+    # Repeat clicks must not flood the queue.
+    waiting = await waiting_ocsr_step(db, Step.image_job_id == job.id, body.engine)
     if waiting is not None:
         return StepAccepted(step_id=waiting)
     try:
         step = await db.run_sync(lambda s: request_image_ocsr(s, job.id, body.engine))
     except ValueError:
+        await db.rollback()
         raise not_found() from None  # deleted meanwhile
     step_id = step.id
     await db.commit()

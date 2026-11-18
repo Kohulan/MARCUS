@@ -480,7 +480,7 @@ async def test_prediction_exposes_cached_flag(app, async_db_session):
     assert [p["cached"] for p in segs[str(seeded.segment_ids[1])]["predictions"]] == [False]
 
 
-COUNT_KEYS = ("structures", "accepted", "rejected", "to_review", "failed_pages")
+COUNT_KEYS = ("structures", "accepted", "rejected", "to_review", "failed_pages", "failed")
 
 
 def _counts(p: dict) -> tuple:
@@ -540,8 +540,8 @@ async def test_list_papers_has_counts(app, async_db_session):
     async with make_client(app, token) as c:
         listed = (await c.get("/api/v2/papers")).json()["papers"]
         detail = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
-    assert _counts(listed[0]) == (3, 1, 1, 1, 1)
-    assert _counts(detail) == (3, 1, 1, 1, 1)
+    assert _counts(listed[0]) == (3, 1, 1, 1, 1, 0)
+    assert _counts(detail) == (3, 1, 1, 1, 1, 0)
 
 
 async def test_paper_without_segments_has_zero_counts(app, async_db_session):
@@ -552,7 +552,70 @@ async def test_paper_without_segments_has_zero_counts(app, async_db_session):
     await db.commit()
     async with make_client(app, token) as c:
         listed = (await c.get("/api/v2/papers")).json()["papers"]
-    assert _counts(listed[0]) == (2, 0, 0, 2, 0)
+    assert _counts(listed[0]) == (2, 0, 0, 2, 0, 0)
+
+
+async def _ocsr_step(db, segment_id, status, later_s=0):
+    """Set the segment's ocsr step to `status`; with `later_s`, add a newer step instead."""
+    step = (
+        (await db.execute(select(Step).where(Step.segment_id == segment_id, Step.kind == "ocsr")))
+        .scalars()
+        .first()
+    )
+    if later_s:
+        db.add(
+            Step(
+                paper_id=step.paper_id, kind="ocsr", queue=step.queue, engine=step.engine,
+                segment_id=segment_id, seq=step.seq + 100, status=status,
+                created_at=step.created_at + timedelta(seconds=later_s),
+            )
+        )  # fmt: skip
+    else:
+        step.status = status
+        step.error_class = "engine_error" if status == "failed" else None
+    await db.commit()
+
+
+async def test_failed_structures_are_counted_apart_from_to_review(app, async_db_session):
+    """A structure whose newest read failed (no valid prediction, no decision) is `failed`,
+    not `to_review`, as the workspace counts it (cardState)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    a, b = seeded.segment_ids
+    await _ocsr_step(db, a, "failed")
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+        detail = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+    assert _counts(listed[0]) == (2, 0, 0, 1, 0, 1)
+    assert _counts(detail) == (2, 0, 0, 1, 0, 1)
+    assert b
+
+
+async def test_failed_structure_not_counted_when_retried_or_decided(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    a, b = seeded.segment_ids
+    await _ocsr_step(db, a, "failed")
+    await _ocsr_step(db, a, "running", later_s=5)  # a retry in flight: reading, to check
+    await _ocsr_step(db, b, "failed")
+    await db.execute(update(Curation).where(Curation.segment_id == b).values(status="rejected"))
+    await db.commit()
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert _counts(listed[0]) == (2, 0, 1, 1, 0, 0)
+
+
+async def test_failed_newer_read_with_a_valid_prediction_is_to_review(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)  # each segment has a valid decimer prediction
+    a, _ = seeded.segment_ids
+    await _ocsr_step(db, a, "failed", later_s=5)
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert _counts(listed[0]) == (2, 0, 0, 2, 0, 0)
 
 
 async def test_failed_page_retried_ok_is_not_counted(app, async_db_session):

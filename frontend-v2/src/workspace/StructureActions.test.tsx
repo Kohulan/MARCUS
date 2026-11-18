@@ -82,17 +82,8 @@ describe("StructureActions", () => {
     expect(convert).toHaveBeenCalledWith("CCO");
   });
 
-  it("copies the SMILES", async () => {
+  it("leaves Copy SMILES out: the SMILES beside it has its own Copy", () => {
     render(<StructureActions {...base} />);
-    fireEvent.click(screen.getByText("Copy SMILES"));
-    await waitFor(() =>
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("CCO"),
-    );
-    expect(await screen.findByText("SMILES copied")).toBeTruthy();
-  });
-
-  it("leaves Copy SMILES out where the SMILES has its own Copy", () => {
-    render(<StructureActions {...base} copySmiles={false} />);
     expect(screen.queryByText("Copy SMILES")).toBeNull();
     expect(screen.getByText("Copy molfile")).toBeInTheDocument();
   });
@@ -111,18 +102,13 @@ describe("StructureActions", () => {
   it("shows the PubChem hit as text with a safe link", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ IdentifierList: { CID: [702] } })),
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              PropertyTable: { Properties: [{ Title: "<b>Ethanol</b>" }] },
-            }),
-          ),
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            PropertyTable: { Properties: [{ CID: 702, Title: "<b>Ethanol</b>" }] },
+          }),
         ),
+      ),
     );
     const { container } = render(<StructureActions {...base} />);
     fireEvent.click(screen.getByText("Look up in PubChem"));
@@ -170,12 +156,9 @@ describe("StructureActions", () => {
   it("clears a shown hit when the structure changes", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ IdentifierList: { CID: [702] } })),
-        )
-        .mockResolvedValueOnce(new Response("{}")),
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ PropertyTable: { Properties: [{ CID: 702 }] } })),
+      ),
     );
     const { rerender } = render(<StructureActions {...base} />);
     fireEvent.click(screen.getByText("Look up in PubChem"));

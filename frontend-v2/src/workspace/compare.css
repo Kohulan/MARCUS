@@ -1,24 +1,37 @@
 /* Compare engines: a drawing sheet of engine columns over the paper ground, then the
    similarity label and the actions on the glass bed. */
 
-.cmp-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background-color: rgb(28 33 29 / 0.32);
-}
-
 .cmp {
   display: flex;
   flex-direction: column;
-  width: min(1120px, 100%);
-  max-height: calc(100vh - 32px);
   border: 1px solid var(--line);
   background-color: var(--paper);
-  box-shadow: 0 16px 40px -12px rgb(28 33 29 / 0.35);
+}
+
+/* As a modal: a native <dialog> in the top layer, the one dialog lift and scrim. */
+.cmp--dialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  padding: 0;
+  color: var(--ink);
+  box-shadow: var(--lift-dialog);
+}
+
+.cmp--dialog:not([open]) {
+  display: none;
+}
+
+.cmp--dialog::backdrop {
+  background-color: var(--scrim);
+}
+
+/* jsdom and old engines without showModal get the open attribute: keep it on top. */
+.cmp--dialog[open]:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
 }
 
 /* The box takes focus only so a click inside keeps Esc working; not a control, so no ring. */
@@ -28,8 +41,6 @@
 
 .cmp--inline {
   width: 100%;
-  max-height: none;
-  box-shadow: none;
 }
 
 .cmp__head {
@@ -58,24 +69,6 @@
   font-size: 12px;
   letter-spacing: 0.05em;
   color: var(--text-2);
-}
-
-.cmp__close {
-  padding: 4px 2px;
-  border: 0;
-  background: none;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--green);
-  cursor: pointer;
-}
-
-.cmp__close:hover {
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
 }
 
 .cmp__scroll {

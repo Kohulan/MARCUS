@@ -43,6 +43,13 @@ class Chosen:
     edited: bool = False  # the curation has its own SMILES or molfile
 
 
+def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
+    """The prediction shown and exported when nothing is curated: of `valid` (newest first),
+    the newest of the paper's engine, else the newest of any engine. The one rule; the stored
+    depiction (api.depiction.shown_structure) and the UI (cardState shownPrediction) agree."""
+    return next((p for p in valid if p.engine == paper_engine), None) or next(iter(valid), None)
+
+
 def choose(
     paper: Paper,
     segments: list[Segment],
@@ -57,40 +64,30 @@ def choose(
         status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
         if status == "rejected" and not include_rejected:
             continue
-        note = cur.note if cur is not None else None
+        row = {
+            "segment_id": seg.id,
+            "page": seg.page,
+            "idx": seg.idx,
+            "status": status,
+            "note": cur.note if cur is not None else None,
+        }
         if cur is not None and (cur.smiles or cur.molfile):
             smiles = cur.smiles or smiles_from_molfile(cur.molfile)
             out.append(
-                Chosen(
-                    seg.id,
-                    seg.page,
-                    seg.idx,
-                    smiles,
-                    cur.molfile,
-                    "curated",
-                    status,
-                    None,
-                    note,
-                    True,
-                )  # fmt: skip
+                Chosen(**row, smiles=smiles, molfile=cur.molfile, source="curated", edited=True)
             )
             continue
         valid = [p for p in predictions.get(seg.id, []) if p.valid]
-        pick = next((p for p in valid if p.engine == paper.engine), None) or next(iter(valid), None)
+        pick = pick_prediction(valid, paper.engine)
         if pick is not None:
             out.append(
                 Chosen(
-                    seg.id,
-                    seg.page,
-                    seg.idx,
-                    pick.smiles,
-                    pick.molfile,
-                    "predicted",
-                    status,
-                    pick.engine,
-                    note,
-                    False,
-                )  # fmt: skip
+                    **row,
+                    smiles=pick.smiles,
+                    molfile=pick.molfile,
+                    source="predicted",
+                    engine=pick.engine,
+                )
             )
     return out
 

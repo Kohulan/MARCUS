@@ -38,6 +38,8 @@ export interface PaperSummary {
   rejected: number;
   to_review: number;
   failed_pages: number;
+  /** Undecided structures whose read failed (not in to_review). */
+  failed: number;
 }
 
 export interface PaperList {
@@ -181,7 +183,7 @@ export interface ImageJobOut {
 
 export type UploadPaperReply = { paper_id: string; status: string };
 export type UploadImageReply = { image_job_id: string; status: string };
-export type DepictReply = { format: "svg" | "png"; data: string };
+export type DepictReply = { format: "svg"; data: string };
 
 export type CompareReply = {
   tanimoto: number;

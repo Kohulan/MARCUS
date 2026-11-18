@@ -372,16 +372,6 @@
   gap: 8px;
 }
 
-/* A finished paper: a filled green square and the word, like a finished step. */
-.item-done__mark {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 7px;
-  vertical-align: 1px;
-  background-color: var(--accepted);
-}
-
 /* The delete confirm: a non-modal dialog opened inside the row. */
 .ask {
   position: static;

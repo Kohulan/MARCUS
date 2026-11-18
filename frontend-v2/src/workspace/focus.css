@@ -111,6 +111,16 @@
   text-underline-offset: 0.25em;
 }
 
+/* The keys act only while focus is in the region (useReviewKeys): out of it, the Keys
+   control goes muted and its key cap dashed. A click in the region turns them back on. */
+.fm:not(:focus-within) .fm-keys {
+  color: var(--muted);
+}
+
+.fm:not(:focus-within) .fm-keys .kbd {
+  border-style: dashed;
+}
+
 /* Two columns ---------------------------------------------------------------- */
 
 .fm-body {
@@ -416,6 +426,18 @@ button.fm-marker:focus-visible {
   color: var(--text-2);
 }
 
+/* The tag hangs above the box, over the page's own text: the pointer on the marker or its
+   tag fades it, so the words under it can be read. */
+.fm-marker:hover .fm-marker__tag {
+  opacity: 0.15;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fm-marker__tag {
+    transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
 .fm-marker--current .fm-marker__tag {
   left: 0;
   margin-bottom: 14px;
@@ -438,25 +460,31 @@ button.fm-marker:focus-visible {
 
 /* Key list ------------------------------------------------------------------- */
 
+/* A native <dialog> in the top layer: the one dialog lift and scrim. */
 .keyhelp {
+  width: min(360px, calc(100vw - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--lift-dialog);
+}
+
+.keyhelp::backdrop {
+  background-color: var(--scrim);
+}
+
+/* jsdom and old engines without showModal get the open attribute: keep it on top. */
+.keyhelp[open]:not(:modal) {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background-color: rgb(28 33 29 / 0.32);
-}
-
-.keyhelp__sheet {
-  width: min(360px, 100%);
-  border: 1px solid var(--line);
-  background-color: var(--paper);
-  box-shadow: 0 12px 32px rgb(28 33 29 / 0.18);
 }
 
 /* Takes focus only so a click on the list keeps Esc working; not a control, so no ring. */
-.keyhelp__sheet:focus {
+.keyhelp:focus {
   outline: none;
 }
 
@@ -473,24 +501,6 @@ button.fm-marker:focus-visible {
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--green);
-}
-
-.keyhelp__close {
-  padding: 4px 2px;
-  border: 0;
-  background: none;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--green);
-  cursor: pointer;
-}
-
-.keyhelp__close:hover {
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
 }
 
 .keyhelp__list {

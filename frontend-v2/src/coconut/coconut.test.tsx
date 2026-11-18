@@ -517,6 +517,24 @@ describe("SubmitForm", () => {
     expect(send).toBeEnabled();
   });
 
+  it("marks the required fields (3.3.2) and Send says why it is off", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    renderForm();
+    const sheet = screen.getByRole("group", { name: "Paper" });
+    for (const name of ["Title", "Evidence", "Organism"]) {
+      const field = within(sheet).getByLabelText(name);
+      expect(field).toBeRequired();
+      expect(field.closest(".coconut-field")).toHaveTextContent(/Required/);
+    }
+    for (const name of ["DOI", "Comment"]) {
+      expect(within(sheet).getByLabelText(name)).not.toBeRequired();
+    }
+    expect(screen.getByLabelText("Name for structure 1")).toBeRequired();
+    const send = screen.getByRole("button", { name: "Send 3 to COCONUT" });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAccessibleDescription("Fill in title, organism");
+  });
+
   it("never sends the token to /api/v2", async () => {
     const ok = okServer();
     stubFetch(async (url, init) => {

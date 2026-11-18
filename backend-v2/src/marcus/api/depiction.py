@@ -23,14 +23,15 @@ from fastapi import HTTPException, Request
 from marcus.api.chem import smiles_from_molfile
 from marcus.api.chempool import CHEM
 from marcus.api.deps import not_found
+from marcus.api.export import pick_prediction
 from marcus.api.security import tools_limit
 from marcus.api.tooling import (
     MAX_SMILES,
-    RETRY_AFTER_S,
     WAIT_S,
     depiction_slot,
     in_tool_budget,
     run_tool,
+    tools_busy,
 )
 from marcus.core import storage
 from marcus.core.enums import Engine
@@ -70,19 +71,11 @@ async def shown_structure(
             smiles = await CHEM.run(smiles_from_molfile, curation.molfile)
         except HTTPException as exc:
             if exc.status_code == 503:  # chem pool busy: the route's 503 with Retry-After
-                raise _unavailable() from None
+                raise tools_busy() from None
             raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
-    pick = next((p for p in valid if p.engine == paper.engine), None) or next(iter(valid), None)
+    pick = pick_prediction(valid, paper.engine)
     return (pick.smiles, "predicted") if pick is not None else None
-
-
-def _unavailable() -> HTTPException:
-    return HTTPException(
-        status_code=503,
-        detail="depiction unavailable, try again",
-        headers={"Retry-After": str(RETRY_AFTER_S)},
-    )
 
 
 _UNDRAWABLE = object()
@@ -100,22 +93,14 @@ def _lookup(path, marker):
 
 
 def _store(path, data: bytes) -> None:
-    """Best effort: a drawing that cannot be stored is still returned (and drawn again later)."""
+    """Best effort: a drawing (or an empty `.nodraw` marker) that cannot be stored is still
+    answered, and drawn (or tried) again later."""
     if storage.disk_is_full():
         return
     try:
         storage.write_atomic(path, data)
     except OSError as exc:
         log.warning("depiction not stored (%s)", type(exc).__name__)
-
-
-def _mark_undrawable(marker) -> None:
-    if storage.disk_is_full():
-        return
-    try:
-        storage.write_atomic(marker, b"")
-    except OSError as exc:
-        log.warning("depiction marker not stored (%s)", type(exc).__name__)
 
 
 async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Source) -> bytes:
@@ -152,9 +137,9 @@ async def _draw(smiles: str, marker) -> str:
         svg = await in_tool_budget(run_tool, DEPICT_TASK, kwargs, WAIT_S)
     except HTTPException as exc:
         if exc.status_code == 422:  # CDK cannot read this SMILES: never try it again
-            await anyio.to_thread.run_sync(_mark_undrawable, marker)
+            await anyio.to_thread.run_sync(_store, marker, b"")
             raise not_found() from None
-        raise _unavailable() from None  # 504 timeout, 500 tool error, 503 budget full
+        raise tools_busy() from None  # 504 timeout, 500 tool error, 503 budget full
     if not isinstance(svg, str):
-        raise _unavailable()
+        raise tools_busy()
     return svg

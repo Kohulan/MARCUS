@@ -71,6 +71,7 @@ function paper(over: Partial<PaperDetail> = {}): PaperDetail {
     rejected: 2,
     to_review: 4,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments: [],
     ...over,
@@ -436,11 +437,12 @@ describe("status bar", () => {
     vi.spyOn(api, "retryPage").mockResolvedValue({ step_id: "new" });
     renderWorkspace({ steps: failedPage4("timeout") });
     const button = await screen.findByRole("button", { name: "Retry page 5" });
+    const reads = vi.mocked(api.getSteps).mock.calls.length;
     let answer!: (v: { steps: StepOut[] }) => void;
     vi.mocked(api.getSteps).mockReturnValue(new Promise((r) => (answer = r)));
     fireEvent.click(button);
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(api.getSteps).toHaveBeenCalledTimes(2)); // the refresh is out
+    await waitFor(() => expect(api.getSteps).toHaveBeenCalledTimes(reads + 1)); // the refresh is out
     expect(screen.getByRole("button", { name: "Retry page 5" })).toBeDisabled();
     // the refresh lands (here still failed: the button is offered again)
     await act(async () => answer({ steps: failedPage4("timeout") }));

@@ -1,36 +1,21 @@
 import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
+import { mediaMatches, subscribeMedia } from "./motion";
 import "./ui.css";
 
 const MIN_WIDTH = 1024;
 const QUERY = `(min-width: ${MIN_WIDTH}px)`;
 
-let query: MediaQueryList | null = null;
-let queryOf: typeof window.matchMedia | null = null;
-
-/** The one (min-width: 1024px) query; null where the browser has no matchMedia (jsdom). */
-function wideQuery(): MediaQueryList | null {
-  if (typeof window.matchMedia !== "function") return null;
-  if (query === null || queryOf !== window.matchMedia) {
-    queryOf = window.matchMedia;
-    query = window.matchMedia(QUERY);
-  }
-  return query;
-}
-
+// The media query's change event, through the tab's one list (ui/motion); the window's
+// resize event only where the browser has no matchMedia.
 function subscribe(onChange: () => void): () => void {
-  const mq = wideQuery();
-  mq?.addEventListener("change", onChange);
+  if (typeof window.matchMedia === "function") return subscribeMedia(QUERY, onChange);
   window.addEventListener("resize", onChange);
-  return () => {
-    mq?.removeEventListener("change", onChange);
-    window.removeEventListener("resize", onChange);
-  };
+  return () => window.removeEventListener("resize", onChange);
 }
 
 function isWide(): boolean {
-  const mq = wideQuery();
-  return mq ? mq.matches : window.innerWidth >= MIN_WIDTH;
+  return mediaMatches(QUERY) ?? window.innerWidth >= MIN_WIDTH;
 }
 
 /**
@@ -50,7 +35,10 @@ export default function DesktopOnly({ children }: { children: ReactNode }) {
 
   const note = (
     <main className="desktop-only">
-      <p className="desktop-only__note">MARCUS is made for a desktop screen</p>
+      <h1 className="desktop-only__note">MARCUS is made for a desktop screen</h1>
+      <a href="/" className="desktop-only__back">
+        Back to start
+      </a>
     </main>
   );
   if (!mounted) return note;

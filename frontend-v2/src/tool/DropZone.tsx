@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
+import { TOO_LARGE } from "../api/client";
 import { ENGINES } from "../api/engines";
 import type { Engine } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
@@ -7,7 +8,6 @@ import "./tool.css";
 
 /** What the backend takes (marcus/api/uploads.py): a PDF, or one PNG, JPEG, TIFF or WebP image. */
 export const MAX_BYTES = 20 * 1024 * 1024;
-export const TOO_LARGE = "This file is larger than 20 MB.";
 export const WRONG_TYPE = "Use a PDF or a PNG, JPEG, TIFF or WebP image.";
 const ONE_FILE = "Drop one file at a time.";
 
@@ -38,7 +38,7 @@ const ACCEPT = [...Object.keys(BY_TYPE), ...Object.keys(BY_EXTENSION).map((e) =>
 );
 
 /** "pdf", "image", or null for a type the backend refuses. */
-export function fileKind(file: File): FileKind | null {
+function fileKind(file: File): FileKind | null {
   const byType = BY_TYPE[file.type];
   if (byType) return byType;
   if (file.type !== "" && file.type !== "application/octet-stream") return null;

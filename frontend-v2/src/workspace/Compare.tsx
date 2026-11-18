@@ -1,29 +1,23 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { api } from "../api/client";
-import { useDepiction } from "../api/depictions";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, errorText } from "../api/client";
+import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
 import { asEngine } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { Modal } from "../ui/modal";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
-import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import { ocsrSteps } from "./cardState";
-import { trapTab } from "./KeyHelp";
-import { errorDetail } from "./useCardActions";
-import type { ReviewRow } from "./useReviewRows";
-import type { Workspace } from "./useWorkspace";
 import {
-  depictQuery,
   engineRows,
   enginesToRun,
   tooManyText,
   useCommonPart,
-  useReplyUrl,
   useRunAll,
   useSimilarity,
   type CompareStep,
@@ -42,7 +36,7 @@ export type CompareProps = {
   onPick: (p: PredictionOut) => void;
   /** After "Run all engines" was accepted: the page reopens its own live stream. */
   onStarted: () => void;
-  /** Given: Compare is a modal dialog (Close, Esc, a focus trap). Without: a page section. */
+  /** Given: Compare is a modal dialog (Close, Esc, the backdrop). Without: a page section. */
   onClose?: (() => void) | undefined;
   /** The structure's `[nn]` tag, beside the title. */
   tag?: string | undefined;
@@ -66,6 +60,7 @@ export default function Compare({
   headAction,
 }: CompareProps) {
   const titleId = useId();
+  const closeButton = useRef<HTMLButtonElement>(null);
   const { requested, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
   const rows = useMemo(
     () => engineRows(predictions, steps, requested),
@@ -73,10 +68,10 @@ export default function Compare({
   );
   const toRun = enginesToRun(rows);
   const pairs = useSimilarity(rows);
-  const validSmiles = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!.smiles);
-  const canCommon = new Set(validSmiles).size >= 2;
+  const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
+  const canCommon = new Set(valid.map((p) => p.smiles)).size >= 2;
   const [common, setCommon] = useState(false);
-  const part = useCommonPart(validSmiles, common);
+  const part = useCommonPart(valid, common);
 
   // Drawings from /tools/depict: every one with the common part, and an image job's always
   // (a segment's plain drawing is its stored depiction, free of the tools bucket).
@@ -99,7 +94,7 @@ export default function Compare({
   ];
   const message =
     tooManyText(runError) ??
-    (runError !== null ? `Not started: ${errorDetail(runError)}` : null) ??
+    (runError !== null ? `Not started: ${errorText(runError)}` : null) ??
     toolErrors.map(tooManyText).find((t) => t !== null) ??
     (common && part.errors.length > 0 ? "Common part unavailable" : null) ??
     (part.none ? "No common part" : null);
@@ -236,70 +231,21 @@ export default function Compare({
     );
   }
   return (
-    <CompareDialog titleId={titleId} title={title} onClose={onClose}>
-      {body}
-    </CompareDialog>
-  );
-}
-
-/**
- * The modal frame: focus moves in (to Close), Tab stays inside, Esc or Close closes it and
- * focus goes back. Keys pressed inside stop here, so a page's own shortcuts (the review keys
- * of focus mode) never act on the structure underneath.
- */
-function CompareDialog({
-  titleId,
-  title,
-  onClose,
-  children,
-}: {
-  titleId: string;
-  title: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const close = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const before = document.activeElement;
-    close.current?.focus();
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-      return;
-    }
-    trapTab(e, box.current);
-  };
-
-  return (
-    <div className="cmp-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div
-        ref={box}
-        className="cmp"
-        role="dialog"
-        // A click on the table keeps focus in the box (not the body), so Esc still closes it.
-        tabIndex={-1}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
-      >
-        <div className="cmp__head">
-          {title}
-          <button ref={close} type="button" className="cmp__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        {children}
+    <Modal
+      className="cmp cmp--dialog"
+      labelledBy={titleId}
+      onClose={onClose}
+      first={closeButton}
+      backdropClose
+    >
+      <div className="cmp__head">
+        {title}
+        <GlassButton ref={closeButton} tint="clear" size="sm" onClick={onClose}>
+          Close
+        </GlassButton>
       </div>
-    </div>
+      {body}
+    </Modal>
   );
 }
 
@@ -396,7 +342,7 @@ export function SegmentCompare({
       structure: { smiles: p.smiles, molfile: p.molfile ?? null },
     }).then(
       () => onSaved?.(),
-      (err: unknown) => toast(`Not saved: ${errorDetail(err)}`, "error"),
+      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
     );
   };
   return (
@@ -410,50 +356,4 @@ export function SegmentCompare({
       tag={tag}
     />
   );
-}
-
-/** Compare opened from a card (grid or Paper view): the segment by id, its `[nn]` tag. */
-export function CardCompare({
-  ws,
-  rows,
-  segmentId,
-  onStarted,
-  onClose,
-}: {
-  ws: Workspace;
-  rows: ReviewRow[];
-  segmentId: string;
-  onStarted: () => void;
-  onClose: () => void;
-}) {
-  const segment = ws.segments.find((s) => s.id === segmentId);
-  const n = rows.find((r) => r.segmentId === segmentId)?.n;
-  if (!ws.paper || !segment || n === undefined) return null;
-  return (
-    <SegmentCompare
-      paperId={ws.paper.id}
-      segment={segment}
-      steps={ws.steps}
-      tag={structureTag(n)}
-      onStarted={onStarted}
-      onClose={onClose}
-      onSaved={() => keepFocusOnCard(segmentId)}
-    />
-  );
-}
-
-/**
- * Focus went back to the card's Compare button, which goes once the card is accepted (it
- * leaves To check): focus the card itself instead of letting it fall to the page. After the
- * next frame, so the card has re-rendered.
- */
-function keepFocusOnCard(segmentId: string) {
-  requestAnimationFrame(() => {
-    const active = document.activeElement;
-    if (active && active !== document.body && active.isConnected) return;
-    const card = [...document.querySelectorAll<HTMLElement>("[data-segment-id]")].find(
-      (el) => el.dataset.segmentId === segmentId,
-    );
-    card?.focus();
-  });
 }

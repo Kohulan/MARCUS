@@ -6,13 +6,18 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, api, depictBlob, svgBlobUrl } from "../api/client";
+import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
+import { depictQuery, useReplyUrl } from "../api/depictions";
+import { engineName } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
+import { isImageActive } from "../api/status";
 import type { DepictReply, Engine, ImageJobOut, PredictionOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
-import { GlassButton, GlassLink } from "../ui/GlassButton";
+import { returnFocus } from "../ui/focus";
+import { GlassButton } from "../ui/GlassButton";
+import GonePage, { OpenFailed } from "../ui/GonePage";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
@@ -49,23 +54,7 @@ type ImageResultProps = {
   compare?: ComponentType<ImageCompareProps> | undefined;
 };
 
-const ENGINE_LABEL: Record<string, string> = {
-  decimer: "DECIMER",
-  "decimer-hand": "DECIMER hand-drawn",
-  molnextr: "MolNexTR",
-  molscribe: "MolScribe",
-};
-
-const engineName = (p: Pick<PredictionOut, "engine" | "engine_version">) =>
-  `${ENGINE_LABEL[p.engine] ?? p.engine} ${p.engine_version}`.trim();
-
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
-
-// Image job ids are UUIDs. Any other id (a mistyped or cut link) is not a job: it gets the
-// gone page at once, without a request the API would answer 422.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const ACTIVE = new Set(["queued", "processing"]);
 
 /**
  * The main result: the job engine's newest valid prediction, else its newest one. Never
@@ -93,43 +82,18 @@ function mainStatus(job: ImageJobOut): "waiting" | "reading" | "failed" | "done"
 
 export default function ImageResult({ compare = COMPARE }: ImageResultProps) {
   const id = useParams().id ?? "";
-  if (!UUID.test(id)) return <NoImage />;
+  if (!isUuid(id)) return <NoImage />;
   return <ImageJobPage key={id} id={id} compare={compare} />;
 }
 
 function NoImage() {
   usePageTitle("Image · MARCUS");
-  return <GonePage />;
-}
-
-/**
- * The one page for an image job the API answers 404 for: deleted, expired, or owned by
- * another browser (the API does not say which, and neither does this page). Never a spinner.
- */
-function GonePage() {
-  return (
-    <main className="ir-gone">
-      <div className="ir-gone__sheet">
-        <span className="corner ir-gone__corner" aria-hidden="true">
-          +
-        </span>
-        <h1 className="ir-gone__title">This image is not here any more.</h1>
-        <p className="ir-gone__why">
-          It was deleted, it expired after 30 days, or it was opened in another browser.
-        </p>
-        <div className="ir-gone__bed glassbed">
-          <GlassLink tint="clear" to="/app">
-            Your papers
-          </GlassLink>
-        </div>
-      </div>
-    </main>
-  );
+  return <GonePage noun="image" />;
 }
 
 /**
  * The job is read first; only a job that exists mounts the result (and with it the live
- * stream). A 404, at first or on a later refresh, shows the gone page and unmounts the
+ * stream). A 404 or 422, at first or on a later refresh, shows the gone page and unmounts the
  * result, so no stream or poll is left behind.
  */
 function ImageJobPage({
@@ -140,28 +104,13 @@ function ImageJobPage({
   compare: ComponentType<ImageCompareProps> | undefined;
 }) {
   const query = useImageJob(id);
-  const gone =
-    query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 422);
+  const gone = isGone(query.error);
   usePageTitle(!gone && query.data ? `${query.data.display_name} · MARCUS` : "Image · MARCUS");
 
-  if (gone) return <GonePage />;
+  if (gone) return <GonePage noun="image" />;
   if (query.data) return <Result job={query.data} compare={compare} />;
   if (query.isError) {
-    return (
-      <main className="ir-gone">
-        <div className="ir-gone__sheet">
-          <h1 className="ir-gone__title">This image could not be opened.</h1>
-          <p className="ir-gone__why">
-            {query.error instanceof ApiError ? query.error.detail : "Something went wrong."}
-          </p>
-          <div className="ir-gone__bed glassbed">
-            <GlassButton tint="clear" onClick={() => void query.refetch()}>
-              Try again
-            </GlassButton>
-          </div>
-        </div>
-      </main>
-    );
+    return <OpenFailed noun="image" error={query.error} onRetry={() => void query.refetch()} />;
   }
   return (
     <main className="ir" aria-busy="true">
@@ -174,37 +123,17 @@ function ImageJobPage({
 }
 
 /**
- * The drawing of `smiles` from /tools/depict as an object URL, revoked when it changes, and
- * the reply itself (Download saves it as is).
+ * The drawing of `smiles` from /tools/depict (Compare's query for a plain drawing, so it is
+ * drawn once) as an object URL, and the reply itself (Download saves it as is).
  */
 function useDrawing(smiles: string | null): {
   src: string | null;
   failed: boolean;
   reply: DepictReply | null;
 } {
-  const query = useQuery({
-    // the same key Compare uses for a drawing without a highlight, so it is drawn once
-    queryKey: ["depict", smiles, null],
-    queryFn: () => api.depict(smiles!),
-    enabled: smiles !== null,
-    staleTime: Infinity,
-  });
-  const [src, setSrc] = useState<string | null>(null);
-  const reply = query.data;
-  useEffect(() => {
-    if (!reply) {
-      setSrc(null);
-      return;
-    }
-    const url = svgBlobUrl(reply);
-    setSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [reply]);
-  return {
-    src: query.isError ? null : src,
-    failed: query.isError,
-    reply: query.isError ? null : (reply ?? null),
-  };
+  const query = useQuery({ ...depictQuery(smiles ?? "", null), enabled: smiles !== null });
+  const reply = smiles !== null && !query.isError ? query.data : undefined;
+  return { src: useReplyUrl(reply), failed: query.isError, reply: reply ?? null };
 }
 
 function Result({
@@ -216,7 +145,15 @@ function Result({
 }) {
   const client = useQueryClient();
   const toast = useToast();
-  const live = useLiveEvents("image", job.id, () => {
+  // The stream's first snapshot ({status}) comes right after the job was read: when it says
+  // what the job says, the refetch is skipped (a later one, a reconnect, never is).
+  const firstSnapshot = useRef(true);
+  const live = useLiveEvents("image", job.id, (snapshot) => {
+    const first = snapshot !== undefined && firstSnapshot.current;
+    if (snapshot !== undefined) firstSnapshot.current = false;
+    const status = (snapshot as { status?: unknown } | null | undefined)?.status;
+    const cached = client.getQueryData<ImageJobOut>(keys.image(job.id))?.status;
+    if (first && status !== undefined && status === cached) return;
     // cancelRefetch false: never cancel (and so never repeat) a fetch already on the wire
     void client.invalidateQueries({ queryKey: keys.image(job.id) }, { cancelRefetch: false });
   });
@@ -228,15 +165,15 @@ function Result({
   const [comparing, setComparing] = useState(false);
   const [retrying, setRetrying] = useState(false);
   // Compare opens below the sheet: focus goes to its Close, and back to what opened it.
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<Element | null>(null);
   const closeCompare = useRef<HTMLButtonElement>(null);
   const openCompare = () => {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    opener.current = document.activeElement;
     setComparing(true);
   };
   const endCompare = () => {
     setComparing(false);
-    opener.current?.focus();
+    returnFocus(opener.current, null);
   };
   useEffect(() => {
     if (!comparing) return;
@@ -253,23 +190,26 @@ function Result({
   const smiles = edit?.smiles ?? prediction?.smiles ?? null;
   const molfile = edit ? edit.molfile : (prediction?.molfile ?? null);
   const drawing = useDrawing(smiles);
-  const active = ACTIVE.has(job.status);
+  const active = isImageActive(job.status);
 
   async function retry() {
     setRetrying(true);
     try {
+      // as sent: the job may run an engine the UI does not offer (the fake stack's "fake")
       await api.runImagePrediction(job.id, job.engine as Engine);
       live.reconnect();
       void client.invalidateQueries({ queryKey: keys.image(job.id) }, { cancelRefetch: false });
     } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Something went wrong.", "error");
+      toast(errorText(err), "error");
     } finally {
       setRetrying(false);
     }
   }
 
   const rows: [string, string][] = [];
-  if (prediction) rows.push(["Engine", engineName(prediction)]);
+  if (prediction) {
+    rows.push(["Engine", `${engineName(prediction.engine)} ${prediction.engine_version}`.trim()]);
+  }
   if (edit) rows.push(["Structure", "Edited"]);
   else if (prediction) {
     rows.push(["Valid", prediction.valid ? "Yes" : "No"], ["Time", duration(prediction.ms)]);
@@ -358,7 +298,6 @@ function Result({
             depictionUrl={null}
             image={drawing.reply ? () => depictBlob(drawing.reply!) : undefined}
             onEdit={() => setEditing(true)}
-            copySmiles={false}
             {...(Compare ? { onCompare: openCompare } : {})}
           />
           {localNote && (

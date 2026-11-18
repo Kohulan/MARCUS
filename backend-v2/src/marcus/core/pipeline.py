@@ -201,16 +201,7 @@ def new_image_job(
     )
     session.add(job)
     session.flush()  # assigns job.id
-    session.add(
-        Step(
-            image_job_id=job.id,
-            kind=StepKind.OCSR.value,
-            queue=queue_for(StepKind.OCSR, engine),
-            engine=engine.value,
-            seq=0,
-            status=StepStatus.PENDING.value,
-        )
-    )
+    session.add(_new_image_step(job, engine, seq=0))
     session.flush()
     return job
 
@@ -232,6 +223,26 @@ def _new_step(paper: Paper, kind: StepKind, seq: int, **kw) -> Step:
         status=StepStatus.PENDING.value,
         **kw,
     )
+
+
+def _new_image_step(job: ImageJob, engine: Engine, seq: int) -> Step:
+    """A pending `ocsr` step of an image job (the only kind an image job has)."""
+    return Step(
+        image_job_id=job.id,
+        kind=StepKind.OCSR.value,
+        queue=queue_for(StepKind.OCSR, engine),
+        engine=engine.value,
+        seq=seq,
+        status=StepStatus.PENDING.value,
+    )
+
+
+def _ocsr_engine(engine: Engine) -> Engine:
+    """`engine` as an Engine; ValueError for the fake engine where it is disabled."""
+    engine = Engine(engine)
+    if engine == Engine.FAKE and not fake_enabled():
+        raise ValueError("engine 'fake' is disabled")
+    return engine
 
 
 def _ocsr_seq(page: int, idx: int) -> int:
@@ -800,9 +811,7 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
-    engine = Engine(engine)
-    if engine == Engine.FAKE and not fake_enabled():
-        raise ValueError("engine 'fake' is disabled")
+    engine = _ocsr_engine(engine)
     segment = session.get(Segment, segment_id)
     if segment is None:
         raise ValueError("segment not found")
@@ -878,23 +887,14 @@ def request_image_ocsr(session: Session, job_id: uuid.UUID, engine: Engine) -> S
 
     Raises ValueError for an unknown or deleted image job, or a disabled engine.
     """
-    engine = Engine(engine)
-    if engine == Engine.FAKE and not fake_enabled():
-        raise ValueError("engine 'fake' is disabled")
+    engine = _ocsr_engine(engine)
     job = _lock(session, ImageJob, job_id)
     if job is None or job.status == ImageJobStatus.DELETED.value:
         raise ValueError("image job not found")
     seq = session.execute(
         select(func.count()).select_from(Step).where(Step.image_job_id == job.id)
     ).scalar_one()
-    step = Step(
-        image_job_id=job.id,
-        kind=StepKind.OCSR.value,
-        queue=queue_for(StepKind.OCSR, engine),
-        engine=engine.value,
-        seq=seq,
-        status=StepStatus.PENDING.value,
-    )
+    step = _new_image_step(job, engine, seq)
     session.add(step)
     job.status = ImageJobStatus.QUEUED.value
     session.flush()

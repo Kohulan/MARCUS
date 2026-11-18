@@ -114,7 +114,7 @@ def _get_json(http, url: str, timeout_s: float):
     try:
         if resp.status_code != 200:
             return None
-        body = b""
+        body = bytearray()  # appended in place, not copied per chunk
         for chunk in resp.iter_content(16 * 1024):
             body += chunk
             if len(body) > TITLE_MAX_BYTES:

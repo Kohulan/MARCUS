@@ -2,8 +2,8 @@
 // light tokens, their WCAG contrast, the self-hosted Geist faces, and that nothing of the
 // old Field Sheet world (dark tokens, theme switch, dropped fonts) comes back.
 // Vitest runs with `css: false`, so the files are read as text from the project root.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (file: string) => readFileSync(resolve(process.cwd(), "src/styles", file), "utf8");
@@ -39,6 +39,14 @@ const EXPECTED_TOKENS: Record<string, string> = {
   "--font-text": '"Geist", ui-sans-serif, system-ui, sans-serif',
   "--font-mono": '"Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace',
   "--font-mark": '"Gmarket Sans", var(--font-text)',
+  "--lift-glass": "0 10px 24px -8px rgba(15, 30, 22, 0.35)",
+  "--lift-menu": "0 12px 28px -10px rgba(15, 30, 22, 0.35)",
+  "--lift-dialog": "0 24px 64px -24px rgba(15, 30, 22, 0.45)",
+  "--lift-pill-solid": "0 6px 16px -8px rgba(15, 30, 22, 0.35)",
+  "--glass-shine":
+    "inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 3px rgba(255, 255, 255, 0.3), " +
+    "inset 0 0 0 1px rgba(255, 255, 255, 0.45), inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22)",
+  "--scrim": "rgba(28, 33, 29, 0.42)",
 };
 
 /** Custom properties declared in tokens.css, name → value (whitespace collapsed). */
@@ -201,5 +209,52 @@ describe("base.css", () => {
 
   it("keeps the reduced-motion block", () => {
     expect(baseCss).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+});
+
+/** Every stylesheet under src/ but tokens.css, path → text without comments. */
+function sheets(): [string, string][] {
+  const root = resolve(process.cwd(), "src");
+  const out: [string, string][] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith(".css") && entry.name !== "tokens.css") {
+        out.push([relative(root, path), stripComments(readFileSync(path, "utf8"))]);
+      }
+    }
+  };
+  walk(root);
+  return out;
+}
+
+// DESIGN.md Elevation: one lift per kind of floating object and one scrim, all tokens.
+describe("elevation", () => {
+  const all = sheets();
+
+  it("finds the stylesheets", () => {
+    expect(all.length).toBeGreaterThan(10);
+  });
+
+  it("no box-shadow outside tokens.css carries a colour literal", () => {
+    const bad = all.flatMap(([file, css]) =>
+      [...css.matchAll(/box-shadow\s*:\s*([^;]+);/g)]
+        .filter((m) => /rgba?\(|#[0-9a-f]{3,8}\b/i.test(m[1] as string))
+        .map((m) => `${file}: ${(m[1] as string).replace(/\s+/g, " ").trim()}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("every dialog backdrop is the one scrim", () => {
+    const backdrops = all.flatMap(([file, css]) =>
+      [...css.matchAll(/::backdrop\s*\{([^}]*)\}/g)]
+        .map((m) => [file, m[1] as string] as const)
+        .filter(([, body]) => /background/.test(body)),
+    );
+    expect(backdrops.length).toBeGreaterThanOrEqual(4); // editor, COCONUT, Compare, Keys
+    for (const [file, body] of backdrops) {
+      expect(body, file).toMatch(/background-color:\s*var\(--scrim\);/);
+    }
   });
 });

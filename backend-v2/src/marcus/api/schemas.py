@@ -35,6 +35,7 @@ class PaperSummary(_Orm):
     rejected: int
     to_review: int
     failed_pages: int
+    failed: int
 
 
 class PaperList(BaseModel):
@@ -212,7 +213,7 @@ class ImageStepOut(BaseModel):
     error_class: str | None
 
 
-class ImageJobSummary(BaseModel):
+class ImageJobSummary(_Orm):
     id: uuid.UUID
     display_name: str
     status: str

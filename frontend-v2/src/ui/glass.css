@@ -40,13 +40,21 @@
   backdrop-filter: blur(3px) saturate(1.8);
   /* Refraction where supported (Chromium); a browser that rejects it keeps the line above. */
   backdrop-filter: url(#marcus-glass) blur(3px) saturate(1.8);
-  box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -2px 3px rgba(255, 255, 255, 0.3),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
-    inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22),
-    0 10px 24px -8px rgba(15, 30, 22, 0.35);
+  box-shadow: var(--glass-shine), var(--lift-glass);
   transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Small pills on a structure card or in focus mode sit on flat white or paper, where the
+ * refraction has nothing to bend: they keep the blur only, so scrolling a long grid does not
+ * run the SVG filter for every pill. Only where the refraction runs at all (Chromium, glass
+ * not reduced, no forced colours); elsewhere the rules below hold.
+ */
+@media (not (prefers-reduced-transparency: reduce)) and (forced-colors: none) {
+  .card .glass:not(:disabled),
+  .fm .glass--sm:not(:disabled) {
+    backdrop-filter: blur(3px) saturate(1.8);
+  }
 }
 
 .glass--sm {
@@ -109,7 +117,7 @@
   .glass {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    box-shadow: 0 6px 16px -8px rgba(15, 30, 22, 0.35);
+    box-shadow: var(--lift-pill-solid);
   }
 
   .glass--orange:not(:disabled) {
@@ -128,7 +136,7 @@
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass {
-    box-shadow: 0 6px 16px -8px rgba(15, 30, 22, 0.35);
+    box-shadow: var(--lift-pill-solid);
   }
 
   .glass--orange:not(:disabled) {

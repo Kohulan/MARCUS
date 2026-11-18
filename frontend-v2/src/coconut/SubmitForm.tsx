@@ -6,6 +6,7 @@
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
+import { Modal } from "../ui/modal";
 import { structureTag } from "../ui/tag";
 import {
   AUTH_ERROR,
@@ -68,7 +69,6 @@ function startRows(structures: SubmitStructure[]): Record<string, StructureField
 }
 
 export default function SubmitForm({ paper, structures, initial, onClose }: SubmitFormProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [token, setToken] = useState<string | null>(() => getToken());
   const [fields, setFields] = useState<PaperFields>(() => startFields(paper, initial));
   const [rows, setRows] = useState(() => startRows(structures));
@@ -89,21 +89,9 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
     onClose();
   }
 
-  // Modal in the browser (top layer, the page behind is inert); jsdom has no showModal.
-  useEffect(() => {
-    const el = dialog.current;
-    const before = document.activeElement;
-    if (el && !el.open) {
-      if (typeof el.showModal === "function") el.showModal();
-      else el.setAttribute("open", "");
-    }
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
-
   // showModal focuses the first button (Close): start in the first field instead, also when
   // the form appears after the login or "Back to form". The results focus their own heading.
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (phase.kind === "form") dialog.current?.querySelector<HTMLElement>("input, textarea")?.focus();
   }, [phase.kind, token]);
@@ -222,10 +210,11 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
         <div className="coconut__columns">
           <fieldset className="coconut-paper" disabled={sending}>
             <legend className="coconut-paper__legend">Paper</legend>
-            <Field id="coconut-title" label="Title">
+            <Field id="coconut-title" label="Title" required>
               <input
                 id="coconut-title"
                 className="coconut-input"
+                aria-required="true"
                 value={fields.title}
                 onChange={(e) => setPaper("title", e.target.value)}
               />
@@ -239,10 +228,11 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                 spellCheck={false}
               />
             </Field>
-            <Field id="coconut-evidence" label="Evidence">
+            <Field id="coconut-evidence" label="Evidence" required>
               <textarea
                 id="coconut-evidence"
                 className="coconut-input coconut-input--area"
+                aria-required="true"
                 rows={3}
                 value={fields.evidence}
                 onChange={(e) => setPaper("evidence", e.target.value)}
@@ -262,6 +252,7 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                 key={i}
                 idBase={`coconut-org-${i}`}
                 label={i === 0 ? "Organism" : `Organism ${i + 1}`}
+                required={i === 0}
                 value={o}
                 onChange={(change) => setOrganism(i, change)}
                 onRemove={
@@ -319,6 +310,7 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                     <input
                       className="coconut-input coconut-row__name"
                       aria-label={`Name for structure ${s.n}`}
+                      aria-required={!out}
                       placeholder="Name"
                       value={row.name}
                       disabled={sending}
@@ -395,10 +387,15 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
         </div>
 
         <footer className="coconut__foot glassbed">
-          <p className="coconut__status" role="status" aria-live="polite">
+          <p id="coconut-status" className="coconut__status" role="status" aria-live="polite">
             {sending ? `Sent ${phase.done} of ${phase.total}` : (token && problem) || ""}
           </p>
-          <GlassButton tint="green" disabled={!canSend} onClick={() => void send()}>
+          <GlassButton
+            tint="green"
+            disabled={!canSend}
+            describedBy="coconut-status"
+            onClick={() => void send()}
+          >
             {`Send ${toSend.length} to COCONUT`}
           </GlassButton>
         </footer>
@@ -407,21 +404,12 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
   }
 
   return (
-    <dialog
-      ref={dialog}
+    <Modal
+      box={dialog}
       className="coconut"
-      aria-labelledby="coconut-title-head"
-      aria-busy={sending}
-      onCancel={(e) => {
-        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
-        close();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          close();
-        }
-      }}
+      labelledBy="coconut-title-head"
+      onClose={close}
+      busy={sending}
     >
       <header className="coconut__head">
         <h2 id="coconut-title-head" className="coconut__title">
@@ -439,16 +427,34 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
         </div>
       </header>
       {body}
-    </dialog>
+    </Modal>
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+type FieldProps = { id: string; label: string; required?: boolean | undefined; children: ReactNode };
+
+/**
+ * A labelled field. Required: a visible "Required" beside the label, kept out of the name
+ * (the input carries aria-required, so a screen reader hears the state with the name).
+ */
+function Field({ id, label, required, children }: FieldProps) {
+  const name = (
+    <label className="mono-label coconut-field__label" htmlFor={id}>
+      {label}
+    </label>
+  );
   return (
     <div className="coconut-field">
-      <label className="mono-label coconut-field__label" htmlFor={id}>
-        {label}
-      </label>
+      {required ? (
+        <span className="coconut-field__head">
+          {name}
+          <span className="mono-label coconut-field__req" aria-hidden="true">
+            · Required
+          </span>
+        </span>
+      ) : (
+        name
+      )}
       {children}
     </div>
   );
@@ -458,20 +464,31 @@ type OrganismFieldsProps = {
   idBase: string;
   label: string;
   placeholder?: string;
+  /** The paper's first organism: required unless every structure has its own. */
+  required?: boolean | undefined;
   value: OrganismDraft;
   onChange: (change: Partial<OrganismDraft>) => void;
   onRemove?: (() => void) | undefined;
 };
 
 /** An organism: name, parts, one location and its ecosystems (lists are comma-separated). */
-function OrganismFields({ idBase, label, placeholder, value, onChange, onRemove }: OrganismFieldsProps) {
+function OrganismFields({
+  idBase,
+  label,
+  placeholder,
+  required,
+  value,
+  onChange,
+  onRemove,
+}: OrganismFieldsProps) {
   return (
     <div className="coconut-organism">
       <div className="coconut-organism__name">
-        <Field id={`${idBase}-name`} label={label}>
+        <Field id={`${idBase}-name`} label={label} required={required}>
           <input
             id={`${idBase}-name`}
             className="coconut-input"
+            aria-required={required || undefined}
             placeholder={placeholder}
             value={value.name}
             onChange={(e) => onChange({ name: e.target.value })}
