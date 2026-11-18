@@ -122,7 +122,7 @@ describe("StructureActions", () => {
     fireEvent.click(screen.getByText("Look up in PubChem"));
     expect(await screen.findByText("CID 702")).toBeTruthy();
     expect(container.querySelector("b")).toBeNull();
-    const a = screen.getByRole("link", { name: "Open" });
+    const a = screen.getByRole("link", { name: "Open in PubChem" });
     expect(a.getAttribute("href")).toBe(
       "https://pubchem.ncbi.nlm.nih.gov/compound/702",
     );
@@ -142,5 +142,55 @@ describe("StructureActions", () => {
     fireEvent.click(screen.getByText("Compare"));
     expect(onEdit).toHaveBeenCalled();
     expect(onCompare).toHaveBeenCalled();
+  });
+
+  it("drops the lookup and aborts it when the structure changes", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_u: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise<Response>(() => {});
+      }),
+    );
+    const { rerender } = render(<StructureActions {...base} />);
+    fireEvent.click(screen.getByText("Look up in PubChem"));
+    expect(await screen.findByText("Looking up…")).toBeTruthy();
+    rerender(<StructureActions {...base} smiles="CCN" />);
+    expect(screen.queryByText("Looking up…")).toBeNull();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("clears a shown hit when the structure changes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ IdentifierList: { CID: [702] } })),
+        )
+        .mockResolvedValueOnce(new Response("{}")),
+    );
+    const { rerender } = render(<StructureActions {...base} />);
+    fireEvent.click(screen.getByText("Look up in PubChem"));
+    expect(await screen.findByText("CID 702")).toBeTruthy();
+    rerender(<StructureActions {...base} smiles="CCN" />);
+    expect(screen.queryByText("CID 702")).toBeNull();
+  });
+
+  it("aborts an in-flight lookup on unmount", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_u: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise<Response>(() => {});
+      }),
+    );
+    const { unmount } = render(<StructureActions {...base} />);
+    fireEvent.click(screen.getByText("Look up in PubChem"));
+    await screen.findByText("Looking up…");
+    unmount();
+    expect(signal?.aborted).toBe(true);
   });
 });

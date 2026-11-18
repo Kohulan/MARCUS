@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { coconutCountForDoi } from "./coconutDoi";
+import { coconutCountForDoi, coconutLabel } from "./coconutDoi";
+import { TIMEOUT_MS } from "./fetchJson";
 import { pubchemBySmiles } from "./pubchem";
 
 function json(body: unknown, status = 200) {
@@ -127,7 +128,7 @@ describe("coconutCountForDoi", () => {
     expect((await coconutCountForDoi("10.1/x"))?.count).toBe(2);
   });
 
-  it("flags a full page as more and encodes the url", async () => {
+  it("flags a full page of unique ids as more and encodes the url", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(json({ data: { data: rowsOf(20) } })),
@@ -147,5 +148,86 @@ describe("coconutCountForDoi", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json("junk")));
     expect(await coconutCountForDoi("10.1/x")).toMatchObject({ count: 0 });
     expect(await coconutCountForDoi("  ")).toBeNull();
+  });
+});
+
+describe("coconutLabel", () => {
+  it("shows the count, with + on a full page, and 0", () => {
+    expect(coconutLabel({ count: 0, more: false })).toBe(
+      "0 already in COCONUT",
+    );
+    expect(coconutLabel({ count: 3, more: false })).toBe(
+      "3 already in COCONUT",
+    );
+    expect(coconutLabel({ count: 20, more: true })).toBe(
+      "20+ already in COCONUT",
+    );
+  });
+
+  it("counts more on unique ids, not rows", async () => {
+    const dupes = Array.from({ length: 20 }, () => ({ id: 1 }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(dupes)));
+    expect(await coconutCountForDoi("10.1/x")).toMatchObject({
+      count: 1,
+      more: false,
+    });
+  });
+});
+
+describe("timeout and abort", () => {
+  it("returns null when the request hangs past the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_u: string, init: RequestInit) =>
+            new Promise<Response>((_res, rej) =>
+              init.signal?.addEventListener("abort", () =>
+                rej(new DOMException("t", "AbortError")),
+              ),
+            ),
+        ),
+      );
+      const p = pubchemBySmiles("CCO");
+      await vi.advanceTimersByTimeAsync(TIMEOUT_MS + 1);
+      expect(await p).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts the request when the caller aborts, and stays null", async () => {
+    let seen: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_u: string, init: RequestInit) =>
+          new Promise<Response>((_res, rej) => {
+            seen = init.signal as AbortSignal;
+            seen.addEventListener("abort", () =>
+              rej(new DOMException("a", "AbortError")),
+            );
+          }),
+      ),
+    );
+    const ctl = new AbortController();
+    const p = coconutCountForDoi("10.1/x", ctl.signal);
+    ctl.abort();
+    expect(await p).toBeNull();
+    expect(seen?.aborted).toBe(true);
+  });
+
+  it("does not start when already aborted", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_u: string, init: RequestInit) => {
+        if (init.signal?.aborted) throw new DOMException("a", "AbortError");
+        return json({});
+      }),
+    );
+    const ctl = new AbortController();
+    ctl.abort();
+    expect(await pubchemBySmiles("C", ctl.signal)).toBeNull();
   });
 });

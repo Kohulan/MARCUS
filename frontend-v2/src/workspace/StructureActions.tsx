@@ -1,7 +1,7 @@
 // The actions for one structure (focus mode and the card menu): copy and download the
 // structure, look it up in PubChem, and hand Edit and Compare back to the caller. Props in,
 // callbacks out: it touches no workspace state. Third-party text is rendered as text only.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
@@ -66,6 +66,16 @@ export default function StructureActions({
   const abort = useRef<AbortController | null>(null);
   const stem = fileStem(name, n);
 
+  // A new structure (focus mode steps on) drops the old lookup and note; unmount aborts too.
+  useEffect(() => {
+    setLookup(null);
+    setNote(null);
+    return () => {
+      abort.current?.abort();
+      abort.current = null;
+    };
+  }, [smiles]);
+
   async function molfile(): Promise<string> {
     if (curatedMolfile) return curatedMolfile;
     if (predictionMolfile) return predictionMolfile;
@@ -120,6 +130,7 @@ export default function StructureActions({
   async function findInPubchem() {
     if (!smiles) return;
     abort.current?.abort();
+    setNote(null);
     const ctl = new AbortController();
     abort.current = ctl;
     setLookup({ state: "busy" });
@@ -129,6 +140,7 @@ export default function StructureActions({
   }
 
   const has = Boolean(smiles);
+  const hasMol = Boolean(smiles || curatedMolfile || predictionMolfile);
   return (
     <div className="structure-actions">
       <div className="structure-actions__row">
@@ -143,7 +155,7 @@ export default function StructureActions({
         <GlassButton
           tint="clear"
           size="sm"
-          disabled={!has}
+          disabled={!hasMol}
           onClick={() => void copyMolfile()}
         >
           Copy molfile
@@ -151,7 +163,7 @@ export default function StructureActions({
         <GlassButton
           tint="clear"
           size="sm"
-          disabled={!has}
+          disabled={!hasMol}
           onClick={() => void downloadMolfile()}
         >
           Download molfile
@@ -196,7 +208,7 @@ export default function StructureActions({
             <span className="structure-actions__cid">CID {lookup.hit.cid}</span>
             {lookup.hit.name && <span> {lookup.hit.name}</span>}{" "}
             <a href={lookup.hit.url} target="_blank" rel="noopener noreferrer">
-              Open
+              Open in PubChem
             </a>
           </>
         )}

@@ -67,10 +67,17 @@ export async function coconutCountForDoi(
     }
     return {
       count: ids.size,
-      more: list.length >= COCONUT_PAGE_SIZE,
+      more: ids.size >= COCONUT_PAGE_SIZE,
       url: `https://coconut.naturalproducts.net/search?q=${encodeURIComponent(clean)}&tagType=citations&type=tags&activeTab=citations`,
     };
   } catch {
     return null;
   }
+}
+
+/** The header text: "3 already in COCONUT", "20+ already in COCONUT" (a full page: more may exist). */
+export function coconutLabel(
+  r: Pick<CoconutDoiCount, "count" | "more">,
+): string {
+  return `${r.count}${r.more ? "+" : ""} already in COCONUT`;
 }
