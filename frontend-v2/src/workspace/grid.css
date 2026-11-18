@@ -369,7 +369,8 @@
 
 /* An open menu must not be clipped by the card's paint containment (content-visibility),
    and it lies over the neighbouring cards. */
-.card:has(.engine-menu__panel) {
+.card:has(.engine-menu__panel),
+.card:has(.card-menu__panel) {
   z-index: 2;
   content-visibility: visible;
 }
@@ -391,9 +392,9 @@
   box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
 }
 
-/* Beside another button, the last button's menu opens to the left, inside the card's
-   width; a menu button alone (a Failed card) keeps its menu anchored left. */
-.engine-menu:last-child:not(:only-child) .engine-menu__panel {
+/* After another button, an engine menu opens to the left, inside the card's width; a menu
+   button first in the row (a Failed card) keeps its menu anchored left. */
+.engine-menu:not(:first-child) .engine-menu__panel {
   right: 0;
   left: auto;
 }
@@ -426,6 +427,30 @@
 
 .engine-menu__item:focus-visible {
   outline-offset: -2px;
+}
+
+/* The card menu ("More"): last in the row, pushed to the card's right edge; its panel
+   opens upwards and to the left, inside the card's width. */
+.card__actions:empty {
+  display: none;
+}
+
+.card-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.card-menu__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  border: 1px solid var(--control-border);
+  background-color: var(--surface);
+  box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
 }
 
 /* Bulk bar ------------------------------------------------------------------ */

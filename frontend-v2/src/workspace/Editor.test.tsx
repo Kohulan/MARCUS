@@ -198,8 +198,9 @@ describe("Editor", () => {
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    // the field is usable again for the next try
+    // the field is usable again for the next try, and has the focus
     expect(screen.getByRole("button", { name: "Save SMILES" })).toBeEnabled();
+    expect(screen.getByLabelText("SMILES")).toHaveFocus();
   });
 
   it("a failure that is not an ApiError shows a fixed text", async () => {
@@ -238,6 +239,19 @@ describe("Editor", () => {
 
     fireEvent.keyDown(screen.getByLabelText("SMILES"), { key: "Escape" });
     expect(a.onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it("no key typed in the dialog reaches a document listener (the review keys)", () => {
+    renderEditor();
+    const seen = vi.fn();
+    document.addEventListener("keydown", seen);
+    try {
+      fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "a" });
+      fireEvent.keyDown(screen.getByLabelText("SMILES"), { key: "Escape" });
+      expect(seen).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("keydown", seen);
+    }
   });
 
   it("stops listening once unmounted", () => {

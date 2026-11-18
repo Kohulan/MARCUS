@@ -27,6 +27,7 @@ import { useToast } from "../ui/Toasts";
 import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardState";
 import { SegmentCompare } from "./Compare";
 import KeyHelp from "./KeyHelp";
+import { SegmentEditor } from "./SegmentEditor";
 import { useCardActions } from "./useCardActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
@@ -50,8 +51,6 @@ export type FocusModeProps = {
   segment: SegmentOut;
   /** Back to the grid; the grid then focuses this segment's card. */
   onClose: (segmentId: string) => void;
-  /** E and the Edit button. F11 fills it (the Ketcher editor); until then E does nothing. */
-  onEdit?: ((segmentId: string) => void) | undefined;
 };
 
 /**
@@ -59,7 +58,7 @@ export type FocusModeProps = {
  * predictions, a note and the decision, all from the keyboard (useReviewKeys). A or R
  * lands the stamp, then moves on to the next structure still to check.
  */
-export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusModeProps) {
+export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps) {
   const paper = ws.paper!;
   const { setSelection } = ws;
   const { save } = useSaveCuration(paper.id);
@@ -69,6 +68,8 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusM
   const [help, setHelp] = useState(false);
   // Compare engines (C) over focus mode: the review keys hold while it is open.
   const [comparing, setComparing] = useState(false);
+  // The structure editor (E): the same hold.
+  const [editing, setEditing] = useState(false);
   const { started } = useCardActions(paper.id, ws.live.reconnect);
   const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
@@ -186,16 +187,18 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusM
     root.current?.focus({ preventScroll: true });
   };
 
-  const held = help || comparing; // a dialog is open over focus mode
+  const held = help || comparing || editing; // a dialog is open over focus mode
   useReviewKeys({
     accept: () => !held && decide("accepted"),
     reject: () => !held && decide("rejected"),
-    edit: () => !held && onEdit?.(id),
+    edit: () => !held && setEditing(true),
     compare: () => !held && setComparing(true),
     prev: () => !held && step(-1),
     next: () => !held && step(1),
-    close: () => (comparing ? setComparing(false) : help ? setHelp(false) : onClose(id)),
-    help: () => !comparing && setHelp((h) => !h),
+    // The editor closes itself (Esc in the dialog never gets here); a stray one leaves it be.
+    close: () =>
+      editing ? undefined : comparing ? setComparing(false) : help ? setHelp(false) : onClose(id),
+    help: () => !comparing && !editing && setHelp((h) => !h),
   });
 
   const left = rows.filter(
@@ -323,12 +326,9 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusM
             <GlassButton tint="clear" onClick={() => decide("rejected")}>
               Reject <Kbd>R</Kbd>
             </GlassButton>
-            {/* F11 hooks the editor in through onEdit. */}
-            {onEdit && (
-              <GlassButton tint="clear" onClick={() => onEdit(id)}>
-                Edit <Kbd>E</Kbd>
-              </GlassButton>
-            )}
+            <GlassButton tint="clear" hasPopup="dialog" onClick={() => setEditing(true)}>
+              Edit <Kbd>E</Kbd>
+            </GlassButton>
             <GlassButton tint="clear" hasPopup="dialog" onClick={() => setComparing(true)}>
               Compare <Kbd>C</Kbd>
             </GlassButton>
@@ -356,6 +356,14 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusM
           tag={tag}
           onStarted={started}
           onClose={() => setComparing(false)}
+        />
+      )}
+      {editing && (
+        <SegmentEditor
+          paperId={paper.id}
+          paperEngine={paper.engine}
+          segment={segment}
+          onClose={() => setEditing(false)}
         />
       )}
     </section>

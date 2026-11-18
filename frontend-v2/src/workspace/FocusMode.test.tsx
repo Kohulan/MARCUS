@@ -442,14 +442,73 @@ describe("focus mode", () => {
     expect(put.mock.calls[0]![1].status).toBe("rejected");
   });
 
-  it("E does nothing until F11 gives an editor; C opens Compare engines", async () => {
+  it("E opens the editor on the shown structure; the review keys hold; Esc closes only it", async () => {
     const put = putSpy();
-    renderAt(paper([segment("s1")]), "?s=s1&focus=1");
+    renderAt(
+      paper([segment("s1", { predictions: [prediction({ smiles: "CCN", molfile: "M1" })] }), segment("s2")]),
+      "?s=s1&focus=1",
+    );
     const region = await focusRegion();
     press("e");
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(within(dialog).getByLabelText("SMILES")).toHaveValue("CCN");
+    // Keys typed while the editor is open (focus on its Close button, not a text field).
+    within(dialog).getByRole("button", { name: "Close" }).focus();
+    for (const key of ["a", "r", "ArrowRight", "c", "?"]) press(key);
+    await act(() => new Promise((r) => setTimeout(r, 20)));
     expect(put).not.toHaveBeenCalled();
-    expect(within(region).queryByRole("button", { name: /Edit/ })).toBeNull();
-    expect(within(region).getByRole("button", { name: /^Compare/ })).toBeInTheDocument();
+    expect(within(region).queryByRole("img", { name: /Accepted|Rejected/ })).toBeNull();
+    expect(region).toHaveAccessibleName("Focus [01]");
+    expect(screen.queryByRole("dialog", { name: /Compare engines|Keys/ })).toBeNull();
+    // A key from the page behind (focus left the dialog) is held too.
+    fireEvent.keyDown(document.body, { key: "a" });
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(put).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Edit structure" })).toBeInTheDocument();
+    // Esc in the dialog closes the editor and leaves focus mode open.
+    fireEvent.keyDown(within(dialog).getByRole("button", { name: "Close" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
+    expect(await focusRegion()).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("focus=1");
+  });
+
+  it("a save in the editor keeps the note and accepts a structure still to check", async () => {
+    const put = putSpy();
+    renderAt(
+      paper([segment("s1", { curation: curation({ note: "n" }) })]),
+      "?s=s1&focus=1",
+    );
+    const region = await focusRegion();
+    fireEvent.click(within(region).getByRole("button", { name: /^Edit/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    fireEvent.change(within(dialog).getByLabelText("SMILES"), { target: { value: "CCO" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save SMILES" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0]).toEqual([
+      "s1",
+      { status: "accepted", smiles: "CCO", molfile: null, note: "n" },
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
+    expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
+  });
+
+  it("an edited structure opens with its curated SMILES and molfile; C still opens Compare", async () => {
+    putSpy();
+    renderAt(
+      paper([
+        segment("s1", {
+          curation: curation({ status: "rejected", smiles: "CCCl", molfile: "M2" }),
+        }),
+      ]),
+      "?s=s1&focus=1",
+    );
+    await focusRegion();
+    press("e");
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(within(dialog).getByLabelText("SMILES")).toHaveValue("CCCl");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
     press("c");
     expect(await screen.findByRole("dialog", { name: /Compare engines/ })).toBeInTheDocument();
   });
@@ -508,6 +567,27 @@ describe("useReviewKeys", () => {
     }
     expect(h.accept).not.toHaveBeenCalled();
     host.remove();
+  });
+
+  it("does nothing, and leaves Esc its default, while a native dialog is open", () => {
+    const h = handlers();
+    renderHook(() => useReviewKeys(h));
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.append(dialog);
+    try {
+      // Focus on the page body (a disabled button dropped it): still the dialog's keys.
+      for (const key of ["a", "r", "e", "c", "ArrowLeft", "ArrowRight", "?"]) {
+        fireEvent.keyDown(document.body, { key });
+      }
+      const esc = fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(esc).toBe(true); // not default-prevented: the dialog's cancel can fire
+      for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
+    } finally {
+      dialog.remove();
+    }
+    fireEvent.keyDown(document.body, { key: "a" });
+    expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a held key for decisions (no repeat accept)", () => {

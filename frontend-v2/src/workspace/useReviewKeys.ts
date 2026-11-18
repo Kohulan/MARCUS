@@ -54,8 +54,9 @@ function pick(h: ReviewKeyHandlers, key: string): (() => void) | undefined {
 /**
  * The focus-mode keys (Global Constraints, exact): A accept, R reject, E edit, C compare,
  * ← previous, → next, Esc back to grid, ? key list. One document listener while mounted.
- * Ignored while focus is in an input, textarea, select or the Ketcher iframe, and when
- * Ctrl, Meta or Alt is held (browser and system shortcuts stay theirs).
+ * Ignored while focus is in an input, textarea, select or the Ketcher iframe, while a native
+ * `<dialog>` is open, and when Ctrl, Meta or Alt is held (browser and system shortcuts stay
+ * theirs).
  */
 export function useReviewKeys(handlers: ReviewKeyHandlers): void {
   const latest = useRef(handlers);
@@ -66,6 +67,9 @@ export function useReviewKeys(handlers: ReviewKeyHandlers): void {
       if (e.defaultPrevented || e.isComposing) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (typingIn(e.target) || typingIn(document.activeElement)) return;
+      // A native dialog is open (the structure editor, the COCONUT form): it owns the keys,
+      // wherever focus is. Its Esc must keep its default, or the dialog's cancel never fires.
+      if (document.querySelector("dialog[open]")) return;
       const fn = pick(latest.current, e.key);
       if (!fn) return;
       e.preventDefault(); // arrows would scroll the page

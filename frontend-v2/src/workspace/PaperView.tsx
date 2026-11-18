@@ -13,6 +13,7 @@ import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { hasDrawing } from "./cardState";
 import { CardCompare } from "./Compare";
+import { CardEditor } from "./SegmentEditor";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
@@ -129,6 +130,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [comparing, setComparing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const busy = BUSY_PAPER.has(paper.status);
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
@@ -272,6 +274,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   onDecide={onDecide}
                   onRun={onRun}
                   onCompare={setComparing}
+                  onEdit={setEditing}
                   onHover={onCardHover}
                 />
               );
@@ -287,6 +290,9 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           onStarted={started}
           onClose={() => setComparing(null)}
         />
+      )}
+      {editing !== null && (
+        <CardEditor ws={ws} segmentId={editing} onClose={() => setEditing(null)} />
       )}
     </div>
   );

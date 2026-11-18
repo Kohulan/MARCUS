@@ -87,8 +87,11 @@ export type StructureCardProps = {
   onOpen: (segmentId: string) => void;
   onDecide: (segmentId: string, status: CurationStatus) => void;
   onRun: (segmentId: string, engine: Engine) => void;
-  /** Opens Compare engines for the segment (To check cards and the engine menu). */
+  /** Opens Compare engines for the segment (To check cards, the engine menu, the card menu). */
   onCompare?: ((segmentId: string) => void) | undefined;
+  /** Opens the structure editor for the segment (the card menu's Edit). */
+  onEdit?: ((segmentId: string) => void) | undefined;
+
   /**
    * The Paper view's list: the drawing beside the text, no checkbox (no bulk actions
    * there), and a click on the card calls `onOpen` (the Paper view selects with it).
@@ -121,6 +124,7 @@ function StructureCard({
   onDecide,
   onRun,
   onCompare,
+  onEdit,
   compact = false,
   linked = false,
   onHover,
@@ -252,17 +256,20 @@ function StructureCard({
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
       </div>
 
-      <CardActions
-        segmentId={segment.id}
-        tag={tag}
-        state={state}
-        paperEngine={paperEngine}
-        canAccept={canAccept}
-        failedEngine={failedEngine}
-        onDecide={onDecide}
-        onRun={onRun}
-        onCompare={onCompare}
-      />
+      <div className="card__actions">
+        <CardActions
+          segmentId={segment.id}
+          tag={tag}
+          state={state}
+          paperEngine={paperEngine}
+          canAccept={canAccept}
+          failedEngine={failedEngine}
+          onDecide={onDecide}
+          onRun={onRun}
+          onCompare={onCompare}
+        />
+        <CardMenu tag={tag} onEdit={onEdit && (() => onEdit(segment.id))} />
+      </div>
     </article>
   );
 }
@@ -300,7 +307,7 @@ function CardActions({
     // No key hints: A and R act in focus mode only. The name starts with the visible word
     // (WCAG 2.5.3 label in name).
     return (
-      <div className="card__actions">
+      <>
         <GlassButton
           tint="green"
           size="sm"
@@ -329,25 +336,23 @@ function CardActions({
             Compare
           </GlassButton>
         )}
-      </div>
+      </>
     );
   }
   if (state === "failed") {
     const failed = asEngine(failedEngine) ?? own;
     return (
-      <div className="card__actions">
-        <EngineMenu
-          label="Try another engine"
-          engines={others(failed)}
-          onPick={(engine) => onRun(segmentId, engine)}
-          onCompare={compare}
-        />
-      </div>
+      <EngineMenu
+        label="Try another engine"
+        engines={others(failed)}
+        onPick={(engine) => onRun(segmentId, engine)}
+        onCompare={compare}
+      />
     );
   }
   if (state === "not-read") {
     return (
-      <div className="card__actions">
+      <>
         <GlassButton tint="clear" size="sm" onClick={() => onRun(segmentId, own)}>
           {`Read with ${engineName(own)}`}
         </GlassButton>
@@ -357,7 +362,7 @@ function CardActions({
           onPick={(engine) => onRun(segmentId, engine)}
           onCompare={compare}
         />
-      </div>
+      </>
     );
   }
   return null;
@@ -366,20 +371,11 @@ function CardActions({
 const others = (engine: Engine) => ENGINES.filter((e) => e.value !== engine);
 
 /**
- * A disclosure of engines to read the segment with, and Compare engines last (when given).
- * Escape or a click outside closes it.
+ * A disclosure on a card: open and close, Escape (kept from the review keys) and a click or
+ * focus outside close it. `close(true)` also puts focus back on its button, where a dialog
+ * opened from the panel returns it.
  */
-function EngineMenu({
-  label,
-  engines,
-  onPick,
-  onCompare,
-}: {
-  label: string;
-  engines: { value: Engine; label: string }[];
-  onPick: (engine: Engine) => void;
-  onCompare?: (() => void) | undefined;
-}) {
+function useDisclosure() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -398,13 +394,36 @@ function EngineMenu({
     };
   }, [open]);
 
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) button.current?.focus();
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== "Escape" || !open) return;
     e.stopPropagation(); // the review keys (F8) must not also see this Escape
-    setOpen(false);
-    button.current?.focus();
+    close(true);
   };
 
+  return { open, setOpen, root, button, panelId, close, onKeyDown };
+}
+
+/**
+ * A disclosure of engines to read the segment with, and Compare engines last (when given).
+ * Escape or a click outside closes it.
+ */
+function EngineMenu({
+  label,
+  engines,
+  onPick,
+  onCompare,
+}: {
+  label: string;
+  engines: { value: Engine; label: string }[];
+  onPick: (engine: Engine) => void;
+  onCompare?: (() => void) | undefined;
+}) {
+  const { open, setOpen, root, button, panelId, close, onKeyDown } = useDisclosure();
   return (
     <div className="engine-menu" ref={root} onKeyDown={onKeyDown}>
       <GlassButton
@@ -438,14 +457,52 @@ function EngineMenu({
               className="engine-menu__item engine-menu__item--compare"
               aria-haspopup="dialog"
               onClick={() => {
-                setOpen(false);
-                button.current?.focus(); // where focus returns when Compare closes
+                close(true); // where focus returns when Compare closes
                 onCompare();
               }}
             >
               Compare
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The card menu ("More", on every card that can be edited): Edit opens the structure
+ * editor. It closes the menu first, so the dialog returns focus to "More".
+ */
+function CardMenu({ tag, onEdit }: { tag: string; onEdit?: (() => void) | undefined }) {
+  const { open, setOpen, root, button, panelId, close, onKeyDown } = useDisclosure();
+  if (!onEdit) return null;
+  return (
+    <div className="card-menu" ref={root} onKeyDown={onKeyDown}>
+      <GlassButton
+        ref={button}
+        tint="clear"
+        size="sm"
+        label={`More for ${tag}`}
+        expanded={open}
+        controls={open ? panelId : undefined}
+        onClick={() => setOpen((o) => !o)}
+      >
+        More
+      </GlassButton>
+      {open && (
+        <div id={panelId} className="card-menu__panel" role="group" aria-label={`${tag} actions`}>
+          <button
+            type="button"
+            className="engine-menu__item"
+            aria-haspopup="dialog"
+            onClick={() => {
+              close(true);
+              onEdit();
+            }}
+          >
+            Edit
+          </button>
         </div>
       )}
     </div>

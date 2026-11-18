@@ -314,6 +314,54 @@ describe("cards and their states", () => {
   });
 });
 
+describe("the card menu (More)", () => {
+  it("Edit opens the editor on that structure; a save keeps the note; focus returns to More", async () => {
+    const put = vi
+      .spyOn(api, "putCuration")
+      .mockImplementation((_id, body) => Promise.resolve({ ...body }));
+    renderGrid(
+      paper([
+        segment("s1"),
+        segment("s2", { curation: curation({ status: "rejected", note: "keep", smiles: "CCCl" }) }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    const more = within(card("[02]")).getByRole("button", { name: "More for [02]" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(card("[02]")).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(within(dialog).getByLabelText("SMILES")).toHaveValue("CCCl");
+    fireEvent.change(within(dialog).getByLabelText("SMILES"), { target: { value: "CCBr" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save SMILES" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0]).toEqual([
+      "s2",
+      { status: "rejected", smiles: "CCBr", molfile: null, note: "keep" },
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
+    expect(within(card("[02]")).getByRole("button", { name: "More for [02]" })).toHaveFocus();
+  });
+
+  it("Escape closes the menu without leaving the page; every card has one", async () => {
+    renderGrid(
+      paper([
+        segment("s1", { curation: curation({ status: "accepted" }) }),
+        segment("s2", { predictions: [] }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(card("[01]")).getByRole("button", { name: "More for [01]" })).toBeInTheDocument();
+    const more = within(card("[02]")).getByRole("button", { name: "More for [02]" });
+    fireEvent.click(more);
+    const edit = within(card("[02]")).getByRole("button", { name: "Edit" });
+    fireEvent.keyDown(edit, { key: "Escape" });
+    expect(within(card("[02]")).queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(more).toHaveFocus();
+  });
+});
+
 describe("selection and bulk review", () => {
   it("select 2 + Accept 2 sends one bulk call with both ids and no note key", async () => {
     let answer: () => void = () => undefined;

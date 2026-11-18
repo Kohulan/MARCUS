@@ -60,6 +60,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
       latest.current.onClose();
     } catch (err) {
       setError(`Save failed: ${err instanceof ApiError ? err.detail : FALLBACK}`);
+      field.current?.focus(); // the disabled button dropped it; the field is where to fix it
     } finally {
       savingNow.current = false;
       setSaving(false);
@@ -128,6 +129,8 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
         close();
       }}
       onKeyDown={(e) => {
+        // As in Compare: no key typed in the dialog reaches the review keys on `document`.
+        e.stopPropagation();
         if (e.key === "Escape") {
           e.preventDefault();
           close();

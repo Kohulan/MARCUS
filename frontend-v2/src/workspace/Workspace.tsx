@@ -197,8 +197,6 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
               rows={rows}
               segment={focused}
               onClose={close}
-              // F11 passes onEdit (the editor) here.
-              onEdit={undefined}
             />
           )}
           {/* Hidden, not unmounted, in focus mode: the grid keeps its filter and selection. */}
