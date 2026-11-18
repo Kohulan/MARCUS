@@ -5,6 +5,7 @@
 // replaced), and the dialog in focus mode (review keys held, Esc closes Compare first).
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
@@ -20,7 +21,8 @@ vi.mock("../api/useLiveEvents", () => ({
   useLiveEvents: () => ({ mode: "live", reconnect: live.reconnect }),
 }));
 
-vi.mock("../api/depictions", () => ({
+vi.mock("../api/depictions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/depictions")>()),
   useDepiction: (url: string | null) => ({ src: url, failed: false }),
 }));
 
@@ -331,6 +333,50 @@ describe("Compare", () => {
     );
   });
 
+  it("as a dialog: native <dialog>, a glass Close, and focus home when the opener is gone", () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <section data-focus-home="" tabIndex={-1} aria-label="Focus [01]">
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}>
+              Open compare
+            </button>
+          )}
+          {open && (
+            <Compare
+              target={{ kind: "segment", id: "s1" }}
+              predictions={[]}
+              steps={[]}
+              onPick={vi.fn()}
+              onStarted={vi.fn()}
+              onClose={() => setOpen(false)}
+            />
+          )}
+        </section>
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Host />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    const opener = screen.getByRole("button", { name: "Open compare" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: /Compare engines/ });
+    expect(dialog.tagName).toBe("DIALOG");
+    expect(dialog).toHaveAttribute("open");
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    expect(close).toHaveClass("glass", "glass--clear", "glass--sm");
+    expect(close).toHaveFocus();
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("region", { name: "Focus [01]" })).toHaveFocus();
+  });
+
   it("Use this one hands the prediction to onPick", () => {
     const p = prediction({ engine: "molnextr", smiles: "CCN" });
     const { props } = renderCompare({ predictions: [prediction(), p] });
@@ -370,6 +416,7 @@ function paper(segments: SegmentOut[]): PaperDetail {
     rejected: 0,
     to_review: segments.length,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments,
   };

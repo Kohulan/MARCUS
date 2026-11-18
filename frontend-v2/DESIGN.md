@@ -67,6 +67,51 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
+  display-info:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "clamp(36px, 2.6vw + 18px, 60px)"
+    fontWeight: 700
+    lineHeight: 0.92
+    letterSpacing: "-0.035em"
+  drop-title:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "44px"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "-0.02em"
+  empty-title:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "32px"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "-0.02em"
+  note-title:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "24px"
+    fontWeight: 700
+    lineHeight: 1.05
+    letterSpacing: "-0.02em"
+  heading-sm:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "20px"
+    fontWeight: 700
+    lineHeight: 1.15
+  dialog-title:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "18px"
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: "-0.01em"
+  prose-lg:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 400
+    lineHeight: 1.3
+  prose-md:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.45
   wordmark:
     fontFamily: "Gmarket Sans, Geist, sans-serif"
     fontSize: "28px"
@@ -204,7 +249,7 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 
 ### Secondary
 - **Signal Orange** (orange): the colour of "needs your eyes". The To check badge fill, the 2px inside edge of a card to check, the dashed outline of a structure being read, bounding boxes on the example page, and the orange glass pill for the first action on a screen (Upload a PDF). Shapes and fills only, never small text.
-- **Orange Ink** (orange-ink): small orange text, such as the [01] index tags and "DECIMER and MolNexTR differ" notes.
+- **Orange Ink** (orange-ink): small orange text, such as the [01] index tags and "Engines differ" notes.
 
 ### Tertiary
 - **Charcoal** (charcoal): the specimen-label header bar, the Failed tag, the rejected stamp ring and the diagonal strike, and the error toast.
@@ -252,6 +297,16 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 - **Control label** (Geist Mono 500, 13px, 0.06em, uppercase; 12px in small pills, segments and nav cells): every button and nav cell.
 - **Data** (Geist Mono 400, 12px, line-height 1.5): SMILES and other machine strings, wrapping anywhere, never uppercased.
 
+Secondary steps, each kept to one kind of thing:
+- **Display info** (Geist 700, clamp(36px, 2.6vw + 18px, 60px), uppercase, forest green): the h1 of About, Privacy and Disclaimer.
+- **Drop title** (Geist 700, 44px, uppercase): the tool home's drop zone heading.
+- **Empty title** (Geist 700, 32px, line-height 1, uppercase): a paper or image that is gone.
+- **Note title** (Geist 700, 24px, line-height 1.05, uppercase): the desktop-only note and the COCONUT results heading.
+- **Heading small** (Geist 700, 20px, line-height 1.15, uppercase): info-page section headings and the tool home's Images heading; the mono readout in an empty drawing takes the same size.
+- **Dialog title** (Geist 700, 18px, line-height 1.2, -0.01em, uppercase): the editor, COCONUT, Compare and Keys dialogs; the info lede (Geist 400) and the example card's failure title share the size.
+- **Prose large** (Geist, 17px, line-height 1.3): paper names in the tool's list (700) and the empty-list line.
+- **Prose medium** (Geist 400, 15px, line-height 1.45): text in the tool: field values, notes, problems, the paper view's text, the focus-mode step arrows.
+
 ### Named Rules
 **The Two Weights Rule.** Geist ships 400 and 700, Geist Mono 400 and 500, with font-synthesis-weight off. No other weights.
 
@@ -269,13 +324,15 @@ The review grid is auto-fill columns of at least 300px structure cells. Breakpoi
 
 ## Elevation & Depth
 
-The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the hatched failed ground) and from hairlines, not shadows. The example page on the landing lies flat with only a 1px hair underline. Shadows belong to the few objects that float above the sheet, all in one green-black ambient family (rgba(15, 30, 22, 0.35)): glass pills, toasts and menus, and dialogs (the structure editor and the COCONUT submission).
+The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the hatched failed ground) and from hairlines, not shadows. The example page on the landing and the page in the paper view lie flat with only a 1px hair underline. Shadows belong to the few objects that float above the sheet, all in one green-black ambient family (rgba(15, 30, 22, 0.35)): glass pills, toasts and menus, and dialogs (the structure editor, the COCONUT submission, Compare engines and Keys). Every value is a token in `tokens.css`; no stylesheet writes a shadow or scrim colour of its own (pinned in `styles.test.ts`).
 
 ### Shadow Vocabulary
-- **Glass lift** (`0 10px 24px -8px rgba(15, 30, 22, 0.35)` plus the pill's inner highlights): glass pill buttons; also toasts and the card's floating menu.
-- **Menu lift** (`0 12px 28px -10px rgba(15, 30, 22, 0.35)`): workspace disclosures such as Export.
-- **Dialog lift** (`0 24px 64px -24px rgba(15, 30, 22, 0.45)`): the editor and COCONUT dialogs.
-- **Solid pill fallback** (`0 6px 16px -8px rgba(15, 30, 22, 0.35)`): glass pills under reduced transparency or without backdrop-filter.
+- **Glass lift** (`--lift-glass`, `0 10px 24px -8px rgba(15, 30, 22, 0.35)`): glass pills (after `--glass-shine`); also toasts and the card's floating menus.
+- **Glass shine** (`--glass-shine`): the pill's inner light: a top highlight, a soft white rim and a bottom shade (four insets).
+- **Menu lift** (`--lift-menu`, `0 12px 28px -10px rgba(15, 30, 22, 0.35)`): workspace disclosures such as Export.
+- **Dialog lift** (`--lift-dialog`, `0 24px 64px -24px rgba(15, 30, 22, 0.45)`): every dialog: the editor, COCONUT, Compare and Keys.
+- **Scrim** (`--scrim`, `rgba(28, 33, 29, 0.42)`): the backdrop of every dialog. Dialogs are native `<dialog>` elements opened as modals, so the page behind is inert.
+- **Solid pill fallback** (`--lift-pill-solid`, `0 6px 16px -8px rgba(15, 30, 22, 0.35)`): glass pills under reduced transparency or without backdrop-filter.
 
 ### Named Rules
 **The Flat Sheet Rule.** Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, menus, toasts, dialogs) lift.
@@ -294,10 +351,11 @@ Liquid glass on paper: tactile pills that are the only shiny thing on a matte sh
 - **Orange glass:** gradient rgba(255,118,72,.95) to rgba(250,54,0,.9), on-orange text: the first action (Upload a PDF).
 - **Green glass:** gradient rgba(46,110,74,.95) to rgba(30,77,51,.92), on-green text: commit actions (Accept, Send to COCONUT).
 - **Clear glass:** white 70% to 25% gradient, ink text: everything else (Reject, Compare, More, Export, Copy).
-- **Material:** backdrop-filter blur(3px) saturate(1.8) with the #marcus-glass SVG refraction where supported; inner top highlight and a soft bottom shade.
+- **Material:** backdrop-filter blur(3px) saturate(1.8) with the #marcus-glass SVG refraction where supported; inner top highlight and a soft bottom shade. Pills on a structure card and small pills in focus mode keep the blur only: on flat white or paper the refraction has nothing to bend.
 - **Hover / Focus:** scale(1.03) over 160ms cubic-bezier(0.16, 1, 0.3, 1) when motion is allowed; 2px forest-green outline at 2px offset. Disabled is a flat hair pill with muted text.
 - **Fallbacks:** solid orange, green, or white with a control-border ring under reduced transparency or without backdrop-filter; a ButtonBorder edge in forced colours.
-- **Text links as buttons:** small Geist Mono 500 uppercase in green with an underline that appears on hover (Copy, Select all shown).
+- **Text links as buttons:** small Geist Mono 500 uppercase in green with an underline that appears on hover (Copy, Select all shown, Back to start).
+- **Dialog Close:** always the small clear glass pill, in the dialog's head cell.
 
 ### Segmented filters
 - **Style:** a control-border box of square surface segments divided by control-border rules, Geist Mono 500 12px uppercase, muted tabular counts.

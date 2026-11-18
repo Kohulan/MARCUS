@@ -3,12 +3,14 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "./client";
+import { depictionKey } from "./depictionKey";
 import {
   createQueryClient,
   keys,
   LIST_POLL_MS,
   refreshPaper,
   SEGMENT_GONE,
+  snapshotIsCached,
   useImages,
   usePapers,
   useSaveCuration,
@@ -32,6 +34,7 @@ function paper(curation: CurationOut | null): PaperDetail {
     rejected: 0,
     to_review: 2,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments: [
       { id: "s1", page: 0, idx: 0, bbox: [0, 0, 1, 1], curation, predictions: [] },
@@ -126,6 +129,107 @@ describe("useSaveCuration", () => {
   });
 });
 
+describe("useSaveCuration optimistic write", () => {
+  const cached = (id = "s1") =>
+    client.getQueryData<PaperDetail>(keys.paper("p1"))!.segments.find((s) => s.id === id)!;
+
+  function holdPuts() {
+    const held: { id: string; resolve: () => void; reject: (e: unknown) => void }[] = [];
+    vi.mocked(api.putCuration).mockImplementation(
+      (id, body) =>
+        new Promise((resolve, reject) =>
+          held.push({ id, resolve: () => resolve({ ...body }), reject }),
+        ),
+    );
+    return held;
+  }
+
+  it("a status shows at once and a failed PUT takes it back; another segment keeps its own", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let one!: Promise<unknown>;
+    let two!: Promise<unknown>;
+    await act(async () => {
+      one = result.current.save("s1", { status: "accepted" }).catch((e: unknown) => e);
+      two = result.current.save("s2", { status: "rejected" });
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+    });
+    expect(cached("s1").curation?.status).toBe("accepted");
+    expect(cached("s2").curation?.status).toBe("rejected");
+    await act(async () => {
+      held.find((h) => h.id === "s1")!.reject(new ApiError(500, "boom"));
+      held.find((h) => h.id === "s2")!.resolve();
+      await Promise.all([one, two]);
+    });
+    expect(cached("s1").curation).toBeNull();
+    expect(cached("s2").curation?.status).toBe("rejected");
+  });
+
+  it("a new structure is cached only with the reply; a failed one leaves the drawing key", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const key = depictionKey(cached());
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    const structure = { smiles: "CCN", molfile: null };
+    let first!: Promise<unknown>;
+    await act(async () => {
+      first = result.current.save("s1", { status: "accepted", structure });
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    expect(cached().curation).toBeNull(); // nothing written before the PUT saved
+    await act(async () => {
+      held[0]!.resolve();
+      await first;
+    });
+    expect(cached().curation).toMatchObject({ status: "accepted", smiles: "CCN" });
+
+    const saved = depictionKey(cached());
+    let second!: Promise<unknown>;
+    await act(async () => {
+      second = result.current
+        .save("s1", { structure: { smiles: "CCO", molfile: null } })
+        .catch((e: unknown) => e);
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+    });
+    expect(depictionKey(cached())).toBe(saved);
+    await act(async () => {
+      held[1]!.reject(new ApiError(422, "bad SMILES"));
+      await second;
+    });
+    expect(depictionKey(cached())).toBe(saved);
+    expect(saved).not.toBe(key);
+  });
+
+  it("a refresh asked for while a save is on the wire waits for it", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue(paper(null));
+    const stop = new QueryObserver(client, {
+      queryKey: keys.paper("p1"),
+      queryFn: () => api.getPaper("p1"),
+      staleTime: Infinity,
+    }).subscribe(() => undefined);
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let saving!: Promise<unknown>;
+    await act(async () => {
+      saving = result.current.save("s1", { status: "accepted" });
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    getPaper.mockClear();
+    refreshPaper(client, "p1");
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(getPaper).not.toHaveBeenCalled();
+    expect(cached().curation?.status).toBe("accepted");
+    await act(async () => {
+      held[0]!.resolve();
+      await saving;
+    });
+    await vi.waitFor(() => expect(getPaper).toHaveBeenCalled(), { timeout: 3000 });
+    stop();
+  });
+});
+
 describe("useSaveCuration without a cached paper", () => {
   it("fetches the paper first and builds on its stored curation", async () => {
     const stored = { status: "accepted", smiles: "CCN", molfile: "M  END", note: "kept" } as const;
@@ -156,6 +260,30 @@ describe("useSaveCuration without a cached paper", () => {
       );
     });
     expect(sent).toEqual([]);
+  });
+});
+
+describe("snapshotIsCached", () => {
+  const step = (status: string) => ({ status }) as StepList["steps"][number];
+
+  it("is true only when the stream's status and step counts are what the cache holds", () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    client.setQueryData<StepList>(keys.steps("p1"), {
+      steps: [step("done"), step("done"), step("running")],
+    });
+    const snap = (status: string, counts: Record<string, number>) => ({
+      status,
+      counts: { steps_by_status: counts },
+    });
+    expect(snapshotIsCached(client, "p1", snap("done", { done: 2, running: 1, failed: 0 }))).toBe(
+      true,
+    );
+    expect(snapshotIsCached(client, "p1", snap("done", { done: 3 }))).toBe(false);
+    expect(snapshotIsCached(client, "p1", snap("processing", { done: 2, running: 1 }))).toBe(
+      false,
+    );
+    expect(snapshotIsCached(client, "p1", null)).toBe(false);
+    expect(snapshotIsCached(client, "p2", snap("done", {}))).toBe(false); // nothing cached
   });
 });
 

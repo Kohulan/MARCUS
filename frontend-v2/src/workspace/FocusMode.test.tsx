@@ -7,7 +7,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@te
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
-import { createQueryClient, keys, useSaveCuration } from "../api/queries";
+import { createQueryClient, keys } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { useReviewKeys } from "./useReviewKeys";
@@ -18,7 +18,8 @@ vi.mock("../api/useLiveEvents", () => ({
   useLiveEvents: () => ({ mode: "live", reconnect: () => undefined }),
 }));
 
-vi.mock("../api/depictions", () => ({
+vi.mock("../api/depictions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/depictions")>()),
   useDepiction: (url: string | null) => ({ src: url, failed: false }),
 }));
 
@@ -75,6 +76,7 @@ function paper(segments: SegmentOut[]): PaperDetail {
     rejected: segments.filter((s) => s.curation?.status === "rejected").length,
     to_review: segments.filter((s) => (s.curation?.status ?? "unchecked") === "unchecked").length,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments,
   };
@@ -409,7 +411,7 @@ describe("focus mode", () => {
     const region = await focusRegion();
     press("?");
     const dialog = await screen.findByRole("dialog", { name: "Keys" });
-    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog.tagName).toBe("DIALOG"); // native: the page behind is inert
     expect(within(dialog).getByText("Accept")).toBeInTheDocument();
     expect(within(dialog).getByText("Compare engines")).toBeInTheDocument();
     expect(dialog.contains(document.activeElement)).toBe(true);
@@ -704,12 +706,11 @@ describe("useReviewKeys", () => {
     expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing while a non-native modal (Compare, Keys) is open or the tool is hidden", () => {
+  it("does nothing while a dialog is open or the tool is hidden", () => {
     const h = handlers();
     keysIn(h);
-    const modal = document.createElement("div");
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
+    const modal = document.createElement("dialog");
+    modal.setAttribute("open", "");
     const hidden = document.createElement("div");
     hidden.setAttribute("data-keys-off", "");
     for (const el of [modal, hidden]) {
@@ -744,26 +745,6 @@ describe("useReviewKeys", () => {
       fireEvent.keyDown(region, { key: "a" });
     });
     expect(h.accept).not.toHaveBeenCalled();
-  });
-});
-
-describe("useSaveCuration counts", () => {
-  it("moves the paper's counts with the saved status (the header stays right)", async () => {
-    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }));
-    const qc = createQueryClient();
-    qc.setQueryData(keys.paper(ID), paper([segment("s1"), segment("s2")]));
-    const { result } = renderHook(() => useSaveCuration(ID), {
-      wrapper: ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
-    });
-    await act(() => result.current.save("s1", { status: "accepted" }));
-    let p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([1, 0, 1]);
-    await act(() => result.current.save("s1", { status: "rejected" }));
-    p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
-    await act(() => result.current.save("s1", { note: "x" }));
-    p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
   });
 });
 

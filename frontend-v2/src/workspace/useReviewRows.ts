@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { reasonText } from "../api/reasons";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
-import { cardState, ocsrSteps, type CardState } from "./cardState";
+import { stateOf, type CardState } from "./cardState";
+import { newestFirst } from "./pageFailures";
 
 /** One structure of the paper as the review views show it. */
 export type ReviewRow = {
@@ -25,6 +26,7 @@ export function useReviewRows(
   segments: SegmentOut[],
   steps: StepOut[],
 ): ReviewRow[] {
+  // Each segment's ocsr steps, newest first: grouped and sorted once per steps change.
   const stepsBySegment = useMemo(() => {
     const map = new Map<string, StepOut[]>();
     for (const s of steps) {
@@ -33,6 +35,7 @@ export function useReviewRows(
       if (list) list.push(s);
       else map.set(s.segment_id, [s]);
     }
+    for (const [id, list] of map) map.set(id, newestFirst(list));
     return map;
   }, [steps]);
 
@@ -40,8 +43,8 @@ export function useReviewRows(
     () =>
       segments.map((segment, i) => {
         const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
-        const state = cardState(segment, own, paper);
-        const newest = state === "failed" ? ocsrSteps(segment, own)[0] : undefined;
+        const state = stateOf(segment, own, paper);
+        const newest = state === "failed" ? own[0] : undefined;
         return {
           segmentId: segment.id,
           n: i + 1,

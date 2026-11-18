@@ -1,11 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ApiError, api } from "../api/client";
+import { api, errorText } from "../api/client";
 import { keys } from "../api/queries";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
-import StateBadge from "../ui/StateBadge";
+import { Modal } from "../ui/modal";
+import { ItemState } from "../ui/StateBadge";
+import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import "./tool.css";
 
@@ -16,40 +18,25 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** "15 structures · 9 accepted · 2 rejected · 4 to check · 1 failed page" (zeros left out). */
-export function countsText(p: PaperSummary): string {
+/**
+ * "15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page" (zeros
+ * left out), in the workspace's order. A failed structure is never counted as to check.
+ */
+function countsText(p: PaperSummary): string {
   const parts = [plural(p.structures, "structure")];
   if (p.accepted) parts.push(`${p.accepted} accepted`);
-  if (p.rejected) parts.push(`${p.rejected} rejected`);
   if (p.to_review) parts.push(`${p.to_review} to check`);
+  if (p.rejected) parts.push(`${p.rejected} rejected`);
+  if (p.failed) parts.push(`${p.failed} failed`);
   if (p.failed_pages) parts.push(plural(p.failed_pages, "failed page"));
   return parts.join(" · ");
 }
 
 /** "Deleted in N days" (N rounded up), "Deleted today" when less than a day is left. */
-export function deletionText(expiresAt: string, now = Date.now()): string {
+function deletionText(expiresAt: string, now = Date.now()): string {
   const days = (Date.parse(expiresAt) - now) / DAY_MS;
   if (!(days >= 1)) return "Deleted today"; // also an unreadable date
   return `Deleted in ${plural(Math.ceil(days), "day")}`;
-}
-
-/** A paper's or image job's state as its word and its shape. */
-export function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
-  if (status === "failed") return <StateBadge state="failed" />;
-  if (status === "done") {
-    if (notRead) return <StateBadge state="not-read" />;
-    return (
-      <span className="state item-done">
-        <span className="item-done__mark" aria-hidden="true" />
-        Done
-      </span>
-    );
-  }
-  return <StateBadge state="reading" />;
-}
-
-function errorText(error: unknown): string {
-  return error instanceof ApiError ? error.detail : "Something went wrong.";
 }
 
 function PaperRow({ paper }: { paper: PaperSummary }) {
@@ -57,18 +44,10 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const deleteButton = useRef<HTMLDivElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-
   // The safe choice gets the focus; closing gives it back to Delete.
-  useEffect(() => {
-    if (asking) dialog.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [asking]);
-
-  function close() {
-    setAsking(false);
-    requestAnimationFrame(() => deleteButton.current?.querySelector("button")?.focus());
-  }
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const close = () => setAsking(false);
 
   async function confirm() {
     setDeleting(true);
@@ -88,7 +67,6 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
     }
   }
 
-  const name = paper.title?.trim() || paper.display_name;
   const askId = `ask-${paper.id}`;
 
   return (
@@ -97,44 +75,52 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
       </div>
       <div className="item__main">
-        <p className="item__name">{name}</p>
+        <p className="item__name">{paperName(paper)}</p>
         {paper.title?.trim() ? <p className="item__file">{paper.display_name}</p> : null}
         <p className="item__counts">{countsText(paper)}</p>
       </div>
       <p className="item__expiry">{deletionText(paper.expires_at)}</p>
-      <div className="item__actions" ref={deleteButton}>
+      <div className="item__actions">
         <GlassLink tint="clear" size="sm" to={`/app/papers/${encodeURIComponent(paper.id)}`}>
           Open
         </GlassLink>
-        <GlassButton tint="clear" size="sm" disabled={asking} onClick={() => setAsking(true)}>
+        <GlassButton
+          ref={deleteButton}
+          tint="clear"
+          size="sm"
+          disabled={asking}
+          onClick={() => setAsking(true)}
+        >
           Delete
         </GlassButton>
       </div>
       {asking ? (
-        <dialog
-          ref={dialog}
-          open
+        <Modal
+          inline
           className="ask"
-          aria-labelledby={askId}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && !deleting) {
-              e.preventDefault();
-              close();
-            }
-          }}
+          labelledBy={askId}
+          onClose={() => !deleting && close()}
+          first={cancelButton}
+          fallback={deleteButton}
         >
           <p id={askId} className="ask__text">
             {ASK}
           </p>
           <div className="ask__actions">
-            <GlassButton tint="clear" size="sm" disabled={deleting} onClick={close}>
+            <GlassButton
+              ref={cancelButton}
+              tint="clear"
+              size="sm"
+              disabled={deleting}
+              onClick={close}
+            >
               Cancel
             </GlassButton>
             <GlassButton tint="orange" size="sm" disabled={deleting} onClick={() => void confirm()}>
               Delete
             </GlassButton>
           </div>
-        </dialog>
+        </Modal>
       ) : null}
     </li>
   );

@@ -97,6 +97,7 @@
 }
 
 .people dd {
+  max-width: 58ch; /* the page's reading measure */
   margin: 2px 0 0;
   color: var(--text-2);
 }

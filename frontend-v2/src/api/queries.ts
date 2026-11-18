@@ -2,9 +2,10 @@
 // hooks, and the one way the UI writes a single curation.
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { api, ApiError } from "./client";
+import { api, ApiError, errorText } from "./client";
 import { curationBody, type CurationChange } from "./curation";
-import type { BulkCurationItem, CurationOut, CurationStatus, PaperDetail } from "./types";
+import { isImageActive, isPaperBusy } from "./status";
+import type { BulkCurationItem, CurationOut, PaperDetail, StepList } from "./types";
 
 export const keys = {
   papers: () => ["papers"] as const,
@@ -40,7 +41,7 @@ export function createQueryClient(): QueryClient {
 // last request of a burst is never dropped (a trailing refresh), and a refresh never starts
 // while the paper or its steps are still being fetched (it waits for that fetch, then
 // refetches, so data newer than that fetch is read).
-export const REFRESH_MS = 1000;
+const REFRESH_MS = 1000;
 
 type RefreshState = {
   timer: ReturnType<typeof setTimeout> | null;
@@ -71,6 +72,57 @@ function fetchingPaper(client: QueryClient, id: string): boolean {
   );
 }
 
+// Curation saves still on the wire, per paper. A refresh read before such a PUT has committed
+// would bring the old curation back over the optimistic one (a stamp that vanishes and lands
+// again), so a refresh waits for them as it waits for a fetch.
+const saving = new WeakMap<QueryClient, Map<string, number>>();
+
+function savingCount(client: QueryClient): Map<string, number> {
+  let map = saving.get(client);
+  if (!map) {
+    map = new Map();
+    saving.set(client, map);
+  }
+  return map;
+}
+
+/** Counts `work` as a save of paper `id` until it settles. */
+function whileSaving<T>(client: QueryClient, id: string, work: Promise<T>): Promise<T> {
+  const map = savingCount(client);
+  map.set(id, (map.get(id) ?? 0) + 1);
+  const done = () => {
+    const n = (map.get(id) ?? 1) - 1;
+    if (n > 0) map.set(id, n);
+    else map.delete(id);
+  };
+  void work.then(done, done);
+  return work;
+}
+
+const busyPaper = (client: QueryClient, id: string) =>
+  fetchingPaper(client, id) || (saving.get(client)?.has(id) ?? false);
+
+/**
+ * True when a stream's snapshot ({status, counts: {steps_by_status}}) says what the cached
+ * paper and steps already say, so a refetch would bring nothing new.
+ */
+export function snapshotIsCached(client: QueryClient, id: string, snapshot: unknown): boolean {
+  const paper = client.getQueryData<PaperDetail>(keys.paper(id));
+  const steps = client.getQueryData<StepList>(keys.steps(id))?.steps;
+  if (!paper || !steps || typeof snapshot !== "object" || snapshot === null) return false;
+  const snap = snapshot as { status?: unknown; counts?: { steps_by_status?: unknown } };
+  const byStatus = snap.counts?.steps_by_status;
+  if (snap.status !== paper.status || typeof byStatus !== "object" || byStatus === null) {
+    return false;
+  }
+  const mine: Record<string, number> = {};
+  for (const s of steps) mine[s.status] = (mine[s.status] ?? 0) + 1;
+  const theirs = Object.entries(byStatus as Record<string, unknown>).filter(([, n]) => n !== 0);
+  return (
+    theirs.length === Object.keys(mine).length && theirs.every(([k, n]) => mine[k] === n)
+  );
+}
+
 /** Refetch a paper and its steps (only these two): what a live event or a poll tick does. */
 export function refreshPaper(client: QueryClient, id: string): void {
   const state = refreshState(client, id);
@@ -88,28 +140,28 @@ export function refreshPaper(client: QueryClient, id: string): void {
     state.timer = setTimeout(() => {
       state.timer = null;
       if (!state.pending) return;
-      if (fetchingPaper(client, id)) schedule(REFRESH_MS);
+      if (busyPaper(client, id)) schedule(REFRESH_MS);
       else run();
     }, delay);
   };
 
   const since = Date.now() - state.last;
-  if (since >= REFRESH_MS && !fetchingPaper(client, id)) run();
+  if (since >= REFRESH_MS && !busyPaper(client, id)) run();
   else schedule(Math.max(REFRESH_MS - since, 0) || REFRESH_MS);
 }
 
 // The papers and image lists (tool home) have no stream of their own: while one of their
 // items is still being worked on, they are fetched again every LIST_POLL_MS.
 export const LIST_POLL_MS = 5000;
-const ACTIVE = new Set(["checking", "processing", "queued"]);
-const anyActive = (items: { status: string }[] | undefined) =>
-  (items ?? []).some((item) => ACTIVE.has(item.status));
+const anyBusy = (items: { status: string }[] | undefined, busy: (status: string) => boolean) =>
+  (items ?? []).some((item) => busy(item.status));
 
 export function usePapers() {
   return useQuery({
     queryKey: keys.papers(),
     queryFn: ({ signal }) => api.listPapers({ signal }),
-    refetchInterval: (query) => (anyActive(query.state.data?.papers) ? LIST_POLL_MS : false),
+    refetchInterval: (query) =>
+      anyBusy(query.state.data?.papers, isPaperBusy) ? LIST_POLL_MS : false,
   });
 }
 
@@ -153,7 +205,8 @@ export function useImages(enabled = true) {
     queryKey: keys.images(),
     queryFn: ({ signal }) => api.listImages({ signal }),
     enabled,
-    refetchInterval: (query) => (anyActive(query.state.data?.jobs) ? LIST_POLL_MS : false),
+    refetchInterval: (query) =>
+      anyBusy(query.state.data?.jobs, isImageActive) ? LIST_POLL_MS : false,
   });
 }
 
@@ -198,38 +251,28 @@ async function currentCuration(
   return segment.curation;
 }
 
-type Counts = Pick<PaperDetail, "accepted" | "rejected" | "to_review">;
+// The workspace counts from its rows and the tool home reads GET /papers, so the cached
+// paper's own counts are never patched here: only segments change.
 
-/** Moves one structure from status `from` to `to` in the paper's counts. */
-function moveCount(counts: Counts, from: CurationStatus, to: CurationStatus): Counts {
-  if (from === to) return counts;
-  const next = { ...counts };
-  const field = (s: CurationStatus) =>
-    s === "accepted" ? "accepted" : s === "rejected" ? "rejected" : "to_review";
-  next[field(from)] -= 1;
-  next[field(to)] += 1;
-  return next;
-}
-
-/** The paper with one segment's curation replaced and its counts moved to match (no refetch). */
-function withCuration(paper: PaperDetail, segmentId: string, out: CurationOut): PaperDetail {
-  const segment = paper.segments.find((s) => s.id === segmentId);
-  if (!segment) return paper;
-  const counts = moveCount(paper, segment.curation?.status ?? "unchecked", out.status);
+/** The paper with one segment's curation replaced (no refetch). */
+function withCuration(
+  paper: PaperDetail,
+  segmentId: string,
+  curation: CurationOut | null,
+): PaperDetail {
   return {
     ...paper,
-    accepted: counts.accepted,
-    rejected: counts.rejected,
-    to_review: counts.to_review,
-    segments: paper.segments.map((s) => (s.id === segmentId ? { ...s, curation: out } : s)),
+    segments: paper.segments.map((s) => (s.id === segmentId ? { ...s, curation } : s)),
   };
 }
 
 /**
  * `save(segmentId, change)`: PUT the full curation built by curationBody from the cached one
- * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved),
- * then write the reply into the ["paper", paperId] cache so the next change builds on it.
- * The only way the UI writes a single curation (PUT replaces the whole record).
+ * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved).
+ * Optimistic for status and note, as bulk() is: the body goes into the ["paper", paperId]
+ * cache at once, the reply replaces it, and a failed PUT rolls it back and rejects. A change
+ * of structure is written only with the reply. Refreshes wait while a save is on the wire. The only way the UI writes
+ * a single curation (PUT replaces the whole record).
  */
 export function useSaveCuration(paperId: string): {
   save: (segmentId: string, change: CurationChange) => Promise<CurationOut>;
@@ -243,16 +286,34 @@ export function useSaveCuration(paperId: string): {
       const run = previous
         .catch(() => undefined) // a failed save does not block the next one
         .then(async () => {
-          const body = curationBody(await currentCuration(client, paperId, segmentId), change);
-          const out = await api.putCuration(segmentId, body);
-          // A paper fetch that started before this PUT would bring back the old curation
-          // and the next change would build on it: cancel it, write, then fetch again.
-          const stale = client.isFetching({ queryKey: key }) > 0;
-          if (stale) await client.cancelQueries({ queryKey: key });
-          client.setQueryData<PaperDetail>(key, (old) =>
-            old ? withCuration(old, segmentId, out) : old,
-          );
-          if (stale) void client.invalidateQueries({ queryKey: key });
+          const before = await currentCuration(client, paperId, segmentId);
+          const body = curationBody(before, change);
+          // A paper fetch on the wire would bring back the old curation (over the optimistic
+          // one now, over the reply later) and the next change would build on it: cancel it,
+          // write, and fetch again once the PUT has answered.
+          const write = async (curation: CurationOut | null) => {
+            const stale = client.isFetching({ queryKey: key }) > 0;
+            if (stale) await client.cancelQueries({ queryKey: key });
+            client.setQueryData<PaperDetail>(key, (old) =>
+              old ? withCuration(old, segmentId, curation) : old,
+            );
+            return stale;
+          };
+          // Optimistic only for status and note. A new structure waits for the reply: its
+          // drawing key would change at once, and the drawing asked for under it would be the
+          // one still stored (the server draws what it has committed).
+          const optimistic = change.structure === undefined;
+          const cancelled = optimistic ? await write(body) : false;
+          let out: CurationOut;
+          try {
+            out = await api.putCuration(segmentId, body);
+          } catch (err) {
+            if ((optimistic && (await write(before))) || cancelled) {
+              void client.invalidateQueries({ queryKey: key });
+            }
+            throw err;
+          }
+          if ((await write(out)) || cancelled) void client.invalidateQueries({ queryKey: key });
           return out;
         });
       map.set(segmentId, run);
@@ -260,7 +321,7 @@ export function useSaveCuration(paperId: string): {
         () => (map.get(segmentId) === run ? map.delete(segmentId) : undefined),
         () => (map.get(segmentId) === run ? map.delete(segmentId) : undefined),
       );
-      return run;
+      return whileSaving(client, paperId, run);
     },
     [client, paperId],
   );
@@ -277,36 +338,29 @@ export class BulkPartialError extends Error {
     readonly total: number,
     override readonly cause: unknown,
   ) {
-    const why = cause instanceof ApiError ? cause.detail : "Something went wrong.";
-    super(`Saved ${saved.toLocaleString("en")} of ${total.toLocaleString("en")}: ${why}`);
+    super(
+      `Saved ${saved.toLocaleString("en")} of ${total.toLocaleString("en")}: ${errorText(cause)}`,
+    );
     this.name = "BulkPartialError";
   }
 }
 
 /** The most items one PUT /papers/{id}/curation takes. */
-export const BULK_CHUNK = 500;
+const BULK_CHUNK = 500;
 
 type BulkStatus = BulkCurationItem["status"];
 
-/** The paper with `status` set on the given segments, and its counts moved to match. */
+/** The paper with `status` set on the given segments. */
 function withStatuses(
   paper: PaperDetail,
   statuses: Map<string, BulkStatus | null>,
 ): PaperDetail {
-  const counts = { accepted: paper.accepted, rejected: paper.rejected, to_review: paper.to_review };
-  const bump = (status: BulkStatus, by: number) => {
-    if (status === "accepted") counts.accepted += by;
-    else if (status === "rejected") counts.rejected += by;
-    else counts.to_review += by;
-  };
   const segments = paper.segments.map((s) => {
     if (!statuses.has(s.id)) return s;
     const next = statuses.get(s.id)!;
     const before = s.curation?.status ?? "unchecked";
     const after = next ?? "unchecked";
     if (before === after && (next !== null || s.curation === null)) return s;
-    bump(before, -1);
-    bump(after, 1);
     const c = s.curation;
     // null (a rollback): back to no curation, unless a note or structure was stored since
     const curation: CurationOut | null =
@@ -317,7 +371,7 @@ function withStatuses(
           : { status: after, smiles: null, molfile: null, note: null };
     return { ...s, curation };
   });
-  return { ...paper, ...counts, segments };
+  return { ...paper, segments };
 }
 
 /**
@@ -373,8 +427,9 @@ export function useBulkCuration(paperId: string): {
         }
         await client.cancelQueries({ queryKey: key });
         apply(items, false);
-        void client.invalidateQueries({ queryKey: key }); // the server's counts
+        void client.invalidateQueries({ queryKey: key });
       })();
+      void whileSaving(client, paperId, run);
       for (const id of ids) map.set(id, run);
       void run.then(
         () => ids.forEach((id) => (map.get(id) === run ? map.delete(id) : undefined)),

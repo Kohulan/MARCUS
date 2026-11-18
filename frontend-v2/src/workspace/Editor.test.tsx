@@ -3,6 +3,7 @@
 // segment caller (useSaveCuration + editorChange) never loses the note.
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient, keys, useSaveCuration } from "../api/queries";
@@ -102,6 +103,34 @@ describe("Editor", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByText("Loading editor…")).toBeInTheDocument();
+  });
+
+  it("closing with the opener gone puts focus on the focus-mode region (keys stay live)", () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <section data-focus-home="" tabIndex={-1} aria-label="Focus [01]">
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}>
+              Edit
+            </button>
+          )}
+          {open && (
+            <Editor
+              initial={{ smiles: "C", molfile: null }}
+              onSave={() => Promise.resolve()}
+              onClose={() => setOpen(false)}
+            />
+          )}
+        </section>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole("button", { name: "Edit" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("region", { name: "Focus [01]" })).toHaveFocus();
   });
 
   it("answers marcus:ready with marcus:load to its own origin, and only then", () => {
@@ -241,14 +270,15 @@ describe("Editor", () => {
     expect(a.onClose).toHaveBeenCalledTimes(3);
   });
 
-  it("no key typed in the dialog reaches a document listener (the review keys)", () => {
-    renderEditor();
-    const seen = vi.fn();
+  it("Escape is handled in the dialog: it reaches the review keys already handled", () => {
+    const { onClose } = renderEditor();
+    const prevented: boolean[] = [];
+    const seen = (e: KeyboardEvent) => prevented.push(e.defaultPrevented);
     document.addEventListener("keydown", seen);
     try {
-      fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "a" });
       fireEvent.keyDown(screen.getByLabelText("SMILES"), { key: "Escape" });
-      expect(seen).not.toHaveBeenCalled();
+      expect(prevented).toEqual([true]);
+      expect(onClose).toHaveBeenCalledTimes(1);
     } finally {
       document.removeEventListener("keydown", seen);
     }

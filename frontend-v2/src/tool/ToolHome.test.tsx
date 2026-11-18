@@ -30,8 +30,9 @@ function paper(over: Partial<PaperSummary> = {}): PaperSummary {
     structures: 15,
     accepted: 9,
     rejected: 2,
-    to_review: 4,
+    to_review: 3,
     failed_pages: 1,
+    failed: 1,
     ...over,
   };
 }
@@ -348,7 +349,7 @@ describe("Papers list", () => {
     const r = within(row);
     expect(r.getByText("alkaloids.pdf")).toBeInTheDocument();
     expect(
-      r.getByText("15 structures · 9 accepted · 2 rejected · 4 to check · 1 failed page"),
+      r.getByText("15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page"),
     ).toBeInTheDocument();
     expect(r.getByText("Done")).toBeInTheDocument();
     expect(r.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/app/papers/p1");
@@ -365,6 +366,7 @@ describe("Papers list", () => {
           rejected: 0,
           to_review: 1,
           failed_pages: 0,
+          failed: 0,
         }),
       ],
     });

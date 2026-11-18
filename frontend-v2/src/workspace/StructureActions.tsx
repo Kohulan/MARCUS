@@ -1,10 +1,14 @@
 // The actions for one structure (focus mode and the card menu): copy and download the
 // structure, look it up in PubChem, and hand Edit and Compare back to the caller. Props in,
 // callbacks out: it touches no workspace state. Third-party text is rendered as text only.
-import { useEffect, useRef, useState } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { loadedDrawing } from "../api/depictions";
+import { molfileQuery } from "./useCompare";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
+import { saveBlob } from "../ui/saveBlob";
 import "./structureActions.css";
 
 export type StructureActionsProps = {
@@ -24,14 +28,9 @@ export type StructureActionsProps = {
    * blob: in connect-src.
    */
   image?: (() => Blob) | undefined;
-  /**
-   * False where a `<Smiles>` with its own Copy is beside these actions (focus mode, the card,
-   * the image page): one "Copy SMILES" per place, not two of the same name.
-   */
-  copySmiles?: boolean;
   onEdit?: (() => void) | undefined;
   onCompare?: (() => void) | undefined;
-  /** Injectable for tests; defaults to api.smilesToMolfile. */
+  /** Injectable for tests; defaults to the shared ["molfile", smiles] query (Compare's). */
   convert?: (smiles: string) => Promise<string>;
 };
 
@@ -46,18 +45,6 @@ export function fileStem(name: string, n: number): string {
   return `${base}-${n}`;
 }
 
-function saveBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 type Lookup =
   { state: "busy" } | { state: "none" } | { state: "hit"; hit: PubchemHit };
 
@@ -69,11 +56,19 @@ export default function StructureActions({
   predictionMolfile,
   depictionUrl,
   image,
-  copySmiles = true,
   onEdit,
   onCompare,
-  convert = api.smilesToMolfile,
+  convert: convertProp,
 }: StructureActionsProps) {
+  // One conversion per SMILES for the tab: Copy then Download (or Compare's common part)
+  // reuse it.
+  const client = useContext(QueryClientContext);
+  const convert =
+    convertProp ??
+    ((s: string) =>
+      client
+        ? client.fetchQuery({ ...molfileQuery(s), retry: false }) // one call, as before
+        : api.smilesToMolfile(s));
   const [note, setNote] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -128,18 +123,19 @@ export default function StructureActions({
   async function downloadImage() {
     try {
       if (image) {
-        const blob = image();
-        saveBlob(blob, `${stem}.${blob.type === "image/png" ? "png" : "svg"}`);
+        saveBlob(image(), `${stem}.svg`);
         setNote(null);
         return;
       }
       if (!depictionUrl) return;
-      const res = await fetch(depictionUrl, { credentials: "same-origin" });
-      if (!res.ok) throw new Error(String(res.status));
-      saveBlob(
-        new Blob([await res.text()], { type: "image/svg+xml" }),
-        `${stem}.svg`,
-      );
+      // The drawing on screen when this tab has loaded it, else asked for once more.
+      let blob = loadedDrawing(depictionUrl);
+      if (!blob) {
+        const res = await fetch(depictionUrl, { credentials: "same-origin" });
+        if (!res.ok) throw new Error(String(res.status));
+        blob = new Blob([await res.text()], { type: "image/svg+xml" });
+      }
+      saveBlob(blob, `${stem}.svg`);
       setNote(null);
     } catch {
       setNote("Could not download the image");
@@ -163,16 +159,6 @@ export default function StructureActions({
   return (
     <div className="structure-actions">
       <div className="structure-actions__row">
-        {copySmiles && (
-          <GlassButton
-            tint="clear"
-            size="sm"
-            disabled={!has}
-            onClick={() => void copy(smiles ?? "", "SMILES copied")}
-          >
-            Copy SMILES
-          </GlassButton>
-        )}
         <GlassButton
           tint="clear"
           size="sm"

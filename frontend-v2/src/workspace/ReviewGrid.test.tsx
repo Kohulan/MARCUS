@@ -35,7 +35,8 @@ vi.mock("../api/useLiveEvents", () => ({
 }));
 
 // Depictions: the src is the depiction URL itself (the real loader is tested on its own).
-vi.mock("../api/depictions", () => ({
+vi.mock("../api/depictions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/depictions")>()),
   useDepiction: (url: string | null) => ({ src: url, failed: false }),
 }));
 
@@ -93,6 +94,7 @@ function paper(segments: SegmentOut[], over: Partial<PaperDetail> = {}): PaperDe
     rejected: segments.filter((s) => s.curation?.status === "rejected").length,
     to_review: segments.filter((s) => (s.curation?.status ?? "unchecked") === "unchecked").length,
     failed_pages: 0,
+    failed: 0,
     counts: { steps_by_status: {} },
     segments,
     ...over,
@@ -314,6 +316,39 @@ describe("cards and their states", () => {
   });
 });
 
+describe("the way into focus mode", () => {
+  it("Review one by one opens focus mode on the first structure still to check", async () => {
+    renderGrid(
+      paper([
+        segment("s1", { curation: curation({ status: "accepted" }) }),
+        segment("s2"),
+        segment("s3"),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    fireEvent.click(screen.getByRole("button", { name: "Review one by one" }));
+    expect(await screen.findByRole("region", { name: "Focus [02]" })).toBeInTheDocument();
+  });
+
+  it("with nothing to check it opens on the first structure", async () => {
+    renderGrid(paper([segment("s1", { curation: curation({ status: "accepted" }) })]));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Review one by one" }));
+    expect(await screen.findByRole("region", { name: "Focus [01]" })).toBeInTheDocument();
+  });
+
+  it("is off when the paper has no structures", async () => {
+    renderGrid(paper([]));
+    expect(await screen.findByRole("button", { name: "Review one by one" })).toBeDisabled();
+  });
+
+  it("each card says that Enter opens it", async () => {
+    renderGrid(paper([segment("s1"), segment("s2")]));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    for (const c of cards()) expect(c).toHaveAccessibleDescription("Enter: open");
+  });
+});
+
 describe("the card menu (More)", () => {
   it("Edit opens the editor on that structure; a save keeps the note; focus returns to More", async () => {
     const put = vi
@@ -447,7 +482,6 @@ describe("selection and bulk review", () => {
     expect(screen.getAllByRole("img", { name: "Accepted" })).toHaveLength(2);
     const cached = client.getQueryData<PaperDetail>(keys.paper(ID))!;
     expect(cached.segments.find((s) => s.id === "s1")!.curation?.note).toBe("keep me");
-    expect(cached.accepted).toBe(2);
     await act(async () => answer());
     await waitFor(() => expect(screen.queryByRole("button", { name: "Accept 2" })).toBeNull());
   });

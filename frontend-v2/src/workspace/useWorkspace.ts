@@ -1,12 +1,10 @@
-// The state of one paper workspace: the paper, its segments and steps, what failed, the
-// live stream, and the view and focused segment (both in the URL, so reload and Back work).
+// The state of one paper workspace: the paper, its segments and steps, the live stream, and the view and focused segment (both in the URL, so reload and Back work).
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { refreshPaper, usePaper, useSteps } from "../api/queries";
+import { refreshPaper, snapshotIsCached, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
-import { checkFailure, pageFailures, type PageFailure } from "./pageFailures";
 
 export type WorkspaceView = "review" | "paper";
 
@@ -16,15 +14,15 @@ const isFocusPushed = (state: unknown) =>
 
 const NO_STEPS: StepOut[] = [];
 
+/** Compare engines or the structure editor, open on one segment (rendered once, by the frame). */
+export type WorkspaceDialog = { kind: "compare" | "edit"; segmentId: string };
+
 export type Workspace = {
   /** Undefined only before the first answer (Workspace mounts this once the paper is in). */
   paper: PaperDetail | undefined;
   /** In (page, idx) order: structure n is segments[n - 1]. */
   segments: SegmentOut[];
   steps: StepOut[];
-  failedPages: PageFailure[];
-  /** Why the PDF check failed, as UI text; null when it did not. */
-  checkFailure: string | null;
   /** The focused segment id (`?s=`). */
   selection: string | null;
   /** Replaces the URL entry by default (moving between cards makes no history); `push` adds one. */
@@ -39,6 +37,11 @@ export type Workspace = {
   /** Adds a history entry, so Back returns to the other view. */
   setView: (view: WorkspaceView) => void;
   live: ReturnType<typeof useLiveEvents>;
+  /** The open dialog; null once its segment is gone (deleted live in another tab). */
+  dialog: WorkspaceDialog | null;
+  openCompare: (segmentId: string) => void;
+  openEditor: (segmentId: string) => void;
+  closeDialog: () => void;
 };
 
 /** Mount only for a paper that exists: a 404 must unmount it, and its live stream with it. */
@@ -46,7 +49,15 @@ export function useWorkspace(id: string): Workspace {
   const client = useQueryClient();
   const paper = usePaper(id).data;
   const steps = useSteps(id).data?.steps ?? NO_STEPS;
-  const live = useLiveEvents("paper", id, () => refreshPaper(client, id));
+  // The stream's first snapshot comes right after the paper and its steps were read: when
+  // it says what they say, the refetch is skipped (a later one, a reconnect, never is).
+  const firstSnapshot = useRef(true);
+  const live = useLiveEvents("paper", id, (snapshot) => {
+    const first = snapshot !== undefined && firstSnapshot.current;
+    if (snapshot !== undefined) firstSnapshot.current = false;
+    if (first && snapshotIsCached(client, id, snapshot)) return;
+    refreshPaper(client, id);
+  });
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   // The entry's state says whether openFocus pushed it; replaced entries keep it.
@@ -58,8 +69,15 @@ export function useWorkspace(id: string): Workspace {
     () => [...(paper?.segments ?? [])].sort((a, b) => a.page - b.page || a.idx - b.idx),
     [paper?.segments],
   );
-  const failedPages = useMemo(() => pageFailures(steps), [steps]);
-  const failure = useMemo(() => checkFailure(steps), [steps]);
+
+  const [open, setOpen] = useState<WorkspaceDialog | null>(null);
+  const dialog = open && segments.some((s) => s.id === open.segmentId) ? open : null;
+  const openCompare = useCallback(
+    (segmentId: string) => setOpen({ kind: "compare", segmentId }),
+    [],
+  );
+  const openEditor = useCallback((segmentId: string) => setOpen({ kind: "edit", segmentId }), []);
+  const closeDialog = useCallback(() => setOpen(null), []);
 
   const view: WorkspaceView = params.get("view") === "paper" ? "paper" : "review";
   const selection = params.get("s");
@@ -136,8 +154,6 @@ export function useWorkspace(id: string): Workspace {
     paper,
     segments,
     steps,
-    failedPages,
-    checkFailure: failure,
     selection,
     setSelection,
     focus,
@@ -146,5 +162,9 @@ export function useWorkspace(id: string): Workspace {
     view,
     setView,
     live,
+    dialog,
+    openCompare,
+    openEditor,
+    closeDialog,
   };
 }

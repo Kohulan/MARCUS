@@ -63,6 +63,13 @@ describe("Landing", () => {
     expect(sample).toHaveAttribute("href", "/app?sample=1");
   });
 
+  it("under the buttons, a note that the tool needs a desktop screen (shown below 1024 px)", () => {
+    const { container } = renderAt("/");
+    const note = container.querySelector(".lead__cta + .lead__desk, .lead__cta .lead__desk");
+    expect(note).toHaveClass("mono-label");
+    expect(note?.textContent).toBe("Desktop screen needed");
+  });
+
   it("the hero is labelled as an example page, with both tags and a bbox line for each", () => {
     renderAt("/");
     const hero = screen.getByRole("region", { name: "Example: a page read by MARCUS" });
@@ -97,12 +104,15 @@ describe("Landing", () => {
     const h2s = within(how).getAllByRole("heading", { level: 2 });
     expect(h2s.map((h) => text(h))).toEqual([
       "[01] Every structure on every page",
-      "[02] Three engines, side by side",
+      "[02] Four engines, side by side",
       "[03] Checked, then into COCONUT",
     ]);
     for (const [i, h2] of h2s.entries()) {
       expect(h2.firstElementChild).toHaveClass("how__tag");
       expect(h2.firstElementChild?.textContent).toBe(`[0${i + 1}]`);
+      // The tag is drawn, not read: the heading's name is its words.
+      expect(h2.firstElementChild).toHaveAttribute("aria-hidden", "true");
+      expect(h2).toHaveAccessibleName(text(h2).replace(/^\[0\d\] /, ""));
       // Nothing sits above the heading in its card.
       expect(h2.previousElementSibling).toBeNull();
     }
@@ -120,6 +130,21 @@ describe("Landing", () => {
     expect(preview.querySelector(".preview__name .mono-label")).toBeNull();
     expect(preview.textContent).toContain("Send 9 to COCONUT");
     expect(preview.querySelectorAll("button, a, [tabindex], input, select, textarea")).toHaveLength(0);
+  });
+
+  it("the preview matches the tool: Engines differ, no keys on grid pills, the keys in focus mode", () => {
+    renderAt("/");
+    const preview = screen.getByRole("region", { name: "Example: the review grid" });
+    expect(within(preview).getByText("Engines differ")).toBeInTheDocument();
+    expect(preview.textContent).not.toContain("DECIMER and MolNexTR differ");
+    expect(preview.querySelectorAll(".pcard kbd")).toHaveLength(0);
+    expect(preview.querySelector(".preview__foot")?.textContent).toContain("Keys in focus mode");
+  });
+
+  it("names the four engines, as the tool runs them", () => {
+    const { container } = renderAt("/");
+    const how = container.querySelector("section#how") as HTMLElement;
+    expect(how.textContent).toContain("MolNexTR, MolScribe and DECIMER hand-drawn");
   });
 
   it("the cite section shows the exact citation and copies it", async () => {

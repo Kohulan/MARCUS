@@ -1,8 +1,9 @@
 // How many molecules COCONUT already holds for a DOI (v1 PdfViewerObject.checkInCoconut):
 // a tag search on citations, no login. Any failure is null.
+import { COCONUT_API } from "../coconut/coconutApi";
 import { fetchJson, isRecord } from "./fetchJson";
 
-const SEARCH = "https://coconut.naturalproducts.net/api/search";
+const SEARCH = `${COCONUT_API}/search`;
 export const COCONUT_PAGE_SIZE = 20;
 
 export type CoconutDoiCount = { count: number; more: boolean; url: string };

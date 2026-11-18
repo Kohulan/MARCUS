@@ -15,10 +15,13 @@
 // - the tab's loader waits for the owner gate (client.ts ownerReady) before its first fetch:
 //   a raw fetch bypasses the gate, and a cookie-less one would make a second owner.
 //
-// The browser HTTP cache still applies (Cache-Control: private, max-age=86400 and the
-// `v=<depictionKey>` in the URL), so a revisit is served from disk.
+// A loaded drawing is kept in memory for the tab (`drawings` below), so a card that comes
+// back (a filter change, Review ↔ Paper, focus mode on the same structure) shows it at once
+// and asks nothing. Behind that, the browser HTTP cache still applies (Cache-Control:
+// private, max-age=86400 and the `v=<depictionKey>` in the URL).
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, ownerReady, toApiError } from "./client";
+import { api, isGone, ownerReady, svgBlobUrl, toApiError } from "./client";
+import type { DepictReply } from "./types";
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const DEFAULT_WAIT_S = 5;
@@ -122,15 +125,63 @@ export function createDepictionLoader(
 /** The one loader of the tab. */
 export const depictionLoader = createDepictionLoader({ gate: ownerReady });
 
-/** Nothing to draw (no structure, or one CDK cannot draw): a retry would get the same. */
-const nothingToDraw = (err: unknown) =>
-  err instanceof ApiError && (err.status === 404 || err.status === 422);
+// The drawings loaded in this tab, by URL: one blob and one blob: URL each, shared by every
+// view that shows it. One in use is never revoked; up to `maxIdle` unused ones are kept
+// (most recently used last), the oldest beyond that are revoked and dropped.
+type Drawing = { blob: Blob; src: string; users: number };
+
+export function createDrawingCache(maxIdle: number) {
+  const drawings = new Map<string, Drawing>();
+  return {
+    get: (url: string) => drawings.get(url),
+    /** One more user of `url`'s drawing (kept from `blob` when new); undefined without one. */
+    take(url: string, blob?: Blob): Drawing | undefined {
+      let d = drawings.get(url);
+      if (!d && blob) {
+        d = { blob, src: URL.createObjectURL(blob), users: 0 };
+        drawings.set(url, d);
+      }
+      if (d) d.users += 1;
+      return d;
+    },
+    release(url: string, d: Drawing) {
+      d.users -= 1;
+      if (d.users > 0 || drawings.get(url) !== d) return;
+      drawings.delete(url); // re-inserted: the most recently used
+      drawings.set(url, d);
+      let idle = [...drawings.values()].filter((x) => x.users === 0).length;
+      for (const [key, x] of drawings) {
+        if (idle <= maxIdle) break;
+        if (x.users > 0) continue;
+        URL.revokeObjectURL(x.src);
+        drawings.delete(key);
+        idle -= 1;
+      }
+    },
+    clear() {
+      for (const d of drawings.values()) URL.revokeObjectURL(d.src);
+      drawings.clear();
+    },
+  };
+}
+
+const drawings = createDrawingCache(300);
+
+/** A drawing this tab has loaded (Download saves it without asking again). */
+export function loadedDrawing(url: string): Blob | undefined {
+  return drawings.get(url)?.blob;
+}
+
+/** Tests only: forget every loaded drawing. */
+export function forgetDrawings(): void {
+  drawings.clear();
+}
 
 /**
  * A blob: URL for `<Structure src>` (null while it loads or for a null `url`); `failed` when
  * the drawing cannot be had. `retry` (null otherwise) loads it again when the failure was
- * not "nothing to draw": a server busy for minutes, a network error. The URL is revoked
- * and the load aborted on unmount or change.
+ * not "nothing to draw": a server busy for minutes, a network error. A drawing already
+ * loaded in the tab is shown at once; the load is aborted on unmount or change.
  */
 export function useDepiction(url: string | null): {
   src: string | null;
@@ -149,28 +200,58 @@ export function useDepiction(url: string | null): {
 
   useEffect(() => {
     if (url === null) return;
+    let held = drawings.take(url);
+    if (held) {
+      const d = held;
+      setState({ url, tries, src: d.src, failed: false, again: false });
+      return () => drawings.release(url, d);
+    }
     const ctrl = new AbortController();
-    let objectUrl: string | null = null;
     depictionLoader.load(url, ctrl.signal).then(
       (blob) => {
         if (ctrl.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
-        setState({ url, tries, src: objectUrl, failed: false, again: false });
+        held = drawings.take(url, blob)!;
+        setState({ url, tries, src: held.src, failed: false, again: false });
       },
       (err: unknown) => {
         if (ctrl.signal.aborted) return;
-        setState({ url, tries, src: null, failed: true, again: !nothingToDraw(err) });
+        // Gone (404, 422): nothing to draw, so a retry would get the same.
+        setState({ url, tries, src: null, failed: true, again: !isGone(err) });
       },
     );
     return () => {
       ctrl.abort();
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
+      if (held) drawings.release(url, held);
     };
   }, [url, tries]);
 
   const retry = useCallback(() => setTries((n) => n + 1), []);
-  if (url === null || state?.url !== url || state.tries !== tries) {
-    return { src: null, failed: false, retry: null };
+  if (url === null) return { src: null, failed: false, retry: null };
+  if (state?.url !== url || state.tries !== tries) {
+    // Loaded before (another card, an earlier visit): shown from the first render.
+    return { src: drawings.get(url)?.src ?? null, failed: false, retry: null };
   }
   return { src: state.src, failed: state.failed, retry: state.again ? retry : null };
+}
+
+/** A /tools/depict drawing: key ["depict", smiles, highlight] (null: a plain drawing). */
+export function depictQuery(smiles: string, highlight: string | null) {
+  return {
+    queryKey: ["depict", smiles, highlight] as const,
+    queryFn: (): Promise<DepictReply> =>
+      highlight === null ? api.depict(smiles) : api.depict(smiles, { highlight }),
+    staleTime: Infinity,
+  };
+}
+
+/** A blob: URL for a depict reply (null without one), revoked when it changes or unmounts. */
+export function useReplyUrl(reply: DepictReply | undefined): string | null {
+  const [shown, setShown] = useState<{ reply: DepictReply; url: string } | null>(null);
+  useEffect(() => {
+    if (!reply) return;
+    const url = svgBlobUrl(reply);
+    setShown({ reply, url });
+    return () => URL.revokeObjectURL(url);
+  }, [reply]);
+  return reply !== undefined && shown?.reply === reply ? shown.url : null;
 }

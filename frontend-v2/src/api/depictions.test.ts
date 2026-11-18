@@ -1,7 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { createDepictionLoader, useDepiction } from "./depictions";
+import {
+  createDepictionLoader,
+  createDrawingCache,
+  forgetDrawings,
+  useDepiction,
+} from "./depictions";
 
 // The tab's loader waits for the owner gate; here a gated request has already succeeded.
 vi.mock("./client", async (importOriginal) => ({
@@ -45,6 +50,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  forgetDrawings();
 });
 
 describe("createDepictionLoader", () => {
@@ -161,20 +167,57 @@ describe("owner gate", () => {
   });
 });
 
+describe("createDrawingCache", () => {
+  it("keeps drawings in use, keeps up to maxIdle unused ones, revokes the oldest beyond", () => {
+    const revoked: string[] = [];
+    let n = 0;
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: () => `blob:${++n}`,
+      revokeObjectURL: (u: string) => revoked.push(u),
+    });
+    const cache = createDrawingCache(2);
+    const blob = new Blob(["<svg/>"]);
+    const a = cache.take("/a", blob)!;
+    const b = cache.take("/b", blob)!;
+    const c = cache.take("/c", blob)!;
+    const d = cache.take("/d", blob)!;
+    cache.release("/a", a);
+    cache.release("/b", b);
+    cache.release("/c", c); // three idle: the oldest (a) goes
+    expect(revoked).toEqual(["blob:1"]);
+    expect(cache.get("/a")).toBeUndefined();
+    expect(cache.take("/b")).toBe(b); // b in use again: c is now the oldest idle
+    cache.release("/d", d); // idle: c, d
+    expect(revoked).toEqual(["blob:1"]);
+    cache.release("/b", b); // idle: c, d, b: c goes, b (in use until now) stays
+    expect(revoked).toEqual(["blob:1", "blob:3"]);
+    expect(cache.get("/b")?.src).toBe("blob:2");
+    expect(cache.get("/d")?.src).toBe("blob:4");
+  });
+});
+
 describe("useDepiction", () => {
-  it("gives a blob URL once loaded and revokes it on unmount", async () => {
+  it("gives a blob URL once loaded, and the same one at once to the next view of it", async () => {
     const revoked: string[] = [];
     vi.stubGlobal("URL", {
       ...URL,
       createObjectURL: () => "blob:svg-1",
       revokeObjectURL: (u: string) => revoked.push(u),
     });
-    const hook = renderHook(() => useDepiction("/api/v2/segments/s1/depiction?v=k"));
+    const url = "/api/v2/segments/s1/depiction?v=k";
+    const hook = renderHook(() => useDepiction(url));
     expect(hook.result.current).toMatchObject({ src: null, failed: false });
     await waitFor(() => expect(pending).toHaveLength(1));
     pending[0]!.resolve(svg());
     await waitFor(() => expect(hook.result.current.src).toBe("blob:svg-1"));
     hook.unmount();
+    expect(revoked).toEqual([]); // kept for the tab
+    const again = renderHook(() => useDepiction(url));
+    expect(again.result.current.src).toBe("blob:svg-1");
+    expect(pending).toHaveLength(1);
+    again.unmount();
+    forgetDrawings();
     expect(revoked).toEqual(["blob:svg-1"]);
   });
 

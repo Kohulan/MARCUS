@@ -14,8 +14,9 @@
    "structures": 10,
    "accepted": 1,
    "rejected": 1,
-   "to_review": 8,
-   "failed_pages": 0
+   "to_review": 7,
+   "failed_pages": 0,
+   "failed": 1
   }
  ]
 }

@@ -12,7 +12,8 @@ const HIDDEN_CLOSE_MS = 60000;
  * Live updates of a paper or image job (wire format: backend-v2 api/routes/events.py).
  * `onEvent` is a hint to refetch; the API stays the source of truth.
  *
- * - `snapshot` (named) and unnamed `data:` frames → onEvent, mode "live".
+ * - `snapshot` (named) and unnamed `data:` frames → onEvent, mode "live". A snapshot hands
+ *   onEvent its parsed data (a page may skip a refetch it has just made).
  * - `end` (named) → onEvent, close, every timer stops, mode "ended". Named events reach only
  *   addEventListener, never onmessage.
  * - `error` (the native error and the named `error` frame both arrive as "error") → mode
@@ -28,7 +29,7 @@ const HIDDEN_CLOSE_MS = 60000;
 export function useLiveEvents(
   kind: "paper" | "image",
   id: string,
-  onEvent: () => void,
+  onEvent: (snapshot?: unknown) => void,
 ): { mode: LiveMode; reconnect: () => void } {
   const [mode, setModeState] = useState<LiveMode>("connecting");
   const onEventRef = useRef(onEvent);
@@ -49,6 +50,13 @@ export function useLiveEvents(
     let suspended = false; // closed because the tab was hidden too long
 
     const fire = () => onEventRef.current();
+    const parse = (data: unknown): unknown => {
+      try {
+        return typeof data === "string" ? (JSON.parse(data) as unknown) : undefined;
+      } catch {
+        return undefined;
+      }
+    };
     const setMode = (next: LiveMode) => {
       current = next;
       setModeState(next);
@@ -80,17 +88,22 @@ export function useLiveEvents(
       const source = new EventSource(url);
       es = source;
       // Every handler ignores a stream that has since been replaced or closed.
-      const mine = (fn: () => void) => () => {
-        if (es === source) fn();
-      };
-      const live = mine(() => {
+      const mine =
+        <E,>(fn: (e: E) => void) =>
+        (e: E) => {
+          if (es === source) fn(e);
+        };
+      const live = (snapshot?: unknown) => {
         stopPolling();
         backoff = 0;
         setMode("live");
-        fire();
-      });
-      source.addEventListener("snapshot", live);
-      source.onmessage = live;
+        onEventRef.current(snapshot);
+      };
+      source.addEventListener(
+        "snapshot",
+        mine((e: Event) => live(parse((e as MessageEvent).data) ?? null)),
+      );
+      source.onmessage = mine(() => live());
       source.addEventListener(
         "open",
         mine(() => {

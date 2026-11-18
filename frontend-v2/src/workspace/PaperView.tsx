@@ -9,11 +9,10 @@ import {
   type RefObject,
 } from "react";
 import { reasonText } from "../api/reasons";
+import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
-import { hasDrawing } from "./cardState";
-import { CardCompare } from "./Compare";
-import { CardEditor } from "./SegmentEditor";
+import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
@@ -22,9 +21,13 @@ import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./paper.css";
 
-const BUSY_PAPER = new Set(["checking", "processing"]);
 const NO_MARKERS: PageMarker[] = [];
-const NOOP = () => undefined;
+
+const sameMarker = (a: PageMarker, b: PageMarker) =>
+  a.segmentId === b.segmentId &&
+  a.n === b.n &&
+  a.state === b.state &&
+  a.bbox.every((v, i) => v === b.bbox[i]);
 
 /**
  * Per page: can its image be shown? Yes once a render_page step of the page is done. Its
@@ -32,18 +35,12 @@ const NOOP = () => undefined;
  * paper being worked on: waiting. No render_page step on a finished paper: try the image.
  */
 function pageImages(steps: StepOut[], pages: number, busy: boolean): PageImage[] {
-  const renders = new Map<number, StepOut[]>();
-  for (const s of steps) {
-    if (s.kind !== "render_page" || s.page === null) continue;
-    const list = renders.get(s.page);
-    if (list) list.push(s);
-    else renders.set(s.page, [s]);
-  }
+  const byPage = pageSteps(steps);
   return Array.from({ length: pages }, (_, page0): PageImage => {
-    const list = renders.get(page0);
-    if (!list) return busy ? { kind: "waiting" } : { kind: "ready" };
-    if (list.some((s) => s.status === "done")) return { kind: "ready" };
-    const newest = list.reduce((a, b) => (b.created_at >= a.created_at ? b : a));
+    const renders = (byPage.get(page0) ?? []).filter((s) => s.kind === "render_page");
+    const newest = renders[0];
+    if (!newest) return busy ? { kind: "waiting" } : { kind: "ready" };
+    if (renders.some((s) => s.status === "done")) return { kind: "ready" };
     if (newest.status === "failed") return { kind: "failed", reason: reasonText(newest.error_class) };
     return { kind: "waiting" };
   });
@@ -121,7 +118,7 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -129,13 +126,12 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const pagesCol = useRef<HTMLElement>(null);
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [comparing, setComparing] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
 
-  const busy = BUSY_PAPER.has(paper.status);
+  const busy = isPaperBusy(paper.status);
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
   const pages = paper.pages ?? 0;
   const images = useMemo(() => pageImages(steps, pages, busy), [steps, pages, busy]);
+  const shownMarkers = useRef(new Map<number, PageMarker[]>());
   const markers = useMemo(() => {
     const map = new Map<number, PageMarker[]>();
     for (const r of rows) {
@@ -146,6 +142,15 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
       if (list) list.push(m);
       else map.set(s.page, [m]);
     }
+    // A page whose markers did not change keeps its array, so a live refresh re-renders only
+    // the pages that changed (PageWithBoxes is memoised).
+    for (const [page, list] of map) {
+      const old = shownMarkers.current.get(page);
+      if (old && old.length === list.length && old.every((m, i) => sameMarker(m, list[i]!))) {
+        map.set(page, old);
+      }
+    }
+    shownMarkers.current = map;
     return map;
   }, [rows, byId]);
 
@@ -252,7 +257,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </p>
         ) : (
           <div className="pv-list">
-            {rows.map((r, index) => {
+            {rows.map((r) => {
               const segment = byId.get(r.segmentId)!;
               return (
                 <StructureCard
@@ -260,21 +265,17 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   compact
                   segment={segment}
                   n={r.n}
-                  index={index}
                   state={r.state}
                   paperEngine={paper.engine}
-                  canAccept={hasDrawing(segment)}
                   reason={r.reason}
                   failedEngine={r.failedEngine}
-                  selected={false}
                   current={selection === r.segmentId}
                   linked={hovered === r.segmentId}
-                  onToggle={NOOP}
                   onOpen={onSelect}
                   onDecide={onDecide}
                   onRun={onRun}
-                  onCompare={setComparing}
-                  onEdit={setEditing}
+                  onCompare={ws.openCompare}
+                  onEdit={ws.openEditor}
                   paperName={paper.display_name}
                   onHover={onCardHover}
                 />
@@ -283,18 +284,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </div>
         )}
       </section>
-      {comparing !== null && (
-        <CardCompare
-          ws={ws}
-          rows={rows}
-          segmentId={comparing}
-          onStarted={started}
-          onClose={() => setComparing(null)}
-        />
-      )}
-      {editing !== null && (
-        <CardEditor ws={ws} segmentId={editing} onClose={() => setEditing(null)} />
-      )}
     </div>
   );
 }

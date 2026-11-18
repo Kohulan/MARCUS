@@ -4,31 +4,69 @@ import uuid
 from collections import defaultdict
 from typing import NamedTuple
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
-from marcus.core.enums import StepStatus
+from marcus.core.enums import Engine, StepKind, StepStatus
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
-from marcus.core.pipeline import PAGE_KINDS, page_step_order
+from marcus.core.pipeline import ACTIVE, PAGE_KINDS, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
 
-class Counts5(NamedTuple):
+class PaperCounts(NamedTuple):
     structures: int
     accepted: int
     rejected: int
     to_review: int
     failed_pages: int
+    failed: int
 
 
-async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uuid.UUID, Counts5]:
+async def waiting_ocsr_step(db: AsyncSession, where, engine: Engine) -> uuid.UUID | None:
+    """The OCSR step of `engine` still waiting or running for `where` (a segment's or an image
+    job's steps): a repeat click gets it back instead of queueing another one."""
+    return await db.scalar(
+        select(Step.id)
+        .where(
+            where,
+            Step.kind == StepKind.OCSR.value,
+            Step.engine == engine.value,
+            Step.status.in_(ACTIVE),
+        )
+        .limit(1)
+    )
+
+
+def _failed_structure():
+    """True for a segment the workspace shows as Failed (frontend cardState): no decision, no
+    valid prediction, no OCSR step in flight, and its newest OCSR step failed."""
+    ocsr = and_(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
+    newest = (
+        select(Step.status)
+        .where(ocsr)
+        .order_by(Step.created_at.desc(), Step.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    return and_(
+        or_(Curation.status.is_(None), Curation.status.not_in(("accepted", "rejected"))),
+        ~exists().where(Prediction.segment_id == Segment.id, Prediction.valid.is_(True)),
+        ~exists().where(ocsr, Step.status.in_(ACTIVE)),
+        newest == StepStatus.FAILED.value,
+    )
+
+
+async def paper_counts(
+    db: AsyncSession, paper_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, PaperCounts]:
     """Structure and failure counts per paper: two grouped queries, whatever the number of papers.
 
-    structures = segments; accepted / rejected = curations with that status; to_review = the
-    rest (every segment has a curation row). failed_pages = distinct pages whose newest
+    structures = segments; accepted / rejected = curations with that status; failed = the
+    undecided ones whose read failed (_failed_structure); to_review = the rest (every segment
+    has a curation row). failed_pages = distinct pages whose newest
     render_page or segment_page step, across both kinds (the order retry_page uses), is failed.
     A retry in flight (pending, queued, running) is the newest step, so the page is not counted
     while it runs; retry_page itself still sees the old failure standing and answers "busy"."""
@@ -40,6 +78,7 @@ async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uui
             func.count(),
             func.count().filter(Curation.status == "accepted"),
             func.count().filter(Curation.status == "rejected"),
+            func.count().filter(_failed_structure()),
         )
         .select_from(Segment)
         .outerjoin(Curation, Curation.segment_id == Segment.id)
@@ -63,16 +102,15 @@ async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uui
         .group_by(newest.c.paper_id)
     )
     failed = dict(failed_rows.all())
-    out = {pid: Counts5(0, 0, 0, 0, failed.get(pid, 0)) for pid in paper_ids}
-    for pid, total, accepted, rejected in seg_rows.all():
-        out[pid] = Counts5(
-            total, accepted, rejected, total - accepted - rejected, failed.get(pid, 0)
-        )
+    out = {pid: PaperCounts(0, 0, 0, 0, failed.get(pid, 0), 0) for pid in paper_ids}
+    for pid, total, accepted, rejected, broken in seg_rows.all():
+        rest = total - accepted - rejected - broken
+        out[pid] = PaperCounts(total, accepted, rejected, rest, failed.get(pid, 0), broken)
     return out
 
 
-def paper_summary(paper: Paper, counts: Counts5) -> PaperSummary:
-    fields = PaperSummary.model_fields.keys() - Counts5._fields
+def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
+    fields = PaperSummary.model_fields.keys() - PaperCounts._fields
     return PaperSummary(**{f: getattr(paper, f) for f in fields}, **counts._asdict())
 
 

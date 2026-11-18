@@ -11,7 +11,7 @@ import PapersList from "./PapersList";
 import "./tool.css";
 
 /** The synthetic sample paper (public/sample) and the display name it is uploaded under. */
-export const SAMPLE_URL = "/sample/synth_015.pdf";
+const SAMPLE_URL = "/sample/synth_015.pdf";
 export const SAMPLE_NAME = "Sample paper (synthetic).pdf";
 const SAMPLE_MISSING = "The sample paper could not be loaded.";
 

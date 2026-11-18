@@ -2,13 +2,10 @@
 // Accept / Reject (one curation save) and a run with another engine.
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { api, ApiError } from "../api/client";
+import { api, errorText } from "../api/client";
 import { refreshPaper, useSaveCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
-
-export const errorDetail = (err: unknown) =>
-  err instanceof ApiError ? err.detail : "Something went wrong.";
 
 /**
  * `decide` saves a card's status (a failure says so in a toast); `run` starts a prediction
@@ -29,7 +26,7 @@ export function useCardActions(paperId: string, reconnect: () => void) {
   const decide = useCallback(
     (segmentId: string, status: CurationStatus) => {
       save(segmentId, { status }).catch((err: unknown) =>
-        toast(`Not saved: ${errorDetail(err)}`, "error"),
+        toast(`Not saved: ${errorText(err)}`, "error"),
       );
     },
     [save, toast],
@@ -38,7 +35,7 @@ export function useCardActions(paperId: string, reconnect: () => void) {
   const run = useCallback(
     (segmentId: string, engine: Engine) => {
       api.runPrediction(segmentId, engine).then(started, (err: unknown) =>
-        toast(`Not started: ${errorDetail(err)}`, "error"),
+        toast(`Not started: ${errorText(err)}`, "error"),
       );
     },
     [started, toast],

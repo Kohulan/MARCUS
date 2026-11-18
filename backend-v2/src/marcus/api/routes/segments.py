@@ -10,13 +10,13 @@ from marcus.api.chem import curation_error
 from marcus.api.chempool import CHEM
 from marcus.api.depiction import draw_or_read, shown_structure
 from marcus.api.deps import current_owner, get_owned_segment, not_found, require_engine_enabled
-from marcus.api.read import IMAGE_HEADERS
+from marcus.api.read import IMAGE_HEADERS, waiting_ocsr_step
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, StepKind
+from marcus.core.enums import Engine
 from marcus.core.models import Curation, Owner, Prediction, Step
-from marcus.core.pipeline import ACTIVE, request_ocsr
+from marcus.core.pipeline import request_ocsr
 
 router = APIRouter()
 
@@ -82,18 +82,8 @@ async def run_prediction(
 ) -> StepAccepted:
     segment, _ = await get_owned_segment(db, owner, segment_id)
     require_engine_enabled(body.engine)
-    # A request for a segment and engine that is still waiting returns that step instead of
-    # queueing another one (repeat clicks must not flood the queue).
-    waiting = await db.scalar(
-        select(Step.id)
-        .where(
-            Step.segment_id == segment.id,
-            Step.kind == StepKind.OCSR.value,
-            Step.engine == body.engine.value,
-            Step.status.in_(ACTIVE),
-        )
-        .limit(1)
-    )
+    # Repeat clicks must not flood the queue.
+    waiting = await waiting_ocsr_step(db, Step.segment_id == segment.id, body.engine)
     if waiting is not None:
         return StepAccepted(step_id=waiting)
     try:
