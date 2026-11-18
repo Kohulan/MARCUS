@@ -300,12 +300,12 @@ describe("cards and their states", () => {
     await waitFor(() => expect(cards()).toHaveLength(2));
   });
 
-  it("Enter on a card opens it (the focused segment goes into the URL)", async () => {
+  it("Enter on a card opens it in focus mode (the focused segment goes into the URL)", async () => {
     renderGrid(paper([segment("s1"), segment("s2")]));
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(card("[02]")).toHaveAttribute("tabindex", "0");
     fireEvent.keyDown(card("[02]"), { key: "Enter" });
-    await waitFor(() => expect(card("[02]")).toHaveAttribute("aria-current", "true"));
+    expect(await screen.findByRole("region", { name: "Focus [02]" })).toBeInTheDocument();
   });
 });
 

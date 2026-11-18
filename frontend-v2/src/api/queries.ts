@@ -4,7 +4,7 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { api, ApiError } from "./client";
 import { curationBody, type CurationChange } from "./curation";
-import type { BulkCurationItem, CurationOut, PaperDetail } from "./types";
+import type { BulkCurationItem, CurationOut, CurationStatus, PaperDetail } from "./types";
 
 export const keys = {
   papers: () => ["papers"] as const,
@@ -198,6 +198,33 @@ async function currentCuration(
   return segment.curation;
 }
 
+type Counts = Pick<PaperDetail, "accepted" | "rejected" | "to_review">;
+
+/** Moves one structure from status `from` to `to` in the paper's counts. */
+function moveCount(counts: Counts, from: CurationStatus, to: CurationStatus): Counts {
+  if (from === to) return counts;
+  const next = { ...counts };
+  const field = (s: CurationStatus) =>
+    s === "accepted" ? "accepted" : s === "rejected" ? "rejected" : "to_review";
+  next[field(from)] -= 1;
+  next[field(to)] += 1;
+  return next;
+}
+
+/** The paper with one segment's curation replaced and its counts moved to match (no refetch). */
+function withCuration(paper: PaperDetail, segmentId: string, out: CurationOut): PaperDetail {
+  const segment = paper.segments.find((s) => s.id === segmentId);
+  if (!segment) return paper;
+  const counts = moveCount(paper, segment.curation?.status ?? "unchecked", out.status);
+  return {
+    ...paper,
+    accepted: counts.accepted,
+    rejected: counts.rejected,
+    to_review: counts.to_review,
+    segments: paper.segments.map((s) => (s.id === segmentId ? { ...s, curation: out } : s)),
+  };
+}
+
 /**
  * `save(segmentId, change)`: PUT the full curation built by curationBody from the cached one
  * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved),
@@ -223,14 +250,7 @@ export function useSaveCuration(paperId: string): {
           const stale = client.isFetching({ queryKey: key }) > 0;
           if (stale) await client.cancelQueries({ queryKey: key });
           client.setQueryData<PaperDetail>(key, (old) =>
-            old
-              ? {
-                  ...old,
-                  segments: old.segments.map((s) =>
-                    s.id === segmentId ? { ...s, curation: out } : s,
-                  ),
-                }
-              : old,
+            old ? withCuration(old, segmentId, out) : old,
           );
           if (stale) void client.invalidateQueries({ queryKey: key });
           return out;

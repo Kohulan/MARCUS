@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { usePaper } from "../api/queries";
@@ -6,10 +6,12 @@ import type { PaperDetail } from "../api/types";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import ExportMenu from "./ExportMenu";
+import FocusMode from "./FocusMode";
 import GonePage from "./GonePage";
 import ReviewGrid from "./ReviewGrid";
 import StatusBar from "./StatusBar";
-import { useWorkspace, type WorkspaceView } from "./useWorkspace";
+import { useReviewRows } from "./useReviewRows";
+import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
 
 const name = (p: PaperDetail) => p.title || p.display_name;
@@ -82,9 +84,35 @@ const VIEWS: { view: WorkspaceView; label: string }[] = [
 
 function Frame({ id }: { id: string }) {
   const ws = useWorkspace(id);
-  const reasonId = useId();
   const paper = ws.paper;
   if (!paper) return null; // the outer component mounts the frame only with a paper
+  return <PaperFrame ws={ws} paper={paper} />;
+}
+
+function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
+  const reasonId = useId();
+  const rows = useReviewRows(paper, ws.segments, ws.steps);
+  const review = useRef<HTMLDivElement>(null);
+  // Esc in focus mode: the grid comes back with this segment's card selected and focused.
+  const [returnTo, setReturnTo] = useState<string | null>(null);
+  const focused =
+    ws.view === "review" && ws.focus ? ws.segments.find((s) => s.id === ws.selection) : undefined;
+
+  const { focus, selection, setSelection, closeFocus } = ws;
+  useEffect(() => {
+    if (returnTo === null || focus) return;
+    setReturnTo(null);
+    if (selection !== returnTo) setSelection(returnTo);
+    const card = [...(review.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])].find(
+      (el) => el.dataset.segmentId === returnTo,
+    );
+    (card ?? review.current)?.focus();
+  }, [returnTo, focus, selection, setSelection]);
+
+  const close = (segmentId: string) => {
+    setReturnTo(segmentId);
+    closeFocus();
+  };
 
   const accepted = paper.accepted;
   return (
@@ -160,7 +188,21 @@ function Frame({ id }: { id: string }) {
         <section className="ws-view" aria-label="Paper view" />
       ) : (
         <section className="ws-view ws-view--review" aria-label="Review view">
-          <ReviewGrid ws={ws} />
+          {focused && (
+            <FocusMode
+              ws={ws}
+              rows={rows}
+              segment={focused}
+              onClose={close}
+              // F11 passes onEdit (the editor) and F10 onCompare (compare engines) here.
+              onEdit={undefined}
+              onCompare={undefined}
+            />
+          )}
+          {/* Hidden, not unmounted, in focus mode: the grid keeps its filter and selection. */}
+          <div ref={review} className="ws-review" hidden={focused !== undefined} tabIndex={-1}>
+            <ReviewGrid ws={ws} rows={rows} />
+          </div>
         </section>
       )}
     </main>

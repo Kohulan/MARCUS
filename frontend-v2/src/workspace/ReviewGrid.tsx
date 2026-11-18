@@ -3,28 +3,19 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
 import { refreshPaper, useBulkCuration, useSaveCuration } from "../api/queries";
-import { reasonText } from "../api/reasons";
-import type { CurationStatus, Engine, StepOut } from "../api/types";
+import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
-import { cardState, filterOf, ocsrSteps, type CardState, type GridFilter } from "./cardState";
+import { filterOf, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
+import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./grid.css";
 
 /** At most this many prediction requests in flight from one bulk "Read N". */
 const READ_AT_ONCE = 4;
-const NO_STEPS: StepOut[] = [];
 const BUSY_PAPER = new Set(["checking", "processing"]);
-
-type Row = {
-  segmentId: string;
-  n: number;
-  state: CardState;
-  reason: string | null;
-  failedEngine: string | null;
-};
 
 /** Run `fn` over `items`, at most `limit` at a time; never rejects. */
 async function runPool<T>(
@@ -55,9 +46,9 @@ const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Someth
  * The review view: filters with counts, the grid of structure cards in (page, idx) order,
  * and the bulk bar for the selected cards.
  */
-export default function ReviewGrid({ ws }: { ws: Workspace }) {
+export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
-  const { segments, steps, setSelection, selection } = ws;
+  const { segments, openFocus, selection } = ws;
   const client = useQueryClient();
   const reconnect = ws.live.reconnect; // stable (the live object itself is new each render)
   const paperId = paper.id;
@@ -74,35 +65,6 @@ export default function ReviewGrid({ ws }: { ws: Workspace }) {
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const anchor = useRef<number | null>(null);
-
-  // One pass over the steps for the whole grid, not one per card.
-  const stepsBySegment = useMemo(() => {
-    const map = new Map<string, StepOut[]>();
-    for (const s of steps) {
-      if (s.kind !== "ocsr" || s.segment_id === null) continue;
-      const list = map.get(s.segment_id);
-      if (list) list.push(s);
-      else map.set(s.segment_id, [s]);
-    }
-    return map;
-  }, [steps]);
-
-  const rows = useMemo<Row[]>(
-    () =>
-      segments.map((segment, i) => {
-        const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
-        const state = cardState(segment, own, paper);
-        const newest = state === "failed" ? ocsrSteps(segment, own)[0] : undefined;
-        return {
-          segmentId: segment.id,
-          n: i + 1,
-          state,
-          reason: newest ? reasonText(newest.error_class) : null,
-          failedEngine: newest?.engine ?? null,
-        };
-      }),
-    [segments, stepsBySegment, paper],
-  );
 
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
 
@@ -161,10 +123,8 @@ export default function ReviewGrid({ ws }: { ws: Workspace }) {
     });
   }, []);
 
-  const onOpen = useCallback(
-    (segmentId: string) => setSelection(segmentId, { push: true }),
-    [setSelection],
-  );
+  // Enter or double-click: focus mode on that structure (a new history entry; Back closes it).
+  const onOpen = openFocus;
 
   const onDecide = useCallback(
     (segmentId: string, status: CurationStatus) => {

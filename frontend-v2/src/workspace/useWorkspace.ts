@@ -1,14 +1,18 @@
 // The state of one paper workspace: the paper, its segments and steps, what failed, the
 // live stream, and the view and focused segment (both in the URL, so reload and Back work).
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useMemo, useRef } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { checkFailure, pageFailures, type PageFailure } from "./pageFailures";
 
 export type WorkspaceView = "review" | "paper";
+
+const FOCUS_PUSHED = { focusPushed: true } as const;
+const isFocusPushed = (state: unknown) =>
+  typeof state === "object" && state !== null && (state as { focusPushed?: unknown }).focusPushed === true;
 
 const NO_STEPS: StepOut[] = [];
 
@@ -25,6 +29,12 @@ export type Workspace = {
   selection: string | null;
   /** Replaces the URL entry by default (moving between cards makes no history); `push` adds one. */
   setSelection: (segmentId: string | null, opts?: { push?: boolean }) => void;
+  /** Focus mode is open on the selection (`?focus=1`, review view). */
+  focus: boolean;
+  /** Opens focus mode on a segment with a new history entry (Back closes it). */
+  openFocus: (segmentId: string) => void;
+  /** Closes focus mode: Back to the grid's entry when focus mode pushed one, else drop the flag. */
+  closeFocus: () => void;
   view: WorkspaceView;
   /** Adds a history entry, so Back returns to the other view. */
   setView: (view: WorkspaceView) => void;
@@ -38,6 +48,11 @@ export function useWorkspace(id: string): Workspace {
   const steps = useSteps(id).data?.steps ?? NO_STEPS;
   const live = useLiveEvents("paper", id, () => refreshPaper(client, id));
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  // The entry's state says whether openFocus pushed it; replaced entries keep it.
+  const location = useLocation();
+  const entryState = useRef<unknown>(location.state);
+  entryState.current = location.state;
 
   const segments = useMemo(
     () => [...(paper?.segments ?? [])].sort((a, b) => a.page - b.page || a.idx - b.idx),
@@ -48,6 +63,7 @@ export function useWorkspace(id: string): Workspace {
 
   const view: WorkspaceView = params.get("view") === "paper" ? "paper" : "review";
   const selection = params.get("s");
+  const focus = view === "review" && selection !== null && params.get("focus") === "1";
 
   const setView = useCallback(
     (next: WorkspaceView) => {
@@ -56,6 +72,7 @@ export function useWorkspace(id: string): Workspace {
         const q = new URLSearchParams(prev);
         if (next === "paper") q.set("view", "paper");
         else q.delete("view");
+        q.delete("focus"); // a view switch leaves focus mode
         return q;
       });
     },
@@ -71,10 +88,40 @@ export function useWorkspace(id: string): Workspace {
           else q.delete("s");
           return q;
         },
-        { replace: !opts.push },
+        // A replaced entry keeps its state (focus mode stays "pushed" while moving in it).
+        opts.push ? {} : { replace: true, state: entryState.current },
       ),
     [setParams],
   );
+
+  const openFocus = useCallback(
+    (segmentId: string) =>
+      setParams(
+        (prev) => {
+          const q = new URLSearchParams(prev);
+          q.set("s", segmentId);
+          q.set("focus", "1");
+          return q;
+        },
+        { state: FOCUS_PUSHED },
+      ),
+    [setParams],
+  );
+
+  const closeFocus = useCallback(() => {
+    if (isFocusPushed(entryState.current)) {
+      void navigate(-1);
+      return;
+    }
+    setParams(
+      (prev) => {
+        const q = new URLSearchParams(prev);
+        q.delete("focus");
+        return q;
+      },
+      { replace: true },
+    );
+  }, [navigate, setParams]);
 
   return {
     paper,
@@ -84,6 +131,9 @@ export function useWorkspace(id: string): Workspace {
     checkFailure: failure,
     selection,
     setSelection,
+    focus,
+    openFocus,
+    closeFocus,
     view,
     setView,
     live,
