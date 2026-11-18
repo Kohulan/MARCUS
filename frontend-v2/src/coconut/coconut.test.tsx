@@ -1,0 +1,575 @@
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildReport,
+  clearToken,
+  COCONUT_API,
+  COCONUT_CHUNK,
+  coconutLogin,
+  getToken,
+  markSent,
+  mutateBody,
+  NOT_SENT_ERROR,
+  sentIds,
+  submitReports,
+  TOKEN_KEY,
+  UNKNOWN_ERROR,
+} from "./coconutApi";
+import CoconutLogin from "./CoconutLogin";
+import SubmitForm from "./SubmitForm";
+import SubmitResults from "./SubmitResults";
+import type { PaperFields, ReportCreate, SubmitItem, SubmitStructure } from "./types";
+
+const TOKEN = "test-token";
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+type Call = { url: string; init: RequestInit };
+let calls: Call[];
+let fetchMock: ReturnType<typeof vi.fn>;
+
+function stubFetch(impl: (url: string, init: RequestInit, n: number) => Promise<Response>) {
+  calls = [];
+  fetchMock = vi.fn((url: string, init: RequestInit = {}) => {
+    calls.push({ url, init });
+    return impl(url, init, calls.length);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+}
+
+function bodyOf(c: Call): { mutate: { attributes: ReportCreate }[] } {
+  return JSON.parse(String(c.init.body)) as { mutate: { attributes: ReportCreate }[] };
+}
+
+/** A COCONUT that creates every report it is sent, ids counting up from 1. */
+function okServer() {
+  let next = 1;
+  return async (_url: string, init: RequestInit) => {
+    const n = (JSON.parse(String(init.body)) as { mutate: unknown[] }).mutate.length;
+    return json({ created: Array.from({ length: n }, () => next++), updated: [] });
+  };
+}
+
+const paper: PaperFields = {
+  title: "MARCUS_Submission Rajan 2025",
+  doi: "10.1039/d5dd00313j",
+  evidence: "Isolated from the bark",
+  comment: "Paper comment",
+  organisms: [{ name: "Salix alba", parts: "bark, leaf", location: "Jena", ecosystems: "forest" }],
+};
+
+function items(count: number): SubmitItem[] {
+  return Array.from({ length: count }, (_, i) => ({
+    segmentId: `s${i + 1}`,
+    report: buildReport(
+      paper,
+      { segmentId: `s${i + 1}`, n: i + 1, smiles: "CCO" },
+      { name: `Name ${i + 1}`, structuralComments: "" },
+    ),
+  }));
+}
+
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+  clearToken();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe("coconutLogin", () => {
+  it("posts to /api/auth/login and keeps access_token in sessionStorage", async () => {
+    stubFetch(async () => json({ access_token: TOKEN, token_type: "Bearer" }));
+    await expect(coconutLogin("a@b.c", "pw")).resolves.toBe(TOKEN);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://coconut.naturalproducts.net/api/auth/login");
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ email: "a@b.c", password: "pw" });
+    expect(calls[0]!.init.credentials).toBe("omit");
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN);
+    expect(TOKEN_KEY).toBe("marcus-coconut-token");
+    expect(localStorage.length).toBe(0);
+    expect(getToken()).toBe(TOKEN);
+  });
+
+  it("keeps the token in memory when sessionStorage throws", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    stubFetch(async () => json({ access_token: TOKEN }));
+    await coconutLogin("a@b.c", "pw");
+    expect(getToken()).toBe(TOKEN);
+    clearToken();
+    expect(getToken()).toBeNull();
+  });
+
+  it("rejects wrong credentials with a plain message", async () => {
+    stubFetch(async () => json({ message: "Invalid" }, 401));
+    await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
+    expect(getToken()).toBeNull();
+  });
+});
+
+describe("submitReports", () => {
+  it("sends one item in the v1 body shape exactly", async () => {
+    stubFetch(okServer());
+    const report = buildReport(
+      paper,
+      { segmentId: "s1", n: 1, smiles: "CCO", link: "https://pubchem.ncbi.nlm.nih.gov/compound/702" },
+      { name: "Ethanol", structuralComments: "drawn as salt" },
+    );
+    const res = await submitReports(TOKEN, [{ segmentId: "s1", report }]);
+    expect(res).toEqual([{ segmentId: "s1", ok: true, reportId: "1" }]);
+    expect(calls[0]!.url).toBe("https://coconut.naturalproducts.net/api/reports/mutate");
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(new Headers(calls[0]!.init.headers).get("Authorization")).toBe(`Bearer ${TOKEN}`);
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+      mutate: [
+        {
+          operation: "create",
+          attributes: {
+            title: "MARCUS_Submission Rajan 2025",
+            evidence: "Isolated from the bark",
+            comment: "Paper comment",
+            suggested_changes: {
+              new_molecule_data: {
+                canonical_smiles: "CCO",
+                reference_id: "10.1039/d5dd00313j",
+                name: "Ethanol",
+                link: "https://pubchem.ncbi.nlm.nih.gov/compound/702",
+                structural_comments: "drawn as salt",
+                references: [
+                  {
+                    doi: "10.1039/d5dd00313j",
+                    organisms: [
+                      {
+                        name: "Salix alba",
+                        parts: ["bark", "leaf"],
+                        locations: [{ name: "Jena", ecosystems: ["forest"] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          relations: [],
+        },
+      ],
+    });
+    expect(mutateBody([report])).toEqual(JSON.parse(String(calls[0]!.init.body)));
+  });
+
+  it("sends 120 items as 50, 50 and 20 and reports progress", async () => {
+    stubFetch(okServer());
+    const progress: [number, number][] = [];
+    const res = await submitReports(TOKEN, items(120), (done, total) => progress.push([done, total]));
+    expect(COCONUT_CHUNK).toBe(50);
+    expect(calls.map((c) => bodyOf(c).mutate.length)).toEqual([50, 50, 20]);
+    expect(progress).toEqual([
+      [50, 120],
+      [100, 120],
+      [120, 120],
+    ]);
+    expect(res).toHaveLength(120);
+    expect(res.every((r) => r.ok)).toBe(true);
+    expect(res[119]).toEqual({ segmentId: "s120", ok: true, reportId: "120" });
+  });
+
+  it("resends a chunk answered with 413 as two halves", async () => {
+    const ok = okServer();
+    stubFetch(async (url, init, n) => (n === 2 ? json({ message: "Too large" }, 413) : ok(url, init)));
+    const res = await submitReports(TOKEN, items(120));
+    expect(calls.map((c) => bodyOf(c).mutate.length)).toEqual([50, 50, 25, 25, 20]);
+    expect(bodyOf(calls[2]!).mutate[0]!.attributes.suggested_changes.new_molecule_data.name).toBe(
+      "Name 51",
+    );
+    expect(res.every((r) => r.ok)).toBe(true);
+    expect(res.map((r) => r.segmentId)).toEqual(items(120).map((i) => i.segmentId));
+  });
+
+  it("halves on a 422 about the list size, but only once", async () => {
+    stubFetch(async () =>
+      json({ message: "The mutate field must not have more than 10 items.", errors: { mutate: ["x"] } }, 422),
+    );
+    const res = await submitReports(TOKEN, items(50));
+    expect(calls.map((c) => bodyOf(c).mutate.length)).toEqual([50, 25, 25]);
+    expect(res.every((r) => !r.ok)).toBe(true);
+  });
+
+  it("does not retry a network error: the chunk is Unknown and sending stops", async () => {
+    const ok = okServer();
+    stubFetch(async (url, init, n) => {
+      if (n === 2) throw new TypeError("Failed to fetch");
+      return ok(url, init);
+    });
+    const res = await submitReports(TOKEN, items(120));
+    expect(calls).toHaveLength(2);
+    expect(res.slice(0, 50).every((r) => r.ok)).toBe(true);
+    expect(res.slice(50, 100)).toEqual(
+      items(120)
+        .slice(50, 100)
+        .map((i) => ({ segmentId: i.segmentId, ok: false, error: "Unknown: check COCONUT before sending again" })),
+    );
+    expect(UNKNOWN_ERROR).toBe("Unknown: check COCONUT before sending again");
+    expect(res.slice(100).every((r) => !r.ok && r.error === NOT_SENT_ERROR)).toBe(true);
+  });
+
+  it("treats a timeout like a network error", async () => {
+    stubFetch(async () => {
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    });
+    const res = await submitReports(TOKEN, items(3));
+    expect(calls).toHaveLength(1);
+    expect(res.every((r) => !r.ok && r.error === UNKNOWN_ERROR)).toBe(true);
+  });
+
+  it("fails only the refused items of a 422 and resends the rest once", async () => {
+    const ok = okServer();
+    stubFetch(async (url, init, n) =>
+      n === 1
+        ? json(
+            {
+              message: "The given data was invalid.",
+              errors: { "mutate.1.attributes.title": ["The title field is required."] },
+            },
+            422,
+          )
+        : ok(url, init),
+    );
+    const res = await submitReports(TOKEN, items(3));
+    expect(calls.map((c) => bodyOf(c).mutate.length)).toEqual([3, 2]);
+    expect(res).toEqual([
+      { segmentId: "s1", ok: true, reportId: "1" },
+      { segmentId: "s2", ok: false, error: "The title field is required." },
+      { segmentId: "s3", ok: true, reportId: "2" },
+    ]);
+  });
+
+  it("stops on 401 and asks for a new login", async () => {
+    stubFetch(async () => json({ message: "Unauthenticated." }, 401));
+    const res = await submitReports(TOKEN, items(60));
+    expect(calls).toHaveLength(1);
+    expect(res.slice(0, 50).every((r) => !r.ok && /log in/i.test(r.error))).toBe(true);
+    expect(res.slice(50).every((r) => !r.ok && r.error === NOT_SENT_ERROR)).toBe(true);
+  });
+
+  it("sends only to coconut.naturalproducts.net", async () => {
+    stubFetch(okServer());
+    await submitReports(TOKEN, items(2));
+    expect(calls.every((c) => c.url.startsWith(`${COCONUT_API}/`))).toBe(true);
+    expect(COCONUT_API).toBe("https://coconut.naturalproducts.net/api");
+  });
+});
+
+describe("buildReport", () => {
+  it("lets a per-structure organism and comment win over the paper's", () => {
+    const r = buildReport(
+      paper,
+      { segmentId: "s1", n: 1, smiles: "C" },
+      {
+        name: "Methane",
+        structuralComments: "",
+        comment: "Own comment",
+        organism: { name: "Quercus robur", parts: "", location: "", ecosystems: "" },
+      },
+    );
+    expect(r.comment).toBe("Own comment");
+    expect(r.suggested_changes.new_molecule_data.references).toEqual([
+      { doi: paper.doi, organisms: [{ name: "Quercus robur", parts: [], locations: [] }] },
+    ]);
+  });
+
+  it("inherits the paper's organism when the override is blank", () => {
+    const r = buildReport(
+      paper,
+      { segmentId: "s1", n: 1, smiles: "C" },
+      { name: "M", structuralComments: "", comment: " ", organism: { name: "", parts: "x", location: "", ecosystems: "" } },
+    );
+    expect(r.comment).toBe("Paper comment");
+    expect(r.suggested_changes.new_molecule_data.references[0]!.organisms[0]!.name).toBe("Salix alba");
+  });
+});
+
+describe("sent store", () => {
+  it("keeps sent ids per paper in localStorage", () => {
+    markSent("p1", ["a", "b"]);
+    markSent("p1", ["c"]);
+    expect([...sentIds("p1")].sort()).toEqual(["a", "b", "c"]);
+    expect(localStorage.getItem("marcus-coconut-sent:p1")).not.toBeNull();
+    expect(sentIds("p2").size).toBe(0);
+  });
+
+  it("survives a localStorage that throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(() => markSent("p1", ["a"])).not.toThrow();
+    expect(sentIds("p1").size).toBe(0);
+  });
+});
+
+// --- Components ----------------------------------------------------------------------------
+
+const structures: SubmitStructure[] = [
+  { segmentId: "s1", n: 1, smiles: "CCO", name: "Ethanol" },
+  { segmentId: "s2", n: 2, smiles: "CCN", name: "Ethylamine" },
+  { segmentId: "s3", n: 3, smiles: "CCC", name: "Propane" },
+];
+
+function renderForm(list = structures) {
+  return render(
+    <SubmitForm
+      paper={{ id: "p1", title: "A paper on willow", doi: "10.1/x" }}
+      structures={list}
+      onClose={() => {}}
+    />,
+  );
+}
+
+function fillPaper() {
+  const sheet = screen.getByRole("group", { name: "Paper" });
+  fireEvent.change(within(sheet).getByLabelText("Title"), { target: { value: "T" } });
+  fireEvent.change(within(sheet).getByLabelText("Organism"), { target: { value: "Salix alba" } });
+}
+
+function row(tag: string) {
+  return screen.getByRole("listitem", { name: new RegExp(`\\[${tag}\\]`) });
+}
+
+describe("CoconutLogin", () => {
+  it("logs in and hands the token back; the password is not logged", async () => {
+    const log = vi.spyOn(console, "log");
+    const err = vi.spyOn(console, "error");
+    stubFetch(async () => json({ access_token: TOKEN }));
+    const onLoggedIn = vi.fn();
+    render(<CoconutLogin onLoggedIn={onLoggedIn} />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    await waitFor(() => expect(onLoggedIn).toHaveBeenCalledWith(TOKEN));
+    expect(log).not.toHaveBeenCalled();
+    expect(err).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed login", async () => {
+    stubFetch(async () => json({ message: "x" }, 401));
+    render(<CoconutLogin onLoggedIn={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong email or password");
+  });
+});
+
+describe("SubmitForm", () => {
+  it("asks for a COCONUT login first, then shows the form", async () => {
+    stubFetch(async () => json({ access_token: TOKEN }));
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await screen.findByRole("group", { name: "Paper" })).toBeInTheDocument();
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(TOKEN);
+  });
+
+  it("fills the paper fields once and sends every structure with progress", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(okServer());
+    renderForm();
+    const sheet = screen.getByRole("group", { name: "Paper" });
+    expect(within(sheet).getByLabelText("DOI")).toHaveValue("10.1/x");
+    expect(within(sheet).getByLabelText("Evidence")).toHaveValue("A paper on willow");
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    expect(await screen.findByText("Report 1")).toBeInTheDocument();
+    const sent = calls.flatMap((c) => bodyOf(c).mutate.map((m) => m.attributes));
+    expect(sent.map((a) => a.suggested_changes.new_molecule_data.name)).toEqual([
+      "Ethanol",
+      "Ethylamine",
+      "Propane",
+    ]);
+    expect(sent.every((a) => a.title === "T")).toBe(true);
+    expect([...sentIds("p1")].sort()).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("shows progress while chunks are sent", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    let release!: () => void;
+    const ok = okServer();
+    stubFetch(async (url, init, n) => {
+      if (n === 2) await new Promise<void>((r) => (release = r));
+      return ok(url, init);
+    });
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      segmentId: `s${i + 1}`,
+      n: i + 1,
+      smiles: "C",
+      name: `N${i + 1}`,
+    }));
+    renderForm(many);
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 60 to COCONUT" }));
+    expect(await screen.findByText("Sent 50 of 60")).toBeInTheDocument();
+    await act(async () => release());
+    expect(await screen.findByText("Report 60")).toBeInTheDocument();
+  });
+
+  it("sends once on a double click", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(okServer());
+    renderForm();
+    fillPaper();
+    const button = screen.getByRole("button", { name: "Send 3 to COCONUT" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await screen.findByText("Report 1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves already sent structures out until Send again is confirmed", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    markSent("p1", ["s2"]);
+    stubFetch(okServer());
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderForm();
+    fillPaper();
+    expect(within(row("02")).getByText("Already sent")).toBeInTheDocument();
+    const again = within(row("02")).getByRole("checkbox", { name: "Send again" });
+    fireEvent.click(again);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(again).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Send 2 to COCONUT" })).toBeInTheDocument();
+    fireEvent.click(again);
+    expect(again).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    await screen.findByText("Report 1");
+    expect(bodyOf(calls[0]!).mutate).toHaveLength(3);
+  });
+
+  it("sends only the structures not sent before", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    markSent("p1", ["s2"]);
+    stubFetch(okServer());
+    renderForm();
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 2 to COCONUT" }));
+    await screen.findByText("Report 1");
+    expect(
+      bodyOf(calls[0]!).mutate.map((m) => m.attributes.suggested_changes.new_molecule_data.name),
+    ).toEqual(["Ethanol", "Propane"]);
+  });
+
+  it("lets a structure's own organism win over the paper's", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(okServer());
+    renderForm();
+    fillPaper();
+    const r2 = row("02");
+    fireEvent.click(within(r2).getByRole("button", { name: "More" }));
+    fireEvent.change(within(r2).getByLabelText("Organism"), { target: { value: "Quercus robur" } });
+    fireEvent.change(within(r2).getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    await screen.findByText("Report 1");
+    const sent = bodyOf(calls[0]!).mutate.map((m) => m.attributes.suggested_changes.new_molecule_data);
+    expect(sent[0]!.references[0]!.organisms[0]!.name).toBe("Salix alba");
+    expect(sent[1]!.references[0]!.organisms[0]!.name).toBe("Quercus robur");
+    expect(sent[1]!.name).toBe("Renamed");
+  });
+
+  it("keeps Send off until the required fields are filled", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    renderForm([{ segmentId: "s1", n: 1, smiles: "C" }]);
+    const send = screen.getByRole("button", { name: "Send 1 to COCONUT" });
+    expect(send).toBeDisabled();
+    fillPaper();
+    expect(send).toBeDisabled(); // the structure has no name yet
+    fireEvent.change(within(row("01")).getByLabelText("Name"), { target: { value: "Methane" } });
+    expect(send).toBeEnabled();
+  });
+
+  it("never sends the token to /api/v2", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(okServer());
+    renderForm();
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    await screen.findByText("Report 1");
+    for (const c of calls) {
+      expect(c.url.startsWith(`${COCONUT_API}/`)).toBe(true);
+      if (c.url.includes("/api/v2")) {
+        expect(JSON.stringify(c.init)).not.toContain(TOKEN);
+      }
+    }
+    expect(calls.some((c) => c.url.includes("/api/v2"))).toBe(false);
+  });
+
+  it("shows each failed structure's error as text and the others' report ids", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    const ok = okServer();
+    stubFetch(async (url, init, n) =>
+      n === 1
+        ? json(
+            {
+              message: "invalid",
+              errors: { "mutate.1.attributes.title": ['<img src=x onerror="alert(1)">'] },
+            },
+            422,
+          )
+        : ok(url, init),
+    );
+    renderForm();
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    expect(await screen.findByText("Report 1")).toBeInTheDocument();
+    expect(within(row("01")).getByText("Report 1")).toBeInTheDocument();
+    expect(within(row("02")).getByText('<img src=x onerror="alert(1)">')).toBeInTheDocument();
+    expect(within(row("03")).getByText("Report 2")).toBeInTheDocument();
+    expect(document.querySelector("img")).toBeNull();
+    expect(sentIds("p1").has("s2")).toBe(false);
+  });
+
+  it("goes back to login when COCONUT says the login expired", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(async () => json({ message: "Unauthenticated." }, 401));
+    renderForm();
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    expect(await screen.findAllByText(/log in to COCONUT again/i)).not.toHaveLength(0);
+    expect(getToken()).toBeNull();
+  });
+});
+
+describe("SubmitResults", () => {
+  it("counts sent and failed", () => {
+    render(
+      <SubmitResults
+        structures={structures}
+        results={[
+          { segmentId: "s1", ok: true, reportId: "7" },
+          { segmentId: "s2", ok: false, error: "Nope" },
+          { segmentId: "s3", ok: true, reportId: null },
+        ]}
+        onBack={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("2 sent, 1 failed")).toBeInTheDocument();
+    expect(within(row("01")).getByText("Report 7")).toBeInTheDocument();
+    expect(within(row("02")).getByText("Nope")).toBeInTheDocument();
+    expect(within(row("03")).getByText("Sent")).toBeInTheDocument();
+  });
+});
