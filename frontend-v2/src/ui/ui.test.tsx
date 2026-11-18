@@ -3,7 +3,7 @@
 // every part a pre-rendered page uses renders on the server without touching window and
 // without a style attribute (CSP style-src 'self').
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { useEffect, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -257,6 +257,50 @@ describe("DesktopOnly", () => {
     );
     expect(screen.getByText("MARCUS is made for a desktop screen")).toBeInTheDocument();
     expect(screen.queryByText("tool")).toBeNull();
+  });
+
+  it("never mounts the tool below 1024 px, not even for one frame", () => {
+    setWidth(800);
+    const mounted = vi.fn();
+    function Tool() {
+      useEffect(() => mounted(), []);
+      return <p>tool</p>;
+    }
+    render(
+      <DesktopOnly>
+        <Tool />
+      </DesktopOnly>,
+    );
+    expect(mounted).not.toHaveBeenCalled();
+  });
+
+  it("follows the (min-width: 1024px) media query when the browser has one", () => {
+    const listeners = new Set<() => void>();
+    let wide = false;
+    window.matchMedia = vi.fn((query: string) => ({
+      get matches() {
+        return query === "(min-width: 1024px)" ? wide : false;
+      },
+      media: query,
+      onchange: null,
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    })) as unknown as typeof window.matchMedia;
+    setWidth(1400); // the query wins over innerWidth
+    render(
+      <DesktopOnly>
+        <p>tool</p>
+      </DesktopOnly>,
+    );
+    expect(screen.queryByText("tool")).toBeNull();
+    act(() => {
+      wide = true;
+      for (const fn of listeners) fn();
+    });
+    expect(screen.getByText("tool")).toBeInTheDocument();
   });
 
   it("shows the tool at 1024 px and follows a resize", () => {

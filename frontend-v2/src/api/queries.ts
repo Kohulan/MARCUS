@@ -98,8 +98,19 @@ export function refreshPaper(client: QueryClient, id: string): void {
   else schedule(Math.max(REFRESH_MS - since, 0) || REFRESH_MS);
 }
 
+// The papers and image lists (tool home) have no stream of their own: while one of their
+// items is still being worked on, they are fetched again every LIST_POLL_MS.
+export const LIST_POLL_MS = 5000;
+const ACTIVE = new Set(["checking", "processing", "queued"]);
+const anyActive = (items: { status: string }[] | undefined) =>
+  (items ?? []).some((item) => ACTIVE.has(item.status));
+
 export function usePapers() {
-  return useQuery({ queryKey: keys.papers(), queryFn: ({ signal }) => api.listPapers({ signal }) });
+  return useQuery({
+    queryKey: keys.papers(),
+    queryFn: ({ signal }) => api.listPapers({ signal }),
+    refetchInterval: (query) => (anyActive(query.state.data?.papers) ? LIST_POLL_MS : false),
+  });
 }
 
 export function usePaper(id: string) {
@@ -136,8 +147,14 @@ export function useText(id: string, enabled = true) {
   });
 }
 
-export function useImages() {
-  return useQuery({ queryKey: keys.images(), queryFn: ({ signal }) => api.listImages({ signal }) });
+/** `enabled` false holds the request (the tool home asks after its papers list answered). */
+export function useImages(enabled = true) {
+  return useQuery({
+    queryKey: keys.images(),
+    queryFn: ({ signal }) => api.listImages({ signal }),
+    enabled,
+    refetchInterval: (query) => (anyActive(query.state.data?.jobs) ? LIST_POLL_MS : false),
+  });
 }
 
 export function useImageJob(id: string) {

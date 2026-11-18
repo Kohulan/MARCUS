@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigationType } from "react-router-dom";
 import { trackPage } from "./analytics";
 import AppRoutes from "./AppRoutes";
 import Footer from "./ui/Footer";
@@ -11,15 +11,21 @@ import { ToastHost, ToastProvider } from "./ui/Toasts";
 // header, the page and the footer, and the toast host. The router is supplied by the
 // caller: BrowserRouter in main.tsx, StaticRouter in entry-server.tsx, MemoryRouter in tests.
 // Each navigation sends one Matomo page view (effects never run in the pre-render).
-/** One Matomo page view per navigation, with the route template (src/analytics.ts). */
+/**
+ * One Matomo page view per navigation, with the route template (src/analytics.ts). A
+ * replace on the same path (the tool dropping ?sample=1 or its picker flag) is not a new page.
+ */
 function usePageViews() {
   const location = useLocation();
-  const last = useRef<string | null>(null);
+  const type = useNavigationType();
+  const last = useRef<{ key: string; path: string } | null>(null);
   useEffect(() => {
-    if (last.current === location.key) return; // StrictMode runs the effect twice
-    last.current = location.key;
+    const previous = last.current;
+    if (previous?.key === location.key) return; // StrictMode runs the effect twice
+    last.current = { key: location.key, path: location.pathname };
+    if (type === "REPLACE" && previous?.path === location.pathname) return;
     trackPage(location.pathname);
-  }, [location.key, location.pathname]);
+  }, [location.key, location.pathname, type]);
 }
 
 export default function App() {

@@ -214,6 +214,19 @@ test.describe("ketcher", () => {
   });
 });
 
+/**
+ * Opens the tool home and waits until its own papers list has answered. Its first GET
+ * gets the owner cookie; an upload sent before that answer would get a second owner, and
+ * whichever Set-Cookie came last would decide whose papers the page lists.
+ */
+async function openApp(page: Page): Promise<void> {
+  await page.goto("/app");
+  await page
+    .getByText("No papers yet.")
+    .or(page.getByRole("list", { name: "Papers" }))
+    .waitFor();
+}
+
 async function listPaperIds(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
     const response = await fetch("/api/v2/papers");
@@ -228,7 +241,7 @@ test.describe("owner cookie on http://localhost", () => {
     page,
     context,
   }) => {
-    await page.goto("/app");
+    await openApp(page);
     const id = await uploadPaperViaApi(page, SAMPLE_PDF, { ocsr: "off" });
     expect(await listPaperIds(page)).toContain(id);
 
@@ -237,7 +250,7 @@ test.describe("owner cookie on http://localhost", () => {
     const other = await browser.newContext();
     try {
       const stranger = await other.newPage();
-      await stranger.goto("/app");
+      await openApp(stranger);
       expect(await listPaperIds(stranger)).not.toContain(id);
     } finally {
       await other.close();
@@ -254,7 +267,7 @@ test.describe("owner cookie on http://localhost", () => {
   test("a paper uploaded by the browser's own fetch is listed by the next fetch", async ({
     page,
   }) => {
-    await page.goto("/app");
+    await openApp(page);
     const id = await page.evaluate(async () => {
       const pdf = await (await fetch("/sample/synth_015.pdf")).blob();
       const form = new FormData();

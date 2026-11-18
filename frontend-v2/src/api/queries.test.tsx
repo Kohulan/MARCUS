@@ -3,7 +3,16 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "./client";
-import { createQueryClient, keys, refreshPaper, SEGMENT_GONE, useSaveCuration } from "./queries";
+import {
+  createQueryClient,
+  keys,
+  LIST_POLL_MS,
+  refreshPaper,
+  SEGMENT_GONE,
+  useImages,
+  usePapers,
+  useSaveCuration,
+} from "./queries";
 import type { CurationIn, CurationOut, PaperDetail, StepList } from "./types";
 
 function paper(curation: CurationOut | null): PaperDetail {
@@ -250,5 +259,58 @@ describe("createQueryClient", () => {
     expect(retry(0, new ApiError(404, "x"))).toBe(false);
     expect(retry(0, new ApiError(503, "x"))).toBe(true);
     expect(retry(1, new ApiError(503, "x"))).toBe(false);
+  });
+});
+
+describe("usePapers and useImages poll only while an item is being worked on", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function ticks(n: number) {
+    for (let i = 0; i < n; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LIST_POLL_MS);
+      });
+    }
+  }
+
+  it("refetches the papers every 5 s while one is processing, then stops", async () => {
+    vi.useFakeTimers();
+    const list = vi
+      .spyOn(api, "listPapers")
+      .mockResolvedValueOnce({ papers: [{ ...paper(null), status: "processing" }] })
+      .mockResolvedValue({ papers: [paper(null)] });
+    renderHook(() => usePapers(), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+    await ticks(1);
+    expect(list).toHaveBeenCalledTimes(2); // processing: polled
+    await ticks(3);
+    expect(list).toHaveBeenCalledTimes(2); // all done: no more polls
+  });
+
+  it("refetches the image jobs while one is queued", async () => {
+    vi.useFakeTimers();
+    const job = {
+      id: "i1",
+      display_name: "a.png",
+      status: "queued",
+      engine: "decimer",
+      created_at: "2026-11-18T00:00:00Z",
+      expires_at: "2026-12-18T00:00:00Z",
+    };
+    const list = vi
+      .spyOn(api, "listImages")
+      .mockResolvedValueOnce({ jobs: [job] })
+      .mockResolvedValue({ jobs: [{ ...job, status: "done" }] });
+    renderHook(() => useImages(), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await ticks(3);
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });

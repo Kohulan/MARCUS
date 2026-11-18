@@ -5,6 +5,7 @@ import Disclaimer from "./pages/Disclaimer";
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 import Privacy from "./pages/Privacy";
+import DesktopOnly from "./ui/DesktopOnly";
 
 // The tool is client-only and split off so the pre-rendered pages stay small.
 const ToolHome = lazy(() => import("./tool/ToolHome"));
@@ -12,11 +13,15 @@ const Workspace = lazy(() => import("./workspace/Workspace"));
 const ImageResult = lazy(() => import("./images/ImageResult"));
 const QueryProvider = lazy(() => import("./api/QueryProvider"));
 
+// Below 1024 px DesktopOnly shows its note instead: the tool chunk is not even loaded,
+// so no query, stream or upload starts on a phone.
 function Tool({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<p role="status">Loading…</p>}>
-      <QueryProvider>{children}</QueryProvider>
-    </Suspense>
+    <DesktopOnly>
+      <Suspense fallback={<p role="status">Loading…</p>}>
+        <QueryProvider>{children}</QueryProvider>
+      </Suspense>
+    </DesktopOnly>
   );
 }
 
