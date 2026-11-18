@@ -2,18 +2,7 @@ import { useId, useRef } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import Kbd from "../ui/Kbd";
 import { Modal } from "../ui/modal";
-
-/** The focus-mode keys (Global Constraints, exact). */
-const REVIEW_KEYS: { keys: string[]; label: string }[] = [
-  { keys: ["A"], label: "Accept" },
-  { keys: ["R"], label: "Reject" },
-  { keys: ["E"], label: "Edit" },
-  { keys: ["C"], label: "Compare engines" },
-  { keys: ["←"], label: "Previous" },
-  { keys: ["→"], label: "Next" },
-  { keys: ["Esc"], label: "Back to grid" },
-  { keys: ["?"], label: "This list" },
-];
+import { REVIEW_KEYS } from "./useReviewKeys";
 
 /**
  * The key list: a modal dialog named "Keys". Focus moves into it, and Escape (or Close)
@@ -33,12 +22,10 @@ export default function KeyHelp({ onClose }: { onClose: () => void }) {
         </GlassButton>
       </div>
       <dl className="keyhelp__list">
-        {REVIEW_KEYS.map(({ keys, label }) => (
+        {REVIEW_KEYS.map(({ shown, label }) => (
           <div key={label} className="keyhelp__row">
             <dt>
-              {keys.map((k) => (
-                <Kbd key={k}>{k}</Kbd>
-              ))}
+              <Kbd>{shown}</Kbd>
             </dt>
             <dd>{label}</dd>
           </div>

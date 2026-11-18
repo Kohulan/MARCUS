@@ -4,9 +4,7 @@ import { keysHeld } from "../ui/keysHeld";
 export type ReviewKeyHandlers = {
   accept: () => void;
   reject: () => void;
-  /** E: open the editor. F11 fills it; until then a no-op. */
   edit: () => void;
-  /** C: compare engines. F10 fills it; until then a no-op. */
   compare: () => void;
   prev: () => void;
   next: () => void;
@@ -22,35 +20,27 @@ function typingIn(el: EventTarget | Element | null): boolean {
   return TYPING.has(el.tagName) || (el instanceof HTMLElement && el.isContentEditable);
 }
 
-/** Arrows may repeat (hold → to step through); a held A or R must not decide again and again. */
-const REPEATS = new Set(["ArrowLeft", "ArrowRight"]);
-
-function pick(h: ReviewKeyHandlers, key: string): (() => void) | undefined {
-  switch (key) {
-    case "a":
-    case "A":
-      return h.accept;
-    case "r":
-    case "R":
-      return h.reject;
-    case "e":
-    case "E":
-      return h.edit;
-    case "c":
-    case "C":
-      return h.compare;
-    case "ArrowLeft":
-      return h.prev;
-    case "ArrowRight":
-      return h.next;
-    case "Escape":
-      return h.close;
-    case "?":
-      return h.help;
-    default:
-      return undefined;
-  }
-}
+/**
+ * The focus-mode keys (Global Constraints, exact), one table for the dispatch here and the
+ * Keys list: what is shown, the KeyboardEvent.key values, the label and the handler. Only
+ * arrows repeat (hold → to step through); a held A or R must not decide again and again.
+ */
+export const REVIEW_KEYS: {
+  shown: string;
+  keys: string[];
+  label: string;
+  action: keyof ReviewKeyHandlers;
+  repeats?: boolean;
+}[] = [
+  { shown: "A", keys: ["a", "A"], label: "Accept", action: "accept" },
+  { shown: "R", keys: ["r", "R"], label: "Reject", action: "reject" },
+  { shown: "E", keys: ["e", "E"], label: "Edit", action: "edit" },
+  { shown: "C", keys: ["c", "C"], label: "Compare engines", action: "compare" },
+  { shown: "←", keys: ["ArrowLeft"], label: "Previous", action: "prev", repeats: true },
+  { shown: "→", keys: ["ArrowRight"], label: "Next", action: "next", repeats: true },
+  { shown: "Esc", keys: ["Escape"], label: "Back to grid", action: "close" },
+  { shown: "?", keys: ["?"], label: "This list", action: "help" },
+];
 
 /**
  * The focus-mode keys (Global Constraints, exact): A accept, R reject, E edit, C compare,
@@ -80,11 +70,11 @@ export function useReviewKeys(
       // A dialog is open or the tool is hidden: it owns the keys, wherever focus is. Esc
       // keeps its default, or a native dialog's cancel never fires.
       if (keysHeld()) return;
-      const fn = pick(latest.current, e.key);
-      if (!fn) return;
+      const k = REVIEW_KEYS.find(({ keys }) => keys.includes(e.key));
+      if (!k) return;
       e.preventDefault(); // arrows would scroll the page
-      if (e.repeat && !REPEATS.has(e.key)) return;
-      fn();
+      if (e.repeat && !k.repeats) return;
+      latest.current[k.action]();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

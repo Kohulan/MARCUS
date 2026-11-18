@@ -188,8 +188,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             </button>
           ))}
         </div>
-        {/* From the rows, as the grid's filters count (the server's to_review also holds
-            the failed ones); the tool home, which has no rows, keeps the server's counts. */}
+        {/* From the rows, as the grid's filters count; the tool home, which has no rows,
+            reads the server's counts (GET /papers). */}
         <ul className="ws-counts" aria-label="Counts">
           <li>{`${counts.all} ${counts.all === 1 ? "structure" : "structures"}`}</li>
           <li className="ws-counts__accepted">{`${counts.accepted} accepted`}</li>
