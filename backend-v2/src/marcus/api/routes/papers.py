@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     Query,
     Request,
     Response,
@@ -45,6 +46,7 @@ from marcus.api.schemas import (
     PaperDetail,
     PaperList,
     SegmentList,
+    StepAccepted,
     StepList,
 )
 from marcus.api.security import upload_limit
@@ -53,7 +55,14 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.models import Curation, Owner, Paper, Segment
-from marcus.core.pipeline import cancel_paper, new_paper, remove_paper_files, store_pdf
+from marcus.core.pipeline import (
+    RetryNotAllowed,
+    cancel_paper,
+    new_paper,
+    remove_paper_files,
+    retry_page,
+    store_pdf,
+)
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -207,6 +216,35 @@ async def page_image(
     if not path.is_file():
         raise not_found()
     return FileResponse(path, media_type="image/png", headers=IMAGE_HEADERS)
+
+
+RETRY_DETAIL = {
+    "not_failed": "Page has not failed",
+    "busy": "Page is still running",
+    "limit": "No retries left for this page",
+}
+
+
+@router.post("/papers/{paper_id}/pages/{n}/retry", status_code=202, response_model=StepAccepted)
+async def retry_page_route(
+    paper_id: uuid.UUID,
+    n: int,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> StepAccepted:
+    paper = await get_owned_paper(db, owner, paper_id)
+    if paper.pages is None or not 0 <= n < paper.pages:
+        raise not_found()
+    try:
+        step = await db.run_sync(lambda s: retry_page(s, paper.id, n))
+    except RetryNotAllowed as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=RETRY_DETAIL[exc.reason]) from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None  # deleted meanwhile
+    await db.commit()
+    return StepAccepted(step_id=step.id)
 
 
 @router.get("/papers/{paper_id}/text")

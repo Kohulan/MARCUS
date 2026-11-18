@@ -19,6 +19,7 @@ ROUTES = [
     ("GET", "/api/v2/papers/{p}/segments", None),
     ("DELETE", "/api/v2/papers/{p}", None),
     ("GET", "/api/v2/papers/{p}/pages/0/image", None),
+    ("POST", "/api/v2/papers/{p}/pages/0/retry", None),
     ("GET", "/api/v2/papers/{p}/text", None),
     ("GET", "/api/v2/papers/{p}/export?format=json", None),
     ("GET", "/api/v2/papers/{p}/export?format=csv", None),

@@ -10,11 +10,13 @@ from marcus.core.enums import Engine, ErrorClass
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import (
     BadResult,
+    RetryNotAllowed,
     cancel_paper,
     complete_step,
     fail_step,
     request_image_ocsr,
     request_ocsr,
+    retry_page,
 )
 from tests.factories import make_image_job, make_paper
 
@@ -651,3 +653,87 @@ def test_request_image_ocsr_refuses_deleted_and_unknown(db_session):
         request_image_ocsr(s, job.id, Engine.DECIMER)
     with pytest.raises(ValueError):
         request_image_ocsr(s, uuid.uuid4(), Engine.DECIMER)
+
+
+# --- retry_page ----------------------------------------------------------------------------
+
+
+def _paper_with_failed_page(s, pages=1, fail="render"):
+    """A paper whose page 0 failed for good (render or segment_page); other pages succeed."""
+    paper = make_paper(s)
+    to_processing(s, paper, pages=pages)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    for r in steps(s, paper, "render_page"):
+        if r.page == 0:
+            if fail == "render":
+                run(s, r)
+                fail_step(s, r.id, ErrorClass.BAD_INPUT, "broken", retryable=False)
+            else:
+                (seg_step,) = finish(s, r, {})
+                run(s, seg_step)
+                fail_step(s, seg_step.id, ErrorClass.ENGINE_ERROR, "crash", retryable=False)
+        else:
+            (seg_step,) = finish(s, r, {})
+            finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    s.refresh(paper)
+    return paper
+
+
+def test_retry_page_reopens_failed_paper(db_session):
+    s = db_session
+    paper = _paper_with_failed_page(s)
+    assert paper.status == "failed"
+    step = retry_page(s, paper.id, 0)
+    assert (step.kind, step.page, step.status, step.queue) == ("render_page", 0, "pending", "q.cpu")
+    s.refresh(paper)
+    assert (paper.status, paper.error) == ("processing", None)
+
+
+def test_retry_page_after_segment_failure_and_success_finishes_done(db_session):
+    s = db_session
+    paper = _paper_with_failed_page(s, fail="segment")
+    step = retry_page(s, paper.id, 0)
+    (seg_step,) = finish(s, step, {})
+    ocsr = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    s.refresh(paper)
+    assert paper.status == "processing"
+    for o in ocsr:
+        finish(s, o, OCSR)
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_retry_page_refusals(db_session):
+    s = db_session
+    paper = _paper_with_failed_page(s, pages=2)
+    with pytest.raises(RetryNotAllowed) as e:
+        retry_page(s, paper.id, 1)  # page 1 succeeded
+    assert e.value.reason == "not_failed"
+    retry_page(s, paper.id, 0)
+    with pytest.raises(RetryNotAllowed) as e:
+        retry_page(s, paper.id, 0)  # the retry is pending
+    assert e.value.reason == "busy"
+    (r,) = steps(s, paper, "render_page", "pending")
+    run(s, r)
+    fail_step(s, r.id, ErrorClass.BAD_INPUT, "again", retryable=False)
+    retry_page(s, paper.id, 0)  # second manual retry
+    (r,) = steps(s, paper, "render_page", "pending")
+    run(s, r)
+    fail_step(s, r.id, ErrorClass.BAD_INPUT, "again", retryable=False)
+    with pytest.raises(RetryNotAllowed) as e:
+        retry_page(s, paper.id, 0)
+    assert e.value.reason == "limit"
+
+
+def test_retry_page_missing_deleted_or_out_of_range(db_session):
+    s = db_session
+    paper = _paper_with_failed_page(s)
+    with pytest.raises(ValueError):
+        retry_page(s, paper.id, 1)
+    with pytest.raises(ValueError):
+        retry_page(s, paper.id, -1)
+    paper.status = "deleted"
+    s.flush()
+    with pytest.raises(ValueError):
+        retry_page(s, paper.id, 0)

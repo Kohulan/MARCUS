@@ -55,6 +55,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/papers/{paper_id}/segments"),
     ("GET", "/api/v2/papers/{paper_id}/steps"),
     ("GET", "/api/v2/papers/{paper_id}/pages/{n}/image"),
+    ("POST", "/api/v2/papers/{paper_id}/pages/{n}/retry"),
     ("GET", "/api/v2/papers/{paper_id}/text"),
     ("GET", "/api/v2/papers/{paper_id}/export"),
     ("GET", "/api/v2/papers/{paper_id}/events"),
