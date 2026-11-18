@@ -10,9 +10,14 @@ import Privacy from "./pages/Privacy";
 const ToolHome = lazy(() => import("./tool/ToolHome"));
 const Workspace = lazy(() => import("./workspace/Workspace"));
 const ImageResult = lazy(() => import("./images/ImageResult"));
+const QueryProvider = lazy(() => import("./api/QueryProvider"));
 
 function Tool({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<p role="status">Loading…</p>}>{children}</Suspense>;
+  return (
+    <Suspense fallback={<p role="status">Loading…</p>}>
+      <QueryProvider>{children}</QueryProvider>
+    </Suspense>
+  );
 }
 
 // One declarative route tree for the browser (BrowserRouter) and the
