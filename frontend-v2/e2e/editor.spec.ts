@@ -85,6 +85,13 @@ test("edit a structure in Ketcher: saved, note kept, drawing changed, no CSP vio
   const save = frame.getByRole("button", { name: "Save drawing" });
   await expect(save).toBeEnabled({ timeout: 60_000 });
   await expect(dialog.getByLabel("SMILES")).not.toHaveValue("");
+  // Read while the Ketcher frame is still open: its own `securitypolicyviolation` records
+  // live in the frame's window and are gone once the dialog closes.
+  expect(
+    page.frames().some((f) => new URL(f.url()).pathname === "/ketcher/"),
+    "the /ketcher/ frame is open",
+  ).toBe(true);
+  expect(await csp()).toEqual([]);
   if (SHOT) await page.screenshot({ path: SHOT });
 
   // A review key typed in the dialog does nothing to focus mode.

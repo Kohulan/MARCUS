@@ -493,6 +493,44 @@ describe("focus mode", () => {
     expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
   });
 
+  it("E right after R edits the structure it opened on: the move is cancelled, the save goes there", async () => {
+    const put = putSpy();
+    renderAt(
+      paper([
+        segment("s1", { predictions: [prediction({ smiles: "CCN" })] }),
+        segment("s2", { predictions: [prediction({ smiles: "CCC" })] }),
+      ]),
+      "?s=s1&focus=1",
+    );
+    const region = await focusRegion();
+    press("r");
+    press("e");
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(within(dialog).getByLabelText("SMILES")).toHaveValue("CCN");
+    // Past the advance wait: focus mode stays on [01] while its editor is open.
+    await act(() => new Promise((r) => setTimeout(r, 400)));
+    expect(region).toHaveAccessibleName("Focus [01]");
+    fireEvent.change(within(dialog).getByLabelText("SMILES"), { target: { value: "CCBr" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save SMILES" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    expect(put.mock.calls[0]![0]).toBe("s1");
+    expect(put.mock.calls[1]![0]).toBe("s1");
+    expect(put.mock.calls[1]![1]).toMatchObject({ smiles: "CCBr" });
+    expect(put.mock.calls.some(([id]) => id === "s2")).toBe(false);
+  });
+
+  it("C right after A compares the structure it opened on (the move is cancelled)", async () => {
+    putSpy();
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    press("a");
+    press("c");
+    await screen.findByRole("dialog", { name: /Compare engines/ });
+    await act(() => new Promise((r) => setTimeout(r, 400)));
+    expect(region).toHaveAccessibleName("Focus [01]");
+    expect(screen.getByTestId("where")).toHaveTextContent("?s=s1&focus=1");
+  });
+
   it("an edited structure opens with its curated SMILES and molfile; C still opens Compare", async () => {
     putSpy();
     renderAt(

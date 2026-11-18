@@ -67,10 +67,13 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const reduce = usePrefersReducedMotion();
   const root = useRef<HTMLElement>(null);
   const [help, setHelp] = useState(false);
-  // Compare engines (C) over focus mode: the review keys hold while it is open.
-  const [comparing, setComparing] = useState(false);
-  // The structure editor (E): the same hold.
-  const [editing, setEditing] = useState(false);
+  // Compare engines (C) and the structure editor (E) over focus mode, each pinned to the
+  // segment it opened on (a pending A/R move must not swap it); the review keys hold while
+  // either is open.
+  const [comparingId, setComparingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const comparing = comparingId !== null;
+  const editing = editingId !== null;
   const { started } = useCardActions(paper.id, ws.live.reconnect);
   const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
@@ -188,19 +191,38 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     root.current?.focus({ preventScroll: true });
   };
 
+  // Opening the editor or Compare cancels the move after A or R: they work on this structure.
+  const openEditor = () => {
+    clearTimer();
+    setEditingId(id);
+  };
+  const openCompare = () => {
+    clearTimer();
+    setComparingId(id);
+  };
+
   const held = help || comparing || editing; // a dialog is open over focus mode
   useReviewKeys({
     accept: () => !held && decide("accepted"),
     reject: () => !held && decide("rejected"),
-    edit: () => !held && setEditing(true),
-    compare: () => !held && setComparing(true),
+    edit: () => !held && openEditor(),
+    compare: () => !held && openCompare(),
     prev: () => !held && step(-1),
     next: () => !held && step(1),
     // The editor closes itself (Esc in the dialog never gets here); a stray one leaves it be.
     close: () =>
-      editing ? undefined : comparing ? setComparing(false) : help ? setHelp(false) : onClose(id),
+      editing ? undefined : comparing ? setComparingId(null) : help ? setHelp(false) : onClose(id),
     help: () => !comparing && !editing && setHelp((h) => !h),
   });
+
+  const segmentById = (sid: string | null) =>
+    sid === null ? undefined : sid === id ? segment : ws.segments.find((s) => s.id === sid);
+  const comparingSegment = segmentById(comparingId);
+  const editingSegment = segmentById(editingId);
+  const tagOf = (sid: string) => {
+    const at = rows.findIndex((r) => r.segmentId === sid);
+    return structureTag(rows[at]?.n ?? at + 1);
+  };
 
   const left = rows.filter(
     (r) => (r.segmentId === id ? state : r.state) === "to-check",
@@ -328,10 +350,10 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
             <GlassButton tint="clear" onClick={() => decide("rejected")}>
               Reject <Kbd>R</Kbd>
             </GlassButton>
-            <GlassButton tint="clear" hasPopup="dialog" onClick={() => setEditing(true)}>
+            <GlassButton tint="clear" hasPopup="dialog" onClick={openEditor}>
               Edit <Kbd>E</Kbd>
             </GlassButton>
-            <GlassButton tint="clear" hasPopup="dialog" onClick={() => setComparing(true)}>
+            <GlassButton tint="clear" hasPopup="dialog" onClick={openCompare}>
               Compare <Kbd>C</Kbd>
             </GlassButton>
           </div>
@@ -364,22 +386,22 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
       </div>
 
       {help && <KeyHelp onClose={() => setHelp(false)} />}
-      {comparing && (
+      {comparingSegment && (
         <SegmentCompare
           paperId={paper.id}
-          segment={segment}
+          segment={comparingSegment}
           steps={ws.steps}
-          tag={tag}
+          tag={tagOf(comparingSegment.id)}
           onStarted={started}
-          onClose={() => setComparing(false)}
+          onClose={() => setComparingId(null)}
         />
       )}
-      {editing && (
+      {editingSegment && (
         <SegmentEditor
           paperId={paper.id}
           paperEngine={paper.engine}
-          segment={segment}
-          onClose={() => setEditing(false)}
+          segment={editingSegment}
+          onClose={() => setEditingId(null)}
         />
       )}
     </section>

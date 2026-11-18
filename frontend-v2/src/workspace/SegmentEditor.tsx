@@ -34,13 +34,17 @@ export function SegmentEditor({
   onClose: () => void;
 }) {
   const { save } = useSaveCuration(paperId);
-  // Fixed at open: a live update while the dialog is open does not move the starting point.
+  // Fixed at open: a live update while the dialog is open does not move the starting point,
+  // and the save goes to the segment it opened on, whatever the host shows meanwhile.
   const [initial] = useState(() => editorStart(segment, paperEngine));
+  const [target] = useState(segment.id);
   // The editor reads its props through a ref refreshed every render, so the status rule
   // sees the curation as it is when Save is pressed. The save's promise goes back to the
   // dialog: a 422 keeps it open with "Save failed: …".
   const onSave = async (s: EditorStructure) => {
-    await save(segment.id, editorChange(segment.curation, s));
+    // A host that swapped the segment under an open editor: refuse rather than overwrite.
+    if (segment.id !== target) throw new Error("The structure changed. Close and edit again.");
+    await save(target, editorChange(segment.curation, s));
   };
   return (
     <Editor initial={initial} onSave={onSave} onClose={onClose} />
