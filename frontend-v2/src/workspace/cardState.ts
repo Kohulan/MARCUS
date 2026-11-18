@@ -1,7 +1,9 @@
 // What a structure card shows: its state (spec §7 state table), the structure the server
 // draws for it, and the grid's filters. Pure functions: the grid computes them once per
 // paper or steps change, for up to hundreds of segments.
+import { isPaperBusy, isStepActive } from "../api/status";
 import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import { newestFirst } from "./pageFailures";
 
 export type CardState = "accepted" | "rejected" | "to-check" | "reading" | "failed" | "not-read";
 
@@ -15,20 +17,9 @@ export const STATE_WORD: Record<CardState, string> = {
   "not-read": "Not read yet",
 };
 
-const ACTIVE = new Set(["pending", "queued", "running"]);
-const BUSY_PAPER = new Set(["checking", "processing"]);
-
-/** Newest first by created_at (ISO strings of one format sort as text), then by id. */
-function newestFirst(a: StepOut, b: StepOut): number {
-  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
-  return a.id < b.id ? 1 : -1;
-}
-
 /** The segment's `ocsr` steps, newest first. `steps` may hold the whole paper's steps. */
 export function ocsrSteps(segment: SegmentOut, steps: StepOut[]): StepOut[] {
-  return steps
-    .filter((s) => s.kind === "ocsr" && s.segment_id === segment.id)
-    .sort(newestFirst);
+  return newestFirst(steps.filter((s) => s.kind === "ocsr" && s.segment_id === segment.id));
 }
 
 /**
@@ -39,14 +30,18 @@ export function ocsrSteps(segment: SegmentOut, steps: StepOut[]): StepOut[] {
  * is about to come, so that is `reading`); else `to-check`.
  */
 export function cardState(segment: SegmentOut, steps: StepOut[], paper: PaperDetail): CardState {
+  return stateOf(segment, ocsrSteps(segment, steps), paper);
+}
+
+/** cardState with the segment's `ocsr` steps already picked, newest first (ocsrSteps). */
+export function stateOf(segment: SegmentOut, ocsr: StepOut[], paper: PaperDetail): CardState {
   const status = segment.curation?.status;
   if (status === "accepted" || status === "rejected") return status;
   if (segment.predictions.some((p) => p.valid)) return "to-check";
-  const ocsr = ocsrSteps(segment, steps);
-  if (ocsr.some((s) => ACTIVE.has(s.status))) return "reading";
+  if (ocsr.some((s) => isStepActive(s.status))) return "reading";
   const newest = ocsr[0];
   if (newest === undefined) {
-    return paper.ocsr_mode !== "off" && BUSY_PAPER.has(paper.status) ? "reading" : "not-read";
+    return paper.ocsr_mode !== "off" && isPaperBusy(paper.status) ? "reading" : "not-read";
   }
   return newest.status === "failed" ? "failed" : "to-check";
 }

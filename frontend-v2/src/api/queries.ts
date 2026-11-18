@@ -4,6 +4,7 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { api, ApiError, errorText } from "./client";
 import { curationBody, type CurationChange } from "./curation";
+import { isImageActive, isPaperBusy } from "./status";
 import type { BulkCurationItem, CurationOut, CurationStatus, PaperDetail } from "./types";
 
 export const keys = {
@@ -101,15 +102,15 @@ export function refreshPaper(client: QueryClient, id: string): void {
 // The papers and image lists (tool home) have no stream of their own: while one of their
 // items is still being worked on, they are fetched again every LIST_POLL_MS.
 export const LIST_POLL_MS = 5000;
-const ACTIVE = new Set(["checking", "processing", "queued"]);
-const anyActive = (items: { status: string }[] | undefined) =>
-  (items ?? []).some((item) => ACTIVE.has(item.status));
+const anyBusy = (items: { status: string }[] | undefined, busy: (status: string) => boolean) =>
+  (items ?? []).some((item) => busy(item.status));
 
 export function usePapers() {
   return useQuery({
     queryKey: keys.papers(),
     queryFn: ({ signal }) => api.listPapers({ signal }),
-    refetchInterval: (query) => (anyActive(query.state.data?.papers) ? LIST_POLL_MS : false),
+    refetchInterval: (query) =>
+      anyBusy(query.state.data?.papers, isPaperBusy) ? LIST_POLL_MS : false,
   });
 }
 
@@ -153,7 +154,8 @@ export function useImages(enabled = true) {
     queryKey: keys.images(),
     queryFn: ({ signal }) => api.listImages({ signal }),
     enabled,
-    refetchInterval: (query) => (anyActive(query.state.data?.jobs) ? LIST_POLL_MS : false),
+    refetchInterval: (query) =>
+      anyBusy(query.state.data?.jobs, isImageActive) ? LIST_POLL_MS : false,
   });
 }
 

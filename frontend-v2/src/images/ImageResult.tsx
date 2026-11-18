@@ -9,6 +9,7 @@ import { useParams } from "react-router-dom";
 import { api, depictBlob, errorText, isGone, isUuid, svgBlobUrl } from "../api/client";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
+import { isImageActive } from "../api/status";
 import type { DepictReply, Engine, ImageJobOut, PredictionOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
@@ -61,8 +62,6 @@ const engineName = (p: Pick<PredictionOut, "engine" | "engine_version">) =>
   `${ENGINE_LABEL[p.engine] ?? p.engine} ${p.engine_version}`.trim();
 
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
-
-const ACTIVE = new Set(["queued", "processing"]);
 
 /**
  * The main result: the job engine's newest valid prediction, else its newest one. Never
@@ -210,7 +209,7 @@ function Result({
   const smiles = edit?.smiles ?? prediction?.smiles ?? null;
   const molfile = edit ? edit.molfile : (prediction?.molfile ?? null);
   const drawing = useDrawing(smiles);
-  const active = ACTIVE.has(job.status);
+  const active = isImageActive(job.status);
 
   async function retry() {
     setRetrying(true);

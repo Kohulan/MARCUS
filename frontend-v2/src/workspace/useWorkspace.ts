@@ -1,12 +1,10 @@
-// The state of one paper workspace: the paper, its segments and steps, what failed, the
-// live stream, and the view and focused segment (both in the URL, so reload and Back work).
+// The state of one paper workspace: the paper, its segments and steps, the live stream, and the view and focused segment (both in the URL, so reload and Back work).
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
-import { checkFailure, pageFailures, type PageFailure } from "./pageFailures";
 
 export type WorkspaceView = "review" | "paper";
 
@@ -22,9 +20,6 @@ export type Workspace = {
   /** In (page, idx) order: structure n is segments[n - 1]. */
   segments: SegmentOut[];
   steps: StepOut[];
-  failedPages: PageFailure[];
-  /** Why the PDF check failed, as UI text; null when it did not. */
-  checkFailure: string | null;
   /** The focused segment id (`?s=`). */
   selection: string | null;
   /** Replaces the URL entry by default (moving between cards makes no history); `push` adds one. */
@@ -58,8 +53,6 @@ export function useWorkspace(id: string): Workspace {
     () => [...(paper?.segments ?? [])].sort((a, b) => a.page - b.page || a.idx - b.idx),
     [paper?.segments],
   );
-  const failedPages = useMemo(() => pageFailures(steps), [steps]);
-  const failure = useMemo(() => checkFailure(steps), [steps]);
 
   const view: WorkspaceView = params.get("view") === "paper" ? "paper" : "review";
   const selection = params.get("s");
@@ -136,8 +129,6 @@ export function useWorkspace(id: string): Workspace {
     paper,
     segments,
     steps,
-    failedPages,
-    checkFailure: failure,
     selection,
     setSelection,
     focus,

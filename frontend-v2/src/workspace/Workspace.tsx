@@ -199,13 +199,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         Enter: open
       </span>
 
-      <StatusBar
-        paper={paper}
-        steps={ws.steps}
-        failedPages={ws.failedPages}
-        checkFailure={ws.checkFailure}
-        live={ws.live}
-      />
+      <StatusBar paper={paper} steps={ws.steps} live={ws.live} />
 
       {ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">

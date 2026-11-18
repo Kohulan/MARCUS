@@ -7,14 +7,13 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, svgBlobUrl } from "../api/client";
 import { ENGINES, engineName } from "../api/engines";
 import { reasonText } from "../api/reasons";
+import { isStepActive } from "../api/status";
 import type { CompareReply, DepictReply, Engine, PredictionOut } from "../api/types";
 
 export type CompareTarget = { kind: "segment" | "image"; id: string };
 
 /** One OCSR step of the target, newest first (paper steps or ImageStepOut). */
 export type CompareStep = { engine: string | null; status: string; error_class: string | null };
-
-const ACTIVE = new Set(["pending", "queued", "running"]);
 
 export type EngineRow = {
   engine: string;
@@ -45,7 +44,7 @@ export function engineRows(
     const label = engineName(engine);
     if (prediction) return { engine, label, prediction, state: "done", reason: null };
     const asked = requested.get(engine);
-    if (own.some((s) => ACTIVE.has(s.status)) || (asked !== undefined && own.length <= asked)) {
+    if (own.some((s) => isStepActive(s.status)) || (asked !== undefined && own.length <= asked)) {
       return { engine, label, prediction, state: "reading", reason: null };
     }
     if (own[0]?.status === "failed") {

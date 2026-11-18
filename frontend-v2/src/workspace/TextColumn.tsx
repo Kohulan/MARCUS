@@ -2,23 +2,18 @@ import { useId, useMemo } from "react";
 import { ApiError } from "../api/client";
 import { useSteps, useText } from "../api/queries";
 import { reasonText } from "../api/reasons";
+import { isPaperBusy, isStepActive } from "../api/status";
 import type { StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { doclingBlocks, type TextBlock } from "./doclingText";
+import { newestFirst } from "./pageFailures";
 
-const ACTIVE = new Set(["pending", "queued", "running"]);
-const BUSY_PAPER = new Set(["checking", "processing"]);
 const NO_BLOCKS: TextBlock[] = [];
 const NO_STEPS: StepOut[] = [];
 
-/** The paper's newest docling step (steps come oldest first; ties go to the later one). */
-function newestDocling(steps: StepOut[]): StepOut | undefined {
-  let newest: StepOut | undefined;
-  for (const s of steps) {
-    if (s.kind === "docling" && (!newest || s.created_at >= newest.created_at)) newest = s;
-  }
-  return newest;
-}
+/** The paper's newest docling step. */
+const newestDocling = (steps: StepOut[]): StepOut | undefined =>
+  newestFirst(steps.filter((s) => s.kind === "docling"))[0];
 
 /** "alkaloids.pdf" → "alkaloids.txt": one trailing ".pdf" (any case) gives way to ".txt". */
 export const textFileName = (displayName: string) => `${displayName.replace(/\.pdf$/i, "")}.txt`;
@@ -63,7 +58,7 @@ export default function TextColumn({
   const failed = docling?.status === "failed";
   const waiting =
     !known ||
-    (docling === undefined ? BUSY_PAPER.has(paperStatus) : ACTIVE.has(docling.status));
+    (docling === undefined ? isPaperBusy(paperStatus) : isStepActive(docling.status));
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
 import { BulkPartialError, useBulkCuration } from "../api/queries";
+import { isPaperBusy } from "../api/status";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
@@ -17,7 +18,6 @@ import "./grid.css";
 
 /** At most this many prediction requests in flight from one bulk "Read N". */
 const READ_AT_ONCE = 4;
-const BUSY_PAPER = new Set(["checking", "processing"]);
 
 /** Run `fn` over `items`, at most `limit` at a time; never rejects. */
 async function runPool<T>(
@@ -217,7 +217,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
         <p className="rg-empty">
           {rows.length > 0
             ? "None here."
-            : BUSY_PAPER.has(paper.status)
+            : isPaperBusy(paper.status)
               ? "Structures appear here as pages are read."
               : "No structures found."}
         </p>
