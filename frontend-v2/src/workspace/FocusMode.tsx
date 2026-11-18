@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -34,6 +33,7 @@ import {
   type CardState,
 } from "./cardState";
 import KeyHelp from "./KeyHelp";
+import { boxStyle } from "./pageBox";
 import StructureActions from "./StructureActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
@@ -349,7 +349,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           </div>
         </div>
 
-        <PageWithBoxes
+        <FocusPage
           paperId={paper.id}
           pages={paper.pages}
           segment={segment}
@@ -388,16 +388,12 @@ function engineRows(predictions: PredictionOut[]): [string, ReactNode][] {
   return out;
 }
 
-const pct = (v: number, total: number) => `${+((v * 100) / total).toFixed(3)}%`;
-const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
-
 /**
  * The page image, scaled to its column, with the structure's box drawn as its marker and
- * `[nn]` tag. `bbox` is [x0, y0, x1, y1] in pixels of the 300 DPI page PNG, which is the
- * image served, so the box is placed in percent of the image's natural size. The page's
- * other structures carry quiet markers; clicking one opens it.
+ * `[nn]` tag (placed as in the Paper view: pageBox). The page's other structures carry
+ * quiet markers; clicking one opens it.
  */
-function PageWithBoxes({
+function FocusPage({
   paperId,
   pages,
   segment,
@@ -426,20 +422,7 @@ function PageWithBoxes({
       .map((s) => ({ segment: s, row: byId.get(s.id) }));
   }, [segments, rows, segment.page]);
 
-  const box = (s: SegmentOut): CSSProperties | undefined => {
-    if (!natural) return undefined;
-    const [a, b, c, d] = s.bbox;
-    const left = clamp(Math.min(a, c), natural.w);
-    const top = clamp(Math.min(b, d), natural.h);
-    const right = clamp(Math.max(a, c), natural.w);
-    const bottom = clamp(Math.max(b, d), natural.h);
-    return {
-      "--l": pct(left, natural.w),
-      "--t": pct(top, natural.h),
-      "--w": pct(right - left, natural.w),
-      "--h": pct(bottom - top, natural.h),
-    } as CSSProperties;
-  };
+  const box = (s: SegmentOut) => boxStyle(s.bbox, natural!.w, natural!.h);
 
   const label = `Page ${segment.page + 1}`;
   return (

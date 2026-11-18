@@ -23,6 +23,12 @@ import "./paper.css";
 
 const NO_MARKERS: PageMarker[] = [];
 
+const sameMarker = (a: PageMarker, b: PageMarker) =>
+  a.segmentId === b.segmentId &&
+  a.n === b.n &&
+  a.state === b.state &&
+  a.bbox.every((v, i) => v === b.bbox[i]);
+
 /**
  * Per page: can its image be shown? Yes once a render_page step of the page is done. Its
  * newest render_page step failed: the reason. A render still to come, or none yet on a
@@ -125,6 +131,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
   const pages = paper.pages ?? 0;
   const images = useMemo(() => pageImages(steps, pages, busy), [steps, pages, busy]);
+  const shownMarkers = useRef(new Map<number, PageMarker[]>());
   const markers = useMemo(() => {
     const map = new Map<number, PageMarker[]>();
     for (const r of rows) {
@@ -135,6 +142,15 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
       if (list) list.push(m);
       else map.set(s.page, [m]);
     }
+    // A page whose markers did not change keeps its array, so a live refresh re-renders only
+    // the pages that changed (PageWithBoxes is memoised).
+    for (const [page, list] of map) {
+      const old = shownMarkers.current.get(page);
+      if (old && old.length === list.length && old.every((m, i) => sameMarker(m, list[i]!))) {
+        map.set(page, old);
+      }
+    }
+    shownMarkers.current = map;
     return map;
   }, [rows, byId]);
 

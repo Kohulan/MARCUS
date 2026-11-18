@@ -171,14 +171,14 @@ describe("Paper view", () => {
     expect(within(pages).getAllByRole("button", { name: /^Structure / })).toHaveLength(2);
   });
 
-  it("scales the bbox by the shown width over the image's natural width", async () => {
+  it("places the bbox in percent of the image's natural size (it follows the shown size)", async () => {
     renderAt(paper([segment("s1", { bbox: [100, 200, 300, 400] })]));
-    await loadPage(2, 2480, 620);
+    await loadPage(2, 2480, 620); // natural 2480 × 3507
     const box = screen.getByRole("button", { name: "Structure [01] on page 2" });
-    expect(box.style.left).toBe("25px");
-    expect(box.style.top).toBe("50px");
-    expect(box.style.width).toBe("50px");
-    expect(box.style.height).toBe("50px");
+    expect(box.style.getPropertyValue("--l")).toBe("4.032%");
+    expect(box.style.getPropertyValue("--t")).toBe("5.703%");
+    expect(box.style.getPropertyValue("--w")).toBe("8.065%");
+    expect(box.style.getPropertyValue("--h")).toBe("5.703%");
   });
 
   it("gives each marker its state shape and its numbered tag", async () => {

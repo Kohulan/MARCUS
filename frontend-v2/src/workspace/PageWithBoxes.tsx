@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useState } from "react";
 import { api } from "../api/client";
 import type { SegmentOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { CardState } from "./cardState";
+import { boxStyle } from "./pageBox";
 
 export type PageMarker = {
   segmentId: string;
@@ -34,17 +35,11 @@ type Props = {
   onHover: (segmentId: string | null) => void;
 };
 
-type Size = { w: number; h: number; scale: number };
-
-const px = (v: number) => `${+v.toFixed(2)}px`;
-const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
-
 /**
- * One page of the Paper view: the page image (lazy), with a marker per segment drawn from
- * its `bbox` ([x0, y0, x1, y1] in pixels of the 300 DPI page PNG, the image served), scaled
- * by the width the image is shown at over its natural width. Markers are buttons: a click
- * selects the structure, hovering outlines its card. Memoised: hovering re-renders only the
- * pages whose `selected` or `hovered` changed.
+ * One page of the Paper view: the page image (lazy), with a marker per segment placed from
+ * its `bbox` (pageBox: percent of the image's natural size, so no measuring). Markers are
+ * buttons: a click selects the structure, hovering outlines its card. Memoised: hovering
+ * re-renders only the pages whose `selected` or `hovered` changed.
  */
 function PageWithBoxes({
   paperId,
@@ -63,48 +58,12 @@ function PageWithBoxes({
   const [attempt, setAttempt] = useState(0);
   const base = api.pageImageUrl(paperId, page0);
   const src = attempt === 0 ? base : `${base}?attempt=${attempt}`;
-  const img = useRef<HTMLImageElement>(null);
-  const [size, setSize] = useState<Size | null>(null);
+  // The image's natural size, from its load (markers wait for it).
+  const [size, setSize] = useState<{ src: string; w: number; h: number } | null>(null);
+  const natural = size !== null && size.src === src ? size : null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const broken = failedSrc === src;
   const ready = imageKind === "ready" && !broken;
-
-  const measure = useCallback(() => {
-    const el = img.current;
-    if (!el || !el.naturalWidth || !el.clientWidth) return;
-    const next = { w: el.naturalWidth, h: el.naturalHeight, scale: el.clientWidth / el.naturalWidth };
-    setSize((prev) =>
-      prev && prev.w === next.w && prev.h === next.h && prev.scale === next.scale ? prev : next,
-    );
-  }, []);
-
-  // The shown width follows the column (window resize, a scrollbar coming or going).
-  useEffect(() => {
-    const el = img.current;
-    if (!ready || !el) return;
-    if (el.complete) measure(); // loaded from the cache before this effect ran
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
-    }
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ready, measure]);
-
-  const box = (bbox: SegmentOut["bbox"], s: Size): CSSProperties => {
-    const [a, b, c, d] = bbox;
-    const left = clamp(Math.min(a, c), s.w);
-    const top = clamp(Math.min(b, d), s.h);
-    const right = clamp(Math.max(a, c), s.w);
-    const bottom = clamp(Math.max(b, d), s.h);
-    return {
-      left: px(left * s.scale),
-      top: px(top * s.scale),
-      width: px((right - left) * s.scale),
-      height: px((bottom - top) * s.scale),
-    };
-  };
 
   return (
     <figure className="pv-page" data-page={page0}>
@@ -116,16 +75,17 @@ function PageWithBoxes({
       {ready ? (
         <div className="pv-page__sheet">
           <img
-            ref={img}
             className="pv-page__img"
             src={src}
             alt={label}
             loading="lazy"
             decoding="async"
-            onLoad={measure}
+            onLoad={(e) =>
+              setSize({ src, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            }
             onError={() => setFailedSrc(src)}
           />
-          {size &&
+          {natural &&
             markers.map((m) => {
               const lit = m.segmentId === selected || m.segmentId === hovered;
               const cls = ["pv-marker", `pv-marker--${m.state}`];
@@ -135,7 +95,7 @@ function PageWithBoxes({
                   key={m.segmentId}
                   type="button"
                   className={cls.join(" ")}
-                  style={box(m.bbox, size)}
+                  style={boxStyle(m.bbox, natural.w, natural.h)}
                   data-marker={m.segmentId}
                   aria-label={`Structure ${structureTag(m.n)} on page ${page0 + 1}`}
                   aria-current={m.segmentId === selected ? "true" : undefined}

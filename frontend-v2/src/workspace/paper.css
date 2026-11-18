@@ -183,6 +183,10 @@
 .pv-marker {
   --mark: var(--orange);
   position: absolute;
+  top: var(--t);
+  left: var(--l);
+  width: var(--w);
+  height: var(--h);
   padding: 0;
   border: 0;
   background: none;
