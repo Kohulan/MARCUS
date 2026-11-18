@@ -15,11 +15,15 @@ fails the test. Run against v1 (which has no `/api/v2`), all 19 runnable tests f
 cd /home/kohulan/MARCUS/judges
 # local v2 fake-engine stack (backend-v2: docker compose -p marcus-v2 -f docker-compose.yml
 #   -f docker-compose.fake.yml up -d --build); nginx is the only published port
-MARCUS_BACKEND_URL=http://localhost:18090 MARCUS_FS_PROBE=docker:marcus-v2-api-1 \
-    uv run pytest security/v2 -v
+MARCUS_BACKEND_URL=http://localhost:18090 MARCUS_FRONTEND_URL=http://localhost:18090 \
+    MARCUS_FS_PROBE=docker:marcus-v2-api-1 uv run pytest security/v2 -v
 ```
 
-Expected: 19 passed, 1 skipped (`needs_frontend`). About 6 minutes, most of it the fake pipeline
+The stack's nginx serves the v2 web UI too (the `marcus-v2-nginx:local` image built from
+`frontend-v2/`), so `MARCUS_FRONTEND_URL` is the same edge. The browser half of #14 needs
+Playwright's Chromium (`uv run playwright install chromium`).
+
+Expected: 20 passed, 0 skipped. About 7 minutes, most of it the fake pipeline
 (one paper is about 35 s, mostly docling) and the XFF test, which waits for the start of a
 rate-limit window and, after its burst, for the next one.
 
@@ -64,10 +68,10 @@ rate-limit window and, after its burst, for the next one.
 | 8 | `test_rate_limit_and_session_bypass::test_burst_requests_eventually_get_rate_limited` | `GET /latest/decimer/health` burst | same | `POST /api/v2/tools/smiles-to-molfile` burst (tools 60/min per owner) | 429 `{"detail": "rate limited"}` with `Retry-After` within 2×60+1 calls; another owner is not limited by it |
 | 9 | `test_rate_limit_and_session_bypass::test_api_calls_without_any_session_are_rejected` | `GET /latest/docling_conversion/list_pdfs` with no session | same | `GET /api/v2/papers` with no credential, with a forged cookie, with a forged `mk_` key | v2 does not 401 a credential-less call by design: it becomes a NEW empty owner (cookie HttpOnly, SameSite=Strict, Path=/api/v2, Secure), sees nothing of anyone, never shares an owner with another credential-less call; a forged cookie is a new owner; a forged API key is 401 |
 | 10 | `test_no_auth_session_and_listings::test_session_cannot_be_removed_by_an_unrelated_caller` | `DELETE /session/remove/{id}` | same | `DELETE /api/v2/papers/{id}` | another owner and a credential-less caller get the byte-identical 404 as a random id; the paper is untouched; a deleted paper gets the same 404 as a missing one |
-| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | the API's real route table (`create_app()` inside the api container) + `DELETE /api/v2/papers/{id}` for the existence check | the route table equals the reviewed allowlist (22 routes; a new route fails until reviewed and listed); every route but `GET /health` and `GET /ready` depends on `current_owner`; 11 global/admin shapes are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
+| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | the API's real route table (`create_app()` inside the api container) + `DELETE /api/v2/papers/{id}` for the existence check | the route table equals the reviewed allowlist (29 routes, the same set as `backend-v2/tests/api/test_security_layer.py` ALLOWED_ROUTES; a new route fails until reviewed and listed); every route but `GET /health` and `GET /ready` depends on `current_owner`; 11 global/admin shapes are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
 | 12 | `test_no_auth_session_and_listings::test_uploaded_pdf_is_not_listed_to_an_unrelated_caller` | `GET /latest/docling_conversion/list_pdfs` | same | `GET /api/v2/papers`, `GET /api/v2/queue`, and 12 per-resource routes incl. the new `GET /api/v2/papers/{id}/steps` (R18), `/events`, `/text`, `/export`, `/segments/{id}/image`, `POST .../predictions`, `PUT .../curation`, `GET /api/v2/images/{id}` | another owner and a credential-less caller: not listed, not in `/queue`, and every route gives the byte-identical 404 as a random id |
 | 13 | `test_upload_size_limit::test_oversized_image_upload_is_rejected_by_the_backend_directly` | `POST /latest/ocsr/generate_smiles` 20 MB + 1 | same | `POST /api/v2/images` and `POST /api/v2/papers`, 20 MiB + 1 byte | the API itself answers 413 `{"detail": "File too large"}` (JSON, so not nginx's HTML 413; nginx's cap is 21 MiB) |
-| 14 | `test_stored_xss_frontend::test_extracted_text_html_does_not_execute_in_browser` | the Vue UI (`v-html`) | same, **skipped** (`needs_frontend`) | the React UI (does not exist yet) | browser flow: no script from extracted text runs |
+| 14 | `test_stored_xss_frontend::test_extracted_text_html_does_not_execute_in_browser` | the Vue UI (`v-html`) | same | the React UI behind the stack's nginx (`/app`, upload with "Find structures automatically" off, `?view=paper`) | browser flow: the payload is on screen as text (Text column, header) and never ran |
 | 14b | (API half of #14, new) | | `test_stored_xss_frontend::test_display_name_is_returned_only_as_json` | `GET /api/v2/papers`, `/papers/{id}`, `/papers/{id}/text`, `/papers/{id}/export`, `/images/{id}` | an `<img onerror>` filename (kept as `display_name`) and PDF text come back only in JSON as `application/json` (export: a JSON attachment), with nosniff and `default-src 'none'` |
 | 15 | `test_security_headers::test_frontend_sends_content_security_policy` | frontend `GET /` (:18080) | same | the v2 edge (:18090): 200 JSON, 200 PNG, owned 404, unknown-route 404, 422, nginx's own 404 | CSP on all |
 | 16 | `test_security_headers::test_frontend_sends_nosniff` | same | same | same | `X-Content-Type-Options: nosniff` on all |
@@ -89,7 +93,6 @@ owners per hour, 100 active papers). Per-owner limits are not raised.
 
 ## Not covered (and why)
 
-- The browser half of the stored-XSS test (#14) waits for the React UI (`needs_frontend`).
 - File checks look in the API container only (`/tmp`, `/data`). `/data` is the volume all
   workers share, so a worker writing a stray file there is caught; a worker's own `/tmp` (a
   tmpfs per container) is not.

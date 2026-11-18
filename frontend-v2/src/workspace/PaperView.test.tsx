@@ -164,15 +164,15 @@ describe("Paper view", () => {
     renderAt(paper([segment("s1"), segment("s2", { bbox: [500, 600, 900, 1000] })]));
     await loadPage(2);
     const pages = screen.getByRole("region", { name: "Pages" });
-    expect(within(pages).getByRole("button", { name: "Structure 1 on page 2" })).toBeInTheDocument();
-    expect(within(pages).getByRole("button", { name: "Structure 2 on page 2" })).toBeInTheDocument();
+    expect(within(pages).getByRole("button", { name: "Structure [01] on page 2" })).toBeInTheDocument();
+    expect(within(pages).getByRole("button", { name: "Structure [02] on page 2" })).toBeInTheDocument();
     expect(within(pages).getAllByRole("button", { name: /^Structure / })).toHaveLength(2);
   });
 
   it("scales the bbox by the shown width over the image's natural width", async () => {
     renderAt(paper([segment("s1", { bbox: [100, 200, 300, 400] })]));
     await loadPage(2, 2480, 620);
-    const box = screen.getByRole("button", { name: "Structure 1 on page 2" });
+    const box = screen.getByRole("button", { name: "Structure [01] on page 2" });
     expect(box.style.left).toBe("25px");
     expect(box.style.top).toBe("50px");
     expect(box.style.width).toBe("50px");
@@ -187,8 +187,8 @@ describe("Paper view", () => {
       ]),
     );
     await loadPage(2);
-    const one = screen.getByRole("button", { name: "Structure 1 on page 2" });
-    const two = screen.getByRole("button", { name: "Structure 2 on page 2" });
+    const one = screen.getByRole("button", { name: "Structure [01] on page 2" });
+    const two = screen.getByRole("button", { name: "Structure [02] on page 2" });
     expect(one).toHaveClass("pv-marker--accepted");
     expect(two).toHaveClass("pv-marker--to-check");
     expect(two).toHaveTextContent("[02]");
@@ -197,7 +197,7 @@ describe("Paper view", () => {
   it("selects a structure's card when its marker is clicked", async () => {
     renderAt(paper([segment("s1"), segment("s2")]));
     await loadPage(2);
-    fireEvent.click(screen.getByRole("button", { name: "Structure 2 on page 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Structure [02] on page 2" }));
     await waitFor(() => expect(card("[02]")).toHaveAttribute("aria-current", "true"));
     expect(card("[01]")).not.toHaveAttribute("aria-current");
     expect(screen.getByTestId("where")).toHaveTextContent("s=s2");
@@ -207,13 +207,13 @@ describe("Paper view", () => {
   it("outlines the marker of a hovered or selected card, and the card of a hovered marker", async () => {
     renderAt(paper([segment("s1"), segment("s2")]));
     await loadPage(2);
-    const two = screen.getByRole("button", { name: "Structure 2 on page 2" });
+    const two = screen.getByRole("button", { name: "Structure [02] on page 2" });
     fireEvent.mouseEnter(card("[02]"));
     expect(two).toHaveClass("pv-marker--lit");
     fireEvent.mouseLeave(card("[02]"));
     expect(two).not.toHaveClass("pv-marker--lit");
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "Structure 1 on page 2" }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Structure [01] on page 2" }));
     expect(card("[01]")).toHaveClass("card--linked");
 
     fireEvent.click(card("[02]"));

@@ -255,6 +255,118 @@ def test_nginx_never_proxies_metrics():
     assert "metrics" not in conf and "9100" not in conf
 
 
+# --- the web UI: nginx serves frontend-v2 (F15) ------------------------------------------------
+
+FRONTEND = ROOT.parent / "frontend-v2"
+UI_LOCATIONS = FRONTEND / "deploy" / "ui-locations.conf"
+UI_LOCATIONS_IN_IMAGE = "/etc/nginx/marcus/ui-locations.conf"
+# Exact, from Global Constraints (frontend v2 plan).
+APP_CSP = (
+    "default-src 'self'; script-src 'self' https://matomo.nfdi4chem.de; "
+    "connect-src 'self' https://coconut.naturalproducts.net https://pubchem.ncbi.nlm.nih.gov "
+    "https://matomo.nfdi4chem.de; img-src 'self' data: blob: https://matomo.nfdi4chem.de; "
+    "style-src 'self'; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; "
+    "form-action 'self'; frame-ancestors 'none'"
+)
+KETCHER_CSP = (
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+    "object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
+)
+UI_HEADERS = {
+    "content-security-policy",
+    "x-content-type-options",
+    "x-frame-options",
+    "referrer-policy",
+    "cross-origin-resource-policy",
+    "permissions-policy",
+}
+
+
+def _strip_comments(conf: str) -> str:
+    return "\n".join(line.split("#", 1)[0] for line in conf.splitlines())
+
+
+def _location_blocks(conf: str) -> list[tuple[str, str]]:
+    """Every `location … {}` block as (its match, its own body without nested blocks)."""
+    text = _strip_comments(conf)
+    blocks: list[tuple[str, str]] = []
+    stack: list[tuple[str, list[str]]] = []  # (header, own body parts)
+    pos = 0
+    for m in re.finditer(r"[{}]", text):
+        chunk = text[pos : m.start()]
+        pos = m.end()
+        if m.group() == "{":
+            # the header is the last statement before the brace
+            head = chunk.rsplit(";", 1)[-1].strip()
+            if stack:
+                stack[-1][1].append(chunk[: len(chunk) - len(chunk.rsplit(";", 1)[-1])])
+            stack.append((head, []))
+        else:
+            head, parts = stack.pop()
+            parts.append(chunk)
+            if head.startswith("location"):
+                blocks.append((head, "".join(parts)))
+    return blocks
+
+
+def test_nginx_service_is_built_from_the_frontend(compose):
+    nginx = compose["services"]["nginx"]
+    assert nginx["build"] == {"context": "../frontend-v2", "dockerfile": "Dockerfile"}
+    assert nginx["image"] == "marcus-v2-nginx:local"
+    # nginx.conf stays a bind mount: the image carries only the UI and its locations file
+    assert "./docker/nginx.conf:/etc/nginx/nginx.conf:ro" in nginx["volumes"]
+
+
+def test_frontend_image_serves_the_build_with_its_locations_file():
+    dockerfile = (FRONTEND / "Dockerfile").read_text()
+    froms = re.findall(r"^FROM\s+(\S+)", dockerfile, re.M)
+    assert froms[0] == "node:22-alpine"
+    assert froms[-1] == "nginxinc/nginx-unprivileged:1.27-alpine"
+    assert re.search(r"^RUN npm ci && npm run build$", dockerfile, re.M)
+    assert re.search(r"^COPY --from=\S+ /\S+/dist /usr/share/nginx/marcus-ui$", dockerfile, re.M)
+    assert re.search(
+        rf"^COPY deploy/ui-locations\.conf {re.escape(UI_LOCATIONS_IN_IMAGE)}$", dockerfile, re.M
+    )
+    ignored = (FRONTEND / ".dockerignore").read_text().split()
+    for name in ("node_modules", "dist", "dist-ssr", "test-results", "playwright-report",
+                 ".impeccable"):  # fmt: skip
+        assert name in ignored, name
+
+
+def test_nginx_includes_the_ui_locations_instead_of_a_404():
+    conf = (ROOT / "docker" / "nginx.conf").read_text()
+    server = conf[conf.index("server {") :]
+    assert re.search(rf"^\s{{8}}include {re.escape(UI_LOCATIONS_IN_IMAGE)};", server, re.M)
+    assert not re.search(r"location\s+/\s*\{\s*return\s+404;", conf)
+    # the API locations are still there, and the UI file defines no API location
+    assert "location /api/v2/ {" in conf
+    assert "/api/" not in _strip_comments(UI_LOCATIONS.read_text())
+
+
+def test_ui_locations_carry_both_exact_csps_mime_types_and_gzip():
+    conf = UI_LOCATIONS.read_text()
+    csps = set(re.findall(r'add_header Content-Security-Policy "([^"]*)" always;', conf))
+    assert csps == {APP_CSP, KETCHER_CSP}
+    assert re.search(r"^include /etc/nginx/mime\.types;", conf, re.M)
+    assert re.search(r"^\s*gzip on;", conf, re.M)
+
+
+def test_every_ui_location_with_headers_sets_all_six():
+    """An add_header in a location drops every inherited one (the server's own security
+    headers included): a location that sets any header must set the whole set, with always."""
+    blocks = _location_blocks(UI_LOCATIONS.read_text())
+    assert len(blocks) >= 5, blocks
+    for head, body in blocks:
+        names = {n.lower() for n in re.findall(r"^\s*add_header\s+(\S+)\s+.*\balways;", body, re.M)}
+        if not re.search(r"^\s*add_header\b", body, re.M):
+            continue
+        assert UI_HEADERS <= names, (head, UI_HEADERS - names)
+        # Ketcher CSP only under /ketcher/, the app CSP everywhere else
+        csp = re.search(r'add_header Content-Security-Policy "([^"]*)"', body).group(1)
+        assert csp == (KETCHER_CSP if "/ketcher/" in head else APP_CSP), head
+
+
 def test_dispatcher_healthcheck_reads_the_heartbeat(compose):
     hc = compose["services"]["dispatcher"]["healthcheck"]
     assert hc["test"] == ["CMD", "python", "-m", "marcus.dispatcher.health"]
@@ -622,6 +734,7 @@ def _nginx_run(env: dict[str, str], *cmd: str) -> subprocess.CompletedProcess:
         "--add-host", "api:127.0.0.1",
         "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
         "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
     ]  # fmt: skip
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
@@ -661,6 +774,7 @@ def _client_seen_by_nginx(env: dict[str, str], xff: str) -> str:
         "--tmpfs", "/tmp", "--add-host", "api:127.0.0.1",
         "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
         "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
     ]  # fmt: skip
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
@@ -747,6 +861,7 @@ def nginx_url():
         "-p", "127.0.0.1::8080", "--add-host", "api:127.0.0.1",
         "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
         "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
         NGINX_IMAGE,
     ]  # fmt: skip
     started = subprocess.run(args, capture_output=True, text=True, timeout=60)

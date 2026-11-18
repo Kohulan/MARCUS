@@ -88,9 +88,17 @@ export async function uploadPaperViaApi(
   return body.paper_id;
 }
 
-/** Runs axe on the current page (light mode only); fails on any serious or critical violation. */
-export async function expectNoA11yViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
+/**
+ * Runs axe on the current page (light mode only); fails on any serious or critical violation.
+ * `exclude`: CSS selectors axe leaves out (the Ketcher frame: a third-party editor page).
+ */
+export async function expectNoA11yViolations(
+  page: Page,
+  opts: { exclude?: string[] } = {},
+): Promise<void> {
+  let axe = new AxeBuilder({ page });
+  for (const selector of opts.exclude ?? []) axe = axe.exclude(selector);
+  const results = await axe.analyze();
   const bad = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map((v) => `${v.impact} ${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`);

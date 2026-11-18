@@ -137,7 +137,7 @@ function PageWithBoxes({
                   className={cls.join(" ")}
                   style={box(m.bbox, size)}
                   data-marker={m.segmentId}
-                  aria-label={`Structure ${m.n} on page ${page0 + 1}`}
+                  aria-label={`Structure ${structureTag(m.n)} on page ${page0 + 1}`}
                   aria-current={m.segmentId === selected ? "true" : undefined}
                   onClick={() => onPick(m.segmentId)}
                   onMouseEnter={() => onHover(m.segmentId)}
