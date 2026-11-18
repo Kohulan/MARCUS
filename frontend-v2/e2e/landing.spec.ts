@@ -87,6 +87,48 @@ test.describe("landing and info pages @mocked", () => {
     expect(filter).toContain("url(");
   });
 
+  // Contract FIRST VIEWPORT: under the hero, the whole headline and both buttons.
+  for (const [width, height] of [
+    [1440, 900],
+    [1366, 768],
+    [1280, 800],
+    [1024, 768],
+  ] as const) {
+    test(`${width} × ${height}: the headline and both buttons are in the first viewport`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/", { waitUntil: "networkidle" });
+      await expect(page.getByRole("heading", { level: 1 })).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole("link", { name: /^Upload a PDF/ })).toBeInViewport({
+        ratio: 1,
+      });
+      await expect(page.getByRole("link", { name: /^Try a sample paper/ })).toBeInViewport({
+        ratio: 1,
+      });
+      await expect(page.getByText("[01] Structure")).toBeInViewport({ ratio: 1 });
+    });
+  }
+
+  test("a footer link opens the info page at its top", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto("/", { waitUntil: "networkidle" });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByRole("contentinfo").getByRole("link", { name: "Privacy" }).click();
+    await expect(page).toHaveURL(/\/privacy$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeInViewport();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test("the Disclaimer's How to cite link lands on the cite section", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto("/disclaimer", { waitUntil: "networkidle" });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByRole("link", { name: "How to cite" }).click();
+    await expect(page).toHaveURL(/\/#cite$/);
+    await expect(page.locator("#cite")).toBeInViewport();
+  });
+
   test("each pre-rendered page has its own title", async ({ page }) => {
     const titles: string[] = [];
     for (const url of [...INFO_PAGES, "/nope"]) {

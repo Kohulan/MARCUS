@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -85,5 +85,31 @@ describe("App routes", () => {
   it("renders the not-found page for an unknown path", () => {
     renderAt("/no-such-page");
     expect(screen.getByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
+  });
+});
+
+describe("scroll on navigation", () => {
+  it("a forward navigation opens the next page at its top", () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    renderAt("/");
+    expect(scrollTo).not.toHaveBeenCalled(); // the first load is the browser's
+    fireEvent.click(within(screen.getByRole("contentinfo")).getByRole("link", { name: "Privacy" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Privacy" })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    vi.unstubAllGlobals();
+  });
+
+  it("a link with a hash scrolls to its target", () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    renderAt("/disclaimer");
+    fireEvent.click(screen.getByRole("link", { name: "How to cite" }));
+    expect(into).toHaveBeenCalledTimes(1);
+    expect((into.mock.contexts[0] as Element).id).toBe("cite");
+    expect(scrollTo).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

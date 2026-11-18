@@ -28,8 +28,32 @@ function usePageViews() {
   }, [location.key, location.pathname, type]);
 }
 
+/**
+ * A forward navigation (a link) opens the next page at its top, or at the element its hash
+ * names ("/#cite"). Back and Forward keep the browser's own scroll restoration; the first
+ * load is the browser's too; a replace on the same path (the tool dropping a flag) stays put.
+ * Instant, never smooth, so reduced motion holds.
+ */
+function useScrollOnNavigate() {
+  const location = useLocation();
+  const type = useNavigationType();
+  const last = useRef({ key: location.key, path: location.pathname });
+  useEffect(() => {
+    const previous = last.current;
+    if (previous.key === location.key) return; // the first load, or StrictMode's second run
+    last.current = { key: location.key, path: location.pathname };
+    if (type === "POP") return;
+    if (type === "REPLACE" && previous.path === location.pathname) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const target = id ? document.getElementById(id) : null;
+    if (target) target.scrollIntoView({ block: "start" });
+    else window.scrollTo(0, 0);
+  }, [location.key, location.pathname, location.hash, type]);
+}
+
 export default function App() {
   usePageViews();
+  useScrollOnNavigate();
   return (
     <ToastProvider>
       <GlassFilter />

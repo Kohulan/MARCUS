@@ -22,6 +22,10 @@ export default function Privacy() {
           <li>Everything from one upload is deleted 30 days after the upload.</li>
           <li>Deleting a paper in the tool removes it for you at once.</li>
           <li>Your files are not sent to outside AI services and not shared with others.</li>
+          <li>
+            To show the paper&apos;s title, the server looks up its DOI at Crossref or DataCite;
+            only the DOI is sent.
+          </li>
         </ul>
       </InfoSection>
 

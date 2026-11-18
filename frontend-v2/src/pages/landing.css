@@ -12,6 +12,40 @@
   flex-direction: column;
 }
 
+/*
+ * First viewport (spec §7 contract): the hero, then the whole headline row with both
+ * buttons, on a laptop screen too (1280 × 800, 1366 × 768, 1024 × 768). The example page
+ * takes the height that is left: --hero-reserve is everything else above the fold, in px
+ * plus the headline's two lines (its size is clamp(36px, 4vw + 18px, 76px), line-height
+ * 0.92: 2 lines = 7.36vw + 33px). Measured parts (px): frame and header 74; hero caption,
+ * ticks and field padding 128; the row's 12 px gap; the title cell's padding 62; 16 to spare.
+ */
+.landing {
+  --hero-reserve: calc(325px + 7.36vw);
+  /* The page is 546 px tall at 560 px wide: its width follows the height that is left. */
+  --page-w: min(560px, max(220px, calc((100vh - var(--hero-reserve)) * 560 / 546)));
+}
+
+@supports (height: 100svh) {
+  .landing {
+    --page-w: min(560px, max(220px, calc((100svh - var(--hero-reserve)) * 560 / 546)));
+  }
+}
+
+/* 1200-1279 px: the headline takes three lines (+ 3.68vw + 17px). */
+@media (min-width: 1200px) and (max-width: 1279.98px) {
+  .landing {
+    --hero-reserve: calc(342px + 11.04vw);
+  }
+}
+
+/* 1024-1199 px: the sentence and the buttons are a second row under the headline (+ 140). */
+@media (min-width: 1024px) and (max-width: 1199.98px) {
+  .landing {
+    --hero-reserve: calc(465px + 7.36vw);
+  }
+}
+
 /* Hero: the drawing sheet ------------------------------------------------- */
 
 .hero {
@@ -46,7 +80,7 @@
 .hero__field {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--page-w)) minmax(0, 1fr);
   grid-template-areas: "bbox page steps";
   align-items: center;
   column-gap: 32px;
@@ -60,7 +94,7 @@
 .xpage {
   grid-area: page;
   justify-self: center;
-  width: min(560px, 100%);
+  width: min(var(--page-w), 100%);
   container-type: inline-size;
   border: 1px solid var(--hair);
   background-color: var(--surface);
@@ -295,8 +329,13 @@
   border: 1px solid var(--muted);
 }
 
-/* Narrower: the readouts sit in a row under the page. */
-@media (max-width: 1199.98px) {
+/* Narrower than the tool (tablet): the page follows the width only; the readouts sit in
+   a row under it. */
+@media (max-width: 1023.98px) {
+  .landing {
+    --page-w: 560px;
+  }
+
   .hero__field {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:

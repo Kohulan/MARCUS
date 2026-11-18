@@ -141,6 +141,10 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain("30 days");
     expect(container.textContent).toContain("Matomo");
     expect(container.textContent).not.toMatch(/OpenAI/i);
+    // the one outside lookup: the paper's DOI, and nothing else, at Crossref or DataCite
+    expect(container.textContent).toContain(
+      "To show the paper's title, the server looks up its DOI at Crossref or DataCite; only the DOI is sent.",
+    );
   });
 
   it("About and Disclaimer carry v2 facts and nothing about OpenAI", () => {
