@@ -177,7 +177,12 @@
   gap: 4px 20px;
 }
 
+/* Each link is a 24 px tall target (WCAG 2.5.8): at phone width the links wrap onto two rows,
+   and 11 px text alone would leave them 18 px tall and 22 px apart. */
 .site-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   color: var(--muted);
   text-decoration: none;
 }

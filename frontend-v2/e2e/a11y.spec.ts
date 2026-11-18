@@ -1,8 +1,9 @@
 // Accessibility sweep (F15), tagged @mocked: every API call is answered from e2e/fixtures/
 // (recorded from the fake stack, engines renamed to real ones), so it needs only the built UI
 // behind nginx (`npm run serve:local`), no stack: CI runs it. axe: 0 serious or critical
-// violations, light mode only, on each screen of the tool. The Ketcher frame is a third-party
-// page and is left out of the editor dialog's run.
+// violations, light mode only, on each screen of the tool (1440 px) and on the static pages at
+// phone width (390 px: the pages that must work on a phone, footer target sizes included). The
+// Ketcher frame is a third-party page and is left out of the editor dialog's run.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -155,4 +156,31 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     expect((await download).suggestedFilename()).toBe("Figure_2b-1.svg");
     await expect(page.getByText("Could not download the image")).toHaveCount(0);
   });
+});
+
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
+
+// The pages a phone visitor reaches (the landing, the info pages, and /app's desktop-only
+// note), at 390 px: the footer links wrap there, so target size (2.5.8) is checked where it bites.
+test.describe("accessibility at phone width", { tag: "@mocked" }, () => {
+  let csp: () => Promise<string[]>;
+
+  test.beforeEach(async ({ page }) => {
+    csp = collectCspViolations(page);
+    await routeApi(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+  });
+
+  test.afterEach(async () => {
+    expect(await csp()).toEqual([]);
+  });
+
+  for (const url of ["/", "/about/", "/privacy/", "/disclaimer/", "/app"]) {
+    test(`${url} at 390 px`, async ({ page }) => {
+      await page.goto(url);
+      await expect(page.getByRole("navigation", { name: "Footer" })).toBeVisible();
+      // WCAG 2.2 AA on: axe leaves target-size (2.5.8) off unless its tag is asked for.
+      await expectNoA11yViolations(page, { tags: WCAG_TAGS });
+    });
+  }
 });

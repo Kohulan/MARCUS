@@ -108,12 +108,14 @@ export async function uploadPaperViaApi(
 /**
  * Runs axe on the current page (light mode only); fails on any serious or critical violation.
  * `exclude`: CSS selectors axe leaves out (the Ketcher frame: a third-party editor page).
+ * `tags`: run only the rules with these tags (axe's default set leaves target-size off).
  */
 export async function expectNoA11yViolations(
   page: Page,
-  opts: { exclude?: string[] } = {},
+  opts: { exclude?: string[]; tags?: string[] } = {},
 ): Promise<void> {
   let axe = new AxeBuilder({ page });
+  if (opts.tags) axe = axe.withTags(opts.tags);
   for (const selector of opts.exclude ?? []) axe = axe.exclude(selector);
   const results = await axe.analyze();
   const bad = results.violations
