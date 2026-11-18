@@ -298,6 +298,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               <Structure
                 src={depiction.src}
                 failed={!drawable || depiction.failed}
+                onRetry={drawable ? (depiction.retry ?? undefined) : undefined}
                 alt={`Structure ${tag}`}
                 crossed={rejected}
               />

@@ -90,20 +90,38 @@ describe("createDepictionLoader", () => {
     expect(pending).toHaveLength(3);
   });
 
-  it("gives up after 6 attempts with the ApiError", async () => {
+  it("busy replies do not count as attempts: ten 503s, then a 200, and it loads (B-I2)", async () => {
     vi.useFakeTimers();
     const loader = createDepictionLoader();
     const load = loader.load("a");
-    const outcome = load.catch((e: unknown) => e);
-    for (let i = 0; i < 6; i++) {
-      pending[i]!.resolve(busy("1"));
+    for (let i = 0; i < 10; i++) {
+      pending[i]!.resolve(busy("5"));
       await flush();
-      await act(() => vi.advanceTimersByTimeAsync(1000));
+      await act(() => vi.advanceTimersByTimeAsync(5000));
     }
+    pending[10]!.resolve(svg());
+    expect((await load).size).toBe(6);
+  });
+
+  it("gives up on a busy server only after 5 minutes of waiting, with the ApiError", async () => {
+    vi.useFakeTimers();
+    const loader = createDepictionLoader();
+    const outcome = loader.load("a").catch((e: unknown) => e);
+    let settled = false;
+    void outcome.then(() => (settled = true));
+    // 30 s pauses: the 10th busy reply comes at 4.5 min, and another 30 s would pass 5.
+    for (let i = 0; i < 10; i++) {
+      pending[i]!.resolve(busy("30"));
+      await flush();
+      expect(settled).toBe(false);
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+    }
+    pending[10]!.resolve(busy("30"));
+    await flush();
     const err = await outcome;
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(503);
-    expect(pending).toHaveLength(6);
+    expect(pending).toHaveLength(11);
   });
 
   it("a 404 fails at once", async () => {
@@ -152,7 +170,7 @@ describe("useDepiction", () => {
       revokeObjectURL: (u: string) => revoked.push(u),
     });
     const hook = renderHook(() => useDepiction("/api/v2/segments/s1/depiction?v=k"));
-    expect(hook.result.current).toEqual({ src: null, failed: false });
+    expect(hook.result.current).toMatchObject({ src: null, failed: false });
     await waitFor(() => expect(pending).toHaveLength(1));
     pending[0]!.resolve(svg());
     await waitFor(() => expect(hook.result.current.src).toBe("blob:svg-1"));
@@ -171,9 +189,31 @@ describe("useDepiction", () => {
     expect(pending[1]?.signal?.aborted).toBe(true);
   });
 
+  it("a drawing not loaded (busy too long, network) offers retry, which loads it again", async () => {
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:svg-2", revokeObjectURL: () => {} });
+    const hook = renderHook(() => useDepiction("/z"));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0]!.resolve(new Response('{"detail":"bad gateway"}', { status: 500 }));
+    await waitFor(() => expect(hook.result.current.failed).toBe(true));
+    expect(hook.result.current.retry).toBeTypeOf("function");
+    act(() => hook.result.current.retry!());
+    expect(hook.result.current).toMatchObject({ src: null, failed: false });
+    await waitFor(() => expect(pending).toHaveLength(2));
+    pending[1]!.resolve(svg());
+    await waitFor(() => expect(hook.result.current.src).toBe("blob:svg-2"));
+  });
+
+  it("nothing to draw (404, 422) offers no retry", async () => {
+    const hook = renderHook(() => useDepiction("/n"));
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0]!.resolve(new Response(null, { status: 422 }));
+    await waitFor(() => expect(hook.result.current.failed).toBe(true));
+    expect(hook.result.current.retry).toBeNull();
+  });
+
   it("null url loads nothing", () => {
     const hook = renderHook(() => useDepiction(null));
-    expect(hook.result.current).toEqual({ src: null, failed: false });
+    expect(hook.result.current).toMatchObject({ src: null, failed: false });
     expect(pending).toHaveLength(0);
   });
 });

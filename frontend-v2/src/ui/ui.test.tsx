@@ -194,6 +194,15 @@ describe("Structure", () => {
     expect(screen.getByText("No drawing")).toBeInTheDocument();
   });
 
+  it("a drawing that was not loaded (not 'nothing to draw') says so and offers Try again", () => {
+    const onRetry = vi.fn();
+    render(<Structure src={null} alt="x" failed onRetry={onRetry} />);
+    expect(screen.getByText("Drawing not loaded")).toBeInTheDocument();
+    expect(screen.queryByText("No drawing")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('shows "No drawing" when the image does not load', () => {
     const { container } = render(<Structure src="blob:http://x/bad" alt="x" />);
     fireEvent.error(container.querySelector("img")!);
@@ -361,19 +370,35 @@ describe("DesktopOnly", () => {
     expect(screen.getByText("tool")).toBeInTheDocument();
   });
 
-  it("shows the tool at 1024 px and follows a resize", () => {
-    setWidth(1024);
+  it("a mounted tool stays mounted when the window narrows: hidden behind the note (B-I1)", () => {
+    setWidth(1400);
+    const unmounted = vi.fn();
+    function Tool() {
+      useEffect(() => unmounted, []);
+      return <input aria-label="note draft" defaultValue="half typed" />;
+    }
     render(
       <DesktopOnly>
-        <p>tool</p>
+        <Tool />
       </DesktopOnly>,
     );
-    expect(screen.getByText("tool")).toBeInTheDocument();
+    const draft = screen.getByRole("textbox", { name: "note draft" });
     act(() => {
       setWidth(900);
       window.dispatchEvent(new Event("resize"));
     });
     expect(screen.getByText("MARCUS is made for a desktop screen")).toBeInTheDocument();
+    expect(unmounted).not.toHaveBeenCalled();
+    expect(draft.isConnected).toBe(true);
+    expect(draft.closest("[hidden]")).not.toBeNull(); // not shown, not torn down
+    act(() => {
+      setWidth(1400);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(screen.queryByText("MARCUS is made for a desktop screen")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "note draft" })).toBe(draft);
+    expect(draft).toHaveValue("half typed");
+    expect(unmounted).not.toHaveBeenCalled();
   });
 });
 

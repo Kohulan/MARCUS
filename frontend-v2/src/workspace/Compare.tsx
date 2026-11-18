@@ -355,8 +355,8 @@ function StoredDrawing({
   alt: string;
 }) {
   const engine = asEngine(prediction.engine) ?? undefined;
-  const { src, failed } = useDepiction(api.depictionUrl(segmentId, prediction.id, engine));
-  return <Structure src={src} failed={failed} alt={alt} />;
+  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, prediction.id, engine));
+  return <Structure src={src} failed={failed} onRetry={retry ?? undefined} alt={alt} />;
 }
 
 /**

@@ -384,6 +384,11 @@
   color: var(--tick);
 }
 
+.structure--retry {
+  flex-direction: column;
+  gap: 10px;
+}
+
 .structure__note {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -515,6 +520,11 @@
 }
 
 /* Below the tool's minimum width ------------------------------------------- */
+
+/* The mounted tool's wrapper: no box of its own while shown; [hidden] (narrowed) hides it. */
+.desktop-only__tool:not([hidden]) {
+  display: contents;
+}
 
 .desktop-only {
   display: flex;

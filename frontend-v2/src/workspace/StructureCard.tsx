@@ -227,6 +227,7 @@ function StructureCard({
           <Structure
             src={depiction.src}
             failed={depiction.failed}
+            onRetry={depiction.retry ?? undefined}
             alt={`Structure ${tag}`}
             crossed={rejected}
           />

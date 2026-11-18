@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import "./ui.css";
 
@@ -35,17 +35,32 @@ function isWide(): boolean {
 
 /**
  * The tool needs at least 1024 px. Below that it shows one note. The width is read during
- * render (useSyncExternalStore), so below 1024 px the tool is never mounted, not even for
- * one frame: no stream, query or upload starts on a phone. /app is not pre-rendered; the
- * server snapshot (wide) only keeps renderToString from touching window.
+ * render (useSyncExternalStore), so a tool first opened below 1024 px is never mounted, not
+ * even for one frame: no stream, query or upload starts on a phone. Once mounted, the tool
+ * stays mounted: a window narrowed below 1024 px (half-screen snapping, docked DevTools)
+ * hides it behind the note and keeps its state (an unsaved drawing, a note draft, a filled
+ * form); widening shows it again as it was. /app is not pre-rendered; the server snapshot
+ * (wide) only keeps renderToString from touching window.
  */
 export default function DesktopOnly({ children }: { children: ReactNode }) {
   const wide = useSyncExternalStore(subscribe, isWide, () => true);
+  // Decided at the first wide read, never undone (state set during render: no extra frame).
+  const [mounted, setMounted] = useState(wide);
+  if (wide && !mounted) setMounted(true);
 
-  if (wide) return <>{children}</>;
-  return (
+  const note = (
     <main className="desktop-only">
       <p className="desktop-only__note">MARCUS is made for a desktop screen</p>
     </main>
+  );
+  if (!mounted) return note;
+  return (
+    <>
+      {/* data-keys-off: the review keys go inert while the tool is hidden (ui/modal.ts). */}
+      <div className="desktop-only__tool" hidden={!wide} data-keys-off={wide ? undefined : ""}>
+        {children}
+      </div>
+      {!wide && note}
+    </>
   );
 }
