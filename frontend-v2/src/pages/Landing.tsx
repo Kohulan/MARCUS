@@ -47,16 +47,18 @@ const STEPS: [StepState, string][] = [
   ["todo", "005 Look up DOI"],
 ];
 
-// The sample paper's own text (synth_015 prints the same paragraph on every page), set
-// around the two markers.
+// The sample paper's own text (synth_015 prints the same paragraph on every page), run to fill
+// the board's blocks around the two markers: about 7 lines, 3 and 6.
 const PAGE_TITLE = "Synthetic paper 0015 structures";
-const LEAD =
-  "Isolation and structural elucidation. The crude extract was fractionated by silica gel " +
-  "column chromatography and purified by semi-preparative HPLC to give the compounds shown below.";
+const S1 = "Isolation and structural elucidation.";
+const S2 =
+  "The crude extract was fractionated by silica gel column chromatography and purified by " +
+  "semi-preparative HPLC to give the compounds shown below.";
+const S3 = "Structures were assigned by 1D and 2D NMR and HRMS; the numbering follows the text.";
 const PAGE_TEXT = [
-  LEAD,
-  "Structures were assigned by 1D and 2D NMR and HRMS; the numbering follows the text.",
-  LEAD,
+  `${S1} ${S2} ${S3} ${S1} ${S3}`,
+  `${S1} ${S2} ${S3}`,
+  `${S1} ${S2} ${S3} ${S2}`,
 ];
 
 /** Text on the example page (decorative: the hero's label says what the page is). */
