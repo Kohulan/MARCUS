@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, svgBlobUrl } from "./client";
+import { api, ApiError, resetOwnerGate, svgBlobUrl } from "./client";
 
 type Call = { url: string; init: RequestInit };
 
@@ -197,5 +197,65 @@ describe("api", () => {
     });
     expect(svgBlobUrl({ format: "svg", data: "<svg/>" })).toBe("blob:x");
     expect(made[0]?.type).toBe("image/svg+xml");
+  });
+});
+
+describe("one owner: no parallel requests before the first success", () => {
+  type Pending = { url: string; resolve: (r: Response) => void; reject: (e: unknown) => void };
+  let pending: Pending[];
+
+  beforeEach(() => {
+    resetOwnerGate();
+    pending = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise<Response>((resolve, reject) => pending.push({ url, resolve, reject })),
+      ),
+    );
+  });
+
+  afterEach(() => resetOwnerGate());
+
+  const ok = () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("holds every request until the first one succeeded, then lets them all go", async () => {
+    const list = api.listPapers();
+    const images = api.listImages();
+    const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+    await tick();
+    expect(pending.map((p) => p.url)).toEqual(["/api/v2/papers"]);
+    pending[0]!.resolve(ok());
+    await list;
+    await tick();
+    expect(pending).toHaveLength(3); // both waiting requests went out together
+    pending[1]!.resolve(ok());
+    pending[2]!.resolve(ok());
+    await Promise.all([images, upload]);
+  });
+
+  it("after a failed first request (error status or network), the next one goes alone", async () => {
+    const list = api.listPapers();
+    const images = api.listImages();
+    const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+    await tick();
+    expect(pending).toHaveLength(1);
+    pending[0]!.resolve(new Response("", { status: 502 }));
+    await expect(list).rejects.toBeInstanceOf(ApiError);
+    await tick();
+    expect(pending).toHaveLength(2); // only one of the two waiting requests
+    pending[1]!.reject(new TypeError("network"));
+    await tick();
+    await tick();
+    expect(pending).toHaveLength(3); // the last one, still alone
+    pending[2]!.resolve(ok());
+    await Promise.allSettled([images, upload]);
+    const next = api.listPapers();
+    await tick();
+    expect(pending).toHaveLength(4); // ready: no more waiting
+    pending[3]!.resolve(ok());
+    await next;
   });
 });

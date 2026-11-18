@@ -92,8 +92,39 @@ export async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, detail, parseRetryAfter(res.headers.get("Retry-After")));
 }
 
+// One owner per browser. The API makes an owner (and sets its cookie) for any request that
+// comes without the cookie, so two cookie-less requests in flight at once make two owners,
+// and the Set-Cookie that arrives last decides which one the browser keeps: an upload could
+// land on the other one. So until one request has succeeded in this page (from then on the
+// cookie is there), requests go out one at a time; a failed one (a 502 while the API
+// restarts, a network error, a 429) lets the next waiting request try.
+let ownerReady = false;
+let firstInFlight: Promise<unknown> | null = null;
+
+async function send(url: string, init: RequestInit): Promise<Response> {
+  while (!ownerReady && firstInFlight) {
+    await firstInFlight.catch(() => undefined);
+  }
+  if (ownerReady) return fetch(url, init);
+  const attempt = fetch(url, init);
+  firstInFlight = attempt;
+  try {
+    const res = await attempt;
+    if (res.ok) ownerReady = true;
+    return res;
+  } finally {
+    if (firstInFlight === attempt) firstInFlight = null;
+  }
+}
+
+/** Tests only: forget that a request has succeeded (a new page). */
+export function resetOwnerGate(): void {
+  ownerReady = false;
+  firstInFlight = null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...init, credentials: "same-origin" });
+  const res = await send(`${BASE}${path}`, { ...init, credentials: "same-origin" });
   if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return undefined as T;
   const text = await res.text();

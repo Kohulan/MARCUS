@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ApiError, api } from "../api/client";
 import { keys } from "../api/queries";
-import type { ImageJobSummary, PaperSummary } from "../api/types";
+import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
 import StateBadge from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
@@ -75,7 +75,12 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
     try {
       await api.deletePaper(paper.id);
       toast("Paper deleted");
-      await client.invalidateQueries({ queryKey: keys.papers() });
+      // The row goes at once: a list refresh that then fails must not leave it standing
+      // with a confirm whose buttons are disabled.
+      client.setQueryData<PaperList>(keys.papers(), (old) =>
+        old ? { ...old, papers: old.papers.filter((p) => p.id !== paper.id) } : old,
+      );
+      void client.invalidateQueries({ queryKey: keys.papers() });
     } catch (error) {
       toast(errorText(error), "error");
       setDeleting(false);

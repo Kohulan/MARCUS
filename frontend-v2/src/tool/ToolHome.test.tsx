@@ -208,6 +208,29 @@ describe("Where an upload goes", () => {
     expect(screen.getByText("Try again in 7 s")).toBeInTheDocument();
   });
 
+  it("the 429 alert is static (announced once); the countdown runs outside it and stops at zero", async () => {
+    const clear = vi.spyOn(globalThis, "clearInterval");
+    vi.mocked(api.uploadPaper).mockRejectedValue(new ApiError(429, "Too many active papers", 2));
+    const { container } = renderHome();
+    pick(container, fileOf("paper.pdf", "application/pdf"));
+    const alert = (await screen.findByText("Too many active papers")).closest('[role="alert"]')!;
+    await screen.findByText("Try again in 2 s");
+    const said = alert.textContent;
+    expect(said).toContain("Too many active papers");
+    expect(said).toContain("Try again in 2 s"); // once, for screen readers
+    const countdown = screen.getByText("Try again in 2 s");
+    expect(alert).not.toContainElement(countdown);
+    expect(countdown).toHaveAttribute("aria-hidden", "true");
+    expect(await screen.findByText("Try again in 1 s", {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(alert.textContent).toBe(said);
+    const before = clear.mock.calls.length;
+    await waitFor(() => expect(screen.queryByText(/^Try again in \d+ s$/)).toBeNull(), {
+      timeout: 2500,
+    });
+    expect(clear.mock.calls.length).toBeGreaterThan(before); // the timer stopped at zero
+    expect(alert.textContent).toBe(said);
+  });
+
   it("shows a 429 without Retry-After without a wait", async () => {
     vi.mocked(api.uploadPaper).mockRejectedValue(new ApiError(429, "daily quota exceeded"));
     const { container } = renderHome();
@@ -395,6 +418,18 @@ describe("Papers list", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Delete" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(del).toHaveBeenCalledWith("p1"));
+  });
+
+  it("a deleted paper leaves the list at once, even when the list refresh then fails", async () => {
+    vi.spyOn(api, "deletePaper").mockResolvedValue(undefined);
+    renderHome({ papers: [paper(), paper({ id: "p2", title: "Second paper" })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    vi.mocked(api.listPapers).mockRejectedValue(new ApiError(503, "busy"));
+    fireEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByText("Alkaloids from Coffea leaves")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Second paper")).toBeInTheDocument();
   });
 
   it("closes the confirm with Escape", async () => {

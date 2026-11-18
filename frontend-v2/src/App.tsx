@@ -28,6 +28,17 @@ function usePageViews() {
   }, [location.key, location.pathname, type]);
 }
 
+/** The element a "#id" names; null for none, or for a malformed hash ("#%E0%A4%A"). */
+function hashTarget(hash: string): Element | null {
+  let id: string;
+  try {
+    id = decodeURIComponent(hash.slice(1));
+  } catch {
+    return null; // URIError: the page simply opens at its top
+  }
+  return id ? document.getElementById(id) : null;
+}
+
 /**
  * A forward navigation (a link) opens the next page at its top, or at the element its hash
  * names ("/#cite"). Back and Forward keep the browser's own scroll restoration; the first
@@ -44,8 +55,7 @@ function useScrollOnNavigate() {
     last.current = { key: location.key, path: location.pathname };
     if (type === "POP") return;
     if (type === "REPLACE" && previous.path === location.pathname) return;
-    const id = decodeURIComponent(location.hash.slice(1));
-    const target = id ? document.getElementById(id) : null;
+    const target = hashTarget(location.hash);
     if (target) target.scrollIntoView({ block: "start" });
     else window.scrollTo(0, 0);
   }, [location.key, location.pathname, location.hash, type]);

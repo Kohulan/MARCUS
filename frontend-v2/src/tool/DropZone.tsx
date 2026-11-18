@@ -69,6 +69,8 @@ type DropZoneProps = {
   onPickerOpened: () => void;
   /** Problems of the last try (refused file, upload error), shown in the drop area. */
   message: ReactNode;
+  /** A live countdown shown under the message, outside the alert (never re-announced). */
+  wait?: ReactNode;
 };
 
 /**
@@ -86,6 +88,7 @@ export default function DropZone({
   openPicker,
   onPickerOpened,
   message,
+  wait,
 }: DropZoneProps) {
   const input = useRef<HTMLInputElement>(null);
   const opened = useRef(false);
@@ -168,6 +171,7 @@ export default function DropZone({
         <div className="drop__message" role="alert">
           {message}
         </div>
+        {wait}
       </div>
 
       <div className="drop__options">

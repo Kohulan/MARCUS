@@ -15,27 +15,43 @@ export const SAMPLE_URL = "/sample/synth_015.pdf";
 export const SAMPLE_NAME = "Sample paper (synthetic).pdf";
 const SAMPLE_MISSING = "The sample paper could not be loaded.";
 
-type Problem = { text: string; retryAt?: number };
+type Problem = { text: string; retryAt?: number; waitS?: number };
 
 function problemOf(error: unknown): Problem {
   if (error instanceof ApiError) {
     return error.status === 429 && error.retryAfter !== undefined
-      ? { text: error.detail, retryAt: Date.now() + error.retryAfter * 1000 }
+      ? {
+          text: error.detail,
+          retryAt: Date.now() + error.retryAfter * 1000,
+          waitS: error.retryAfter,
+        }
       : { text: error.detail };
   }
   return { text: "The upload did not reach the server. Check your connection." };
 }
 
-/** "Try again in N s", counting down; gone at zero. */
+const waitText = (seconds: number) => `Try again in ${seconds} s`;
+
+/**
+ * "Try again in N s", counting down; gone at zero, and its timer with it. Shown outside the
+ * alert and hidden from screen readers: the alert says the first value once (a ticking line
+ * inside role="alert" would be read out again every second).
+ */
 function RetryIn({ at }: { at: number }) {
   const [now, setNow] = useState(() => Date.now());
+  const seconds = Math.ceil((at - now) / 1000);
+  const done = seconds <= 0;
   useEffect(() => {
+    if (done) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
-  const seconds = Math.ceil((at - now) / 1000);
-  if (seconds <= 0) return null;
-  return <p className="drop__wait">{`Try again in ${seconds} s`}</p>;
+  }, [done]);
+  if (done) return null;
+  return (
+    <p className="drop__wait" aria-hidden="true">
+      {waitText(seconds)}
+    </p>
+  );
 }
 
 /**
@@ -166,12 +182,17 @@ export default function ToolHome() {
           onPickerOpened={pickerOpened}
           message={
             problem ? (
-              <>
-                <p className="drop__problem">{problem.text}</p>
+              <p className="drop__problem">
+                {problem.text}
                 {problem.retryAt !== undefined ? (
-                  <RetryIn key={problem.retryAt} at={problem.retryAt} />
+                  <span className="visually-hidden">{` ${waitText(problem.waitS ?? 0)}.`}</span>
                 ) : null}
-              </>
+              </p>
+            ) : null
+          }
+          wait={
+            problem?.retryAt !== undefined ? (
+              <RetryIn key={problem.retryAt} at={problem.retryAt} />
             ) : null
           }
         />

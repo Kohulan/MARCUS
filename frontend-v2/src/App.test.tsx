@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { api } from "./api/client";
@@ -43,13 +43,14 @@ describe("App routes", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "Drop a PDF here" }),
     ).toBeInTheDocument();
-    expect(document.title).toBe("Papers · MARCUS");
+    // the title is set in an effect, which may run just after the heading is found
+    await waitFor(() => expect(document.title).toBe("Papers · MARCUS"));
   });
 
   it("/app/images/i1 sets its own title", async () => {
     renderAt("/app/images/i1");
     await screen.findByRole("heading", { level: 1 });
-    expect(document.title).toBe("Image · MARCUS");
+    await waitFor(() => expect(document.title).toBe("Image · MARCUS"));
   });
 
   it("/app/papers/:id is titled with the paper's title (or its file name)", async () => {
@@ -75,7 +76,7 @@ describe("App routes", () => {
     vi.spyOn(api, "getSteps").mockResolvedValue({ steps: [] });
     renderAt("/app/papers/3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f");
     await screen.findByRole("heading", { level: 1, name: "alkaloids.pdf" });
-    expect(document.title).toBe("alkaloids.pdf · MARCUS");
+    await waitFor(() => expect(document.title).toBe("alkaloids.pdf · MARCUS"));
   });
 
   it("below 1024 px /app shows the desktop note and never asks the API", async () => {
@@ -133,6 +134,29 @@ describe("scroll on navigation", () => {
     expect(into).toHaveBeenCalledTimes(1);
     expect((into.mock.contexts[0] as Element).id).toBe("cite");
     expect(scrollTo).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("a malformed hash does not crash: the page opens at its top", () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    function Go() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/about#%E0%A4%A")}>
+          go
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+        <Go />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "go" }));
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    expect(screen.queryByRole("heading", { level: 1, name: "Every molecule has a source." })).toBeNull();
     vi.unstubAllGlobals();
   });
 });
