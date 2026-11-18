@@ -16,6 +16,23 @@ export const REVIEW_KEYS: { keys: string[]; label: string }[] = [
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Keeps Tab and Shift+Tab inside `box` (a modal dialog's focus trap). */
+export function trapTab(e: KeyboardEvent<HTMLElement>, box: HTMLElement | null): void {
+  if (e.key !== "Tab" || !box) return;
+  const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  if (e.shiftKey && (active === first || !box.contains(active))) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (active === last || !box.contains(active))) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 /**
  * The key list: a modal dialog named "Keys". Focus moves into it, Tab stays inside it, and
  * Escape (or Close) closes it and gives focus back to where it was.
@@ -40,19 +57,7 @@ export default function KeyHelp({ onClose }: { onClose: () => void }) {
       onClose();
       return;
     }
-    if (e.key !== "Tab" || !box.current) return;
-    const items = [...box.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (!first || !last) return;
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || !box.current.contains(active))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    trapTab(e, box.current);
   };
 
   return (

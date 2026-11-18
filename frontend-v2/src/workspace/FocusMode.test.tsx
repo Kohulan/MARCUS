@@ -442,15 +442,16 @@ describe("focus mode", () => {
     expect(put.mock.calls[0]![1].status).toBe("rejected");
   });
 
-  it("E and C call the edit and compare hooks only when they are given (F10/F11)", async () => {
+  it("E does nothing until F11 gives an editor; C opens Compare engines", async () => {
     const put = putSpy();
     renderAt(paper([segment("s1")]), "?s=s1&focus=1");
     const region = await focusRegion();
     press("e");
-    press("c");
     expect(put).not.toHaveBeenCalled();
     expect(within(region).queryByRole("button", { name: /Edit/ })).toBeNull();
-    expect(within(region).queryByRole("button", { name: /Compare/ })).toBeNull();
+    expect(within(region).getByRole("button", { name: /^Compare/ })).toBeInTheDocument();
+    press("c");
+    expect(await screen.findByRole("dialog", { name: /Compare engines/ })).toBeInTheDocument();
   });
 
   it("a save that fails says so and takes the stamp back", async () => {

@@ -242,11 +242,12 @@ describe("cards and their states", () => {
     expect(filter("Failed")).toHaveTextContent("1");
     fireEvent.click(within(card("[01]")).getByRole("button", { name: "Try another engine" }));
     const menu = within(card("[01]")).getByRole("group", { name: "Engines" });
-    // the other three engines, not the one that failed
+    // the other three engines, not the one that failed, then Compare
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "DECIMER hand-drawn",
       "MolNexTR",
       "MolScribe",
+      "Compare",
     ]);
     fireEvent.click(within(menu).getByRole("button", { name: "MolNexTR" }));
     await waitFor(() => expect(run).toHaveBeenCalledWith("s1", "molnextr"));

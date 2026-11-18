@@ -415,6 +415,11 @@
   border-top: 1px solid var(--hair);
 }
 
+/* Compare, the last entry, set apart from the engines. */
+.engine-menu__item + .engine-menu__item--compare {
+  border-top-color: var(--line);
+}
+
 .engine-menu__item:hover {
   background-color: var(--sunken);
 }

@@ -87,6 +87,8 @@ export type StructureCardProps = {
   onOpen: (segmentId: string) => void;
   onDecide: (segmentId: string, status: CurationStatus) => void;
   onRun: (segmentId: string, engine: Engine) => void;
+  /** Opens Compare engines for the segment (To check cards and the engine menu). */
+  onCompare?: ((segmentId: string) => void) | undefined;
   /**
    * The Paper view's list: the drawing beside the text, no checkbox (no bulk actions
    * there), and a click on the card calls `onOpen` (the Paper view selects with it).
@@ -118,6 +120,7 @@ function StructureCard({
   onOpen,
   onDecide,
   onRun,
+  onCompare,
   compact = false,
   linked = false,
   onHover,
@@ -258,6 +261,7 @@ function StructureCard({
         failedEngine={failedEngine}
         onDecide={onDecide}
         onRun={onRun}
+        onCompare={onCompare}
       />
     </article>
   );
@@ -278,6 +282,7 @@ function CardActions({
   failedEngine,
   onDecide,
   onRun,
+  onCompare,
 }: {
   segmentId: string;
   tag: string;
@@ -287,8 +292,10 @@ function CardActions({
   failedEngine: string | null;
   onDecide: StructureCardProps["onDecide"];
   onRun: StructureCardProps["onRun"];
+  onCompare: StructureCardProps["onCompare"];
 }) {
   const own = asEngine(paperEngine) ?? "decimer";
+  const compare = onCompare && (() => onCompare(segmentId));
   if (state === "to-check") {
     // No key hints: A and R act in focus mode only. The name starts with the visible word
     // (WCAG 2.5.3 label in name).
@@ -311,6 +318,17 @@ function CardActions({
         >
           Reject
         </GlassButton>
+        {compare && (
+          <GlassButton
+            tint="clear"
+            size="sm"
+            label={`Compare ${tag}`}
+            hasPopup="dialog"
+            onClick={compare}
+          >
+            Compare
+          </GlassButton>
+        )}
       </div>
     );
   }
@@ -322,6 +340,7 @@ function CardActions({
           label="Try another engine"
           engines={others(failed)}
           onPick={(engine) => onRun(segmentId, engine)}
+          onCompare={compare}
         />
       </div>
     );
@@ -336,6 +355,7 @@ function CardActions({
           label="Other engine"
           engines={others(own)}
           onPick={(engine) => onRun(segmentId, engine)}
+          onCompare={compare}
         />
       </div>
     );
@@ -345,15 +365,20 @@ function CardActions({
 
 const others = (engine: Engine) => ENGINES.filter((e) => e.value !== engine);
 
-/** A disclosure of engines to read the segment with. Escape or a click outside closes it. */
+/**
+ * A disclosure of engines to read the segment with, and Compare engines last (when given).
+ * Escape or a click outside closes it.
+ */
 function EngineMenu({
   label,
   engines,
   onPick,
+  onCompare,
 }: {
   label: string;
   engines: { value: Engine; label: string }[];
   onPick: (engine: Engine) => void;
+  onCompare?: (() => void) | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -407,6 +432,20 @@ function EngineMenu({
               {e.label}
             </button>
           ))}
+          {onCompare && (
+            <button
+              type="button"
+              className="engine-menu__item engine-menu__item--compare"
+              aria-haspopup="dialog"
+              onClick={() => {
+                setOpen(false);
+                button.current?.focus(); // where focus returns when Compare closes
+                onCompare();
+              }}
+            >
+              Compare
+            </button>
+          )}
         </div>
       )}
     </div>

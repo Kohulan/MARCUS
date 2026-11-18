@@ -6,6 +6,7 @@ import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { filterOf, hasDrawing, type GridFilter } from "./cardState";
+import { CardCompare } from "./Compare";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
 import { errorDetail as detail, useCardActions } from "./useCardActions";
@@ -59,6 +60,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   const [filter, setFilter] = useState<GridFilter>("all");
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
+  const [comparing, setComparing] = useState<string | null>(null);
   // The Shift-click anchor: a card, looked up in the list shown now (positions move).
   const anchor = useRef<string | null>(null);
   const grid = useRef<HTMLDivElement>(null);
@@ -239,6 +241,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               onOpen={onOpen}
               onDecide={onDecide}
               onRun={onRun}
+              onCompare={setComparing}
             />
           ))}
         </div>
@@ -254,6 +257,15 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
           onReject={() => void decideAll("rejected")}
           onRead={() => void readAll()}
           onClear={clear}
+        />
+      )}
+      {comparing !== null && (
+        <CardCompare
+          ws={ws}
+          rows={rows}
+          segmentId={comparing}
+          onStarted={started}
+          onClose={() => setComparing(null)}
         />
       )}
     </>

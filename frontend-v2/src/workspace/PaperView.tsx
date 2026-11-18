@@ -12,6 +12,7 @@ import { reasonText } from "../api/reasons";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { hasDrawing } from "./cardState";
+import { CardCompare } from "./Compare";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
@@ -119,7 +120,7 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide: onDecide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -127,6 +128,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const pagesCol = useRef<HTMLElement>(null);
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
+  const [comparing, setComparing] = useState<string | null>(null);
 
   const busy = BUSY_PAPER.has(paper.status);
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
@@ -269,6 +271,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   onOpen={onSelect}
                   onDecide={onDecide}
                   onRun={onRun}
+                  onCompare={setComparing}
                   onHover={onCardHover}
                 />
               );
@@ -276,6 +279,15 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </div>
         )}
       </section>
+      {comparing !== null && (
+        <CardCompare
+          ws={ws}
+          rows={rows}
+          segmentId={comparing}
+          onStarted={started}
+          onClose={() => setComparing(null)}
+        />
+      )}
     </div>
   );
 }

@@ -25,7 +25,9 @@ import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardState";
+import { SegmentCompare } from "./Compare";
 import KeyHelp from "./KeyHelp";
+import { useCardActions } from "./useCardActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
@@ -50,8 +52,6 @@ export type FocusModeProps = {
   onClose: (segmentId: string) => void;
   /** E and the Edit button. F11 fills it (the Ketcher editor); until then E does nothing. */
   onEdit?: ((segmentId: string) => void) | undefined;
-  /** C and the Compare button. F10 fills it (compare engines); until then C does nothing. */
-  onCompare?: ((segmentId: string) => void) | undefined;
 };
 
 /**
@@ -59,7 +59,7 @@ export type FocusModeProps = {
  * predictions, a note and the decision, all from the keyboard (useReviewKeys). A or R
  * lands the stamp, then moves on to the next structure still to check.
  */
-export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompare }: FocusModeProps) {
+export default function FocusMode({ ws, rows, segment, onClose, onEdit }: FocusModeProps) {
   const paper = ws.paper!;
   const { setSelection } = ws;
   const { save } = useSaveCuration(paper.id);
@@ -67,6 +67,9 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
   const reduce = usePrefersReducedMotion();
   const root = useRef<HTMLElement>(null);
   const [help, setHelp] = useState(false);
+  // Compare engines (C) over focus mode: the review keys hold while it is open.
+  const [comparing, setComparing] = useState(false);
+  const { started } = useCardActions(paper.id, ws.live.reconnect);
   const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const seq = useRef(0);
@@ -183,15 +186,16 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
     root.current?.focus({ preventScroll: true });
   };
 
+  const held = help || comparing; // a dialog is open over focus mode
   useReviewKeys({
-    accept: () => !help && decide("accepted"),
-    reject: () => !help && decide("rejected"),
-    edit: () => !help && onEdit?.(id),
-    compare: () => !help && onCompare?.(id),
-    prev: () => !help && step(-1),
-    next: () => !help && step(1),
-    close: () => (help ? setHelp(false) : onClose(id)),
-    help: () => setHelp((h) => !h),
+    accept: () => !held && decide("accepted"),
+    reject: () => !held && decide("rejected"),
+    edit: () => !held && onEdit?.(id),
+    compare: () => !held && setComparing(true),
+    prev: () => !held && step(-1),
+    next: () => !held && step(1),
+    close: () => (comparing ? setComparing(false) : help ? setHelp(false) : onClose(id)),
+    help: () => !comparing && setHelp((h) => !h),
   });
 
   const left = rows.filter(
@@ -319,17 +323,15 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
             <GlassButton tint="clear" onClick={() => decide("rejected")}>
               Reject <Kbd>R</Kbd>
             </GlassButton>
-            {/* F11 hooks the editor in through onEdit, F10 the comparison through onCompare. */}
+            {/* F11 hooks the editor in through onEdit. */}
             {onEdit && (
               <GlassButton tint="clear" onClick={() => onEdit(id)}>
                 Edit <Kbd>E</Kbd>
               </GlassButton>
             )}
-            {onCompare && (
-              <GlassButton tint="clear" onClick={() => onCompare(id)}>
-                Compare <Kbd>C</Kbd>
-              </GlassButton>
-            )}
+            <GlassButton tint="clear" hasPopup="dialog" onClick={() => setComparing(true)}>
+              Compare <Kbd>C</Kbd>
+            </GlassButton>
           </div>
         </div>
 
@@ -346,6 +348,16 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
       </div>
 
       {help && <KeyHelp onClose={() => setHelp(false)} />}
+      {comparing && (
+        <SegmentCompare
+          paperId={paper.id}
+          segment={segment}
+          steps={ws.steps}
+          tag={tag}
+          onStarted={started}
+          onClose={() => setComparing(false)}
+        />
+      )}
     </section>
   );
 }

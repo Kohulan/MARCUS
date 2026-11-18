@@ -27,11 +27,28 @@ type GlassButtonProps = {
   /** For a button that opens a menu or panel: its state and the id of what it opens. */
   expanded?: boolean | undefined;
   controls?: string | undefined;
+  /** For a toggle ("Show common part"): aria-pressed. */
+  pressed?: boolean | undefined;
+  /** For a button that opens a dialog ("Compare"). */
+  hasPopup?: "dialog" | undefined;
   children: ReactNode;
 };
 
 export const GlassButton = forwardRef<HTMLButtonElement, GlassButtonProps>(function GlassButton(
-  { tint, size = "md", type = "button", disabled, onClick, label, describedBy, expanded, controls, children },
+    {
+    tint,
+    size = "md",
+    type = "button",
+    disabled,
+    onClick,
+    label,
+    describedBy,
+    expanded,
+    controls,
+    pressed,
+    hasPopup,
+    children,
+  },
   ref,
 ) {
   return (
@@ -45,6 +62,8 @@ export const GlassButton = forwardRef<HTMLButtonElement, GlassButtonProps>(funct
       aria-describedby={describedBy}
       aria-expanded={expanded}
       aria-controls={controls}
+      aria-pressed={pressed}
+      aria-haspopup={hasPopup}
     >
       {children}
     </button>
