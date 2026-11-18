@@ -80,10 +80,11 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const tag = structureTag(row?.n ?? index + 1);
   // The save is optimistic (useSaveCuration): a decision is in the row at once.
   const state: CardState = row?.state ?? "to-check";
-  // A decision made on this structure while it is shown lands its stamp (as on a card).
-  const [shownAt, setShownAt] = useState({ id, state });
-  if (shownAt.id !== id) setShownAt({ id, state });
-  const landed = shownAt.id === id && shownAt.state !== state;
+  // Each A or R pressed here lands its stamp, also on a structure already decided (a fresh
+  // key per decision); a failed save takes it back.
+  const [landing, setLanding] = useState<{ id: string; n: number } | null>(null);
+  const seq = useRef(0);
+  const mine = landing !== null && landing.id === id ? landing : null;
   const stored = segment.curation?.note ?? null;
   // A structure to accept: a curated one or a valid prediction.
   const drawable = hasDrawing(segment);
@@ -148,11 +149,16 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     if (status === "accepted" && !drawable) return; // nothing to accept (ruling on F7 M2)
     holdFocus();
     const typed = text;
+    const n = ++seq.current;
+    setLanding({ id, n });
     // curationBody keeps an edited smiles and molfile; the note goes with the decision. A
     // failed save rolls the row back.
     save(id, { status, note: noteOf(text) }).then(
       () => dropDraft(id, typed),
-      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
+      (err: unknown) => {
+        setLanding((l) => (l !== null && l.n === n ? null : l));
+        toast(`Not saved: ${errorText(err)}`, "error");
+      },
     );
     clearTimer();
     if (reduce) advance(id);
@@ -287,7 +293,12 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               />
               {(state === "accepted" || state === "rejected") && (
                 <span className="fm-stamp">
-                  <Stamp key={state} state={state} size="lg" animate={landed} />
+                  <Stamp
+                    key={mine ? `landed-${mine.n}` : "shown"}
+                    state={state}
+                    size="lg"
+                    animate={mine !== null}
+                  />
                 </span>
               )}
             </div>

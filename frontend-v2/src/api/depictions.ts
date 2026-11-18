@@ -126,36 +126,46 @@ export function createDepictionLoader(
 export const depictionLoader = createDepictionLoader({ gate: ownerReady });
 
 // The drawings loaded in this tab, by URL: one blob and one blob: URL each, shared by every
-// view that shows it. One in use is never revoked; up to MAX_IDLE unused ones are kept
+// view that shows it. One in use is never revoked; up to `maxIdle` unused ones are kept
 // (most recently used last), the oldest beyond that are revoked and dropped.
 type Drawing = { blob: Blob; src: string; users: number };
-const MAX_IDLE = 300;
-const drawings = new Map<string, Drawing>();
 
-function take(url: string, blob?: Blob): Drawing | undefined {
-  let d = drawings.get(url);
-  if (!d && blob) {
-    d = { blob, src: URL.createObjectURL(blob), users: 0 };
-    drawings.set(url, d);
-  }
-  if (d) d.users += 1;
-  return d;
+export function createDrawingCache(maxIdle: number) {
+  const drawings = new Map<string, Drawing>();
+  return {
+    get: (url: string) => drawings.get(url),
+    /** One more user of `url`'s drawing (kept from `blob` when new); undefined without one. */
+    take(url: string, blob?: Blob): Drawing | undefined {
+      let d = drawings.get(url);
+      if (!d && blob) {
+        d = { blob, src: URL.createObjectURL(blob), users: 0 };
+        drawings.set(url, d);
+      }
+      if (d) d.users += 1;
+      return d;
+    },
+    release(url: string, d: Drawing) {
+      d.users -= 1;
+      if (d.users > 0 || drawings.get(url) !== d) return;
+      drawings.delete(url); // re-inserted: the most recently used
+      drawings.set(url, d);
+      let idle = [...drawings.values()].filter((x) => x.users === 0).length;
+      for (const [key, x] of drawings) {
+        if (idle <= maxIdle) break;
+        if (x.users > 0) continue;
+        URL.revokeObjectURL(x.src);
+        drawings.delete(key);
+        idle -= 1;
+      }
+    },
+    clear() {
+      for (const d of drawings.values()) URL.revokeObjectURL(d.src);
+      drawings.clear();
+    },
+  };
 }
 
-function release(url: string, d: Drawing) {
-  d.users -= 1;
-  if (d.users > 0 || drawings.get(url) !== d) return;
-  drawings.delete(url); // re-inserted: the most recently used
-  drawings.set(url, d);
-  let idle = [...drawings.values()].filter((x) => x.users === 0).length;
-  for (const [key, x] of drawings) {
-    if (idle <= MAX_IDLE) break;
-    if (x.users > 0) continue;
-    URL.revokeObjectURL(x.src);
-    drawings.delete(key);
-    idle -= 1;
-  }
-}
+const drawings = createDrawingCache(300);
 
 /** A drawing this tab has loaded (Download saves it without asking again). */
 export function loadedDrawing(url: string): Blob | undefined {
@@ -164,7 +174,6 @@ export function loadedDrawing(url: string): Blob | undefined {
 
 /** Tests only: forget every loaded drawing. */
 export function forgetDrawings(): void {
-  for (const d of drawings.values()) URL.revokeObjectURL(d.src);
   drawings.clear();
 }
 
@@ -191,17 +200,17 @@ export function useDepiction(url: string | null): {
 
   useEffect(() => {
     if (url === null) return;
-    let held = take(url);
+    let held = drawings.take(url);
     if (held) {
       const d = held;
       setState({ url, tries, src: d.src, failed: false, again: false });
-      return () => release(url, d);
+      return () => drawings.release(url, d);
     }
     const ctrl = new AbortController();
     depictionLoader.load(url, ctrl.signal).then(
       (blob) => {
         if (ctrl.signal.aborted) return;
-        held = take(url, blob)!;
+        held = drawings.take(url, blob)!;
         setState({ url, tries, src: held.src, failed: false, again: false });
       },
       (err: unknown) => {
@@ -212,7 +221,7 @@ export function useDepiction(url: string | null): {
     );
     return () => {
       ctrl.abort();
-      if (held) release(url, held);
+      if (held) drawings.release(url, held);
     };
   }, [url, tries]);
 

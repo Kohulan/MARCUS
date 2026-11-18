@@ -65,7 +65,10 @@ export default function StructureActions({
   const client = useContext(QueryClientContext);
   const convert =
     convertProp ??
-    ((s: string) => (client ? client.fetchQuery(molfileQuery(s)) : api.smilesToMolfile(s)));
+    ((s: string) =>
+      client
+        ? client.fetchQuery({ ...molfileQuery(s), retry: false }) // one call, as before
+        : api.smilesToMolfile(s));
   const [note, setNote] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const abort = useRef<AbortController | null>(null);

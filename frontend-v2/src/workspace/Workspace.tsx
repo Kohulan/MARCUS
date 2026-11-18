@@ -27,12 +27,17 @@ import "./workspace.css";
 
 /**
  * How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI).
- * Asked once per DOI for the tab (each open of the paper, each Back to it, reads the cache).
+ * An answer is kept for the tab (each open of the paper, each Back to it, reads it); no
+ * answer is not kept, so the next open asks again.
  */
 function useCoconutCount(doi: string | null): CoconutDoiCount | null {
   const query = useQuery({
     queryKey: ["coconut-doi", doi],
-    queryFn: ({ signal }) => coconutCountForDoi(doi ?? "", signal),
+    queryFn: async ({ signal }) => {
+      const count = await coconutCountForDoi(doi ?? "", signal);
+      if (count === null) throw new Error("no answer from COCONUT");
+      return count;
+    },
     enabled: Boolean(doi),
     staleTime: Infinity,
     retry: false,
