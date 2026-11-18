@@ -354,6 +354,11 @@
   color: var(--accepted);
 }
 
+.coconut-row__sent--unknown {
+  border-color: var(--orange);
+  color: var(--orange-ink);
+}
+
 .coconut-row__again {
   display: flex;
   align-items: center;

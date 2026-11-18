@@ -1,9 +1,10 @@
 // COCONUT batch submit: a modal sheet opened from the paper ("Send N to COCONUT"). Login
 // first (the curator's own COCONUT account), then the paper's fields filled once and
 // inherited by every structure, a row per structure for its own values, and the results.
-// Structures this browser already sent for the paper are left out unless the curator ticks
+// Structures this browser already sent for the paper, and those whose send ended without an
+// answer ("Unknown": they may be in COCONUT), are left out unless the curator ticks
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import {
@@ -12,9 +13,12 @@ import {
   clearToken,
   getToken,
   markSent,
+  markUnknown,
   organismsFor,
   sentIds,
   submitReports,
+  UNKNOWN_ERROR,
+  unknownIds,
 } from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
 import SubmitResults from "./SubmitResults";
@@ -69,14 +73,21 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
   const [fields, setFields] = useState<PaperFields>(() => startFields(paper, initial));
   const [rows, setRows] = useState(() => startRows(structures));
   const [sent, setSent] = useState<Set<string>>(() => sentIds(paper.id));
+  const [unknown, setUnknown] = useState<Set<string>>(() => unknownIds(paper.id));
   const [again, setAgain] = useState<Set<string>>(() => new Set());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [phase, setPhase] = useState<Phase>({ kind: "form" });
   const busy = useRef(false);
+  // What the form started with, to ask before Close throws typed values away.
+  const snapshot = JSON.stringify([fields, rows]);
+  const [startSnapshot] = useState(snapshot);
 
-  const close = useCallback(() => {
-    if (!busy.current) onClose();
-  }, [onClose]);
+  function close() {
+    if (busy.current) return;
+    const typed = phase.kind === "form" && token !== null && snapshot !== startSnapshot;
+    if (typed && !window.confirm("Close and lose what you typed?")) return;
+    onClose();
+  }
 
   // Modal in the browser (top layer, the page behind is inert); jsdom has no showModal.
   useEffect(() => {
@@ -85,16 +96,21 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
     if (el && !el.open) {
       if (typeof el.showModal === "function") el.showModal();
       else el.setAttribute("open", "");
-      // showModal focuses the first button (Close); start in the first field instead.
-      el.querySelector<HTMLElement>("input, textarea")?.focus();
     }
     return () => {
       if (before instanceof HTMLElement && before.isConnected) before.focus();
     };
   }, []);
 
+  // showModal focuses the first button (Close): start in the first field instead, also when
+  // the form appears after the login or "Back to form". The results focus their own heading.
+  useEffect(() => {
+    if (phase.kind === "form") dialog.current?.querySelector<HTMLElement>("input, textarea")?.focus();
+  }, [phase.kind, token]);
+
   const rowOf = (id: string): StructureFields => rows[id] ?? { name: "", structuralComments: "" };
-  const toSend = structures.filter((s) => !sent.has(s.segmentId) || again.has(s.segmentId));
+  const held = (id: string) => sent.has(id) || unknown.has(id);
+  const toSend = structures.filter((s) => !held(s.segmentId) || again.has(s.segmentId));
   const unnamed = toSend.filter((s) => !rowOf(s.segmentId).name.trim()).length;
   const noOrganism = toSend.some((s) => organismsFor(fields, rowOf(s.segmentId)).length === 0);
   const missing = [
@@ -144,7 +160,10 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
   }
 
   function sendAgain(id: string, on: boolean) {
-    if (on && !window.confirm("This structure is already in COCONUT. Send it again?")) return;
+    const ask = sent.has(id)
+      ? "This structure is already in COCONUT. Send it again?"
+      : "COCONUT may already have this structure. Check COCONUT first. Send it again?";
+    if (on && !window.confirm(ask)) return;
     setAgain((a) => toggle(a, id, on));
   }
 
@@ -159,8 +178,11 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
     setPhase({ kind: "sending", done: 0, total: items.length });
     const results = await submitReports(token, items, (done, total, chunk) => {
       const ok = chunk.filter((r) => r.ok).map((r) => r.segmentId);
+      const lost = chunk.filter((r) => !r.ok && r.error === UNKNOWN_ERROR).map((r) => r.segmentId);
       markSent(paper.id, ok);
+      markUnknown(paper.id, lost);
       setSent((s) => new Set([...s, ...ok]));
+      setUnknown((u) => new Set([...u].filter((id) => !ok.includes(id)).concat(lost)));
       setPhase({ kind: "sending", done, total });
     });
     if (results.some((r) => !r.ok && r.error === AUTH_ERROR)) {
@@ -277,10 +299,11 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                 const id = s.segmentId;
                 const row = rowOf(id);
                 const wasSent = sent.has(id);
+                const isUnknown = !wasSent && unknown.has(id);
                 const open = expanded.has(id);
                 const tagId = `coconut-tag-${id}`;
                 const moreId = `coconut-more-${id}`;
-                const out = wasSent && !again.has(id);
+                const out = held(id) && !again.has(id);
                 return (
                   <li
                     key={id}
@@ -295,16 +318,22 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                     </code>
                     <input
                       className="coconut-input coconut-row__name"
-                      aria-label="Name"
+                      aria-label={`Name for structure ${s.n}`}
                       placeholder="Name"
                       value={row.name}
                       disabled={sending}
                       onChange={(e) => setRow(id, { name: e.target.value })}
                     />
                     <span className="coconut-row__state">
-                      {wasSent ? (
+                      {wasSent || isUnknown ? (
                         <>
-                          <span className="coconut-row__sent">Already sent</span>
+                          {wasSent ? (
+                            <span className="coconut-row__sent">Already sent</span>
+                          ) : (
+                            <span className="coconut-row__sent coconut-row__sent--unknown">
+                              Unknown
+                            </span>
+                          )}
                           <label className="coconut-row__again">
                             <input
                               type="checkbox"
@@ -321,7 +350,8 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                       type="button"
                       className="coconut-row__more"
                       aria-expanded={open}
-                      aria-controls={moreId}
+                      aria-controls={open ? moreId : undefined}
+                      aria-describedby={tagId}
                       onClick={() => setExpanded((x) => toggle(x, id, !open))}
                     >
                       More

@@ -361,10 +361,11 @@ export async function submitReports(
 
 // --- Duplicate guard -----------------------------------------------------------------------
 
-/** Segment ids of this paper that COCONUT already accepted from this browser. */
-export function sentIds(paperId: string): Set<string> {
+const UNKNOWN_KEY = "marcus-coconut-unknown:";
+
+function readIds(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(SENT_KEY + paperId);
+    const raw = localStorage.getItem(key);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : []);
   } catch {
@@ -372,13 +373,38 @@ export function sentIds(paperId: string): Set<string> {
   }
 }
 
+function writeIds(key: string, ids: Set<string>) {
+  try {
+    if (ids.size === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify([...ids]));
+  } catch {
+    // storage blocked: the guard lasts only while the form is open
+  }
+}
+
+/** Segment ids of this paper that COCONUT already accepted from this browser. */
+export function sentIds(paperId: string): Set<string> {
+  return readIds(SENT_KEY + paperId);
+}
+
+/** Segment ids whose send ended without an answer (UNKNOWN_ERROR): they may be in COCONUT. */
+export function unknownIds(paperId: string): Set<string> {
+  return readIds(UNKNOWN_KEY + paperId);
+}
+
+/** Records accepted ids; an accepted id is no longer unknown. */
 export function markSent(paperId: string, ids: string[]) {
   if (ids.length === 0) return;
   const all = sentIds(paperId);
   for (const id of ids) all.add(id);
-  try {
-    localStorage.setItem(SENT_KEY + paperId, JSON.stringify([...all]));
-  } catch {
-    // storage blocked: the guard lasts only while the form is open
-  }
+  writeIds(SENT_KEY + paperId, all);
+  const unknown = unknownIds(paperId);
+  if (ids.some((id) => unknown.delete(id))) writeIds(UNKNOWN_KEY + paperId, unknown);
+}
+
+export function markUnknown(paperId: string, ids: string[]) {
+  if (ids.length === 0) return;
+  const all = unknownIds(paperId);
+  for (const id of ids) all.add(id);
+  writeIds(UNKNOWN_KEY + paperId, all);
 }

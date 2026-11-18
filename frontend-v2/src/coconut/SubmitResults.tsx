@@ -1,4 +1,5 @@
 // What COCONUT answered, per structure: the created report id, or the error as text.
+import { useEffect, useRef } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { SubmitResult, SubmitStructure } from "./types";
@@ -16,11 +17,20 @@ export default function SubmitResults({ structures, results, onBack, onClose }: 
   const bySegment = new Map(results.map((r) => [r.segmentId, r]));
   const sent = results.filter((r) => r.ok).length;
   const failed = results.length - sent;
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // The Send button that had the focus is gone: land on the outcome.
+  useEffect(() => heading.current?.focus(), []);
 
   return (
     <section className="coconut-results" aria-labelledby="coconut-results-title">
       <header className="coconut-results__head">
-        <h3 id="coconut-results-title" className="coconut-results__title">
+        <h3
+          ref={heading}
+          id="coconut-results-title"
+          className="coconut-results__title"
+          tabIndex={-1}
+        >
           {failed === 0 ? `${sent} sent` : `${sent} sent, ${failed} failed`}
         </h3>
         <div className="coconut-results__actions">

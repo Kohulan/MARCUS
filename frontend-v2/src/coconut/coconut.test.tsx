@@ -8,13 +8,16 @@ import {
   coconutLogin,
   getToken,
   markSent,
+  markUnknown,
   mutateBody,
   NOT_SENT_ERROR,
   sentIds,
   submitReports,
   TOKEN_KEY,
   UNKNOWN_ERROR,
+  unknownIds,
 } from "./coconutApi";
+import { api } from "../api/client";
 import CoconutLogin from "./CoconutLogin";
 import SubmitForm from "./SubmitForm";
 import SubmitResults from "./SubmitResults";
@@ -310,6 +313,14 @@ describe("sent store", () => {
     expect(sentIds("p2").size).toBe(0);
   });
 
+  it("keeps unknown ids until they are sent", () => {
+    markUnknown("p1", ["a", "b"]);
+    expect([...unknownIds("p1")].sort()).toEqual(["a", "b"]);
+    markSent("p1", ["a"]);
+    expect([...unknownIds("p1")]).toEqual(["b"]);
+    expect(localStorage.getItem("marcus-coconut-unknown:p1")).toBe('["b"]');
+  });
+
   it("survives a localStorage that throws", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
@@ -434,8 +445,11 @@ describe("SubmitForm", () => {
     renderForm();
     fillPaper();
     const button = screen.getByRole("button", { name: "Send 3 to COCONUT" });
-    fireEvent.click(button);
-    fireEvent.click(button);
+    // Both clicks land before React re-renders the button as disabled: only the guard holds.
+    act(() => {
+      button.click();
+      button.click();
+    });
     await screen.findByText("Report 1");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -481,7 +495,9 @@ describe("SubmitForm", () => {
     const r2 = row("02");
     fireEvent.click(within(r2).getByRole("button", { name: "More" }));
     fireEvent.change(within(r2).getByLabelText("Organism"), { target: { value: "Quercus robur" } });
-    fireEvent.change(within(r2).getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.change(within(r2).getByLabelText("Name for structure 2"), {
+      target: { value: "Renamed" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
     await screen.findByText("Report 1");
     const sent = bodyOf(calls[0]!).mutate.map((m) => m.attributes.suggested_changes.new_molecule_data);
@@ -497,24 +513,95 @@ describe("SubmitForm", () => {
     expect(send).toBeDisabled();
     fillPaper();
     expect(send).toBeDisabled(); // the structure has no name yet
-    fireEvent.change(within(row("01")).getByLabelText("Name"), { target: { value: "Methane" } });
+    fireEvent.change(screen.getByLabelText("Name for structure 1"), { target: { value: "Methane" } });
     expect(send).toBeEnabled();
   });
 
   it("never sends the token to /api/v2", async () => {
+    const ok = okServer();
+    stubFetch(async (url, init) => {
+      if (url.includes("/auth/login")) return json({ access_token: TOKEN });
+      if (url.startsWith("/api/v2")) return json({ papers: [], updated: 0 });
+      return ok(url, init);
+    });
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.c" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole("group", { name: "Paper" });
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    await screen.findByText("Report 1");
+    // The app's own calls, made while the COCONUT token is stored in this tab.
+    await api.listPapers();
+    await api.putBulkCuration("p1", [{ segment_id: "s1", status: "accepted" }]);
+    const v2 = calls.filter((c) => c.url.startsWith("/api/v2"));
+    expect(v2).toHaveLength(2);
+    for (const c of v2) {
+      expect(c.url).not.toContain(TOKEN);
+      expect(String(c.init.body ?? "")).not.toContain(TOKEN);
+      expect(JSON.stringify([...new Headers(c.init.headers).entries()])).not.toContain(TOKEN);
+    }
+    const toCoconut = calls.filter((c) => !c.url.startsWith("/api/v2"));
+    expect(toCoconut.every((c) => c.url.startsWith(`${COCONUT_API}/`))).toBe(true);
+  });
+
+  it("keeps Unknown structures out of the next send until Send again is confirmed", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const { unmount } = renderForm();
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    expect(await screen.findAllByText(UNKNOWN_ERROR)).toHaveLength(3);
+    expect([...unknownIds("p1")].sort()).toEqual(["s1", "s2", "s3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Back to form" }));
+    expect(within(row("02")).getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send 0 to COCONUT" })).toBeDisabled();
+    unmount();
+
+    // Still held after the form is opened again.
+    const ok = okServer();
+    stubFetch(ok);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderForm();
+    fillPaper();
+    expect(screen.getByRole("button", { name: "Send 0 to COCONUT" })).toBeDisabled();
+    fireEvent.click(within(row("02")).getByRole("checkbox", { name: "Send again" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/may already have/));
+    fireEvent.click(screen.getByRole("button", { name: "Send 1 to COCONUT" }));
+    await screen.findByText("Report 1");
+    expect(bodyOf(calls[0]!).mutate).toHaveLength(1);
+    expect([...unknownIds("p1")].sort()).toEqual(["s1", "s3"]);
+    expect(sentIds("p1").has("s2")).toBe(true);
+  });
+
+  it("moves the focus to the results heading", async () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN);
     stubFetch(okServer());
     renderForm();
     fillPaper();
     fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
     await screen.findByText("Report 1");
-    for (const c of calls) {
-      expect(c.url.startsWith(`${COCONUT_API}/`)).toBe(true);
-      if (c.url.includes("/api/v2")) {
-        expect(JSON.stringify(c.init)).not.toContain(TOKEN);
-      }
-    }
-    expect(calls.some((c) => c.url.includes("/api/v2"))).toBe(false);
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "3 sent" }));
+  });
+
+  it("starts in the first field", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    renderForm();
+    expect(document.activeElement).toBe(screen.getByLabelText("Title"));
+  });
+
+  it("gives each row its own names and controls only an open detail", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    renderForm();
+    expect(screen.getByLabelText("Name for structure 3")).toHaveValue("Propane");
+    const more = within(row("02")).getByRole("button", { name: "More" });
+    expect(more).not.toHaveAttribute("aria-controls");
+    fireEvent.click(more);
+    const id = more.getAttribute("aria-controls");
+    expect(id && document.getElementById(id)).toBeTruthy();
   });
 
   it("shows each failed structure's error as text and the others' report ids", async () => {
@@ -550,6 +637,58 @@ describe("SubmitForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
     expect(await screen.findAllByText(/log in to COCONUT again/i)).not.toHaveLength(0);
     expect(getToken()).toBeNull();
+  });
+});
+
+describe("SubmitForm closing", () => {
+  function escape() {
+    fireEvent.keyDown(screen.getByRole("dialog", { hidden: true }), { key: "Escape" });
+  }
+
+  it("closes on Escape without asking when nothing was typed", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    const confirm = vi.spyOn(window, "confirm");
+    const onClose = vi.fn();
+    render(<SubmitForm paper={{ id: "p1", title: null, doi: null }} structures={structures} onClose={onClose} />);
+    escape();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("asks before Escape or Close throws typed values away", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const onClose = vi.fn();
+    render(<SubmitForm paper={{ id: "p1", title: null, doi: null }} structures={structures} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText("Name for structure 1"), { target: { value: "Typed" } });
+    escape();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not close while a send runs", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    let release!: () => void;
+    const ok = okServer();
+    stubFetch(async (url, init) => {
+      await new Promise<void>((r) => (release = r));
+      return ok(url, init);
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onClose = vi.fn();
+    render(<SubmitForm paper={{ id: "p1", title: "T", doi: null }} structures={structures} onClose={onClose} />);
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    await screen.findByText("Sent 0 of 3");
+    escape();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => release());
+    await screen.findByText("Report 1");
+    escape();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
