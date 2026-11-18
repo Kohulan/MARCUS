@@ -239,6 +239,7 @@ describe("one owner: no parallel requests before the first success", () => {
   it("after a failed first request (error status or network), the next one goes alone", async () => {
     const list = api.listPapers();
     const images = api.listImages();
+    images.catch(() => undefined); // it rejects (network) before allSettled below sees it
     const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
     await tick();
     expect(pending).toHaveLength(1);
