@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
-import { createQueryClient, keys, useBulkCuration } from "../api/queries";
+import { BulkPartialError, createQueryClient, keys, useBulkCuration } from "../api/queries";
 import type {
   BulkCurationItem,
   CurationOut,
@@ -408,6 +408,114 @@ describe("selection and bulk review", () => {
   });
 });
 
+describe("selection follows the visible cards (F7 fix round 1)", () => {
+  function putOk() {
+    return vi
+      .spyOn(api, "putCuration")
+      .mockImplementation((_id, body) => Promise.resolve({ ...body }));
+  }
+
+  it("under To check, select 3 and accept one from its card: the bar acts on the 2 left", async () => {
+    putOk();
+    const bulk = vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 2 });
+    renderGrid(paper([segment("s1"), segment("s2"), segment("s3"), segment("s4")]));
+    await waitFor(() => expect(cards()).toHaveLength(4));
+    fireEvent.click(filter("To check"));
+    for (const t of ["[01]", "[02]", "[03]"]) {
+      fireEvent.click(screen.getByRole("checkbox", { name: `Select ${t}` }));
+    }
+    expect(screen.getByRole("button", { name: "Reject 3" })).toBeInTheDocument();
+    fireEvent.click(within(card("[02]")).getByRole("button", { name: /^Accept/ }));
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(screen.getByRole("group", { name: "2 selected" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reject 2" }));
+    await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1));
+    expect(bulk.mock.calls[0]![1].map((i) => i.segment_id)).toEqual(["s1", "s3"]);
+  });
+
+  it("a card that leaves the filter and comes back is not selected again", async () => {
+    putOk();
+    renderGrid(paper([segment("s1"), segment("s2")]));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    fireEvent.click(filter("To check"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select [01]" }));
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: /^Accept/ }));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(screen.queryByRole("group", { name: /selected$/ })).toBeNull();
+    fireEvent.click(filter("All"));
+    expect(screen.getByRole("checkbox", { name: "Select [01]" })).not.toBeChecked();
+  });
+
+  it("the Shift-click anchor is the card, not its old position", async () => {
+    putOk();
+    renderGrid(paper([segment("s1"), segment("s2"), segment("s3"), segment("s4")]));
+    await waitFor(() => expect(cards()).toHaveLength(4));
+    fireEvent.click(filter("To check"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select [03]" }));
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: /^Accept/ }));
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select [02]" }), { shiftKey: true });
+    // [02]..[03], not the cards at the old index range
+    expect(screen.getByRole("button", { name: "Reject 2" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select [04]" })).not.toBeChecked();
+  });
+
+  it("Accept is off for a card with no structure, and bulk Accept counts only cards with one", async () => {
+    const bulk = vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 1 });
+    renderGrid(
+      paper([segment("s1"), segment("s2", { predictions: [prediction({ valid: false })] })]),
+      [step({ segment_id: "s2", status: "done" })], // read, but nothing valid: To check
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(await within(card("[02]")).findByRole("button", { name: /^Accept/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Select all shown" }));
+    expect(screen.getByRole("button", { name: "Reject 2" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Accept 1" }));
+    await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1));
+    expect(bulk.mock.calls[0]![1].map((i) => i.segment_id)).toEqual(["s1"]);
+  });
+
+  it("after a decision on a card, focus goes to the next card", async () => {
+    putOk();
+    renderGrid(paper([segment("s1"), segment("s2"), segment("s3")]));
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    const accept = within(card("[01]")).getByRole("button", { name: /^Accept/ });
+    accept.focus();
+    fireEvent.click(accept);
+    await waitFor(() => expect(card("[02]")).toHaveFocus());
+  });
+
+  it("after a bulk decision, focus stays in the grid (not on the page body)", async () => {
+    vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 2 });
+    renderGrid(paper([segment("s1"), segment("s2"), segment("s3")]));
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select [01]" }));
+    const accept = screen.getByRole("button", { name: "Accept 1" });
+    accept.focus();
+    fireEvent.click(accept);
+    await waitFor(() => expect(screen.queryByRole("group", { name: /selected$/ })).toBeNull());
+    await waitFor(() => expect(document.activeElement?.tagName).toBe("ARTICLE"));
+  });
+
+  it("a rejected card that shows its crop has the crop crossed too", async () => {
+    renderGrid(
+      paper([segment("s1", { predictions: [], curation: curation({ status: "rejected" }) })]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const crop = within(card("[01]")).getByRole("img", { name: "Crop [01]" });
+    expect(crop.closest(".structure")).toHaveClass("structure--crossed");
+  });
+
+  it("the failed-pages live region is not atomic (only the new line is read)", async () => {
+    renderGrid(paper([segment("s1")]));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(screen.getByRole("status", { name: "Failed pages" })).toHaveAttribute(
+      "aria-atomic",
+      "false",
+    );
+  });
+});
+
 describe("useBulkCuration", () => {
   function bigPaper(n: number): PaperDetail {
     return paper(Array.from({ length: n }, (_, i) => segment(`s${i}`)));
@@ -429,6 +537,29 @@ describe("useBulkCuration", () => {
     await act(() => result.current.bulk(items));
     expect(bulk).toHaveBeenCalledTimes(3);
     expect(bulk.mock.calls.map((c) => c[1].length)).toEqual([500, 500, 200]);
+  });
+
+  it("a run that fails after a saved chunk rejects with how many were saved", async () => {
+    const qc = createQueryClient();
+    qc.setQueryData(keys.paper(ID), bigPaper(600));
+    vi.spyOn(api, "getPaper").mockResolvedValue(bigPaper(600));
+    vi.spyOn(api, "putBulkCuration")
+      .mockResolvedValueOnce({ updated: 500 })
+      .mockRejectedValueOnce(new ApiError(500, "Server error."));
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useBulkCuration(ID), { wrapper });
+    const items: BulkCurationItem[] = Array.from({ length: 600 }, (_, i) => ({
+      segment_id: `s${i}`,
+      status: "accepted",
+    }));
+    let caught: unknown;
+    await act(() => result.current.bulk(items).catch((e: unknown) => void (caught = e)));
+    expect(caught).toBeInstanceOf(BulkPartialError);
+    expect((caught as BulkPartialError).saved).toBe(500);
+    expect((caught as BulkPartialError).total).toBe(600);
+    expect((caught as BulkPartialError).message).toBe("Saved 500 of 600: Server error.");
   });
 
   it("waits for a pending single save of the same segment before it sends", async () => {

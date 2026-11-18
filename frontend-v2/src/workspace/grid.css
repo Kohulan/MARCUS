@@ -298,6 +298,13 @@
 
 /* Engine menu: a small ruled list under its button ---------------------------- */
 
+/* An open menu must not be clipped by the card's paint containment (content-visibility),
+   and it lies over the neighbouring cards. */
+.card:has(.engine-menu__panel) {
+  z-index: 2;
+  content-visibility: visible;
+}
+
 .engine-menu {
   position: relative;
 }
@@ -315,6 +322,12 @@
   box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
 }
 
+/* The last button's menu opens to the left, inside the card's width. */
+.engine-menu:last-child .engine-menu__panel {
+  right: 0;
+  left: auto;
+}
+
 .engine-menu__item {
   padding: 9px 12px;
   border: 0;
@@ -328,7 +341,13 @@
   cursor: pointer;
 }
 
-.engine-menu__item + .engine-menu__item {
+.engine-menu__item + /* The last button's menu opens to the left, inside the card's width. */
+.engine-menu:last-child .engine-menu__panel {
+  right: 0;
+  left: auto;
+}
+
+.engine-menu__item {
   border-top: 1px solid var(--hair);
 }
 

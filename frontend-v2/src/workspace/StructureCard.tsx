@@ -79,6 +79,8 @@ export type StructureCardProps = {
   state: CardState;
   /** The paper's engine (wire value). */
   paperEngine: string;
+  /** There is a structure to accept (a curated one or a valid prediction). */
+  canAccept: boolean;
   /** For a failed card: the reason (reasonText) and the engine that failed. */
   reason: string | null;
   failedEngine: string | null;
@@ -102,6 +104,7 @@ function StructureCard({
   index,
   state,
   paperEngine,
+  canAccept,
   reason,
   failedEngine,
   selected,
@@ -173,7 +176,11 @@ function StructureCard({
 
       <div className="card__figure">
         {showCrop ? (
-          <Structure src={api.segmentImageUrl(segment.id)} alt={`Crop ${tag}`} />
+          <Structure
+            src={api.segmentImageUrl(segment.id)}
+            alt={`Crop ${tag}`}
+            crossed={rejected}
+          />
         ) : (
           <Structure
             src={depiction.src}
@@ -221,6 +228,7 @@ function StructureCard({
         tag={tag}
         state={state}
         paperEngine={paperEngine}
+        canAccept={canAccept}
         failedEngine={failedEngine}
         onDecide={onDecide}
         onRun={onRun}
@@ -240,6 +248,7 @@ function CardActions({
   tag,
   state,
   paperEngine,
+  canAccept,
   failedEngine,
   onDecide,
   onRun,
@@ -248,6 +257,7 @@ function CardActions({
   tag: string;
   state: CardState;
   paperEngine: string;
+  canAccept: boolean;
   failedEngine: string | null;
   onDecide: StructureCardProps["onDecide"];
   onRun: StructureCardProps["onRun"];
@@ -260,6 +270,7 @@ function CardActions({
           tint="green"
           size="sm"
           label={`Accept ${tag}`}
+          disabled={!canAccept}
           onClick={() => onDecide(segmentId, "accepted")}
         >
           Accept <Kbd>A</Kbd>

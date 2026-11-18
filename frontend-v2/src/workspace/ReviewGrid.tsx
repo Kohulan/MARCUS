@@ -1,12 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
-import { refreshPaper, useBulkCuration, useSaveCuration } from "../api/queries";
+import { BulkPartialError, refreshPaper, useBulkCuration, useSaveCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
-import { filterOf, type GridFilter } from "./cardState";
+import { filterOf, hasDrawing, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
 import type { ReviewRow } from "./useReviewRows";
@@ -64,7 +64,9 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   const [filter, setFilter] = useState<GridFilter>("all");
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
-  const anchor = useRef<number | null>(null);
+  // The Shift-click anchor: a card, looked up in the list shown now (positions move).
+  const anchor = useRef<string | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
 
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
 
@@ -87,7 +89,22 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   const shownRef = useRef(shown);
   shownRef.current = shown;
 
-  const chosen = rows.filter((r) => picked.has(r.segmentId));
+  // The selection is what is selected AND shown: a card that leaves the filter (a decision on
+  // its card, a live update, a new engine run) leaves the selection with it, so a bulk
+  // action never touches a card out of sight.
+  const chosen = shown.filter((r) => picked.has(r.segmentId));
+  useEffect(() => {
+    const visible = new Set(shown.map((r) => r.segmentId));
+    setPicked((prev) => {
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next; // a card coming back is not re-selected
+    });
+  }, [shown]);
+  // Accept only what has a structure to accept (a curated one or a valid prediction).
+  const acceptable = chosen.filter((r) => {
+    const segment = byId.get(r.segmentId);
+    return segment !== undefined && hasDrawing(segment);
+  });
   const notRead = chosen.filter((r) => r.state === "not-read");
   const readEngine: Engine = asEngine(paper.engine) ?? "decimer";
 
@@ -105,13 +122,13 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
     const list = shownRef.current;
     const id = list[index]?.segmentId;
     if (id === undefined) return;
-    const from = anchor.current;
-    anchor.current = index;
+    const from = anchor.current === null ? -1 : list.findIndex((r) => r.segmentId === anchor.current);
+    anchor.current = id;
     setPicked((prev) => {
       const on = !prev.has(id);
       const next = new Set(prev);
       const [a, b] =
-        range && from !== null && from < list.length
+        range && from >= 0
           ? [Math.min(from, index), Math.max(from, index)]
           : [index, index];
       for (let i = a; i <= b; i++) {
@@ -126,13 +143,29 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   // Enter or double-click: focus mode on that structure (a new history entry; Back closes it).
   const onOpen = openFocus;
 
+  /** Focus a card of the grid by id (null: the first card, else the filter strip). */
+  const focusCard = useCallback((segmentId: string | null) => {
+    const cards = [...(grid.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])];
+    const card =
+      segmentId === null ? cards[0] : cards.find((el) => el.dataset.segmentId === segmentId);
+    if (card) card.focus();
+    else if (segmentId === null) {
+      document.querySelector<HTMLElement>('.rg-filters [aria-pressed="true"]')?.focus();
+    }
+  }, []);
+
   const onDecide = useCallback(
     (segmentId: string, status: CurationStatus) => {
+      // The card's buttons go when its state changes: keep the keyboard on the next card.
+      const list = shownRef.current;
+      const at = list.findIndex((r) => r.segmentId === segmentId);
+      const next = list[at + 1] ?? list[at - 1];
+      focusCard(next ? next.segmentId : segmentId);
       save(segmentId, { status }).catch((err: unknown) =>
         toast(`Not saved: ${detail(err)}`, "error"),
       );
     },
-    [save, toast],
+    [save, toast, focusCard],
   );
 
   const onRun = useCallback(
@@ -151,14 +184,22 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   };
 
   const decideAll = async (status: "accepted" | "rejected") => {
-    const items = chosen.map((r) => ({ segment_id: r.segmentId, status }));
+    const items = (status === "accepted" ? acceptable : chosen).map((r) => ({
+      segment_id: r.segmentId,
+      status,
+    }));
     setBusy(true);
     try {
       await bulk(items);
       clear();
       toast(`${items.length} ${status}`);
+      // The bar goes with the selection: focus the first card (after this render).
+      requestAnimationFrame(() => focusCard(null));
     } catch (err) {
-      toast(`Not saved: ${detail(err)}`, "error");
+      toast(
+        err instanceof BulkPartialError ? err.message : `Not saved: ${detail(err)}`,
+        "error",
+      );
     } finally {
       setBusy(false);
     }
@@ -193,7 +234,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               : "No structures found."}
         </p>
       ) : (
-        <div className="rg-grid">
+        <div className="rg-grid" ref={grid}>
           {shown.map((r, index) => (
             <StructureCard
               key={r.segmentId}
@@ -202,6 +243,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               index={index}
               state={r.state}
               paperEngine={paper.engine}
+              canAccept={hasDrawing(byId.get(r.segmentId)!)}
               reason={r.reason}
               failedEngine={r.failedEngine}
               selected={picked.has(r.segmentId)}
@@ -217,6 +259,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
       {chosen.length > 0 && (
         <BulkBar
           count={chosen.length}
+          acceptCount={acceptable.length}
           notRead={notRead.length}
           engineLabel={engineName(readEngine)}
           busy={busy}

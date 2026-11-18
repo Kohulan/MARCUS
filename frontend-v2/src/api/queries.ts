@@ -267,6 +267,22 @@ export function useSaveCuration(paperId: string): {
   return { save };
 }
 
+/**
+ * Thrown by bulk() when a chunk failed after earlier chunks were saved: `saved` of `total`
+ * items kept their new status (the rest were rolled back). `cause` is the chunk's error.
+ */
+export class BulkPartialError extends Error {
+  constructor(
+    readonly saved: number,
+    readonly total: number,
+    override readonly cause: unknown,
+  ) {
+    const why = cause instanceof ApiError ? cause.detail : "Something went wrong.";
+    super(`Saved ${saved.toLocaleString("en")} of ${total.toLocaleString("en")}: ${why}`);
+    this.name = "BulkPartialError";
+  }
+}
+
 /** The most items one PUT /papers/{id}/curation takes. */
 export const BULK_CHUNK = 500;
 
@@ -311,6 +327,7 @@ function withStatuses(
  * every chunk after it, is rolled back (status only) and bulk() rejects. A bulk change waits
  * for pending single saves of the same segments and later single saves wait for it (the
  * per-segment chain of useSaveCuration), so a save's reply never lands over it out of order.
+ * A failure after a saved chunk rejects with BulkPartialError (how many were saved).
  */
 export function useBulkCuration(paperId: string): {
   bulk: (items: BulkCurationItem[]) => Promise<void>;
@@ -351,7 +368,7 @@ export function useBulkCuration(paperId: string): {
           } catch (err) {
             apply(items.slice(i), true);
             void client.invalidateQueries({ queryKey: key });
-            throw err;
+            throw i > 0 ? new BulkPartialError(i, items.length, err) : err;
           }
         }
         await client.cancelQueries({ queryKey: key });

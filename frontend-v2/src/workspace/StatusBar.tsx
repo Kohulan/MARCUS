@@ -107,7 +107,7 @@ export default function StatusBar({ paper, steps, failedPages, checkFailure, liv
         )}
       </div>
       {/* Always in the page, so a page that fails while the paper is open is announced. */}
-      <div role="status" aria-live="polite" aria-label="Failed pages">
+      <div role="status" aria-live="polite" aria-atomic="false" aria-label="Failed pages">
         {failedPages.length > 0 && (
           <ul className="ws-status__failures">
             {failedPages.map((f) =>

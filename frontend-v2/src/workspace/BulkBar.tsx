@@ -3,6 +3,8 @@ import "./grid.css";
 
 type BulkBarProps = {
   count: number;
+  /** Selected cards with a structure to accept. */
+  acceptCount: number;
   /** Selected cards that are "Not read yet", and the engine that would read them. */
   notRead: number;
   engineLabel: string;
@@ -16,6 +18,7 @@ type BulkBarProps = {
 /** The actions on the selected cards; it sits at the bottom of the window while you scroll. */
 export default function BulkBar({
   count,
+  acceptCount,
   notRead,
   engineLabel,
   busy,
@@ -25,9 +28,9 @@ export default function BulkBar({
   onClear,
 }: BulkBarProps) {
   return (
-    <div className="rg-bulk glassbed" role="group" aria-label="Selected">
-      <GlassButton tint="green" disabled={busy} onClick={onAccept}>
-        {`Accept ${count}`}
+    <div className="rg-bulk glassbed" role="group" aria-label={`${count} selected`}>
+      <GlassButton tint="green" disabled={busy || acceptCount === 0} onClick={onAccept}>
+        {`Accept ${acceptCount}`}
       </GlassButton>
       <GlassButton tint="clear" disabled={busy} onClick={onReject}>
         {`Reject ${count}`}
