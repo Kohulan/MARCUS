@@ -7,7 +7,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@te
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
-import { createQueryClient, keys, useSaveCuration } from "../api/queries";
+import { createQueryClient, keys } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { useReviewKeys } from "./useReviewKeys";
@@ -744,26 +744,6 @@ describe("useReviewKeys", () => {
       fireEvent.keyDown(region, { key: "a" });
     });
     expect(h.accept).not.toHaveBeenCalled();
-  });
-});
-
-describe("useSaveCuration counts", () => {
-  it("moves the paper's counts with the saved status (the header stays right)", async () => {
-    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }));
-    const qc = createQueryClient();
-    qc.setQueryData(keys.paper(ID), paper([segment("s1"), segment("s2")]));
-    const { result } = renderHook(() => useSaveCuration(ID), {
-      wrapper: ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
-    });
-    await act(() => result.current.save("s1", { status: "accepted" }));
-    let p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([1, 0, 1]);
-    await act(() => result.current.save("s1", { status: "rejected" }));
-    p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
-    await act(() => result.current.save("s1", { note: "x" }));
-    p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
-    expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
   });
 });
 

@@ -481,7 +481,6 @@ describe("selection and bulk review", () => {
     expect(screen.getAllByRole("img", { name: "Accepted" })).toHaveLength(2);
     const cached = client.getQueryData<PaperDetail>(keys.paper(ID))!;
     expect(cached.segments.find((s) => s.id === "s1")!.curation?.note).toBe("keep me");
-    expect(cached.accepted).toBe(2);
     await act(async () => answer());
     await waitFor(() => expect(screen.queryByRole("button", { name: "Accept 2" })).toBeNull());
   });

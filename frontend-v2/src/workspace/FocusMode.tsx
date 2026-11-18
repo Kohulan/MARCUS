@@ -46,7 +46,6 @@ import "./focus.css";
 export const ADVANCE_MS = 250;
 
 type Decision = "accepted" | "rejected";
-type Landed = { id: string; status: Decision; seq: number };
 
 /** A blank note is no note. */
 const noteOf = (text: string): string | null => (text.trim() === "" ? null : text);
@@ -78,10 +77,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const [comparingId, setComparingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { started } = useCardActions(paper.id, ws.live.reconnect);
-  const [landed, setLanded] = useState<Landed | null>(null);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
-  const seq = useRef(0);
-  const pending = useRef(new Set<string>()); // decided, save not answered yet
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -90,8 +86,12 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const index = rows.findIndex((r) => r.segmentId === id);
   const row = rows[index];
   const tag = structureTag(row?.n ?? index + 1);
-  const mine = landed !== null && landed.id === id ? landed : null;
-  const state: CardState = mine?.status ?? row?.state ?? "to-check";
+  // The save is optimistic (useSaveCuration): a decision is in the row at once.
+  const state: CardState = row?.state ?? "to-check";
+  // A decision made on this structure while it is shown lands its stamp (as on a card).
+  const [shownAt, setShownAt] = useState({ id, state });
+  if (shownAt.id !== id) setShownAt({ id, state });
+  const landed = shownAt.id === id && shownAt.state !== state;
   const stored = segment.curation?.note ?? null;
   // A structure to accept: a curated one or a valid prediction.
   const drawable = hasDrawing(segment);
@@ -152,7 +152,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     const at = list.findIndex((r) => r.segmentId === from);
     for (let k = 1; k < list.length; k++) {
       const r = list[(at + k + list.length) % list.length]!;
-      if (r.segmentId === from || pending.current.has(r.segmentId)) continue;
+      if (r.segmentId === from) continue;
       if (r.state === "to-check") {
         go(r.segmentId);
         return;
@@ -163,21 +163,12 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const decide = (status: Decision) => {
     if (status === "accepted" && !drawable) return; // nothing to accept (ruling on F7 M2)
     holdFocus();
-    const n = ++seq.current;
-    setLanded({ id, status, seq: n });
-    pending.current.add(id);
     const typed = text;
-    // curationBody keeps an edited smiles and molfile; the note goes with the decision.
+    // curationBody keeps an edited smiles and molfile; the note goes with the decision. A
+    // failed save rolls the row back.
     save(id, { status, note: noteOf(text) }).then(
-      () => {
-        pending.current.delete(id);
-        dropDraft(id, typed);
-      },
-      (err: unknown) => {
-        pending.current.delete(id);
-        setLanded((l) => (l !== null && l.seq === n ? null : l));
-        toast(`Not saved: ${errorText(err)}`, "error");
-      },
+      () => dropDraft(id, typed),
+      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
     );
     clearTimer();
     if (reduce) advance(id);
@@ -245,9 +236,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     return structureTag(rows[at]?.n ?? at + 1);
   };
 
-  const left = rows.filter(
-    (r) => (r.segmentId === id ? state : r.state) === "to-check",
-  ).length;
+  const left = rows.filter((r) => r.state === "to-check").length;
 
   const depictionUrl = drawable ? api.depictionUrl(id, depictionKey(segment)) : null;
   const depiction = useDepiction(depictionUrl);
@@ -325,12 +314,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               />
               {(state === "accepted" || state === "rejected") && (
                 <span className="fm-stamp">
-                  <Stamp
-                    key={mine ? `landed-${mine.seq}` : "shown"}
-                    state={state}
-                    size="lg"
-                    animate={mine !== null}
-                  />
+                  <Stamp key={state} state={state} size="lg" animate={landed} />
                 </span>
               )}
             </div>
@@ -402,7 +386,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           segment={segment}
           segments={ws.segments}
           rows={rows}
-          currentState={state}
           tag={tag}
           onPick={(to) => {
             holdFocus();
@@ -469,7 +452,6 @@ function PageWithBoxes({
   segment,
   segments,
   rows,
-  currentState,
   tag,
   onPick,
 }: {
@@ -478,7 +460,6 @@ function PageWithBoxes({
   segment: SegmentOut;
   segments: SegmentOut[];
   rows: ReviewRow[];
-  currentState: CardState;
   tag: string;
   onPick: (segmentId: string) => void;
 }) {
@@ -530,7 +511,7 @@ function PageWithBoxes({
         {natural &&
           onPage.map(({ segment: s, row }) => {
             const current = s.id === segment.id;
-            const state = current ? currentState : (row?.state ?? "to-check");
+            const state = row?.state ?? "to-check";
             const t = structureTag(row?.n ?? 0);
             const cls = `fm-marker fm-marker--${state}${current ? " fm-marker--current" : ""}`;
             return current ? (
