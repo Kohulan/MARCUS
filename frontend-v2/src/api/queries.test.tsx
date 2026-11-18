@@ -9,6 +9,7 @@ import {
   LIST_POLL_MS,
   refreshPaper,
   SEGMENT_GONE,
+  snapshotIsCached,
   useImages,
   usePapers,
   useSaveCuration,
@@ -157,6 +158,30 @@ describe("useSaveCuration without a cached paper", () => {
       );
     });
     expect(sent).toEqual([]);
+  });
+});
+
+describe("snapshotIsCached", () => {
+  const step = (status: string) => ({ status }) as StepList["steps"][number];
+
+  it("is true only when the stream's status and step counts are what the cache holds", () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    client.setQueryData<StepList>(keys.steps("p1"), {
+      steps: [step("done"), step("done"), step("running")],
+    });
+    const snap = (status: string, counts: Record<string, number>) => ({
+      status,
+      counts: { steps_by_status: counts },
+    });
+    expect(snapshotIsCached(client, "p1", snap("done", { done: 2, running: 1, failed: 0 }))).toBe(
+      true,
+    );
+    expect(snapshotIsCached(client, "p1", snap("done", { done: 3 }))).toBe(false);
+    expect(snapshotIsCached(client, "p1", snap("processing", { done: 2, running: 1 }))).toBe(
+      false,
+    );
+    expect(snapshotIsCached(client, "p1", null)).toBe(false);
+    expect(snapshotIsCached(client, "p2", snap("done", {}))).toBe(false); // nothing cached
   });
 });
 

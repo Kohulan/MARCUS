@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
-import { usePaper } from "../api/queries";
+import { usePaper, useSteps } from "../api/queries";
 import type { PaperDetail } from "../api/types";
 import SubmitForm from "../coconut/SubmitForm";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
@@ -56,6 +56,7 @@ function NoPaper() {
  */
 function PaperWorkspace({ id }: { id: string }) {
   const query = usePaper(id);
+  useSteps(id); // asked for with the paper, not after it (the frame reads it)
   const gone = isGone(query.error);
   usePageTitle(!gone && query.data ? `${paperName(query.data)} · MARCUS` : "Paper · MARCUS");
 

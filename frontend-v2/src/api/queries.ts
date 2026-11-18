@@ -5,7 +5,7 @@ import { useCallback } from "react";
 import { api, ApiError, errorText } from "./client";
 import { curationBody, type CurationChange } from "./curation";
 import { isImageActive, isPaperBusy } from "./status";
-import type { BulkCurationItem, CurationOut, PaperDetail } from "./types";
+import type { BulkCurationItem, CurationOut, PaperDetail, StepList } from "./types";
 
 export const keys = {
   papers: () => ["papers"] as const,
@@ -69,6 +69,27 @@ function fetchingPaper(client: QueryClient, id: string): boolean {
   return (
     client.isFetching({ queryKey: keys.paper(id) }) > 0 ||
     client.isFetching({ queryKey: keys.steps(id) }) > 0
+  );
+}
+
+/**
+ * True when a stream's snapshot ({status, counts: {steps_by_status}}) says what the cached
+ * paper and steps already say, so a refetch would bring nothing new.
+ */
+export function snapshotIsCached(client: QueryClient, id: string, snapshot: unknown): boolean {
+  const paper = client.getQueryData<PaperDetail>(keys.paper(id));
+  const steps = client.getQueryData<StepList>(keys.steps(id))?.steps;
+  if (!paper || !steps || typeof snapshot !== "object" || snapshot === null) return false;
+  const snap = snapshot as { status?: unknown; counts?: { steps_by_status?: unknown } };
+  const byStatus = snap.counts?.steps_by_status;
+  if (snap.status !== paper.status || typeof byStatus !== "object" || byStatus === null) {
+    return false;
+  }
+  const mine: Record<string, number> = {};
+  for (const s of steps) mine[s.status] = (mine[s.status] ?? 0) + 1;
+  const theirs = Object.entries(byStatus as Record<string, unknown>).filter(([, n]) => n !== 0);
+  return (
+    theirs.length === Object.keys(mine).length && theirs.every(([k, n]) => mine[k] === n)
   );
 }
 

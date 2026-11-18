@@ -145,7 +145,15 @@ function Result({
 }) {
   const client = useQueryClient();
   const toast = useToast();
-  const live = useLiveEvents("image", job.id, () => {
+  // The stream's first snapshot ({status}) comes right after the job was read: when it says
+  // what the job says, the refetch is skipped (a later one, a reconnect, never is).
+  const firstSnapshot = useRef(true);
+  const live = useLiveEvents("image", job.id, (snapshot) => {
+    const first = snapshot !== undefined && firstSnapshot.current;
+    if (snapshot !== undefined) firstSnapshot.current = false;
+    const status = (snapshot as { status?: unknown } | null | undefined)?.status;
+    const cached = client.getQueryData<ImageJobOut>(keys.image(job.id))?.status;
+    if (first && status !== undefined && status === cached) return;
     // cancelRefetch false: never cancel (and so never repeat) a fetch already on the wire
     void client.invalidateQueries({ queryKey: keys.image(job.id) }, { cancelRefetch: false });
   });

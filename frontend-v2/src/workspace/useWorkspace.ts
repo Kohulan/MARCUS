@@ -2,7 +2,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { refreshPaper, usePaper, useSteps } from "../api/queries";
+import { refreshPaper, snapshotIsCached, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 
@@ -49,7 +49,15 @@ export function useWorkspace(id: string): Workspace {
   const client = useQueryClient();
   const paper = usePaper(id).data;
   const steps = useSteps(id).data?.steps ?? NO_STEPS;
-  const live = useLiveEvents("paper", id, () => refreshPaper(client, id));
+  // The stream's first snapshot comes right after the paper and its steps were read: when
+  // it says what they say, the refetch is skipped (a later one, a reconnect, never is).
+  const firstSnapshot = useRef(true);
+  const live = useLiveEvents("paper", id, (snapshot) => {
+    const first = snapshot !== undefined && firstSnapshot.current;
+    if (snapshot !== undefined) firstSnapshot.current = false;
+    if (first && snapshotIsCached(client, id, snapshot)) return;
+    refreshPaper(client, id);
+  });
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   // The entry's state says whether openFocus pushed it; replaced entries keep it.
