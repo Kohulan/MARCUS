@@ -38,12 +38,19 @@ export function GlassButton({
   );
 }
 
-type GlassLinkProps = { tint: GlassTint; size?: GlassSize; to: string; children: ReactNode };
+type GlassLinkProps = {
+  tint: GlassTint;
+  size?: GlassSize;
+  to: string;
+  /** Router state handed to the next page (the landing's "Upload a PDF" asks /app to open the file picker). */
+  state?: unknown;
+  children: ReactNode;
+};
 
 /** A route link that looks like a glass button ("Upload a PDF", "Try a sample paper"). */
-export function GlassLink({ tint, size = "md", to, children }: GlassLinkProps) {
+export function GlassLink({ tint, size = "md", to, state, children }: GlassLinkProps) {
   return (
-    <Link to={to} className={glassClass(tint, size)}>
+    <Link to={to} state={state} className={glassClass(tint, size)}>
       {children}
     </Link>
   );

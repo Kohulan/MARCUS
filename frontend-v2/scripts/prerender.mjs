@@ -13,9 +13,31 @@ if (!template.includes(PLACEHOLDER)) {
   throw new Error(`dist/index.html has no ${PLACEHOLDER} placeholder`);
 }
 
-const { render } = await import(pathToFileURL(join(root, "dist-ssr", "entry-server.js")).href);
+const { render, pageMeta, APP_SHELL_META } = await import(
+  pathToFileURL(join(root, "dist-ssr", "entry-server.js")).href
+);
 
-const fill = (html) => template.replace(PLACEHOLDER, () => `<div id="root">${html}</div>`);
+const escapeHtml = (text) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const TITLE = /<title>[^<]*<\/title>/;
+const DESCRIPTION = /(<meta\s+name="description"\s+content=")[^"]*(")/;
+const PRELOAD = /<link\s+rel="preload"[^>]*>\s*/g;
+for (const [name, pattern] of [["<title>", TITLE], ["description", DESCRIPTION]]) {
+  if (!pattern.test(template)) throw new Error(`dist/index.html has no ${name}`);
+}
+
+// Each page gets its own title and description, and keeps only the font preloads its first
+// screen uses (meta.preload: file-name stems of the preloads in index.html).
+function head(html, meta) {
+  return html
+    .replace(TITLE, () => `<title>${escapeHtml(meta.title)}</title>`)
+    .replace(DESCRIPTION, (_, open, close) => `${open}${escapeHtml(meta.description)}${close}`)
+    .replace(PRELOAD, (link) => (meta.preload.some((stem) => link.includes(stem)) ? link : ""));
+}
+
+const fill = (html, meta) =>
+  head(template, meta).replace(PLACEHOLDER, () => `<div id="root">${html}</div>`);
 
 // url -> output file. Any path no route claims renders NotFound (route "*").
 const pages = [
@@ -35,8 +57,8 @@ async function write(file, html) {
 
 // The shell nginx falls back to for every /app/... path: empty root,
 // rendered on the client. Written first, from the untouched template.
-await write("app/index.html", fill(""));
+await write("app/index.html", fill("", APP_SHELL_META));
 
 for (const [url, file] of pages) {
-  await write(file, fill(render(url)));
+  await write(file, fill(render(url), pageMeta(url)));
 }

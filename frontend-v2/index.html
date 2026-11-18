@@ -17,6 +17,15 @@
       type="font/woff2"
       crossorigin
     />
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <!-- Matomo (the one tracker): a file, not inline (CSP). Before the app, so _paq exists. -->
+    <script src="/matomo.js" defer></script>
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body><!--

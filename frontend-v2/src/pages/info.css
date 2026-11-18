@@ -1,0 +1,162 @@
+/*
+ * About, Privacy, Disclaimer, not found (Read mode): one ruled sheet, the title cell left,
+ * the text right at a reading measure. Hairlines come from a 1 px grid gap over --line.
+ * base.css loads after this file, so refinements of base rules carry one more class.
+ */
+
+.info {
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: minmax(280px, 5fr) minmax(0, 7fr);
+  gap: 1px;
+  background-color: var(--line);
+}
+
+.info > * {
+  background-color: var(--paper);
+}
+
+.info__head {
+  padding: 36px 24px 40px;
+}
+
+.info__head-inner {
+  position: sticky;
+  top: 32px;
+}
+
+.info .info__head h1 {
+  max-width: 12ch;
+  font-size: clamp(36px, 2.6vw + 18px, 60px);
+}
+
+.info__lede {
+  max-width: 34ch;
+  margin-top: 20px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.info .info__updated {
+  margin-top: 20px;
+}
+
+.info__body {
+  padding: 4px 0 24px;
+}
+
+.info__section {
+  padding: 28px 32px 30px;
+  border-top: 1px solid var(--hair);
+}
+
+.info__section:first-child {
+  border-top: 0;
+}
+
+.info .info__section h2 {
+  margin-bottom: 14px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.info__section p,
+.info__section li {
+  max-width: 68ch;
+}
+
+.info__section p + p,
+.info__section p + ul,
+.info__section ul + p {
+  margin-top: 12px;
+}
+
+.info__section ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.info__section li + li {
+  margin-top: 6px;
+}
+
+.info__section li::marker {
+  color: var(--muted);
+}
+
+/* People: name, then the role in muted. */
+.people {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.people dt {
+  font-weight: 700;
+}
+
+.people dd {
+  margin: 2px 0 0;
+  color: var(--text-2);
+}
+
+/* Publications: ruled rows, the DOI in mono. */
+.refs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.info__section .refs li {
+  max-width: 72ch;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.refs li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.refs__title {
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.info__section .refs__meta {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.refs__meta a {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.info__section a[href^="mailto:"],
+.info__section a[href^="http"] {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 859.98px) {
+  .info {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .info__head {
+    padding: 28px 16px 26px;
+  }
+
+  .info__head-inner {
+    position: static;
+  }
+
+  .info__section {
+    padding: 24px 16px 26px;
+  }
+}

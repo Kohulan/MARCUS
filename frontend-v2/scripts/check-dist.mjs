@@ -65,6 +65,19 @@ for (const file of existsSync(dist) ? htmlFiles(dist) : []) {
 
 if (has("theme.js")) fail("dist/theme.js exists (light mode only)");
 
+// Matomo from its file on every app page; each pre-rendered page its own <title>.
+const titles = new Map();
+for (const file of required.filter((f) => f !== "ketcher/index.html" && has(f))) {
+  const html = read(file);
+  if (!html.includes('<script src="/matomo.js" defer></script>')) {
+    fail(`dist/${file}: no <script src="/matomo.js" defer>`);
+  }
+  const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? "";
+  if (titles.has(title)) fail(`dist/${file}: same <title> as dist/${titles.get(title)} (${title})`);
+  titles.set(title, file);
+}
+if (!has("matomo.js")) fail("dist/matomo.js missing");
+
 // Survey Sheet fonts only (Geist, Geist Mono, Gmarket mark) and no dark rules.
 const dropped = /bricolage|hanken|jetbrains/i;
 const assets = join(dist, "assets");

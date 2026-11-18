@@ -167,6 +167,15 @@ hr {
   color: var(--muted);
 }
 
+/* The glass bed: a --hair grid every 16 px, the light ground glass buttons sit on.
+   Lines only (background-image), so a cell keeps its own background-color. */
+.glassbed {
+  background-image:
+    linear-gradient(var(--hair) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hair) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
 /* The failed ground: 135° stripes. */
 .hatch {
   background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);

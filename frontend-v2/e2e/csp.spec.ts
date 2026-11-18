@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
-import { collectCspViolations, uploadPaperViaApi } from "./helpers";
+import { collectCspViolations, routeMatomo, uploadPaperViaApi } from "./helpers";
 
 // Exact, from Global Constraints (the Ketcher CSP as F1b narrowed it).
 const APP_CSP =
@@ -15,6 +15,11 @@ const KETCHER_CSP =
   "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
   "object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'";
+// No test reaches the real Matomo: every page loads /matomo.js, which asks the tracker host.
+test.beforeEach(async ({ page }) => {
+  await routeMatomo(page);
+});
+
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const SAMPLE_PDF = "public/sample/synth_015.pdf";
 

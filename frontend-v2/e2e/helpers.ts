@@ -56,6 +56,16 @@ export function collectCspViolations(page: Page): () => Promise<string[]> {
 }
 
 /**
+ * Answers every request to the Matomo host with an empty 204, so a test never reaches the
+ * real tracker (and never counts as a visit). Call before the first `page.goto`.
+ */
+export async function routeMatomo(page: Page): Promise<void> {
+  await page.route("https://matomo.nfdi4chem.de/**", (route) =>
+    route.fulfill({ status: 204, body: "" }),
+  );
+}
+
+/**
  * Uploads a PDF through the API with the page's own cookies (`page.request` shares the
  * browser context's cookie jar, so the paper belongs to the page's owner).
  * Returns the paper id. `engine` defaults to "fake" (the only engine the fake stack reads).
