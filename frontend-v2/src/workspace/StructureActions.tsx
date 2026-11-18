@@ -1,9 +1,11 @@
 // The actions for one structure (focus mode and the card menu): copy and download the
 // structure, look it up in PubChem, and hand Edit and Compare back to the caller. Props in,
 // callbacks out: it touches no workspace state. Third-party text is rendered as text only.
-import { useEffect, useRef, useState } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { loadedDrawing } from "../api/depictions";
+import { molfileQuery } from "./useCompare";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
 import { saveBlob } from "../ui/saveBlob";
@@ -28,7 +30,7 @@ export type StructureActionsProps = {
   image?: (() => Blob) | undefined;
   onEdit?: (() => void) | undefined;
   onCompare?: (() => void) | undefined;
-  /** Injectable for tests; defaults to api.smilesToMolfile. */
+  /** Injectable for tests; defaults to the shared ["molfile", smiles] query (Compare's). */
   convert?: (smiles: string) => Promise<string>;
 };
 
@@ -56,8 +58,14 @@ export default function StructureActions({
   image,
   onEdit,
   onCompare,
-  convert = api.smilesToMolfile,
+  convert: convertProp,
 }: StructureActionsProps) {
+  // One conversion per SMILES for the tab: Copy then Download (or Compare's common part)
+  // reuse it.
+  const client = useContext(QueryClientContext);
+  const convert =
+    convertProp ??
+    ((s: string) => (client ? client.fetchQuery(molfileQuery(s)) : api.smilesToMolfile(s)));
   const [note, setNote] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const abort = useRef<AbortController | null>(null);

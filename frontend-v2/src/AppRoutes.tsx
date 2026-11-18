@@ -8,16 +8,26 @@ import Privacy from "./pages/Privacy";
 import DesktopOnly from "./ui/DesktopOnly";
 
 // The tool is client-only and split off so the pre-rendered pages stay small.
-const ToolHome = lazy(() => import("./tool/ToolHome"));
-const Workspace = lazy(() => import("./workspace/Workspace"));
-const ImageResult = lazy(() => import("./images/ImageResult"));
+const loadToolHome = () => import("./tool/ToolHome");
+const loadWorkspace = () => import("./workspace/Workspace");
+const loadImageResult = () => import("./images/ImageResult");
+const ToolHome = lazy(loadToolHome);
+const Workspace = lazy(loadWorkspace);
+const ImageResult = lazy(loadImageResult);
 const QueryProvider = lazy(() => import("./api/QueryProvider"));
+
+/** Asks for the page's chunk at once, beside the query provider's (not after it). */
+function Preload({ load }: { load: () => Promise<unknown> }) {
+  void load(); // import() is cached: the same request on every render
+  return null;
+}
 
 // Below 1024 px DesktopOnly shows its note instead: the tool chunk is not even loaded,
 // so no query, stream or upload starts on a phone.
-function Tool({ children }: { children: ReactNode }) {
+function Tool({ load, children }: { load: () => Promise<unknown>; children: ReactNode }) {
   return (
     <DesktopOnly>
+      <Preload load={load} />
       <Suspense fallback={<p role="status">Loading…</p>}>
         <QueryProvider>{children}</QueryProvider>
       </Suspense>
@@ -37,7 +47,7 @@ export default function AppRoutes() {
       <Route
         path="/app"
         element={
-          <Tool>
+          <Tool load={loadToolHome}>
             <ToolHome />
           </Tool>
         }
@@ -45,7 +55,7 @@ export default function AppRoutes() {
       <Route
         path="/app/papers/:id"
         element={
-          <Tool>
+          <Tool load={loadWorkspace}>
             <Workspace />
           </Tool>
         }
@@ -53,7 +63,7 @@ export default function AppRoutes() {
       <Route
         path="/app/images/:id"
         element={
-          <Tool>
+          <Tool load={loadImageResult}>
             <ImageResult />
           </Tool>
         }

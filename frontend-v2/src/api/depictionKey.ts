@@ -15,9 +15,11 @@ export function depictionKey(segment: SegmentOut): string {
   return fnv1a32(input);
 }
 
+const encoder = new TextEncoder();
+
 function fnv1a32(text: string): string {
   let hash = 0x811c9dc5;
-  for (const byte of new TextEncoder().encode(text)) {
+  for (const byte of encoder.encode(text)) {
     hash ^= byte;
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }

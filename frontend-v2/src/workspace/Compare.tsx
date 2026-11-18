@@ -68,10 +68,10 @@ export default function Compare({
   );
   const toRun = enginesToRun(rows);
   const pairs = useSimilarity(rows);
-  const validSmiles = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!.smiles);
-  const canCommon = new Set(validSmiles).size >= 2;
+  const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
+  const canCommon = new Set(valid.map((p) => p.smiles)).size >= 2;
   const [common, setCommon] = useState(false);
-  const part = useCommonPart(validSmiles, common);
+  const part = useCommonPart(valid, common);
 
   // Drawings from /tools/depict: every one with the common part, and an image job's always
   // (a segment's plain drawing is its stored depiction, free of the tools bucket).

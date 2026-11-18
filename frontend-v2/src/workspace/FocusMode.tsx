@@ -207,7 +207,11 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
   const left = rows.filter((r) => r.state === "to-check").length;
 
-  const depictionUrl = drawable ? api.depictionUrl(id, depictionKey(segment)) : null;
+  // Once per segment change, not per keystroke in the note (a curated molfile can be long).
+  const depictionUrl = useMemo(
+    () => (drawable ? api.depictionUrl(id, depictionKey(segment)) : null),
+    [drawable, id, segment],
+  );
   const depiction = useDepiction(depictionUrl);
   const shown = shownStructure(segment, paper.engine);
   const { smiles, edited } = shown;

@@ -102,18 +102,13 @@ describe("StructureActions", () => {
   it("shows the PubChem hit as text with a safe link", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ IdentifierList: { CID: [702] } })),
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              PropertyTable: { Properties: [{ Title: "<b>Ethanol</b>" }] },
-            }),
-          ),
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            PropertyTable: { Properties: [{ CID: 702, Title: "<b>Ethanol</b>" }] },
+          }),
         ),
+      ),
     );
     const { container } = render(<StructureActions {...base} />);
     fireEvent.click(screen.getByText("Look up in PubChem"));
@@ -161,12 +156,9 @@ describe("StructureActions", () => {
   it("clears a shown hit when the structure changes", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ IdentifierList: { CID: [702] } })),
-        )
-        .mockResolvedValueOnce(new Response("{}")),
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ PropertyTable: { Properties: [{ CID: 702 }] } })),
+      ),
     );
     const { rerender } = render(<StructureActions {...base} />);
     fireEvent.click(screen.getByText("Look up in PubChem"));

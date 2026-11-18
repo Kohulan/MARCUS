@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
@@ -24,18 +25,19 @@ import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
 
-/** How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI). */
+/**
+ * How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI).
+ * Asked once per DOI for the tab (each open of the paper, each Back to it, reads the cache).
+ */
 function useCoconutCount(doi: string | null): CoconutDoiCount | null {
-  const [found, setFound] = useState<{ doi: string; count: CoconutDoiCount } | null>(null);
-  useEffect(() => {
-    if (!doi) return;
-    const ctl = new AbortController();
-    void coconutCountForDoi(doi, ctl.signal).then((count) => {
-      if (!ctl.signal.aborted) setFound(count ? { doi, count } : null);
-    });
-    return () => ctl.abort();
-  }, [doi]);
-  return found !== null && found.doi === doi ? found.count : null;
+  const query = useQuery({
+    queryKey: ["coconut-doi", doi],
+    queryFn: ({ signal }) => coconutCountForDoi(doi ?? "", signal),
+    enabled: Boolean(doi),
+    staleTime: Infinity,
+    retry: false,
+  });
+  return (doi && query.data) || null;
 }
 
 export default function Workspace() {

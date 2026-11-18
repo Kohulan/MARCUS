@@ -176,26 +176,34 @@ export function useSimilarity(rows: EngineRow[]): Pair[] {
   return pairs;
 }
 
+/** A SMILES as a molfile from /tools/smiles-to-molfile: key ["molfile", smiles]. */
+export function molfileQuery(smiles: string) {
+  return {
+    queryKey: ["molfile", smiles] as const,
+    queryFn: () => api.smilesToMolfile(smiles),
+    staleTime: Infinity,
+  };
+}
+
 /**
- * The common part of the distinct valid SMILES: `smilesToMolfile` per SMILES (["molfile",
- * smiles]), then `mcs` over the molfiles (["mcs", ...sortedMolfiles]). `highlight` is the MCS
- * SMARTS: null while asking, when off, or when there is none (`none`).
+ * The common part of the valid predictions' distinct structures: each one's own molfile, or
+ * `smilesToMolfile` for one sent without (molfileQuery), then `mcs` over the molfiles
+ * (["mcs", ...sortedMolfiles]). `highlight` is the MCS SMARTS: null while asking, when off,
+ * or when there is none (`none`).
  */
 export function useCommonPart(
-  smiles: string[],
+  predictions: Pick<PredictionOut, "smiles" | "molfile">[],
   enabled: boolean,
 ): { highlight: string | null; none: boolean; errors: unknown[] } {
-  const distinct = sorted([...new Set(smiles)]);
+  const own = new Map<string, string | null>();
+  for (const p of predictions) if (!own.get(p.smiles)) own.set(p.smiles, p.molfile || null);
+  const distinct = sorted([...own.keys()]);
   const on = enabled && distinct.length >= 2;
-  const molfiles = useQueries({
-    queries: distinct.map((s) => ({
-      queryKey: ["molfile", s] as const,
-      queryFn: () => api.smilesToMolfile(s),
-      staleTime: Infinity,
-      enabled: on,
-    })),
+  const toConvert = distinct.filter((s) => own.get(s) === null);
+  const converted = useQueries({
+    queries: toConvert.map((s) => ({ ...molfileQuery(s), enabled: on })),
   });
-  const files = molfiles.map((q) => q.data);
+  const files = distinct.map((s) => own.get(s) ?? converted[toConvert.indexOf(s)]?.data);
   const ready = on && files.every((f): f is string => typeof f === "string");
   const key = ready ? sorted(files as string[]) : [];
   const mcs = useQuery({
@@ -208,6 +216,6 @@ export function useCommonPart(
   return {
     highlight: on ? smarts : null,
     none: on && mcs.data !== undefined && smarts === null,
-    errors: [...molfiles.map((q) => q.error), mcs.error].filter((e) => e !== null),
+    errors: [...converted.map((q) => q.error), mcs.error].filter((e) => e !== null),
   };
 }
