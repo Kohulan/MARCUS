@@ -45,6 +45,8 @@ export type CompareProps = {
   onClose?: (() => void) | undefined;
   /** The structure's `[nn]` tag, beside the title. */
   tag?: string | undefined;
+  /** As a page section (no `onClose`): a control at the end of the head (the page's Close). */
+  headAction?: ReactNode;
 };
 
 /**
@@ -60,6 +62,7 @@ export default function Compare({
   onStarted,
   onClose,
   tag,
+  headAction,
 }: CompareProps) {
   const titleId = useId();
   const { requested, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
@@ -219,7 +222,10 @@ export default function Compare({
   if (!onClose) {
     return (
       <section className="cmp cmp--inline" aria-labelledby={titleId}>
-        <div className="cmp__head">{title}</div>
+        <div className="cmp__head">
+          {title}
+          {headAction}
+        </div>
         {body}
       </section>
     );

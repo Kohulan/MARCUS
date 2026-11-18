@@ -4,7 +4,7 @@
 // in this page only ("Edited here, not saved"). Raw error text (ImageJobOut.error) is never
 // read; a failure shows reasonText(error_class).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError, api, svgBlobUrl } from "../api/client";
 import { keys, useImageJob } from "../api/queries";
@@ -18,6 +18,7 @@ import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
+import Compare from "../workspace/Compare";
 import Editor, { type EditorStructure } from "../workspace/Editor";
 import StructureActions from "../workspace/StructureActions";
 import "./imageResult.css";
@@ -36,13 +37,12 @@ export type ImageCompareProps = {
   }[];
   onPick: (p: PredictionOut) => void;
   onStarted: () => void;
+  /** The section's Close, at the end of Compare's head. */
+  headAction?: ReactNode;
 };
 
-// ---- COMPARE SLOT (F10, lane A) ------------------------------------------------------
-// Until Compare exists this is undefined and the page has no Compare button. Hook-up:
-// `import Compare from "../workspace/Compare";` and set `COMPARE = Compare`.
-const COMPARE: ComponentType<ImageCompareProps> | undefined = undefined;
-// ---------------------------------------------------------------------------------------
+// F10's Compare, as a page section (no onClose): this page renders it below the sheet.
+const COMPARE: ComponentType<ImageCompareProps> | undefined = Compare;
 
 type ImageResultProps = {
   /** The Compare component; defaults to COMPARE above (tests pass a fake). */
@@ -195,6 +195,22 @@ function Result({
   const [editing, setEditing] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  // Compare opens below the sheet: focus goes to its Close, and back to what opened it.
+  const opener = useRef<HTMLElement | null>(null);
+  const closeCompare = useRef<HTMLButtonElement>(null);
+  const openCompare = () => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setComparing(true);
+  };
+  const endCompare = () => {
+    setComparing(false);
+    opener.current?.focus();
+  };
+  useEffect(() => {
+    if (!comparing) return;
+    closeCompare.current?.scrollIntoView?.({ block: "nearest" });
+    closeCompare.current?.focus({ preventScroll: true });
+  }, [comparing]);
 
   const prediction = picked ?? job.prediction;
   const smiles = edit?.smiles ?? prediction?.smiles ?? null;
@@ -304,7 +320,8 @@ function Result({
             predictionMolfile={edit ? null : (prediction?.molfile ?? null)}
             depictionUrl={drawing.src}
             onEdit={() => setEditing(true)}
-            {...(Compare ? { onCompare: () => setComparing(true) } : {})}
+            copySmiles={false}
+            {...(Compare ? { onCompare: openCompare } : {})}
           />
           {localNote && (
             <div className="ir-local">
@@ -322,15 +339,7 @@ function Result({
       </div>
 
       {Compare && comparing && (
-        <section className="ir-compare" aria-labelledby="ir-compare-title">
-          <header className="ir-compare__head">
-            <h2 id="ir-compare-title" className="ir-compare__title">
-              Compare engines
-            </h2>
-            <GlassButton tint="clear" size="sm" onClick={() => setComparing(false)}>
-              Close
-            </GlassButton>
-          </header>
+        <div className="ir-compare">
           <Compare
             target={{ kind: "image", id: job.id }}
             predictions={job.predictions}
@@ -340,8 +349,13 @@ function Result({
               setEdit(null);
             }}
             onStarted={live.reconnect}
+            headAction={
+              <GlassButton ref={closeCompare} tint="clear" size="sm" onClick={endCompare}>
+                Close
+              </GlassButton>
+            }
           />
-        </section>
+        </div>
       )}
 
       {editing && (

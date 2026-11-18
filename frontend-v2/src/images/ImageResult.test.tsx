@@ -255,12 +255,10 @@ describe("ImageResult", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save SMILES" }));
     await screen.findByText("Edited here, not saved");
-    // the inline Copy of the SMILES and the actions' Copy SMILES
-    const copies = screen.getAllByRole("button", { name: "Copy SMILES" });
-    expect(copies).toHaveLength(2);
-    for (const copy of copies) fireEvent.click(copy);
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(writeText.mock.calls).toEqual([["CCO"], ["CCO"]]);
+    // the SMILES's own Copy (the actions leave theirs out: one per place)
+    fireEvent.click(screen.getByRole("button", { name: "Copy SMILES" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls).toEqual([["CCO"]]);
   });
 
   it("Undo edit brings back the engine's structure", async () => {
@@ -341,11 +339,32 @@ describe("ImageResult", () => {
       created_at: "2026-11-18T10:01:00Z",
     };
 
-    it("has no Compare button until a Compare component is plugged in", async () => {
+    it("plugs in the real Compare: one Compare engines section, its Close, run all on this job", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ predictions: [{ ...molnextr, engine: "decimer", engine_version: "2.7.1" }] }),
+      );
+      const run = vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
+      renderPage();
+      const open = await screen.findByRole("button", { name: "Compare" });
+      open.focus();
+      fireEvent.click(open);
+      const section = await screen.findByRole("region", { name: "Compare engines" });
+      expect(within(section).getByRole("button", { name: "Close" })).toHaveFocus();
+      expect(screen.getAllByRole("heading", { name: "Compare engines" })).toHaveLength(1);
+      fireEvent.click(within(section).getByRole("button", { name: "Run all engines" }));
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
+      expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID, ID]);
+      await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
+      fireEvent.click(within(section).getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("region", { name: "Compare engines" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Compare" })).toHaveFocus();
+    });
+
+    it("has one Copy SMILES (the SMILES's own)", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(job());
       renderPage();
       await screen.findByRole("button", { name: "Edit" });
-      expect(screen.queryByRole("button", { name: "Compare" })).toBeNull();
+      expect(screen.getAllByRole("button", { name: "Copy SMILES" })).toHaveLength(1);
     });
 
     it("hands Compare the image target, predictions, steps and the page's reconnect", async () => {

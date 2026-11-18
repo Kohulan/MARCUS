@@ -158,26 +158,9 @@
 
 /* Compare (F10) below the sheet ----------------------------------------------------- */
 
+/* Compare engines (F10) as a section below the sheet; it draws its own frame and head. */
 .ir-compare {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px 18px;
-  border: 1px solid var(--line);
-}
-
-.ir-compare__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.ir-compare__title {
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 18px;
-  line-height: 1.2;
+  scroll-margin-top: 16px;
 }
 
 /* Loading: one quiet bar where the title goes. */
