@@ -1,10 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { keys } from "../api/queries";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
+import { Modal } from "../ui/modal";
 import { ItemState } from "../ui/StateBadge";
 import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
@@ -43,18 +44,10 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const deleteButton = useRef<HTMLDivElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-
   // The safe choice gets the focus; closing gives it back to Delete.
-  useEffect(() => {
-    if (asking) dialog.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [asking]);
-
-  function close() {
-    setAsking(false);
-    requestAnimationFrame(() => deleteButton.current?.querySelector("button")?.focus());
-  }
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const close = () => setAsking(false);
 
   async function confirm() {
     setDeleting(true);
@@ -87,39 +80,47 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         <p className="item__counts">{countsText(paper)}</p>
       </div>
       <p className="item__expiry">{deletionText(paper.expires_at)}</p>
-      <div className="item__actions" ref={deleteButton}>
+      <div className="item__actions">
         <GlassLink tint="clear" size="sm" to={`/app/papers/${encodeURIComponent(paper.id)}`}>
           Open
         </GlassLink>
-        <GlassButton tint="clear" size="sm" disabled={asking} onClick={() => setAsking(true)}>
+        <GlassButton
+          ref={deleteButton}
+          tint="clear"
+          size="sm"
+          disabled={asking}
+          onClick={() => setAsking(true)}
+        >
           Delete
         </GlassButton>
       </div>
       {asking ? (
-        <dialog
-          ref={dialog}
-          open
+        <Modal
+          inline
           className="ask"
-          aria-labelledby={askId}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && !deleting) {
-              e.preventDefault();
-              close();
-            }
-          }}
+          labelledBy={askId}
+          onClose={() => !deleting && close()}
+          first={cancelButton}
+          fallback={deleteButton}
         >
           <p id={askId} className="ask__text">
             {ASK}
           </p>
           <div className="ask__actions">
-            <GlassButton tint="clear" size="sm" disabled={deleting} onClick={close}>
+            <GlassButton
+              ref={cancelButton}
+              tint="clear"
+              size="sm"
+              disabled={deleting}
+              onClick={close}
+            >
               Cancel
             </GlassButton>
             <GlassButton tint="orange" size="sm" disabled={deleting} onClick={() => void confirm()}>
               Delete
             </GlassButton>
           </div>
-        </dialog>
+        </Modal>
       ) : null}
     </li>
   );

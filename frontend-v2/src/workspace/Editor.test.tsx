@@ -270,14 +270,15 @@ describe("Editor", () => {
     expect(a.onClose).toHaveBeenCalledTimes(3);
   });
 
-  it("no key typed in the dialog reaches a document listener (the review keys)", () => {
-    renderEditor();
-    const seen = vi.fn();
+  it("Escape is handled in the dialog: it reaches the review keys already handled", () => {
+    const { onClose } = renderEditor();
+    const prevented: boolean[] = [];
+    const seen = (e: KeyboardEvent) => prevented.push(e.defaultPrevented);
     document.addEventListener("keydown", seen);
     try {
-      fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "a" });
       fireEvent.keyDown(screen.getByLabelText("SMILES"), { key: "Escape" });
-      expect(seen).not.toHaveBeenCalled();
+      expect(prevented).toEqual([true]);
+      expect(onClose).toHaveBeenCalledTimes(1);
     } finally {
       document.removeEventListener("keydown", seen);
     }

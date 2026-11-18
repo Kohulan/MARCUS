@@ -1,7 +1,6 @@
 import {
   memo,
   useEffect,
-  useId,
   useRef,
   useState,
   type KeyboardEvent,
@@ -19,6 +18,7 @@ import Stamp from "../ui/Stamp";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
+import { useDisclosure } from "../ui/useDisclosure";
 import {
   CARD_OPEN_HINT,
   enginesDiffer,
@@ -383,44 +383,6 @@ function CardActions({
 }
 
 const others = (engine: Engine) => ENGINES.filter((e) => e.value !== engine);
-
-/**
- * A disclosure on a card: open and close, Escape (kept from the review keys) and a click or
- * focus outside close it. `close(true)` also puts focus back on its button, where a dialog
- * opened from the panel returns it.
- */
-function useDisclosure() {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const outside = (e: Event) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("focusin", outside);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("focusin", outside);
-    };
-  }, [open]);
-
-  const close = (refocus: boolean) => {
-    setOpen(false);
-    if (refocus) button.current?.focus();
-  };
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !open) return;
-    e.stopPropagation(); // the review keys (F8) must not also see this Escape
-    close(true);
-  };
-
-  return { open, setOpen, root, button, panelId, close, onKeyDown };
-}
 
 /**
  * A disclosure of engines to read the segment with, and Compare engines last (when given).

@@ -705,12 +705,11 @@ describe("useReviewKeys", () => {
     expect(h.accept).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing while a non-native modal (Compare, Keys) is open or the tool is hidden", () => {
+  it("does nothing while a dialog is open or the tool is hidden", () => {
     const h = handlers();
     keysIn(h);
-    const modal = document.createElement("div");
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
+    const modal = document.createElement("dialog");
+    modal.setAttribute("open", "");
     const hidden = document.createElement("div");
     hidden.setAttribute("data-keys-off", "");
     for (const el of [modal, hidden]) {

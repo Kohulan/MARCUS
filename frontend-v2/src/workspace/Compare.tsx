@@ -1,12 +1,12 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { useDepiction } from "../api/depictions";
 import { asEngine } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
-import { useModal } from "../ui/modal";
+import { Modal } from "../ui/modal";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
@@ -14,7 +14,6 @@ import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import { ocsrSteps } from "./cardState";
-import { trapTab } from "./KeyHelp";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import {
@@ -42,7 +41,7 @@ export type CompareProps = {
   onPick: (p: PredictionOut) => void;
   /** After "Run all engines" was accepted: the page reopens its own live stream. */
   onStarted: () => void;
-  /** Given: Compare is a modal dialog (Close, Esc, a focus trap). Without: a page section. */
+  /** Given: Compare is a modal dialog (Close, Esc, the backdrop). Without: a page section. */
   onClose?: (() => void) | undefined;
   /** The structure's `[nn]` tag, beside the title. */
   tag?: string | undefined;
@@ -66,6 +65,7 @@ export default function Compare({
   headAction,
 }: CompareProps) {
   const titleId = useId();
+  const closeButton = useRef<HTMLButtonElement>(null);
   const { requested, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
   const rows = useMemo(
     () => engineRows(predictions, steps, requested),
@@ -236,65 +236,21 @@ export default function Compare({
     );
   }
   return (
-    <CompareDialog titleId={titleId} title={title} onClose={onClose}>
-      {body}
-    </CompareDialog>
-  );
-}
-
-/**
- * The modal frame, a native <dialog> (top layer; the page behind is inert): focus moves in
- * (to Close), Tab stays inside, Esc or Close closes it and focus goes back (ui/modal). Keys pressed inside stop here, so a page's own shortcuts (the review keys
- * of focus mode) never act on the structure underneath.
- */
-function CompareDialog({
-  titleId,
-  title,
-  onClose,
-  children,
-}: {
-  titleId: string;
-  title: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const box = useRef<HTMLDialogElement>(null);
-  const close = useRef<HTMLButtonElement>(null);
-  useModal(box, close);
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-      return;
-    }
-    trapTab(e, box.current);
-  };
-
-  return (
-    <dialog
-      ref={box}
+    <Modal
       className="cmp cmp--dialog"
-      // A click on the table keeps focus in the box (not the body), so Esc still closes it.
-      tabIndex={-1}
-      aria-labelledby={titleId}
-      onKeyDown={onKeyDown}
-      onCancel={(e) => {
-        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
-        onClose();
-      }}
-      // A press on the backdrop lands on the dialog itself.
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      labelledBy={titleId}
+      onClose={onClose}
+      first={closeButton}
+      backdropClose
     >
       <div className="cmp__head">
         {title}
-        <GlassButton ref={close} tint="clear" size="sm" onClick={onClose}>
+        <GlassButton ref={closeButton} tint="clear" size="sm" onClick={onClose}>
           Close
         </GlassButton>
       </div>
-      {children}
-    </dialog>
+      {body}
+    </Modal>
   );
 }
 

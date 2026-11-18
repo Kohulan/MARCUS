@@ -55,12 +55,13 @@ function pick(h: ReviewKeyHandlers, key: string): (() => void) | undefined {
 /**
  * The focus-mode keys (Global Constraints, exact): A accept, R reject, E edit, C compare,
  * ← previous, → next, Esc back to grid, ? key list. One document listener while mounted.
- * Active only while focus is inside `region` (WCAG 2.1.4 "active only on focus": a key
- * pressed elsewhere on the page, or with focus on the body, does nothing); the region takes
- * focus when focus mode opens and after each step or decision (FocusMode). Ignored while
- * focus is in an input, textarea, select or the Ketcher iframe, while any dialog is open or
- * the tool is hidden (ui/keysHeld), and when Ctrl, Meta or Alt is held (browser and system
- * shortcuts stay theirs).
+ * One rule for the components inside: one that handles a key calls preventDefault, and the
+ * review keys skip it (no stopPropagation anywhere). Active only while focus is inside
+ * `region` (WCAG 2.1.4 "active only on focus": a key pressed elsewhere on the page, or with
+ * focus on the body, does nothing); the region takes focus when focus mode opens and after
+ * each step or decision (FocusMode). Ignored while focus is in an input, textarea, select or
+ * the Ketcher iframe, while any dialog is open or the tool is hidden (ui/keysHeld), and when
+ * Ctrl, Meta or Alt is held (browser and system shortcuts stay theirs).
  */
 export function useReviewKeys(
   region: RefObject<HTMLElement | null>,
@@ -76,8 +77,8 @@ export function useReviewKeys(
       const el = region.current;
       if (!el || !(e.target instanceof Node) || !el.contains(e.target)) return;
       if (typingIn(e.target) || typingIn(document.activeElement)) return;
-      // A dialog is open (native or modal div) or the tool is hidden: it owns the keys,
-      // wherever focus is. Esc keeps its default, or a native dialog's cancel never fires.
+      // A dialog is open or the tool is hidden: it owns the keys, wherever focus is. Esc
+      // keeps its default, or a native dialog's cancel never fires.
       if (keysHeld()) return;
       const fn = pick(latest.current, e.key);
       if (!fn) return;

@@ -8,7 +8,7 @@ import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
-import { returnFocus } from "../ui/modal";
+import { Modal } from "../ui/modal";
 import { listenToFrame, postToFrame } from "./editorBridge";
 import "./editor.css";
 
@@ -36,7 +36,6 @@ export function editorChange(
 }
 
 export default function Editor({ initial, onSave, onClose }: EditorProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const [smiles, setSmiles] = useState(initial.smiles ?? "");
@@ -68,18 +67,6 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
 
   const close = useCallback(() => {
     if (!savingNow.current) latest.current.onClose();
-  }, []);
-
-  // Modal in the browser (top layer, the page behind is inert); jsdom has no showModal.
-  useEffect(() => {
-    const el = dialog.current;
-    const before = document.activeElement;
-    if (el && !el.open) {
-      if (typeof el.showModal === "function") el.showModal();
-      else el.setAttribute("open", "");
-    }
-    field.current?.focus();
-    return () => returnFocus(before);
   }, []);
 
   useEffect(
@@ -117,23 +104,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
   };
 
   return (
-    <dialog
-      ref={dialog}
-      className="editor"
-      aria-labelledby="editor-title"
-      onCancel={(e) => {
-        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
-        close();
-      }}
-      onKeyDown={(e) => {
-        // As in Compare: no key typed in the dialog reaches the review keys on `document`.
-        e.stopPropagation();
-        if (e.key === "Escape") {
-          e.preventDefault();
-          close();
-        }
-      }}
-    >
+    <Modal className="editor" labelledBy="editor-title" onClose={close} first={field}>
       <header className="editor__head">
         <h2 id="editor-title" className="editor__title">
           Edit structure
@@ -181,6 +152,6 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
           sandbox="allow-scripts allow-same-origin"
         />
       </div>
-    </dialog>
+    </Modal>
   );
 }

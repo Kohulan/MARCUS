@@ -5,10 +5,9 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function setup(withHome = true) {
+function setup() {
   const home = document.createElement("section");
   home.tabIndex = -1;
-  if (withHome) home.setAttribute("data-focus-home", "");
   const opener = document.createElement("button");
   home.append(opener);
   document.body.append(home);
@@ -17,32 +16,32 @@ function setup(withHome = true) {
 
 describe("returnFocus", () => {
   it("gives focus back to the opener while it is there", () => {
-    const { opener } = setup();
-    returnFocus(opener);
+    const { home, opener } = setup();
+    returnFocus(opener, home);
     expect(opener).toHaveFocus();
   });
 
-  it("falls back to the focus home when the opener is gone", () => {
+  it("falls back to the host's fallback when the opener is gone", () => {
     const { home, opener } = setup();
     opener.remove();
-    returnFocus(opener);
+    returnFocus(opener, home);
     expect(home).toHaveFocus();
   });
 
-  it("falls back to the focus home when the opener is disabled or was the body", () => {
+  it("falls back when the opener is disabled or was the body", () => {
     const { home, opener } = setup();
     opener.disabled = true;
-    returnFocus(opener);
+    returnFocus(opener, home);
     expect(home).toHaveFocus();
     home.blur();
-    returnFocus(document.body);
+    returnFocus(document.body, home);
     expect(home).toHaveFocus();
   });
 
-  it("leaves focus alone with no home", () => {
-    const { opener } = setup(false);
+  it("leaves focus alone with no fallback", () => {
+    const { opener } = setup();
     opener.remove();
-    returnFocus(opener);
+    returnFocus(opener, null);
     expect(document.activeElement).toBe(document.body);
   });
 });

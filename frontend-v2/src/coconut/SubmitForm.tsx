@@ -6,7 +6,7 @@
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
-import { returnFocus } from "../ui/modal";
+import { Modal } from "../ui/modal";
 import { structureTag } from "../ui/tag";
 import {
   AUTH_ERROR,
@@ -69,7 +69,6 @@ function startRows(structures: SubmitStructure[]): Record<string, StructureField
 }
 
 export default function SubmitForm({ paper, structures, initial, onClose }: SubmitFormProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [token, setToken] = useState<string | null>(() => getToken());
   const [fields, setFields] = useState<PaperFields>(() => startFields(paper, initial));
   const [rows, setRows] = useState(() => startRows(structures));
@@ -90,19 +89,9 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
     onClose();
   }
 
-  // Modal in the browser (top layer, the page behind is inert); jsdom has no showModal.
-  useEffect(() => {
-    const el = dialog.current;
-    const before = document.activeElement;
-    if (el && !el.open) {
-      if (typeof el.showModal === "function") el.showModal();
-      else el.setAttribute("open", "");
-    }
-    return () => returnFocus(before);
-  }, []);
-
   // showModal focuses the first button (Close): start in the first field instead, also when
   // the form appears after the login or "Back to form". The results focus their own heading.
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (phase.kind === "form") dialog.current?.querySelector<HTMLElement>("input, textarea")?.focus();
   }, [phase.kind, token]);
@@ -415,21 +404,12 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
   }
 
   return (
-    <dialog
-      ref={dialog}
+    <Modal
+      box={dialog}
       className="coconut"
-      aria-labelledby="coconut-title-head"
-      aria-busy={sending}
-      onCancel={(e) => {
-        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
-        close();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          close();
-        }
-      }}
+      labelledBy="coconut-title-head"
+      onClose={close}
+      busy={sending}
     >
       <header className="coconut__head">
         <h2 id="coconut-title-head" className="coconut__title">
@@ -447,7 +427,7 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
         </div>
       </header>
       {body}
-    </dialog>
+    </Modal>
   );
 }
 
