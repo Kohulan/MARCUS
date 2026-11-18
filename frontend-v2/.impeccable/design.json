@@ -1,0 +1,588 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T14:35:40+00:00",
+  "title": "Design System: MARCUS",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Survey Paper",
+        "canonical": "#F4F3EA",
+        "tonalRamp": [
+          "#0C0B06",
+          "#26251F",
+          "#43423B",
+          "#62625A",
+          "#84837B",
+          "#A6A59D",
+          "#CAC9C1",
+          "#F0EFE6"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Plate White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "sunken": {
+        "role": "neutral",
+        "displayName": "Sunken Paper",
+        "canonical": "#ECEBE1",
+        "tonalRamp": [
+          "#0C0B06",
+          "#26251E",
+          "#43423A",
+          "#626259",
+          "#84837A",
+          "#A6A59C",
+          "#CBCAC0",
+          "#F0EFE5"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Field Ink",
+        "canonical": "#1C211D",
+        "tonalRamp": [
+          "#080C09",
+          "#212722",
+          "#3E443F",
+          "#5D635E",
+          "#7E847F",
+          "#A0A7A2",
+          "#C4CBC6",
+          "#EAF1EB"
+        ]
+      },
+      "text-2": {
+        "role": "neutral",
+        "displayName": "Graphite Text",
+        "canonical": "#3F443D",
+        "tonalRamp": [
+          "#090C07",
+          "#222720",
+          "#3F443D",
+          "#5E635C",
+          "#7F847C",
+          "#A1A79F",
+          "#C5CBC3",
+          "#EAF1E8"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Pencil Muted",
+        "canonical": "#5E625B",
+        "tonalRamp": [
+          "#090C07",
+          "#232620",
+          "#40433D",
+          "#5F635C",
+          "#80847D",
+          "#A2A79F",
+          "#C6CBC3",
+          "#ECF0E8"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Frame Line",
+        "canonical": "#B9BCB2",
+        "tonalRamp": [
+          "#0A0C06",
+          "#24261E",
+          "#41433B",
+          "#60635A",
+          "#81847A",
+          "#A4A69D",
+          "#C8CBC0",
+          "#EDF0E6"
+        ]
+      },
+      "hair": {
+        "role": "neutral",
+        "displayName": "Inner Hair",
+        "canonical": "#D9DACF",
+        "tonalRamp": [
+          "#0B0C05",
+          "#25261E",
+          "#42433A",
+          "#616259",
+          "#828379",
+          "#A5A69C",
+          "#C9CABF",
+          "#EFF0E4"
+        ]
+      },
+      "tick": {
+        "role": "neutral",
+        "displayName": "Ruler Tick",
+        "canonical": "#9FA398",
+        "tonalRamp": [
+          "#0A0C05",
+          "#23261E",
+          "#40443A",
+          "#5F6359",
+          "#808479",
+          "#A3A79C",
+          "#C7CBC0",
+          "#ECF0E5"
+        ]
+      },
+      "hatch": {
+        "role": "neutral",
+        "displayName": "Hatch Stripe",
+        "canonical": "#E6E5DC",
+        "tonalRamp": [
+          "#0C0B06",
+          "#26251F",
+          "#43423B",
+          "#62625A",
+          "#84837B",
+          "#A6A59D",
+          "#CAC9C1",
+          "#F0EFE6"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "#7E8279",
+        "tonalRamp": [
+          "#0A0C06",
+          "#23261F",
+          "#40433B",
+          "#5F635A",
+          "#80847B",
+          "#A3A79D",
+          "#C7CBC1",
+          "#ECF0E6"
+        ]
+      },
+      "green": {
+        "role": "primary",
+        "displayName": "Forest Green",
+        "canonical": "#1E4D33",
+        "tonalRamp": [
+          "#000F06",
+          "#002E18",
+          "#1E4D33",
+          "#3E6D51",
+          "#5F8F72",
+          "#82B294",
+          "#A5D7B7",
+          "#CAFDDC"
+        ]
+      },
+      "accepted": {
+        "role": "primary",
+        "displayName": "Accepted Green",
+        "canonical": "#2D7A46",
+        "tonalRamp": [
+          "#001003",
+          "#032E13",
+          "#0C4F26",
+          "#24733F",
+          "#4A955F",
+          "#6DB981",
+          "#91DEA4",
+          "#C8FFD4"
+        ]
+      },
+      "orange": {
+        "role": "secondary",
+        "displayName": "Signal Orange",
+        "canonical": "#FA3600",
+        "tonalRamp": [
+          "#1E0100",
+          "#480B01",
+          "#781B07",
+          "#AC2C11",
+          "#E7370F",
+          "#FC775C",
+          "#FCB5A5",
+          "#FFE9E4"
+        ]
+      },
+      "orange-ink": {
+        "role": "secondary",
+        "displayName": "Orange Ink",
+        "canonical": "#B82800",
+        "tonalRamp": [
+          "#1C0200",
+          "#490A00",
+          "#791A04",
+          "#AC2C0C",
+          "#DA4B2C",
+          "#FD775A",
+          "#FCB5A4",
+          "#FFE9E4"
+        ]
+      },
+      "charcoal": {
+        "role": "tertiary",
+        "displayName": "Charcoal",
+        "canonical": "#1C211D",
+        "tonalRamp": [
+          "#080C09",
+          "#212722",
+          "#3E443F",
+          "#5D635E",
+          "#7E847F",
+          "#A0A7A2",
+          "#C4CBC6",
+          "#EAF1EB"
+        ]
+      },
+      "on-green": {
+        "role": "neutral",
+        "displayName": "On Green",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "on-orange": {
+        "role": "neutral",
+        "displayName": "On Orange",
+        "canonical": "#141414",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "on-charcoal": {
+        "role": "neutral",
+        "displayName": "On Charcoal",
+        "canonical": "#F4F3EA",
+        "tonalRamp": [
+          "#0C0B06",
+          "#26251F",
+          "#43423B",
+          "#62625A",
+          "#84837B",
+          "#A6A59D",
+          "#CAC9C1",
+          "#F0EFE6"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection Mint",
+        "canonical": "#DCEBDF",
+        "tonalRamp": [
+          "#050E07",
+          "#1D2820",
+          "#39463C",
+          "#58655B",
+          "#79867C",
+          "#9BA99E",
+          "#BFCEC2",
+          "#E4F3E7"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one h1 per page; uppercase, forest green."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section and card headings; uppercase."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Names of things (paper file name, Example paper); case kept."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose and lead text."
+      },
+      "body-sm": {
+        "displayName": "Body small",
+        "purpose": "Card lines and notes in text-2."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Mono uppercase captions, readouts, state words, specimen row heads."
+      },
+      "label-control": {
+        "displayName": "Control label",
+        "purpose": "Every button and nav cell."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "SMILES and machine strings; case kept, wraps anywhere."
+      },
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The MARCUS wordmark only (subset font)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "glass-lift",
+        "value": "0 10px 24px -8px rgba(15, 30, 22, 0.35)",
+        "purpose": "Glass pills (with their inner highlights), toasts, card menus."
+      },
+      {
+        "name": "glass-inner",
+        "value": "inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22)",
+        "purpose": "The liquid-glass highlight stack on every pill."
+      },
+      {
+        "name": "menu-lift",
+        "value": "0 12px 28px -10px rgba(15, 30, 22, 0.35)",
+        "purpose": "Workspace disclosures such as Export."
+      },
+      {
+        "name": "dialog-lift",
+        "value": "0 24px 64px -24px rgba(15, 30, 22, 0.45)",
+        "purpose": "The structure editor and COCONUT dialogs."
+      },
+      {
+        "name": "pill-fallback",
+        "value": "0 6px 16px -8px rgba(15, 30, 22, 0.35)",
+        "purpose": "Solid pills under reduced transparency or without backdrop-filter."
+      },
+      {
+        "name": "sheet-flat",
+        "value": "0 1px 0 #D9DACF",
+        "purpose": "A drawing sheet lying flat; the most a printed sheet may carry."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-sheet",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one easing for every transition and animation."
+      },
+      {
+        "name": "duration-quick",
+        "value": "160ms",
+        "purpose": "Hover fills, pill scale, the stamp landing."
+      },
+      {
+        "name": "duration-enter",
+        "value": "200ms",
+        "purpose": "Toast entering (8px rise)."
+      },
+      {
+        "name": "duration-panel",
+        "value": "220ms",
+        "purpose": "Panels and larger state changes."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "560px"
+      },
+      {
+        "name": "lead-stack",
+        "value": "720px"
+      },
+      {
+        "name": "cards-stack",
+        "value": "900px"
+      },
+      {
+        "name": "nav-row",
+        "value": "960px"
+      },
+      {
+        "name": "tool-min",
+        "value": "1024px"
+      },
+      {
+        "name": "lead-wide",
+        "value": "1200px"
+      },
+      {
+        "name": "workspace-wide",
+        "value": "1280px"
+      },
+      {
+        "name": "frame-max",
+        "value": "1440px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Orange Glass Pill",
+      "kind": "button",
+      "refersTo": "button-glass-orange",
+      "description": "The first action on a screen, such as Upload a PDF. Light grounds only.",
+      "html": "<div class=\"ds-glassbed\"><button class=\"ds-glass-orange\">Upload a PDF</button></div>",
+      "css": ".ds-glassbed { padding: 18px; background-color: #F4F3EA; background-image: linear-gradient(#D9DACF 1px, transparent 1px), linear-gradient(90deg, #D9DACF 1px, transparent 1px); background-size: 16px 16px; } .ds-glass-orange { font-family: var(--font-mono, 'Geist Mono', monospace); font-weight: 500; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border: 0; border-radius: 999px; cursor: pointer; -webkit-backdrop-filter: blur(3px) saturate(1.8); backdrop-filter: blur(3px) saturate(1.8); box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22), 0 10px 24px -8px rgba(15,30,22,0.35); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); background: linear-gradient(180deg, rgba(255,118,72,0.95), rgba(250,54,0,0.9)); color: #141414; } .ds-glass-orange:hover { transform: scale(1.03); } .ds-glass-orange:focus-visible { outline: 2px solid var(--green, #1E4D33); outline-offset: 2px; }"
+    },
+    {
+      "name": "Green Glass Pill",
+      "kind": "button",
+      "refersTo": "button-glass-green",
+      "description": "Commit actions: Accept, Send to COCONUT.",
+      "html": "<div class=\"ds-glassbed\"><button class=\"ds-glass-green\">Send 9 to COCONUT</button></div>",
+      "css": ".ds-glassbed { padding: 18px; background-color: #F4F3EA; background-image: linear-gradient(#D9DACF 1px, transparent 1px), linear-gradient(90deg, #D9DACF 1px, transparent 1px); background-size: 16px 16px; } .ds-glass-green { font-family: var(--font-mono, 'Geist Mono', monospace); font-weight: 500; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border: 0; border-radius: 999px; cursor: pointer; -webkit-backdrop-filter: blur(3px) saturate(1.8); backdrop-filter: blur(3px) saturate(1.8); box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22), 0 10px 24px -8px rgba(15,30,22,0.35); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); background: linear-gradient(180deg, rgba(46,110,74,0.95), rgba(30,77,51,0.92)); color: #FFFFFF; } .ds-glass-green:hover { transform: scale(1.03); } .ds-glass-green:focus-visible { outline: 2px solid var(--green, #1E4D33); outline-offset: 2px; }"
+    },
+    {
+      "name": "Clear Glass Pill",
+      "kind": "button",
+      "refersTo": "button-glass-clear",
+      "description": "Every other action: Reject, Compare, More, Export, Copy.",
+      "html": "<div class=\"ds-glassbed\"><button class=\"ds-glass-clear\">Compare</button></div>",
+      "css": ".ds-glassbed { padding: 18px; background-color: #F4F3EA; background-image: linear-gradient(#D9DACF 1px, transparent 1px), linear-gradient(90deg, #D9DACF 1px, transparent 1px); background-size: 16px 16px; } .ds-glass-clear { font-family: var(--font-mono, 'Geist Mono', monospace); font-weight: 500; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border: 0; border-radius: 999px; cursor: pointer; -webkit-backdrop-filter: blur(3px) saturate(1.8); backdrop-filter: blur(3px) saturate(1.8); box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22), 0 10px 24px -8px rgba(15,30,22,0.35); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.25)); color: #1C211D; } .ds-glass-clear:hover { transform: scale(1.03); } .ds-glass-clear:focus-visible { outline: 2px solid var(--green, #1E4D33); outline-offset: 2px; }"
+    },
+    {
+      "name": "Header Nav Cells",
+      "kind": "nav",
+      "refersTo": "nav-cell",
+      "description": "The header as a row of ruled cells; the tool cell is solid green.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-cell\" href=\"#\">How it works</a><a class=\"ds-nav-cell\" href=\"#\">Cite</a><a class=\"ds-nav-cell ds-nav-cell--tool\" href=\"#\">Open the tool</a></nav>",
+      "css": ".ds-nav { display: flex; border: 1px solid #B9BCB2; background: #F4F3EA; width: max-content; } .ds-nav-cell { display: block; width: 150px; padding: 12px 14px 26px; border-left: 1px solid #B9BCB2; font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; color: #1C211D; text-decoration: none; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav-cell:first-child { border-left: 0; } .ds-nav-cell:hover { background: #ECEBE1; } .ds-nav-cell--tool { width: 170px; background: #1E4D33; color: #FFFFFF; } .ds-nav-cell--tool:hover { background: #1C211D; } .ds-nav-cell:focus-visible { outline: 2px solid #1E4D33; outline-offset: -4px; } .ds-nav-cell--tool:focus-visible { outline-color: #FFFFFF; }"
+    },
+    {
+      "name": "Segmented Filter",
+      "kind": "chip",
+      "refersTo": "segment",
+      "description": "Square segments in a control-border box; pressed fills green.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-btn\" aria-pressed=\"true\">All <span>10</span></button><button class=\"ds-seg-btn\" aria-pressed=\"false\">To check <span>6</span></button><button class=\"ds-seg-btn\" aria-pressed=\"false\">Accepted <span>3</span></button></div>",
+      "css": ".ds-seg { display: inline-flex; border: 1px solid #7E8279; } .ds-seg-btn { display: inline-flex; gap: 8px; padding: 7px 12px; border: 0; background: #FFFFFF; font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #1C211D; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-seg-btn + .ds-seg-btn { border-left: 1px solid #7E8279; } .ds-seg-btn span { font-weight: 400; color: #5E625B; } .ds-seg-btn:hover { background: #ECEBE1; } .ds-seg-btn[aria-pressed='true'] { background: #1E4D33; color: #FFFFFF; } .ds-seg-btn[aria-pressed='true'] span { color: inherit; } .ds-seg-btn:focus-visible { outline: 2px solid #1E4D33; outline-offset: 2px; position: relative; z-index: 1; }"
+    },
+    {
+      "name": "Select Field",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "Form control with a control-border edge and a 2px corner.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Engine</span><select class=\"ds-select\"><option>DECIMER</option><option>MolNexTR</option></select></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; width: 260px; } .ds-field-label { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #3F443D; } .ds-select { min-height: 40px; padding: 8px 10px; border: 1px solid #7E8279; border-radius: 2px; background: #FFFFFF; font-family: Geist, sans-serif; font-size: 15px; color: #1C211D; } .ds-select:focus-visible { outline: 2px solid #1E4D33; outline-offset: 2px; }"
+    },
+    {
+      "name": "Structure Card States",
+      "kind": "card",
+      "refersTo": "structure-card",
+      "description": "Ruled surface cells: to check with the orange inside edge, accepted with the stamp, rejected under the strike.",
+      "html": "<div class=\"ds-grid\"><div class=\"ds-card ds-card--check\"><div class=\"ds-tagrow\"><span>[04] · Page 2</span><span class=\"ds-badge\">To check</span></div><div class=\"ds-drawing\"></div><div class=\"ds-smiles\">O=c1ccc2ccccc2o1</div></div><div class=\"ds-card\"><div class=\"ds-tagrow\"><span>[03] · Page 2</span><span class=\"ds-accepted\">Accepted</span></div><div class=\"ds-drawing\"><span class=\"ds-stamp\">Accepted</span></div><div class=\"ds-smiles\">Cn1cnc2c1c(=O)n(C)c(=O)n2C</div></div><div class=\"ds-card\"><div class=\"ds-tagrow\"><span>[07] · Page 4</span><span>Rejected</span></div><div class=\"ds-drawing ds-strike\"></div><div class=\"ds-smiles ds-smiles--struck\">c1ccccc1</div></div></div>",
+      "css": ".ds-grid { display: grid; grid-template-columns: repeat(3, 220px); border-top: 1px solid #B9BCB2; border-left: 1px solid #B9BCB2; } .ds-card { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 14px; background: #FFFFFF; border-right: 1px solid #B9BCB2; border-bottom: 1px solid #B9BCB2; } .ds-card--check { box-shadow: inset 0 0 0 2px #FA3600; } .ds-tagrow { display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #1C211D; } .ds-badge { padding: 1px 6px; background: #FA3600; color: #141414; } .ds-accepted { color: #2D7A46; } .ds-drawing { position: relative; height: 110px; display: flex; align-items: flex-end; justify-content: flex-end; } .ds-strike::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), #1C211D calc(50% - 1px), #1C211D calc(50% + 1px), transparent calc(50% + 1px)); } .ds-stamp { display: inline-flex; align-items: center; justify-content: center; width: 66px; height: 66px; border: 2px solid #2D7A46; border-radius: 50%; color: #2D7A46; font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; transform: rotate(-12deg); } .ds-smiles { font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.5; color: #1C211D; overflow-wrap: anywhere; } .ds-smiles--struck { color: #5E625B; text-decoration: line-through; }"
+    },
+    {
+      "name": "Specimen Label",
+      "kind": "custom",
+      "refersTo": "specimen-head",
+      "description": "A data table drawn as a specimen label: charcoal header bar, hair-ruled rows.",
+      "html": "<table class=\"ds-specimen\"><caption class=\"ds-specimen-head\">Structure [03] · Page 2</caption><tr><th>Engine</th><td>DECIMER 2.7</td></tr><tr><th>SMILES</th><td>Cn1cnc2c1c(=O)n(C)c(=O)n2C</td></tr><tr><th>State</th><td>Accepted</td></tr></table>",
+      "css": ".ds-specimen { width: 340px; border-collapse: collapse; border: 1px solid #B9BCB2; border-top: 0; background: #FFFFFF; font-family: Geist, sans-serif; font-size: 13px; line-height: 1.5; } .ds-specimen-head { caption-side: top; padding: 6px 10px; background: #1C211D; color: #F4F3EA; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left; } .ds-specimen th, .ds-specimen td { padding: 6px 10px; border-top: 1px solid #D9DACF; text-align: left; vertical-align: top; } .ds-specimen tr:first-child > * { border-top: 0; } .ds-specimen th { width: 1%; border-right: 1px solid #D9DACF; font-family: 'Geist Mono', monospace; font-weight: 400; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: #5E625B; } .ds-specimen td { color: #1C211D; overflow-wrap: anywhere; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Square slip from the bottom right; errors invert to charcoal.",
+      "html": "<div class=\"ds-toasts\"><div class=\"ds-toast\">Copied SMILES</div><div class=\"ds-toast ds-toast--error\">Could not reach COCONUT</div></div>",
+      "css": ".ds-toasts { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; } .ds-toast { padding: 10px 16px; border: 1px solid #B9BCB2; background: #FFFFFF; color: #1C211D; font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.4; letter-spacing: 0.05em; text-transform: uppercase; box-shadow: 0 10px 24px -8px rgba(15,30,22,0.35); } .ds-toast--error { border-color: #1C211D; background: #1C211D; color: #F4F3EA; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Survey Sheet",
+    "overview": "\n**Creative North Star: \"The Survey Sheet\"**\n\nEvery screen is a drawing sheet laid flat on a warm paper ground: a hairline frame, ruled cells, \"+\" corner marks, ruler ticks every 8px, and mono captions that read like a plate's title block. Structures sit in surface-white cells inside that grid, and the curation states are marked on the sheet the way a surveyor marks a field sheet: a round stamp for accepted, a cross-out for rejected, a hatched ground for failed, an orange fill or outline for what still needs a person's eyes.\n\nThe density is a working document, not a brochure. Cells share 1px rules instead of floating as cards; type is either a heavy uppercase Geist heading in forest green or a small uppercase Geist Mono readout. The only objects that rise off the sheet are the liquid-glass pill buttons, which sit on light grounds and carry the actions. Light mode only.\n\nThe world is evidence-first: page numbers, bounding boxes, engine names and counts are printed as readouts, never decorated. Copy is minimal; a state is its exact word.",
+    "keyCharacteristics": [
+      "Warm paper ground (#F4F3EA) with white structure cells, ruled by 1px hairlines.",
+      "Forest green leads; orange asks for attention; charcoal marks rejected and failed.",
+      "Geist 700 uppercase headings, Geist Mono uppercase labels and readouts; two weights per family.",
+      "Square cells and sheets; round only for things that act (pills) or mark (stamps, dots).",
+      "Flat sheet; glass pills, menus, toasts and dialogs are the only lifted objects."
+    ],
+    "rules": [
+      {
+        "name": "The Orange Asks Rule",
+        "body": "Orange means a person is needed: to check, being read, or the one first action. It never decorates, never marks success, and never sets small text (use orange-ink).",
+        "section": "colors"
+      },
+      {
+        "name": "The Word and Shape Rule",
+        "body": "A state is always its exact word plus a shape: Accepted with the round stamp, To check with the orange fill, Reading with the dashed orange outline, Rejected in charcoal with the cross-out, Failed with the charcoal tag on the hatched ground, Not read yet in muted. Colour alone never carries a state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Green on Paper Rule",
+        "body": "Accepted-green text sits on paper or surface only, never on sunken (4.4:1 there). A band that carries the Accepted count uses paper.",
+        "section": "colors"
+      },
+      {
+        "name": "The Control Edge Rule",
+        "body": "Every control edge is control-border (3.3:1 or more on every ground). The frame line (about 1.7:1) draws sheets and cells, never something you click or type into.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Weights Rule",
+        "body": "Geist ships 400 and 700, Geist Mono 400 and 500, with font-synthesis-weight off. No other weights.",
+        "section": "typography"
+      },
+      {
+        "name": "The Uppercase in CSS Rule",
+        "body": "Headings, labels and buttons are uppercased by CSS; the source text stays in sentence case. Machine strings (SMILES, file names) keep their case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Speaks for the Machine Rule",
+        "body": "Anything the tool measures, counts or names (pages, bboxes, engines, counts, keys) is set in Geist Mono; prose a person reads is Geist.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Sheet Rule",
+        "body": "Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, menus, toasts, dialogs) lift.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Light Ground Rule",
+        "body": "Glass pills sit on light grounds only: paper, surface, sunken, or the glass bed. Never on charcoal or on a picture (the clear tint drops to 2.3:1 there).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do rule cells with exactly 1px of line, by a 1px grid gap over a line background or by right and bottom edges, never by doubled borders.",
+      "Do pair every state with its word and shape (stamp, orange fill, dashed outline, strike, hatch); colour alone never decides.",
+      "Do set small orange text in orange-ink and keep orange itself for fills, outlines and markers.",
+      "Do put accepted-green text on paper or surface only.",
+      "Do give every control a control-border (#7E8279) edge.",
+      "Do set headings, labels and buttons uppercase through CSS and keep source text in sentence case.",
+      "Do place glass pills on paper, surface, sunken or the glass bed, with their solid fallbacks intact.",
+      "Do keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP).",
+      "Do use the one easing, cubic-bezier(0.16, 1, 0.3, 1), at 160 to 220ms, and drop motion under prefers-reduced-motion."
+    ],
+    "donts": [
+      "Don't add a dark mode; the system is light only.",
+      "Don't use orange for anything that does not need a person's attention.",
+      "Don't put accepted-green text on sunken.",
+      "Don't draw a control edge in line or hair.",
+      "Don't put glass pills on charcoal or over a picture.",
+      "Don't cast shadows from things printed on the sheet: cells, cards, tables, the example page.",
+      "Don't load a weight outside Geist 400/700 and Geist Mono 400/500, or use Gmarket Sans for anything but the wordmark.",
+      "Don't round content containers; radius is for pills, stamps, dots and small control corners."
+    ]
+  }
+}
