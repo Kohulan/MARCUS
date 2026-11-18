@@ -21,7 +21,15 @@ describe("App routes", () => {
 
   it("loads the lazy tool route at /app and shows MARCUS", async () => {
     renderAt("/app");
-    expect(await screen.findByText("MARCUS")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "MARCUS" })).toBeInTheDocument();
+  });
+
+  it("frames every page with the header, the footer and the one glass filter", () => {
+    const { container } = renderAt("/about");
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByRole("contentinfo")).toBeInTheDocument();
+    expect(container.querySelectorAll("#marcus-glass")).toHaveLength(1);
+    expect(container.querySelector(".frame > .sheet")).not.toBeNull();
   });
 
   it("renders the not-found page for an unknown path", () => {
