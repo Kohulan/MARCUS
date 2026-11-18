@@ -1,15 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "../api/client";
-import { refreshPaper, useSaveCuration } from "../api/queries";
 import { reasonText } from "../api/reasons";
-import type { CurationStatus, Engine, StepOut } from "../api/types";
+import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
-import { useToast } from "../ui/Toasts";
 import { hasDrawing } from "./cardState";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
+import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./paper.css";
@@ -17,8 +14,6 @@ import "./paper.css";
 const BUSY_PAPER = new Set(["checking", "processing"]);
 const NO_MARKERS: PageMarker[] = [];
 const NOOP = () => undefined;
-
-const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Something went wrong.");
 
 /**
  * Per page: can its image be shown? Yes once a render_page step of the page is done. Its
@@ -86,9 +81,7 @@ function byData(root: HTMLElement | null, key: "marker" | "segmentId" | "page", 
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const client = useQueryClient();
-  const toast = useToast();
-  const { save } = useSaveCuration(paper.id);
+  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -157,27 +150,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
       if (segmentId !== null) showMarker(segmentId);
     },
     [showMarker],
-  );
-
-  const onDecide = useCallback(
-    (segmentId: string, status: CurationStatus) => {
-      save(segmentId, { status }).catch((err: unknown) => toast(`Not saved: ${detail(err)}`, "error"));
-    },
-    [save, toast],
-  );
-  const reconnect = ws.live.reconnect;
-  const paperId = paper.id;
-  const onRun = useCallback(
-    (segmentId: string, engine: Engine) => {
-      api.runPrediction(segmentId, engine).then(
-        () => {
-          reconnect(); // a finished paper's stream had ended: results come back live
-          refreshPaper(client, paperId);
-        },
-        (err: unknown) => toast(`Not started: ${detail(err)}`, "error"),
-      );
-    },
-    [reconnect, client, paperId, toast],
   );
 
   const pageOf = (id: string | null) => (id === null ? undefined : byId.get(id)?.page);

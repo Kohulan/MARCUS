@@ -5,6 +5,16 @@ import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/typ
 
 export type CardState = "accepted" | "rejected" | "to-check" | "reading" | "failed" | "not-read";
 
+/** The state's word (exact, spec §7 state table). */
+export const STATE_WORD: Record<CardState, string> = {
+  accepted: "Accepted",
+  rejected: "Rejected",
+  "to-check": "To check",
+  reading: "Reading…",
+  failed: "Failed",
+  "not-read": "Not read yet",
+};
+
 const ACTIVE = new Set(["pending", "queued", "running"]);
 const BUSY_PAPER = new Set(["checking", "processing"]);
 

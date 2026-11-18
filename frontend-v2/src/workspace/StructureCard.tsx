@@ -14,13 +14,18 @@ import { useDepiction } from "../api/depictions";
 import { asEngine, ENGINES, engineName } from "../api/engines";
 import type { CurationStatus, Engine, SegmentOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
-import Kbd from "../ui/Kbd";
 import Smiles from "../ui/Smiles";
 import Stamp from "../ui/Stamp";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
-import { enginesDiffer, hasDrawing, shownPrediction, type CardState } from "./cardState";
+import {
+  enginesDiffer,
+  hasDrawing,
+  shownPrediction,
+  STATE_WORD,
+  type CardState,
+} from "./cardState";
 import "./grid.css";
 
 // Depictions load only for cards near the viewport: one IntersectionObserver for the whole
@@ -60,15 +65,6 @@ function useNearViewport(ref: RefObject<Element | null>): boolean {
   }, [near, ref]);
   return near;
 }
-
-const WORD: Record<CardState, string> = {
-  accepted: "Accepted",
-  rejected: "Rejected",
-  "to-check": "To check",
-  reading: "Reading…",
-  failed: "Failed",
-  "not-read": "Not read yet",
-};
 
 export type StructureCardProps = {
   segment: SegmentOut;
@@ -175,7 +171,7 @@ function StructureCard({
       ref={ref}
       className={classes.join(" ")}
       tabIndex={0}
-      aria-label={`${where}, ${WORD[state]}`}
+      aria-label={`${where}, ${STATE_WORD[state]}`}
       aria-current={current ? "true" : undefined}
       data-segment-id={segment.id}
       onKeyDown={ownKey}
@@ -294,6 +290,8 @@ function CardActions({
 }) {
   const own = asEngine(paperEngine) ?? "decimer";
   if (state === "to-check") {
+    // No key hints: A and R act in focus mode only. The name starts with the visible word
+    // (WCAG 2.5.3 label in name).
     return (
       <div className="card__actions">
         <GlassButton
@@ -303,7 +301,7 @@ function CardActions({
           disabled={!canAccept}
           onClick={() => onDecide(segmentId, "accepted")}
         >
-          Accept <Kbd>A</Kbd>
+          Accept
         </GlassButton>
         <GlassButton
           tint="clear"
@@ -311,7 +309,7 @@ function CardActions({
           label={`Reject ${tag}`}
           onClick={() => onDecide(segmentId, "rejected")}
         >
-          Reject <Kbd>R</Kbd>
+          Reject
         </GlassButton>
       </div>
     );

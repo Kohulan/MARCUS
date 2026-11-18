@@ -328,6 +328,29 @@ button.fm-marker:focus-visible {
   border-radius: 0;
 }
 
+/* The page's other structures: their state's shape (spec §7 table) at 1 px, under the
+   open one's 2 px. */
+.fm-marker--to-check:not(.fm-marker--current) {
+  outline-color: var(--orange);
+}
+
+.fm-marker--reading:not(.fm-marker--current) {
+  outline: 1px dashed var(--orange);
+}
+
+.fm-marker--accepted:not(.fm-marker--current) {
+  outline-color: var(--accepted);
+}
+
+.fm-marker--rejected:not(.fm-marker--current),
+.fm-marker--failed:not(.fm-marker--current) {
+  outline-color: var(--charcoal);
+}
+
+.fm-marker--not-read:not(.fm-marker--current) {
+  outline: 1px dashed var(--muted);
+}
+
 .fm-marker--current {
   z-index: 1;
   outline: 2px solid var(--orange);

@@ -24,7 +24,7 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
-import { hasDrawing, shownPrediction, type CardState } from "./cardState";
+import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardState";
 import KeyHelp from "./KeyHelp";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
@@ -107,6 +107,18 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
     [setSelection],
   );
 
+  // After a move (a marker click turns that marker into the current one, a step can disable
+  // the focused button), the keyboard stays in focus mode instead of falling to the page.
+  useEffect(() => {
+    const active = document.activeElement;
+    const lost =
+      active === null ||
+      active === document.body ||
+      !active.isConnected ||
+      (active instanceof HTMLButtonElement && active.disabled);
+    if (lost) root.current?.focus({ preventScroll: true });
+  }, [id, drawable]);
+
   const step = (by: -1 | 1) => {
     const to = rows[index + by];
     if (to) go(to.segmentId);
@@ -132,9 +144,13 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
     const n = ++seq.current;
     setLanded({ id, status, seq: n });
     pending.current.add(id);
+    const typed = text;
     // curationBody keeps an edited smiles and molfile; the note goes with the decision.
     save(id, { status, note: noteOf(text) }).then(
-      () => pending.current.delete(id),
+      () => {
+        pending.current.delete(id);
+        dropDraft(id, typed);
+      },
       (err: unknown) => {
         pending.current.delete(id);
         setLanded((l) => (l !== null && l.seq === n ? null : l));
@@ -146,10 +162,18 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
     else timer.current = setTimeout(() => advance(id), ADVANCE_MS);
   };
 
+  /** Drops this segment's draft once it is saved, unless it was typed on meanwhile. */
+  const dropDraft = (segmentId: string, saved: string) =>
+    setDraft((d) => (d !== null && d.id === segmentId && d.text === saved ? null : d));
+
   const saveNote = () => {
     const next = noteOf(text);
     if (next === stored) return;
-    save(id, { note: next }).catch((err: unknown) => toast(`Note not saved: ${detail(err)}`, "error"));
+    const typed = text;
+    save(id, { note: next }).then(
+      () => dropDraft(id, typed),
+      (err: unknown) => toast(`Note not saved: ${detail(err)}`, "error"),
+    );
   };
 
   const noteKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -194,6 +218,10 @@ export default function FocusMode({ ws, rows, segment, onClose, onEdit, onCompar
         <StateBadge state={state} />
         <p className="fm-bar__left" role="status">
           {left === 0 ? "None left to check" : `${left} to check`}
+        </p>
+        {/* The region's name changes with each step, but focus stays on it: say where. */}
+        <p className="visually-hidden" role="status">
+          {`${tag} · Page ${segment.page + 1} · ${STATE_WORD[state]}`}
         </p>
         <div className="fm-bar__nav">
           <button

@@ -1,14 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { api } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
-import { BulkPartialError, refreshPaper, useBulkCuration, useSaveCuration } from "../api/queries";
+import { BulkPartialError, useBulkCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { filterOf, hasDrawing, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
+import { errorDetail as detail, useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
 import "./grid.css";
@@ -40,7 +40,10 @@ async function runPool<T>(
   return ok;
 }
 
-const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Something went wrong.");
+
+/** Focus the filter strip's pressed button. */
+const focusFilters = () =>
+  document.querySelector<HTMLElement>('.rg-filters [aria-pressed="true"]')?.focus();
 
 /**
  * The review view: filters with counts, the grid of structure cards in (page, idx) order,
@@ -49,16 +52,8 @@ const detail = (err: unknown) => (err instanceof ApiError ? err.detail : "Someth
 export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, openFocus, selection } = ws;
-  const client = useQueryClient();
-  const reconnect = ws.live.reconnect; // stable (the live object itself is new each render)
-  const paperId = paper.id;
-  // After a prediction was accepted: open the stream again if it had ended (a finished or
-  // ocsr=off paper), and read the steps once, so the card says "Reading…" at once.
-  const started = useCallback(() => {
-    reconnect();
-    refreshPaper(client, paperId);
-  }, [reconnect, client, paperId]);
-  const { save } = useSaveCuration(paper.id);
+  // ws.live.reconnect is stable (the live object itself is new each render).
+  const { decide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
   const { bulk } = useBulkCuration(paper.id);
   const toast = useToast();
   const [filter, setFilter] = useState<GridFilter>("all");
@@ -149,33 +144,25 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
     const card =
       segmentId === null ? cards[0] : cards.find((el) => el.dataset.segmentId === segmentId);
     if (card) card.focus();
-    else if (segmentId === null) {
-      document.querySelector<HTMLElement>('.rg-filters [aria-pressed="true"]')?.focus();
-    }
+    else if (segmentId === null) focusFilters();
   }, []);
 
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
   const onDecide = useCallback(
     (segmentId: string, status: CurationStatus) => {
       // The card's buttons go when its state changes: keep the keyboard on the next card.
+      // With none left, the card itself under All (it stays), else the filter strip (the
+      // decided card leaves the filter).
       const list = shownRef.current;
       const at = list.findIndex((r) => r.segmentId === segmentId);
       const next = list[at + 1] ?? list[at - 1];
-      focusCard(next ? next.segmentId : segmentId);
-      save(segmentId, { status }).catch((err: unknown) =>
-        toast(`Not saved: ${detail(err)}`, "error"),
-      );
+      if (next) focusCard(next.segmentId);
+      else if (filterRef.current === "all") focusCard(segmentId);
+      else focusFilters();
+      decide(segmentId, status);
     },
-    [save, toast, focusCard],
-  );
-
-  const onRun = useCallback(
-    (segmentId: string, engine: Engine) => {
-      api.runPrediction(segmentId, engine).then(
-        started,
-        (err: unknown) => toast(`Not started: ${detail(err)}`, "error"),
-      );
-    },
-    [started, toast],
+    [decide, focusCard],
   );
 
   const clear = () => {

@@ -1,7 +1,7 @@
 // The state of one paper workspace: the paper, its segments and steps, what failed, the
 // live stream, and the view and focused segment (both in the URL, so reload and Back work).
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
@@ -108,8 +108,17 @@ export function useWorkspace(id: string): Workspace {
     [setParams],
   );
 
+  // Set by a Back that has not landed yet: a second Esc or "Grid" click before popstate
+  // must not go Back again (it would leave the workspace). Any new entry clears it.
+  const goingBack = useRef(false);
+  useEffect(() => {
+    goingBack.current = false;
+  }, [location.key]);
+
   const closeFocus = useCallback(() => {
+    if (goingBack.current) return;
     if (isFocusPushed(entryState.current)) {
+      goingBack.current = true;
       void navigate(-1);
       return;
     }

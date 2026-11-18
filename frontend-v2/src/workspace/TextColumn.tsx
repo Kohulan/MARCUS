@@ -20,6 +20,9 @@ function newestDocling(steps: StepOut[]): StepOut | undefined {
   return newest;
 }
 
+/** "alkaloids.pdf" → "alkaloids.txt": one trailing ".pdf" (any case) gives way to ".txt". */
+export const textFileName = (displayName: string) => `${displayName.replace(/\.pdf$/i, "")}.txt`;
+
 /** Saves the blocks, joined by blank lines, as `<name>.txt` through a blob link. */
 function download(blocks: TextBlock[], name: string) {
   const blob = new Blob([blocks.map((b) => b.text).join("\n\n")], {
@@ -28,7 +31,7 @@ function download(blocks: TextBlock[], name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${name}.txt`;
+  a.download = textFileName(name);
   document.body.append(a);
   a.click();
   a.remove();

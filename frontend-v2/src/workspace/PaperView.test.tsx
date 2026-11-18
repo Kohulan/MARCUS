@@ -227,7 +227,8 @@ describe("Paper view", () => {
     const c = within(list).getByRole("article");
     expect(c).toHaveClass("card--compact");
     expect(within(c).queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(within(c).getByRole("button", { name: "Accept [01]" })).toBeInTheDocument();
+    expect(within(c).getByRole("button", { name: "Accept [01]" })).toHaveTextContent(/^Accept$/);
+    expect(within(c).getByRole("button", { name: "Reject [01]" })).toHaveTextContent(/^Reject$/);
   });
 
   it("does not ask for the text in the Review view", async () => {
@@ -262,7 +263,7 @@ describe("Paper view", () => {
     expect((window as { __xss?: unknown }).__xss).toBeUndefined();
   });
 
-  it("downloads the text as <display name>.txt through a blob link", async () => {
+  it("downloads the text as <display name without .pdf>.txt through a blob link", async () => {
     const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:http://localhost/7c1d");
     const revokeObjectURL = vi.fn();
     // jsdom has no object URLs. Left in place for this file: the revoke runs on a timer.
@@ -271,13 +272,13 @@ describe("Paper view", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
       clicked.push(this);
     });
-    renderAt(paper([segment("s1")]));
+    renderAt(paper([segment("s1")], { display_name: "alkaloids.PDF" }));
     await screen.findByRole("heading", { name: "Results" });
     fireEvent.click(screen.getByRole("button", { name: "Download text" }));
 
     expect(clicked).toHaveLength(1);
     expect(clicked[0]!.href).toMatch(/^blob:/);
-    expect(clicked[0]!.download).toBe("alkaloids.pdf.txt");
+    expect(clicked[0]!.download).toBe("alkaloids.txt");
     const blob = createObjectURL.mock.calls[0]![0];
     const read = await new Promise<string>((resolve) => {
       const reader = new FileReader();

@@ -11,6 +11,7 @@ import { createQueryClient, keys, useSaveCuration } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { useReviewKeys } from "./useReviewKeys";
+import { useWorkspace } from "./useWorkspace";
 import Workspace from "./Workspace";
 
 vi.mock("../api/useLiveEvents", () => ({
@@ -545,5 +546,103 @@ describe("useSaveCuration counts", () => {
     await act(() => result.current.save("s1", { note: "x" }));
     p = qc.getQueryData<PaperDetail>(keys.paper(ID))!;
     expect([p.accepted, p.rejected, p.to_review]).toEqual([0, 1, 1]);
+  });
+});
+
+describe("focus mode follow-ups (F8 review)", () => {
+  it("announces each step: [nn] · Page n · state in the polite status", async () => {
+    renderAt(
+      paper([segment("s1"), segment("s2", { curation: curation({ status: "accepted" }) })]),
+      "?s=s1&focus=1",
+    );
+    await focusRegion();
+    press("ArrowRight");
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((s) => s.textContent === "[02] · Page 1 · Accepted"),
+      ).toBe(true),
+    );
+  });
+
+  it("keeps the keyboard in focus mode after a marker click", async () => {
+    renderAt(paper([segment("s1"), segment("s2", { bbox: [500, 600, 900, 1000] })]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    const page = within(region).getByRole("img", { name: "Page 1" });
+    Object.defineProperty(page, "naturalWidth", { value: 2480 });
+    Object.defineProperty(page, "naturalHeight", { value: 3510 });
+    fireEvent.load(page);
+    const other = await within(region).findByRole("button", { name: "Open [02]" });
+    other.focus();
+    fireEvent.click(other);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?s=s2&focus=1"));
+    await waitFor(() => expect(region).toHaveFocus());
+  });
+
+  it("keeps the keyboard in focus mode when the focused button turns disabled", async () => {
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    const next = within(region).getByRole("button", { name: "Next structure" });
+    next.focus();
+    fireEvent.click(next);
+    await waitFor(() => expect(next).toBeDisabled());
+    await waitFor(() => expect(region).toHaveFocus());
+  });
+
+  it("a saved note draft is dropped, so a newer stored note is not overwritten", async () => {
+    const put = putSpy();
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    const note = within(region).getByRole("textbox", { name: "Note" });
+    note.focus();
+    fireEvent.change(note, { target: { value: "old" } });
+    fireEvent.blur(note);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    // The stored note changes elsewhere (another tab, a later editor).
+    await act(async () => {
+      client.setQueryData<PaperDetail>(keys.paper(ID), (old) =>
+        old && {
+          ...old,
+          segments: old.segments.map((s) =>
+            s.id === "s1" ? { ...s, curation: curation({ note: "newer" }) } : s,
+          ),
+        },
+      );
+    });
+    await waitFor(() => expect(note).toHaveValue("newer"));
+    (document.activeElement as HTMLElement | null)?.blur();
+    press("a");
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    expect(put.mock.calls[1]![1]).toMatchObject({ status: "accepted", note: "newer" });
+  });
+});
+
+describe("useWorkspace closeFocus", () => {
+  it("goes Back once, however often it is called before the focus flag drops", async () => {
+    vi.spyOn(api, "getPaper").mockResolvedValue(paper([segment("s1")]));
+    vi.spyOn(api, "getSteps").mockResolvedValue({ steps: [] });
+    const qc = createQueryClient();
+    let where = "";
+    function Probe() {
+      where = useLocation().pathname + useLocation().search;
+      return null;
+    }
+    const { result } = renderHook(() => useWorkspace(ID), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={["/app", `/app/papers/${ID}`]} initialIndex={1}>
+            {children}
+            <Probe />
+          </MemoryRouter>
+        </QueryClientProvider>
+      ),
+    });
+    act(() => result.current.openFocus("s1"));
+    expect(where).toBe(`/app/papers/${ID}?s=s1&focus=1`);
+    act(() => {
+      result.current.closeFocus();
+      result.current.closeFocus();
+    });
+    await waitFor(() => expect(where).toBe(`/app/papers/${ID}`));
+    expect(result.current.focus).toBe(false);
   });
 });

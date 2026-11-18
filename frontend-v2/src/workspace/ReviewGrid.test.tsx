@@ -178,9 +178,13 @@ describe("cards and their states", () => {
     expect(card("[03]")).toHaveTextContent("[03] · Page 1");
     // the rejected SMILES is struck through
     expect(within(card("[02]")).getByText("CCO").closest(".smiles")).toHaveClass("smiles--struck");
-    // a To check card offers Accept and Reject with their keys
-    expect(within(card("[03]")).getByRole("button", { name: /Accept/ })).toHaveTextContent("A");
-    expect(within(card("[03]")).getByRole("button", { name: /Reject/ })).toHaveTextContent("R");
+    // a To check card offers Accept and Reject: the visible word starts the name (WCAG 2.5.3),
+    // and no key hints (A and R act in focus mode only)
+    const accept = within(card("[03]")).getByRole("button", { name: "Accept [03]" });
+    const reject = within(card("[03]")).getByRole("button", { name: "Reject [03]" });
+    expect(accept).toHaveTextContent(/^Accept$/);
+    expect(reject).toHaveTextContent(/^Reject$/);
+    expect(card("[03]").querySelector("kbd")).toBeNull();
   });
 
   it("tags follow (page, idx) order, and two engines that differ say so", async () => {
@@ -483,6 +487,19 @@ describe("selection follows the visible cards (F7 fix round 1)", () => {
     accept.focus();
     fireEvent.click(accept);
     await waitFor(() => expect(card("[02]")).toHaveFocus());
+  });
+
+  it("the last card under To check: after its decision, focus goes to the filter strip", async () => {
+    putOk();
+    renderGrid(paper([segment("s1", { curation: curation({ status: "accepted" }) }), segment("s2")]));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    fireEvent.click(filter("To check"));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const accept = within(card("[02]")).getByRole("button", { name: /^Accept/ });
+    accept.focus();
+    fireEvent.click(accept);
+    await waitFor(() => expect(cards()).toHaveLength(0));
+    await waitFor(() => expect(filter("To check")).toHaveFocus());
   });
 
   it("after a bulk decision, focus stays in the grid (not on the page body)", async () => {

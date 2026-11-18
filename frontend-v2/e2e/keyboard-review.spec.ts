@@ -96,7 +96,7 @@ test("a whole paper reviewed with the keyboard only", async ({ page }) => {
   const toCheck = page
     .getByRole("group", { name: "Filter" })
     .getByRole("button", { name: /^To check/ });
-  await expect(toCheck).toContainText("0");
+  await expect(toCheck.locator(".rg-filters__count")).toHaveText("0");
   await toCheck.click();
   await expect(cards).toHaveCount(0);
 
