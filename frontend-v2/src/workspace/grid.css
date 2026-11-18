@@ -337,8 +337,11 @@
   font-size: 9px;
 }
 
-.card--compact[aria-current="true"] {
-  outline-offset: -2px;
+/* Selected and keyboard rings sit inside the To check edge (inset 0-2 px), not over it,
+   and inside the list column, which would clip a ring drawn outside the card. */
+.card--compact[aria-current="true"],
+.card--compact:focus-visible {
+  outline-offset: -4px;
 }
 
 /* Linked: its marker on the page is hovered. An inner orange frame with the board's corner

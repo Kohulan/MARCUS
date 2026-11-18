@@ -328,3 +328,18 @@ describe("Paper view", () => {
     expect(screen.queryByRole("img", { name: "Page 3" })).not.toBeInTheDocument();
   });
 });
+
+describe("Paper view fixes (F9 review)", () => {
+  it("a page image that failed to load offers Try again, which loads it afresh", async () => {
+    renderAt(paper([segment("s1")]));
+    const pages = await screen.findByRole("region", { name: "Pages" });
+    const img = await within(pages).findByRole("img", { name: "Page 2" });
+    const first = img.getAttribute("src");
+    fireEvent.error(img);
+    expect(within(pages).getByText("The page image could not be loaded")).toBeInTheDocument();
+    fireEvent.click(within(pages).getByRole("button", { name: "Try again" }));
+    const again = await within(pages).findByRole("img", { name: "Page 2" });
+    expect(again.getAttribute("src")).not.toBe(first);
+    expect(again.getAttribute("src")).toContain(`/papers/${ID}/pages/1/image`);
+  });
+});

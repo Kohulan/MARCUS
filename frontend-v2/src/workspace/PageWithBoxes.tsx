@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "../api/client";
 import type { SegmentOut } from "../api/types";
+import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { CardState } from "./cardState";
 
@@ -20,7 +21,10 @@ type Props = {
   /** 0-based API page; the UI shows page0 + 1. */
   page0: number;
   pages: number;
-  image: PageImage;
+  /** Primitives, not a PageImage object: a live steps refresh leaves unchanged pages alone. */
+  imageKind: PageImage["kind"];
+  /** Why the page failed (reasonText), for `imageKind` "failed". */
+  imageReason: string | null;
   markers: PageMarker[];
   /** The selected segment, when it is on this page. */
   selected: string | null;
@@ -46,7 +50,8 @@ function PageWithBoxes({
   paperId,
   page0,
   pages,
-  image,
+  imageKind,
+  imageReason,
   markers,
   selected,
   hovered,
@@ -54,11 +59,15 @@ function PageWithBoxes({
   onHover,
 }: Props) {
   const label = `Page ${page0 + 1}`;
-  const src = api.pageImageUrl(paperId, page0);
+  // "Try again" after a failed load asks afresh (a new URL, so the browser loads it again).
+  const [attempt, setAttempt] = useState(0);
+  const base = api.pageImageUrl(paperId, page0);
+  const src = attempt === 0 ? base : `${base}?attempt=${attempt}`;
   const img = useRef<HTMLImageElement>(null);
   const [size, setSize] = useState<Size | null>(null);
-  const [broken, setBroken] = useState(false);
-  const ready = image.kind === "ready" && !broken;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const broken = failedSrc === src;
+  const ready = imageKind === "ready" && !broken;
 
   const measure = useCallback(() => {
     const el = img.current;
@@ -114,7 +123,7 @@ function PageWithBoxes({
             loading="lazy"
             decoding="async"
             onLoad={measure}
-            onError={() => setBroken(true)}
+            onError={() => setFailedSrc(src)}
           />
           {size &&
             markers.map((m) => {
@@ -146,16 +155,23 @@ function PageWithBoxes({
       ) : (
         <div
           className={
-            image.kind === "failed" ? "pv-page__sheet pv-page__sheet--failed" : "pv-page__sheet pv-page__sheet--empty"
+            imageKind === "failed"
+              ? "pv-page__sheet pv-page__sheet--failed"
+              : "pv-page__sheet pv-page__sheet--empty"
           }
         >
-          <p className="pv-page__why">
-            {image.kind === "failed"
-              ? `Could not be read: ${image.reason}`
-              : broken
-                ? "The page image could not be loaded"
-                : "Not ready"}
-          </p>
+          {imageKind === "failed" ? (
+            <p className="pv-page__why">{`Could not be read: ${imageReason ?? "an unknown error"}`}</p>
+          ) : broken ? (
+            <div className="pv-page__retry">
+              <p className="pv-page__why">The page image could not be loaded</p>
+              <GlassButton tint="clear" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+                Try again
+              </GlassButton>
+            </div>
+          ) : (
+            <p className="pv-page__why">Not ready</p>
+          )}
         </div>
       )}
     </figure>

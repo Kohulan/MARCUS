@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { reasonText } from "../api/reasons";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
@@ -72,6 +81,35 @@ function byData(root: HTMLElement | null, key: "marker" | "segmentId" | "page", 
 }
 
 /**
+ * Sets `--pv-top` on the view: its distance from the top of the page. The view is the
+ * window's height less that, so at the top of the page all three columns end inside the
+ * window, and the wheel at a column's end goes on to scroll the page (no trap). Measured
+ * again when the window or anything above the view (header, status bar lines) changes size.
+ */
+function useViewTop(view: RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const el = view.current;
+    if (!el) return;
+    const measure = () => {
+      const top = Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY));
+      el.style.setProperty("--pv-top", `${top}px`);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    let ro: ResizeObserver | undefined;
+    const ws = el.closest(".ws");
+    if (typeof ResizeObserver !== "undefined" && ws) {
+      ro = new ResizeObserver(measure);
+      for (const child of ws.children) if (!child.contains(el)) ro.observe(child);
+    }
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [view]);
+}
+
+/**
  * The Paper view (spec §5.4, board: Field Sheet "paper view" in the Survey Sheet look):
  * the pages with a marker per structure | the paper's text | the structure list. A marker
  * and its card are one thing: clicking a marker selects and scrolls to its card; selecting
@@ -85,6 +123,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
+  const view = useRef<HTMLDivElement>(null);
   const pagesCol = useRef<HTMLElement>(null);
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -129,6 +168,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     scrollWithin(listCol.current, card, "nearest", !latest.current.reduce);
   }, []);
 
+  useViewTop(view);
+
   // A selection (here, from the URL, or from the Review view) brings its card and page in.
   useEffect(() => {
     if (selection === null) return;
@@ -157,7 +198,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const hoveredPage = pageOf(hovered);
 
   return (
-    <div className="pv">
+    <div className="pv" ref={view}>
       <section className="pv-col pv-col--pages" aria-labelledby={pagesHead} ref={pagesCol}>
         <div className="pv-cap">
           <h2 id={pagesHead} className="pv-cap__title">
@@ -175,7 +216,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                 paperId={paper.id}
                 page0={page0}
                 pages={pages}
-                image={image}
+                imageKind={image.kind}
+                imageReason={image.kind === "failed" ? image.reason : null}
                 markers={markers.get(page0) ?? NO_MARKERS}
                 selected={selectedPage === page0 ? selection : null}
                 hovered={hoveredPage === page0 ? hovered : null}

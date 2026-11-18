@@ -2,7 +2,8 @@
  * Paper view (Field Sheet board's "paper view" layout in the Survey Sheet look): three
  * ruled columns under the status bar, each scrolling on its own: pages with the
  * found-structure markers on sunken ground | the paper's text on paper | the structure list.
- * The view is one window tall, so a column's end is always reachable.
+ * The view fills the window under the chrome above it (--pv-top, measured by PaperView),
+ * so every column ends inside the window; at a column's end the wheel scrolls the page.
  * Light only; tokens only. Marker boxes come in as left/top/width/height from the
  * client-only PageWithBoxes (the bbox scaled to the shown image).
  */
@@ -10,9 +11,9 @@
 .pv {
   display: grid;
   grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
-  height: 100vh;
-  height: 100dvh;
-  min-height: 560px;
+  height: calc(100vh - var(--pv-top, 0px));
+  height: calc(100dvh - var(--pv-top, 0px));
+  min-height: 480px;
   border-top: 1px solid var(--line);
 }
 
@@ -20,7 +21,6 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 
@@ -153,6 +153,13 @@
   background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
 }
 
+.pv-page__retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
 .pv-page__why {
   margin: 0;
   max-width: 24ch;
@@ -240,7 +247,7 @@
 }
 
 .pv-marker:hover {
-  background-color: rgb(250 54 0 / 0.08);
+  background-color: color-mix(in srgb, var(--orange) 8%, transparent);
 }
 
 /* Lit: the card is hovered or selected, or this marker is. Thicker, with the board's
@@ -287,6 +294,12 @@
 
   .pv-marker__tag {
     border: 1px solid CanvasText;
+  }
+
+  /* The box-shadow ring is dropped in forced colours: the focused marker gets a double edge. */
+  .pv-marker:focus-visible {
+    outline: 4px double CanvasText;
+    outline-offset: 4px;
   }
 }
 
@@ -356,4 +369,15 @@
 .pv-list {
   display: flex;
   flex-direction: column;
+}
+
+/* An open engine menu opens downwards in the list (upwards it would slide under the sticky
+   caption or past the column's top), above the cards below and the caption. */
+.pv-list .card:has(.engine-menu__panel) {
+  z-index: 4;
+}
+
+.pv-list .engine-menu__panel {
+  top: calc(100% + 6px);
+  bottom: auto;
 }
