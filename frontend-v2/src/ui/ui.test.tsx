@@ -326,6 +326,19 @@ describe("DesktopOnly", () => {
     expect(screen.queryByText("tool")).toBeNull();
   });
 
+  it("below 1024 px the note is the page's h1, with a way back to the start page", () => {
+    setWidth(390);
+    render(
+      <DesktopOnly>
+        <p>tool</p>
+      </DesktopOnly>,
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "MARCUS is made for a desktop screen" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to start" })).toHaveAttribute("href", "/");
+  });
+
   it("never mounts the tool below 1024 px, not even for one frame", () => {
     setWidth(800);
     const mounted = vi.fn();

@@ -4,7 +4,6 @@ import chromene from "../assets/chromene.svg";
 import coumarin from "../assets/coumarin.svg";
 import exampleCrop from "../assets/example-crop.png";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
-import Kbd from "../ui/Kbd";
 import Stamp from "../ui/Stamp";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
@@ -166,6 +165,8 @@ function Lead() {
         <GlassLink tint="clear" to="/app?sample=1">
           Try a sample paper<span aria-hidden="true">→</span>
         </GlassLink>
+        {/* Shown below 1024 px, where /app has only its desktop note. */}
+        <p className="mono-label lead__desk">Desktop screen needed</p>
       </div>
     </div>
   );
@@ -179,8 +180,8 @@ const CARDS = [
   },
   {
     tag: "[02]",
-    title: "Three engines, side by side",
-    line: "DECIMER by default. Compare with MolNexTR and MolScribe.",
+    title: "Four engines, side by side",
+    line: "DECIMER by default. Compare with MolNexTR, MolScribe and DECIMER hand-drawn.",
   },
   {
     tag: "[03]",
@@ -195,7 +196,10 @@ function How() {
       {CARDS.map((card) => (
         <article key={card.tag} className="how__card">
           <h2 className="how__title">
-            <span className="how__tag">{card.tag}</span> {card.title}
+            <span className="how__tag" aria-hidden="true">
+              {card.tag}
+            </span>{" "}
+            {card.title}
           </h2>
           <p className="how__line">{card.line}</p>
         </article>
@@ -259,17 +263,11 @@ function Preview() {
             <Structure src={coumarin} alt="Coumarin" />
           </div>
           <code className="pcard__smiles">O=c1ccc2ccccc2o1</code>
-          <p className="pcard__note pcard__note--check">DECIMER and MolNexTR differ</p>
+          <p className="pcard__note pcard__note--check">Engines differ</p>
           <p className="pcard__actions">
-            <Pill tint="green">
-              Accept <Kbd>A</Kbd>
-            </Pill>
-            <Pill tint="clear">
-              Reject <Kbd>R</Kbd>
-            </Pill>
-            <Pill tint="clear">
-              Compare <Kbd>C</Kbd>
-            </Pill>
+            <Pill tint="green">Accept</Pill>
+            <Pill tint="clear">Reject</Pill>
+            <Pill tint="clear">Compare</Pill>
           </p>
         </div>
 
@@ -303,7 +301,7 @@ function Preview() {
       </div>
 
       <div className="preview__foot">
-        <p>Keys · A accept · R reject · E edit · C compare · ← → move · ? help</p>
+        <p>Keys in focus mode · A accept · R reject · E edit · C compare · ← → move · ? help</p>
         <p>Export JSON · CSV · SDF</p>
       </div>
     </section>

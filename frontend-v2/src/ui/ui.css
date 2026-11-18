@@ -534,13 +534,17 @@
 .desktop-only {
   display: flex;
   flex: 1 0 auto;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 20px;
   padding: 64px 24px;
 }
 
+/* The page's h1, set as the note it always was. */
 .desktop-only__note {
   max-width: 18ch;
+  margin: 0;
   font-family: var(--font-head);
   font-weight: 700;
   font-size: 24px;
@@ -548,5 +552,25 @@
   letter-spacing: -0.02em;
   text-align: center;
   text-transform: uppercase;
+  color: var(--green);
+}
+
+/* The way back: a text link in the mono control voice, 24 px tall for a thumb. */
+.desktop-only__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--green);
+}
+
+.desktop-only__back:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
   color: var(--green);
 }

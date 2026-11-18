@@ -408,6 +408,18 @@
   padding: 15px 22px;
 }
 
+/* Only below 1024 px, where /app has only its desktop note. */
+.lead .lead__desk {
+  display: none;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 1023.98px) {
+  .lead .lead__desk {
+    display: block;
+  }
+}
+
 @media (max-width: 1199.98px) {
   .lead {
     grid-template-columns: minmax(0, 1fr) 260px;
@@ -422,7 +434,12 @@
 }
 
 @media (max-width: 719.98px) {
+  /* Phone: the headline and its buttons come first, the example page after them. */
   .lead {
+    order: -1;
+    margin-top: 0;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "title"

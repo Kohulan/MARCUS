@@ -50,7 +50,10 @@ export default function DesktopOnly({ children }: { children: ReactNode }) {
 
   const note = (
     <main className="desktop-only">
-      <p className="desktop-only__note">MARCUS is made for a desktop screen</p>
+      <h1 className="desktop-only__note">MARCUS is made for a desktop screen</h1>
+      <a href="/" className="desktop-only__back">
+        Back to start
+      </a>
     </main>
   );
   if (!mounted) return note;
