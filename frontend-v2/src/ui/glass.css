@@ -44,6 +44,19 @@
   transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/*
+ * Small pills on a structure card or in focus mode sit on flat white or paper, where the
+ * refraction has nothing to bend: they keep the blur only, so scrolling a long grid does not
+ * run the SVG filter for every pill. Only where the refraction runs at all (Chromium, glass
+ * not reduced, no forced colours); elsewhere the rules below hold.
+ */
+@media (not (prefers-reduced-transparency: reduce)) and (forced-colors: none) {
+  .card .glass:not(:disabled),
+  .fm .glass--sm:not(:disabled) {
+    backdrop-filter: blur(3px) saturate(1.8);
+  }
+}
+
 .glass--sm {
   gap: 8px;
   padding: 8px 14px;

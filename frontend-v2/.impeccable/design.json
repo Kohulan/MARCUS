@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-18T14:35:40+00:00",
+  "generatedAt": "2026-11-18T19:27:47+00:00",
   "title": "Design System: MARCUS",
   "extensions": {
     "colorMeta": {
@@ -338,6 +338,38 @@
         "displayName": "Data",
         "purpose": "SMILES and machine strings; case kept, wraps anywhere."
       },
+      "display-info": {
+        "displayName": "Display info",
+        "purpose": "The h1 of About, Privacy and Disclaimer; clamp(36px, 2.6vw + 18px, 60px)."
+      },
+      "drop-title": {
+        "displayName": "Drop title",
+        "purpose": "The tool home's drop zone heading; 44px."
+      },
+      "empty-title": {
+        "displayName": "Empty title",
+        "purpose": "A paper or image that is gone; 32px."
+      },
+      "note-title": {
+        "displayName": "Note title",
+        "purpose": "The desktop-only note and the COCONUT results heading; 24px."
+      },
+      "heading-sm": {
+        "displayName": "Heading small",
+        "purpose": "Info-page section headings, the tool home's Images heading; 20px."
+      },
+      "dialog-title": {
+        "displayName": "Dialog title",
+        "purpose": "Editor, COCONUT, Compare and Keys dialog titles; 18px."
+      },
+      "prose-lg": {
+        "displayName": "Prose large",
+        "purpose": "Paper names in the tool's list, the empty-list line; 17px."
+      },
+      "prose-md": {
+        "displayName": "Prose medium",
+        "purpose": "Text in the tool: field values, notes, problems, paper-view text; 15px."
+      },
       "wordmark": {
         "displayName": "Wordmark",
         "purpose": "The MARCUS wordmark only (subset font)."
@@ -345,34 +377,39 @@
     },
     "shadows": [
       {
-        "name": "glass-lift",
+        "name": "lift-glass",
         "value": "0 10px 24px -8px rgba(15, 30, 22, 0.35)",
-        "purpose": "Glass pills (with their inner highlights), toasts, card menus."
+        "purpose": "Glass pills (after glass-shine), toasts, card menus. Token --lift-glass."
       },
       {
-        "name": "glass-inner",
-        "value": "inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22)",
-        "purpose": "The liquid-glass highlight stack on every pill."
+        "name": "glass-shine",
+        "value": "inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 -2px 3px rgba(255, 255, 255, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.45), inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22)",
+        "purpose": "The liquid-glass highlight stack on every pill. Token --glass-shine."
       },
       {
-        "name": "menu-lift",
+        "name": "lift-menu",
         "value": "0 12px 28px -10px rgba(15, 30, 22, 0.35)",
-        "purpose": "Workspace disclosures such as Export."
+        "purpose": "Workspace disclosures such as Export. Token --lift-menu."
       },
       {
-        "name": "dialog-lift",
+        "name": "lift-dialog",
         "value": "0 24px 64px -24px rgba(15, 30, 22, 0.45)",
-        "purpose": "The structure editor and COCONUT dialogs."
+        "purpose": "Every dialog: editor, COCONUT, Compare, Keys. Token --lift-dialog."
       },
       {
-        "name": "pill-fallback",
+        "name": "scrim",
+        "value": "rgba(28, 33, 29, 0.42)",
+        "purpose": "The backdrop of every dialog (native <dialog>, page behind inert). Token --scrim."
+      },
+      {
+        "name": "lift-pill-solid",
         "value": "0 6px 16px -8px rgba(15, 30, 22, 0.35)",
-        "purpose": "Solid pills under reduced transparency or without backdrop-filter."
+        "purpose": "Solid pills under reduced transparency or without backdrop-filter. Token --lift-pill-solid."
       },
       {
         "name": "sheet-flat",
         "value": "0 1px 0 #D9DACF",
-        "purpose": "A drawing sheet lying flat; the most a printed sheet may carry."
+        "purpose": "A drawing sheet lying flat (the landing's example page, the paper-view page); the most a printed sheet may carry."
       }
     ],
     "motion": [

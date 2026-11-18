@@ -246,6 +246,18 @@
   color: var(--ink);
 }
 
+/* The tag hangs above the box, over the page's own text: the pointer on the marker or its
+   tag fades it, so the words under it can be read. */
+.pv-marker:hover .pv-marker__tag {
+  opacity: 0.15;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pv-marker__tag {
+    transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
 .pv-marker:hover {
   background-color: color-mix(in srgb, var(--orange) 8%, transparent);
 }
