@@ -97,6 +97,17 @@
   color: var(--text-2);
 }
 
+/* "Required" beside the label: the same mono label, quieter (no asterisk). */
+.coconut-field__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.coconut .coconut-field__req {
+  color: var(--muted);
+}
+
 .coconut-input {
   width: 100%;
   min-height: 36px;

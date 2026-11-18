@@ -19,6 +19,14 @@
   background-color: var(--paper);
 }
 
+/* The filters, then the way into focus mode beside them. */
+.rg-filters__lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
 .rg-filters__set {
   display: inline-flex;
   border: 1px solid var(--control-border);

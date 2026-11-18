@@ -315,6 +315,39 @@ describe("cards and their states", () => {
   });
 });
 
+describe("the way into focus mode", () => {
+  it("Review one by one opens focus mode on the first structure still to check", async () => {
+    renderGrid(
+      paper([
+        segment("s1", { curation: curation({ status: "accepted" }) }),
+        segment("s2"),
+        segment("s3"),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    fireEvent.click(screen.getByRole("button", { name: "Review one by one" }));
+    expect(await screen.findByRole("region", { name: "Focus [02]" })).toBeInTheDocument();
+  });
+
+  it("with nothing to check it opens on the first structure", async () => {
+    renderGrid(paper([segment("s1", { curation: curation({ status: "accepted" }) })]));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Review one by one" }));
+    expect(await screen.findByRole("region", { name: "Focus [01]" })).toBeInTheDocument();
+  });
+
+  it("is off when the paper has no structures", async () => {
+    renderGrid(paper([]));
+    expect(await screen.findByRole("button", { name: "Review one by one" })).toBeDisabled();
+  });
+
+  it("each card says that Enter opens it", async () => {
+    renderGrid(paper([segment("s1"), segment("s2")]));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    for (const c of cards()) expect(c).toHaveAccessibleDescription("Enter: open");
+  });
+});
+
 describe("the card menu (More)", () => {
   it("Edit opens the editor on that structure; a save keeps the note; focus returns to More", async () => {
     const put = vi

@@ -13,7 +13,7 @@ import GonePage from "./GonePage";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { coconutStructures, submissionTitle } from "./coconutList";
-import { filterCounts } from "./cardState";
+import { CARD_OPEN_HINT, filterCounts } from "./cardState";
 import StatusBar from "./StatusBar";
 import { useReviewRows } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
@@ -215,6 +215,10 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           {counts.failed > 0 && <li className="ws-counts__failed">{`${counts.failed} failed`}</li>}
         </ul>
       </div>
+      {/* Every structure card points here (aria-describedby): Enter opens it. */}
+      <span id={CARD_OPEN_HINT} className="visually-hidden">
+        Enter: open
+      </span>
 
       <StatusBar
         paper={paper}

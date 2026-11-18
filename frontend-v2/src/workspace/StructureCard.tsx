@@ -20,6 +20,7 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import {
+  CARD_OPEN_HINT,
   enginesDiffer,
   hasDrawing,
   shownPrediction,
@@ -188,6 +189,7 @@ function StructureCard({
       className={classes.join(" ")}
       tabIndex={0}
       aria-label={`${where}, ${STATE_WORD[state]}`}
+      aria-describedby={CARD_OPEN_HINT}
       aria-current={current ? "true" : undefined}
       data-segment-id={segment.id}
       onKeyDown={ownKey}

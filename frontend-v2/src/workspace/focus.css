@@ -111,6 +111,16 @@
   text-underline-offset: 0.25em;
 }
 
+/* The keys act only while focus is in the region (useReviewKeys): out of it, the Keys
+   control goes muted and its key cap dashed. A click in the region turns them back on. */
+.fm:not(:focus-within) .fm-keys {
+  color: var(--muted);
+}
+
+.fm:not(:focus-within) .fm-keys .kbd {
+  border-style: dashed;
+}
+
 /* Two columns ---------------------------------------------------------------- */
 
 .fm-body {

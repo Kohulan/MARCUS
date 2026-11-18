@@ -135,6 +135,9 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   latestOpen.current = openFocus;
   const onOpen = useCallback((segmentId: string) => latestOpen.current(segmentId), []);
 
+  // "Review one by one" opens focus mode on the first structure still to check, else the first.
+  const firstOpen = rows.find((r) => r.state === "to-check") ?? rows[0];
+
   /** Focus a card of the grid by id (null: the first card, else the filter strip). */
   const focusCard = useCallback((segmentId: string | null) => {
     const cards = [...(grid.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])];
@@ -208,6 +211,7 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
         onFilter={onFilter}
         shown={shown.length}
         onSelectAll={() => setPicked(new Set(shown.map((r) => r.segmentId)))}
+        onReview={firstOpen === undefined ? null : () => onOpen(firstOpen.segmentId)}
       />
       {shown.length === 0 ? (
         <p className="rg-empty">

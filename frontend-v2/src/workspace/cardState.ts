@@ -110,3 +110,6 @@ export function filterCounts(rows: readonly { state: CardState }[]): Record<Grid
   for (const r of rows) c[filterOf(r.state)] += 1;
   return c;
 }
+
+/** Id of the one hidden "Enter: open" that every structure card points at (Workspace). */
+export const CARD_OPEN_HINT = "card-open-hint";
