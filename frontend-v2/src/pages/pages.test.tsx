@@ -90,18 +90,25 @@ describe("Landing", () => {
     ]);
   });
 
-  it("the three cards carry [01], [02], [03] and live under #how", () => {
+  it("the three cards set [01], [02], [03] on the heading's first line, with no label above", () => {
     const { container } = renderAt("/");
-    const how = container.querySelector("section#how");
+    const how = container.querySelector("section#how") as HTMLElement;
     expect(how).toHaveAttribute("aria-label", "What MARCUS does");
-    const h2s = within(how as HTMLElement).getAllByRole("heading", { level: 2 });
-    expect(h2s.map((h) => h.textContent)).toEqual([
-      "Every structure on every page",
-      "Three engines, side by side",
-      "Checked, then into COCONUT",
+    const h2s = within(how).getAllByRole("heading", { level: 2 });
+    expect(h2s.map((h) => text(h))).toEqual([
+      "[01] Every structure on every page",
+      "[02] Three engines, side by side",
+      "[03] Checked, then into COCONUT",
     ]);
-    for (const tag of ["[01]", "[02]", "[03]"]) {
-      expect(within(how as HTMLElement).getByText(tag)).toBeInTheDocument();
+    for (const [i, h2] of h2s.entries()) {
+      expect(h2.firstElementChild).toHaveClass("how__tag");
+      expect(h2.firstElementChild?.textContent).toBe(`[0${i + 1}]`);
+      // Nothing sits above the heading in its card.
+      expect(h2.previousElementSibling).toBeNull();
+    }
+    expect(how.querySelector(".mono-label")).toBeNull();
+    for (const word of ["Find", "Read", "Curate"]) {
+      expect(within(how).queryByText(word)).toBeNull();
     }
   });
 
@@ -109,6 +116,8 @@ describe("Landing", () => {
     renderAt("/");
     const preview = screen.getByRole("region", { name: "Example: the review grid" });
     expect(preview.textContent).toContain("Example paper");
+    expect(preview.textContent).not.toContain("In the tool");
+    expect(preview.querySelector(".preview__name .mono-label")).toBeNull();
     expect(preview.textContent).toContain("Send 9 to COCONUT");
     expect(preview.querySelectorAll("button, a, [tabindex], input, select, textarea")).toHaveLength(0);
   });

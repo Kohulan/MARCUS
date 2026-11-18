@@ -173,19 +173,16 @@ function Lead() {
 
 const CARDS = [
   {
-    label: "Find",
     tag: "[01]",
     title: "Every structure on every page",
     line: "DECIMER Segmentation marks each drawing and keeps its page and position.",
   },
   {
-    label: "Read",
     tag: "[02]",
     title: "Three engines, side by side",
     line: "DECIMER by default. Compare with MolNexTR and MolScribe.",
   },
   {
-    label: "Curate",
     tag: "[03]",
     title: "Checked, then into COCONUT",
     line: "Accept or reject with one key. Send what you accepted.",
@@ -197,9 +194,9 @@ function How() {
     <section id="how" className="how" aria-label="What MARCUS does">
       {CARDS.map((card) => (
         <article key={card.tag} className="how__card">
-          <p className="mono-label">{card.label}</p>
-          <p className="how__tag">{card.tag}</p>
-          <h2 className="how__title">{card.title}</h2>
+          <h2 className="how__title">
+            <span className="how__tag">{card.tag}</span> {card.title}
+          </h2>
           <p className="how__line">{card.line}</p>
         </article>
       ))}
@@ -218,7 +215,6 @@ function Preview() {
     <section className="preview" aria-label="Example: the review grid">
       <div className="preview__bar">
         <div className="preview__name">
-          <p className="mono-label">In the tool · Review</p>
           <p className="preview__title">Example paper</p>
         </div>
         <p className="preview__counts">

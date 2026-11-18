@@ -459,17 +459,20 @@
   background-color: var(--paper);
 }
 
+/* The step number on the heading's first line, set as a [nn] tag (no label above). */
 .how__tag {
-  margin-top: 22px;
+  margin-right: 0.15em;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.4;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0;
+  vertical-align: 0.95em;
   color: var(--orange-ink);
 }
 
 .how .how__title {
-  max-width: 13ch;
-  margin: 6px 0 10px;
+  max-width: 14ch;
+  margin: 0 0 10px;
   font-size: 30px;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -489,10 +492,6 @@
 
   .how__card {
     padding: 20px 16px 26px;
-  }
-
-  .how__tag {
-    margin-top: 14px;
   }
 
   .how .how__title {
@@ -522,11 +521,12 @@
 }
 
 .preview__name {
+  display: flex;
+  align-items: center;
   padding: 16px 24px;
 }
 
 .preview__title {
-  margin-top: 4px;
   font-weight: 700;
   font-size: 22px;
   line-height: 1.2;
