@@ -22,7 +22,7 @@ function plural(n: number, word: string): string {
  * "15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page" (zeros
  * left out), in the workspace's order. A failed structure is never counted as to check.
  */
-export function countsText(p: PaperSummary): string {
+function countsText(p: PaperSummary): string {
   const parts = [plural(p.structures, "structure")];
   if (p.accepted) parts.push(`${p.accepted} accepted`);
   if (p.to_review) parts.push(`${p.to_review} to check`);
@@ -33,7 +33,7 @@ export function countsText(p: PaperSummary): string {
 }
 
 /** "Deleted in N days" (N rounded up), "Deleted today" when less than a day is left. */
-export function deletionText(expiresAt: string, now = Date.now()): string {
+function deletionText(expiresAt: string, now = Date.now()): string {
   const days = (Date.parse(expiresAt) - now) / DAY_MS;
   if (!(days >= 1)) return "Deleted today"; // also an unreadable date
   return `Deleted in ${plural(Math.ceil(days), "day")}`;

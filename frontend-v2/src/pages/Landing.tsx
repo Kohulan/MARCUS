@@ -22,7 +22,7 @@ import "./landing.css";
 // a snapshot of a read in progress. The review preview is labelled "Example". No accuracy,
 // speed or usage numbers.
 
-export const CITATION_TEXT =
+const CITATION_TEXT =
   "Rajan K., Weißenborn V., Lederer L., Zielesny A., Steinbeck C. MARCUS: molecular " +
   "annotation and recognition for curating unravelled structures. Digital Discovery 2025, " +
   "4(11), 3137–3148. https://doi.org/10.1039/d5dd00313j";
@@ -30,7 +30,7 @@ export const CITATION_TEXT =
 const DOI_URL = "https://doi.org/10.1039/d5dd00313j";
 
 /** Router state for /app: the visitor came to upload, so the tool opens the file picker. */
-export const OPEN_PICKER = { openPicker: true } as const;
+const OPEN_PICKER = { openPicker: true } as const;
 
 type StepState = "done" | "running" | "todo";
 const STEP_WORD: Record<StepState, string> = {

@@ -41,7 +41,7 @@ import type { Workspace } from "./useWorkspace";
 import "./focus.css";
 
 /** After A or R the stamp lands (160 ms), then focus mode moves on (none under reduced motion). */
-export const ADVANCE_MS = 250;
+const ADVANCE_MS = 250;
 
 type Decision = "accepted" | "rejected";
 

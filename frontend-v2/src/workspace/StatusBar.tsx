@@ -13,7 +13,7 @@ import { checkFailure as checkFailureOf, pageFailures, progress } from "./pageFa
 import "./workspace.css";
 
 /** "About 3 min in the queue" (whole minutes, rounded up); under 60 s "Less than a minute". */
-export function queueText(seconds: number): string {
+function queueText(seconds: number): string {
   if (seconds < 60) return "Less than a minute";
   return `About ${Math.ceil(seconds / 60)} min in the queue`;
 }

@@ -5,6 +5,7 @@ import { reasonText } from "../api/reasons";
 import { isPaperBusy, isStepActive } from "../api/status";
 import type { StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { saveBlob } from "../ui/saveBlob";
 import { doclingBlocks, type TextBlock } from "./doclingText";
 import { newestFirst } from "./pageFailures";
 
@@ -16,22 +17,12 @@ const newestDocling = (steps: StepOut[]): StepOut | undefined =>
   newestFirst(steps.filter((s) => s.kind === "docling"))[0];
 
 /** "alkaloids.pdf" → "alkaloids.txt": one trailing ".pdf" (any case) gives way to ".txt". */
-export const textFileName = (displayName: string) => `${displayName.replace(/\.pdf$/i, "")}.txt`;
+const textFileName = (displayName: string) => `${displayName.replace(/\.pdf$/i, "")}.txt`;
 
-/** Saves the blocks, joined by blank lines, as `<name>.txt` through a blob link. */
+/** Saves the blocks, joined by blank lines, as `<name>.txt`. */
 function download(blocks: TextBlock[], name: string) {
-  const blob = new Blob([blocks.map((b) => b.text).join("\n\n")], {
-    type: "text/plain;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = textFileName(name);
-  document.body.append(a);
-  a.click();
-  a.remove();
-  // Some browsers start reading the blob after click() returns.
-  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+  const text = blocks.map((b) => b.text).join("\n\n");
+  saveBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), textFileName(name));
 }
 
 /**

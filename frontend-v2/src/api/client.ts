@@ -26,7 +26,7 @@ import type {
 
 export const BASE = "/api/v2";
 
-const TOO_LARGE = "This file is larger than 20 MB.";
+export const TOO_LARGE = "This file is larger than 20 MB.";
 const BUSY = "The server is busy, try again in a moment.";
 
 export class ApiError extends Error {

@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import { loadedDrawing } from "../api/depictions";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
+import { saveBlob } from "../ui/saveBlob";
 import "./structureActions.css";
 
 export type StructureActionsProps = {
@@ -40,18 +41,6 @@ export function fileStem(name: string, n: number): string {
       .replace(/^[._]+|_+$/g, "")
       .slice(0, 80) || "structure";
   return `${base}-${n}`;
-}
-
-function saveBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 type Lookup =
