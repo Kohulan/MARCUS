@@ -39,7 +39,34 @@ vi.mock("../api/useLiveEvents", async () => {
 const ID = "3f6c1a52-8d0e-4f43-9a7b-2b1c0d9e8f71";
 const XSS = "<img src=x onerror=window.__xss=1>";
 
-function job(over: Partial<ImageJobOut> & { error?: string | null } = {}): ImageJobOut {
+const CAFFEINE = "CN1C=NC2=C1C(=O)N(C(=O)N2C)C";
+
+function pred(over: Partial<PredictionOut> = {}): PredictionOut {
+  return {
+    id: "pr1",
+    engine: "decimer",
+    engine_version: "2.7.1",
+    smiles: CAFFEINE,
+    molfile: "CAFFEINE-MOL",
+    valid: true,
+    ms: 1240,
+    cached: false,
+    created_at: "2026-11-18T10:00:30Z",
+    ...over,
+  };
+}
+
+/**
+ * A job as GET /images/{id} sends it. `prediction` (a test shorthand) is the job engine's
+ * one prediction; `predictions` (newest first) overrides it. The default step is the job
+ * engine's, as the pipeline writes it (the job itself is never "processing").
+ */
+function job(
+  over: Partial<ImageJobOut> & { error?: string | null; prediction?: PredictionOut | null } = {},
+): ImageJobOut {
+  const { prediction = pred(), ...rest } = over;
+  const status = rest.status ?? "done";
+  const stepStatus = status === "processing" ? "running" : status;
   return {
     id: ID,
     status: "done",
@@ -47,18 +74,12 @@ function job(over: Partial<ImageJobOut> & { error?: string | null } = {}): Image
     display_name: "drawing.png",
     created_at: "2026-11-18T10:00:00Z",
     expires_at: "2026-12-18T10:00:00Z",
-    prediction: {
-      smiles: "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
-      molfile: "CAFFEINE-MOL",
-      valid: true,
-      engine: "decimer",
-      engine_version: "2.7.1",
-      ms: 1240,
-    },
-    predictions: [],
+    predictions: prediction ? [prediction] : [],
     error_class: null,
-    steps: [{ engine: "decimer", status: "done", error_class: null }],
-    ...over,
+    steps: [
+      { engine: rest.engine ?? "decimer", status: stepStatus, error_class: rest.error_class ?? null },
+    ],
+    ...rest,
   } as ImageJobOut;
 }
 
@@ -118,6 +139,120 @@ describe("ImageResult", () => {
     expect(api.depict).toHaveBeenCalledWith("CN1C=NC2=C1C(=O)N(C(=O)N2C)C");
     expect(live.mounted).toEqual([{ kind: "image", id: ID }]);
     await waitFor(() => expect(document.title).toBe("drawing.png · MARCUS"));
+  });
+
+  describe("the main result is the job engine's (A-I1)", () => {
+    const molnextr = pred({
+      id: "pr2",
+      engine: "molnextr",
+      engine_version: "1.0",
+      smiles: "c1ccccc1O",
+      created_at: "2026-11-18T10:01:00Z",
+    });
+    const molscribe = pred({
+      id: "pr3",
+      engine: "molscribe",
+      engine_version: "1.1",
+      smiles: "C(",
+      valid: false,
+      created_at: "2026-11-18T10:02:00Z",
+    });
+
+    it("stays on the job engine's structure when Compare's engines finish later", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({
+          predictions: [molscribe, molnextr, pred()],
+          steps: [
+            { engine: "molscribe", status: "done", error_class: null },
+            { engine: "molnextr", status: "done", error_class: null },
+            { engine: "decimer", status: "done", error_class: null },
+          ],
+        }),
+      );
+      renderPage();
+      expect(await screen.findByText(CAFFEINE)).toBeInTheDocument();
+      const label = screen.getByRole("table");
+      expect(within(label).getByText("DECIMER 2.7.1")).toBeInTheDocument();
+      expect(within(label).getByText("Yes")).toBeInTheDocument();
+      expect(screen.queryByText("C(")).toBeNull();
+      expect(screen.queryByText("Picked here, not saved")).toBeNull();
+    });
+
+    it("takes the engine's newest valid prediction over a newer invalid one", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({
+          predictions: [
+            pred({ id: "pr9", smiles: "C1CC", valid: false, created_at: "2026-11-18T10:05:00Z" }),
+            pred(),
+          ],
+        }),
+      );
+      renderPage();
+      expect(await screen.findByText(CAFFEINE)).toBeInTheDocument();
+      expect(screen.queryByText("C1CC")).toBeNull();
+    });
+
+    it("says nothing about the queue while only Compare's engines run", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({
+          status: "queued",
+          steps: [
+            { engine: "molscribe", status: "queued", error_class: null },
+            { engine: "molnextr", status: "running", error_class: null },
+            { engine: "decimer", status: "done", error_class: null },
+          ],
+        }),
+      );
+      renderPage();
+      expect(await screen.findByText(CAFFEINE)).toBeInTheDocument();
+      const result = screen.getByRole("region", { name: "Structure" });
+      expect(within(result).queryByText("Waiting in the queue")).toBeNull();
+      expect(within(result).queryByText("Reading…")).toBeNull();
+    });
+
+    it("reads 'Reading…' while the job engine's step runs (the job itself stays queued)", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({
+          status: "queued",
+          prediction: null,
+          steps: [{ engine: "decimer", status: "running", error_class: null }],
+        }),
+      );
+      renderPage();
+      expect(await screen.findByText("Reading…")).toBeInTheDocument();
+      expect(screen.queryByText("Waiting in the queue")).toBeNull();
+    });
+  });
+
+  it("Download image saves the drawing the page holds, with no fetch (C-I1: CSP)", async () => {
+    vi.spyOn(api, "getImageJob").mockResolvedValue(job());
+    const fetchSpy = vi.fn(() => Promise.reject(new TypeError("refused by connect-src")));
+    vi.stubGlobal("fetch", fetchSpy);
+    const saved: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    try {
+      renderPage();
+      await screen.findByRole("img", { name: "Structure read from the image" });
+      const before = vi.mocked(URL.createObjectURL).mock.calls.length;
+      fireEvent.click(screen.getByRole("button", { name: "Download image" }));
+      await waitFor(() => expect(saved).toEqual(["drawing-1.svg"]));
+      expect(fetchSpy).not.toHaveBeenCalled();
+      const blob = vi.mocked(URL.createObjectURL).mock.calls[before]![0] as Blob;
+      expect(blob.type).toBe("image/svg+xml");
+      const text = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(blob);
+      });
+      expect(text).toBe("<svg/>");
+      expect(screen.queryByText("Could not download the image")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("revokes the drawing's object URL when the page goes away", async () => {
@@ -372,7 +507,9 @@ describe("ImageResult", () => {
         { engine: "molnextr", status: "done", error_class: null },
         { engine: "decimer", status: "done", error_class: null },
       ];
-      vi.spyOn(api, "getImageJob").mockResolvedValue(job({ predictions: [molnextr], steps }));
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ predictions: [molnextr, pred()], steps }),
+      );
       const seen: ImageCompareProps[] = [];
       function FakeCompare(props: ImageCompareProps) {
         seen.push(props);
@@ -391,7 +528,7 @@ describe("ImageResult", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Compare" }));
       const last = seen.at(-1)!;
       expect(last.target).toEqual({ kind: "image", id: ID });
-      expect(last.predictions).toEqual([molnextr]);
+      expect(last.predictions).toEqual([molnextr, pred()]);
       expect(last.steps).toEqual(steps);
 
       fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));

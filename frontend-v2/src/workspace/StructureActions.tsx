@@ -16,8 +16,14 @@ export type StructureActionsProps = {
   /** The curated molfile, then the chosen prediction's, else the SMILES is converted. */
   curatedMolfile?: string | null;
   predictionMolfile?: string | null;
-  /** api.depictionUrl(...) of the shown structure. */
+  /** api.depictionUrl(...) of the shown structure (an API URL, fetched on Download). */
   depictionUrl: string | null;
+  /**
+   * The drawing the caller already holds (the image page's /tools/depict reply), used for
+   * Download instead of `depictionUrl`. Never a fetch of a blob: URL: the app CSP has no
+   * blob: in connect-src.
+   */
+  image?: (() => Blob) | undefined;
   /**
    * False where a `<Smiles>` with its own Copy is beside these actions (focus mode, the card,
    * the image page): one "Copy SMILES" per place, not two of the same name.
@@ -62,6 +68,7 @@ export default function StructureActions({
   curatedMolfile,
   predictionMolfile,
   depictionUrl,
+  image,
   copySmiles = true,
   onEdit,
   onCompare,
@@ -119,8 +126,14 @@ export default function StructureActions({
   }
 
   async function downloadImage() {
-    if (!depictionUrl) return;
     try {
+      if (image) {
+        const blob = image();
+        saveBlob(blob, `${stem}.${blob.type === "image/png" ? "png" : "svg"}`);
+        setNote(null);
+        return;
+      }
+      if (!depictionUrl) return;
       const res = await fetch(depictionUrl, { credentials: "same-origin" });
       if (!res.ok) throw new Error(String(res.status));
       saveBlob(
@@ -179,7 +192,7 @@ export default function StructureActions({
         <GlassButton
           tint="clear"
           size="sm"
-          disabled={!depictionUrl}
+          disabled={!image && !depictionUrl}
           onClick={() => void downloadImage()}
         >
           Download image

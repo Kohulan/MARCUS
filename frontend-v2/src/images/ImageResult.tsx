@@ -6,10 +6,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError, api, svgBlobUrl } from "../api/client";
+import { ApiError, api, depictBlob, svgBlobUrl } from "../api/client";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
-import type { Engine, ImageJobOut, ImagePrediction, PredictionOut } from "../api/types";
+import type { DepictReply, Engine, ImageJobOut, PredictionOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
@@ -56,7 +56,7 @@ const ENGINE_LABEL: Record<string, string> = {
   molscribe: "MolScribe",
 };
 
-const engineName = (p: Pick<ImagePrediction, "engine" | "engine_version">) =>
+const engineName = (p: Pick<PredictionOut, "engine" | "engine_version">) =>
   `${ENGINE_LABEL[p.engine] ?? p.engine} ${p.engine_version}`.trim();
 
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
@@ -66,6 +66,30 @@ const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixe
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ACTIVE = new Set(["queued", "processing"]);
+
+/**
+ * The main result: the job engine's newest valid prediction, else its newest one. Never
+ * another engine's: an engine run from Compare shows there, and here only once picked
+ * (the API's `prediction` is the newest of any engine, so it is not read).
+ */
+export function mainPrediction(job: ImageJobOut): PredictionOut | null {
+  const own = job.predictions.filter((p) => p.engine === job.engine);
+  return own.find((p) => p.valid) ?? own[0] ?? null;
+}
+
+/**
+ * What the job engine is doing, from its newest step (newest first). The job's own status
+ * also counts Compare's engines (it is "queued" while any of them runs) and is never
+ * "processing", so it is only the fallback for a job without a step of its engine.
+ */
+function mainStatus(job: ImageJobOut): "waiting" | "reading" | "failed" | "done" {
+  const step = job.steps.find((s) => s.engine === job.engine);
+  const status = step?.status ?? job.status;
+  if (status === "running" || status === "processing") return "reading";
+  if (status === "pending" || status === "queued") return "waiting";
+  if (status === "failed") return "failed";
+  return "done";
+}
 
 export default function ImageResult({ compare = COMPARE }: ImageResultProps) {
   const id = useParams().id ?? "";
@@ -149,10 +173,14 @@ function ImageJobPage({
   );
 }
 
-/** The drawing of `smiles` from /tools/depict as an object URL, revoked when it changes. */
+/**
+ * The drawing of `smiles` from /tools/depict as an object URL, revoked when it changes, and
+ * the reply itself (Download saves it as is).
+ */
 function useDrawing(smiles: string | null): {
   src: string | null;
   failed: boolean;
+  reply: DepictReply | null;
 } {
   const query = useQuery({
     // the same key Compare uses for a drawing without a highlight, so it is drawn once
@@ -172,7 +200,11 @@ function useDrawing(smiles: string | null): {
     setSrc(url);
     return () => URL.revokeObjectURL(url);
   }, [reply]);
-  return { src: query.isError ? null : src, failed: query.isError };
+  return {
+    src: query.isError ? null : src,
+    failed: query.isError,
+    reply: query.isError ? null : (reply ?? null),
+  };
 }
 
 function Result({
@@ -190,7 +222,7 @@ function Result({
   });
 
   // Kept in this page only: a prediction picked in Compare, and an edit on top of it.
-  const [picked, setPicked] = useState<ImagePrediction | null>(null);
+  const [picked, setPicked] = useState<PredictionOut | null>(null);
   const [edit, setEdit] = useState<EditorStructure | null>(null);
   const [editing, setEditing] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -212,7 +244,12 @@ function Result({
     closeCompare.current?.focus({ preventScroll: true });
   }, [comparing]);
 
-  const prediction = picked ?? job.prediction;
+  const prediction = picked ?? mainPrediction(job);
+  const status = mainStatus(job);
+  // The job engine failed and left nothing to show: the failure is the result (Retry).
+  const failed = status === "failed" && mainPrediction(job) === null;
+  const failedClass =
+    job.steps.find((st) => st.engine === job.engine)?.error_class ?? job.error_class;
   const smiles = edit?.smiles ?? prediction?.smiles ?? null;
   const molfile = edit ? edit.molfile : (prediction?.molfile ?? null);
   const drawing = useDrawing(smiles);
@@ -263,18 +300,18 @@ function Result({
             Structure
           </p>
 
-          {job.status === "queued" && (
+          {status === "waiting" && (
             <p className="ir-status ir-status--wait">Waiting in the queue</p>
           )}
-          {job.status === "processing" && (
+          {status === "reading" && (
             <p className="ir-status">
               <StateBadge state="reading" />
             </p>
           )}
-          {job.status === "failed" && (
+          {failed && (
             <div className="ir-failed hatch">
               <StateBadge state="failed" />
-              <p className="ir-failed__why">{`Could not read a structure: ${reasonText(job.error_class)}`}</p>
+              <p className="ir-failed__why">{`Could not read a structure: ${reasonText(failedClass)}`}</p>
               <GlassButton tint="clear" size="sm" disabled={retrying} onClick={() => void retry()}>
                 Retry
               </GlassButton>
@@ -285,7 +322,7 @@ function Result({
           )}
 
           {/* A failed job with nothing to draw has no empty box: the failure is the content. */}
-          {(smiles || job.status !== "failed") && (
+          {(smiles || !failed) && (
             <div className="ir-drawing">
               {smiles ? (
                 <Structure
@@ -293,7 +330,7 @@ function Result({
                   failed={drawing.failed}
                   alt="Structure read from the image"
                 />
-              ) : job.status === "done" ? (
+              ) : status === "done" ? (
                 <p className="ir-drawing__none mono-label">No structure found</p>
               ) : (
                 <span className="corner ir-drawing__empty" aria-hidden="true">
@@ -318,7 +355,8 @@ function Result({
             smiles={smiles}
             curatedMolfile={edit ? edit.molfile : null}
             predictionMolfile={edit ? null : (prediction?.molfile ?? null)}
-            depictionUrl={drawing.src}
+            depictionUrl={null}
+            image={drawing.reply ? () => depictBlob(drawing.reply!) : undefined}
             onEdit={() => setEditing(true)}
             copySmiles={false}
             {...(Compare ? { onCompare: openCompare } : {})}

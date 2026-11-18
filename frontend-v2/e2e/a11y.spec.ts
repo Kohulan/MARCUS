@@ -148,5 +148,11 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     await expect(page.getByText(image.display_name).first()).toBeVisible();
     await expect(page.getByRole("img", { name: /structure/i }).first()).toBeVisible();
     await expectNoA11yViolations(page);
+
+    // Download image under the real CSP: the drawing the page holds, never a fetch of blob:.
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download image" }).click();
+    expect((await download).suggestedFilename()).toBe("Figure_2b-1.svg");
+    await expect(page.getByText("Could not download the image")).toHaveCount(0);
   });
 });

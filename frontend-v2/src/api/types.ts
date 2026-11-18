@@ -141,15 +141,6 @@ export interface QueueOut {
   estimate_s: number;
 }
 
-export interface ImagePrediction {
-  smiles: string;
-  molfile: string | null;
-  valid: boolean;
-  engine: string;
-  engine_version: string;
-  ms: number;
-}
-
 export interface ImageStepOut {
   engine: string;
   status: string;
@@ -170,7 +161,9 @@ export interface ImageJobList {
 }
 
 // The API also sends `error` (raw worker text, kept for API compatibility). It is left out
-// of this type on purpose: raw error text is never shown (Global Constraints).
+// of this type on purpose: raw error text is never shown (Global Constraints). It also sends
+// `prediction`, the newest of ANY engine (a Compare engine that finished last included); the
+// page derives the job engine's result from `predictions` instead (ImageResult mainPrediction).
 export interface ImageJobOut {
   id: string;
   status: string;
@@ -178,8 +171,6 @@ export interface ImageJobOut {
   display_name: string;
   created_at: string;
   expires_at: string;
-  /** The newest prediction. */
-  prediction: ImagePrediction | null;
   /** All predictions, newest first. */
   predictions: PredictionOut[];
   /** Of the newest failed step. */
