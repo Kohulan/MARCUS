@@ -8,15 +8,19 @@ import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../looku
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import GonePage, { OpenFailed } from "../ui/GonePage";
-import { paperName } from "../ui/tag";
+import { focusLost } from "../ui/focus";
+import { paperName, structureTag } from "../ui/tag";
+import { SegmentCompare } from "./Compare";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
+import { SegmentEditor } from "./SegmentEditor";
 import { coconutStructures, submissionTitle } from "./coconutList";
-import { CARD_OPEN_HINT, filterCounts } from "./cardState";
+import { CARD_OPEN_HINT, filterCounts, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
-import { useReviewRows } from "./useReviewRows";
+import { useCardActions } from "./useCardActions";
+import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
 
@@ -102,10 +106,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     if (returnTo === null || focus) return;
     setReturnTo(null);
     if (selection !== returnTo) setSelection(returnTo);
-    const card = [...(review.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])].find(
-      (el) => el.dataset.segmentId === returnTo,
-    );
-    (card ?? review.current)?.focus();
+    (segmentCard(review.current, returnTo) ?? review.current)?.focus();
   }, [returnTo, focus, selection, setSelection]);
 
   const close = (segmentId: string) => {
@@ -217,10 +218,12 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           )}
           {/* Hidden, not unmounted, in focus mode: the grid keeps its filter and selection. */}
           <div ref={review} className="ws-review" hidden={focused !== undefined} tabIndex={-1}>
-            <ReviewGrid ws={ws} rows={rows} />
+            <ReviewGrid ws={ws} rows={rows} counts={counts} />
           </div>
         </section>
       )}
+
+      <OpenDialog ws={ws} paper={paper} rows={rows} />
 
       {sending && (
         <SubmitForm
@@ -233,5 +236,53 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         />
       )}
     </main>
+  );
+}
+
+/**
+ * Compare engines or the structure editor, wherever it was opened (focus mode, a card, the
+ * Paper view's list): one place, pinned to its segment, gone with it.
+ */
+function OpenDialog({
+  ws,
+  paper,
+  rows,
+}: {
+  ws: WorkspaceState;
+  paper: PaperDetail;
+  rows: ReviewRow[];
+}) {
+  const { started } = useCardActions(paper.id, ws.live.reconnect);
+  const segment = ws.dialog && ws.segments.find((s) => s.id === ws.dialog!.segmentId);
+  if (!ws.dialog || !segment) return null;
+  if (ws.dialog.kind === "edit") {
+    return (
+      <SegmentEditor
+        key={segment.id}
+        paperId={paper.id}
+        paperEngine={paper.engine}
+        segment={segment}
+        onClose={ws.closeDialog}
+      />
+    );
+  }
+  const at = rows.findIndex((r) => r.segmentId === segment.id);
+  return (
+    <SegmentCompare
+      key={segment.id}
+      paperId={paper.id}
+      segment={segment}
+      steps={ws.steps}
+      tag={structureTag(rows[at]?.n ?? at + 1)}
+      onStarted={started}
+      onClose={ws.closeDialog}
+      // "Use this one" accepts: the card's Compare button goes (it leaves To check), so a
+      // focus that fell with it goes to the card (after the next frame, once re-rendered).
+      onSaved={() =>
+        requestAnimationFrame(() => {
+          if (focusLost()) segmentCard(document, segment.id)?.focus();
+        })
+      }
+    />
   );
 }

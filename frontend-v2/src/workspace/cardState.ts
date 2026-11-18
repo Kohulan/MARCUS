@@ -138,3 +138,13 @@ export function filterCounts(rows: readonly { state: CardState }[]): Record<Grid
 
 /** Id of the one hidden "Enter: open" that every structure card points at (Workspace). */
 export const CARD_OPEN_HINT = "card-open-hint";
+
+/** The structure card of `segmentId` under `root` (compared as data, never as a selector). */
+export function segmentCard(
+  root: ParentNode | null | undefined,
+  segmentId: string,
+): HTMLElement | undefined {
+  return [...(root?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])].find(
+    (el) => el.dataset.segmentId === segmentId,
+  );
+}

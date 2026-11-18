@@ -12,8 +12,6 @@ import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
-import { CardCompare } from "./Compare";
-import { CardEditor } from "./SegmentEditor";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
@@ -114,7 +112,7 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -122,8 +120,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const pagesCol = useRef<HTMLElement>(null);
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [comparing, setComparing] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
 
   const busy = isPaperBusy(paper.status);
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
@@ -262,8 +258,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   onOpen={onSelect}
                   onDecide={onDecide}
                   onRun={onRun}
-                  onCompare={setComparing}
-                  onEdit={setEditing}
+                  onCompare={ws.openCompare}
+                  onEdit={ws.openEditor}
                   paperName={paper.display_name}
                   onHover={onCardHover}
                 />
@@ -272,18 +268,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </div>
         )}
       </section>
-      {comparing !== null && (
-        <CardCompare
-          ws={ws}
-          rows={rows}
-          segmentId={comparing}
-          onStarted={started}
-          onClose={() => setComparing(null)}
-        />
-      )}
-      {editing !== null && (
-        <CardEditor ws={ws} segmentId={editing} onClose={() => setEditing(null)} />
-      )}
     </div>
   );
 }

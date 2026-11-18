@@ -6,9 +6,7 @@ import { isPaperBusy } from "../api/status";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
-import { filterCounts, filterOf, hasDrawing, type GridFilter } from "./cardState";
-import { CardCompare } from "./Compare";
-import { CardEditor } from "./SegmentEditor";
+import { filterOf, hasDrawing, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
@@ -50,7 +48,16 @@ const focusFilters = () =>
  * The review view: filters with counts, the grid of structure cards in (page, idx) order,
  * and the bulk bar for the selected cards.
  */
-export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
+export default function ReviewGrid({
+  ws,
+  rows,
+  counts,
+}: {
+  ws: Workspace;
+  rows: ReviewRow[];
+  /** filterCounts(rows), as the frame's header counts them. */
+  counts: Record<GridFilter, number>;
+}) {
   const paper = ws.paper!;
   const { segments, openFocus, selection } = ws;
   // ws.live.reconnect is stable (the live object itself is new each render).
@@ -60,15 +67,11 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   const [filter, setFilter] = useState<GridFilter>("all");
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
-  const [comparing, setComparing] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
   // The Shift-click anchor: a card, looked up in the list shown now (positions move).
   const anchor = useRef<string | null>(null);
   const grid = useRef<HTMLDivElement>(null);
 
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
-
-  const counts = useMemo(() => filterCounts(rows), [rows]);
 
   const shown = useMemo(
     () => (filter === "all" ? rows : rows.filter((r) => filterOf(r.state) === filter)),
@@ -96,14 +99,10 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
   const notRead = chosen.filter((r) => r.state === "not-read");
   const readEngine: Engine = asEngine(paper.engine) ?? "decimer";
 
+  // The selection then keeps to what is shown (the effect above).
   const onFilter = (next: GridFilter) => {
     setFilter(next);
     anchor.current = null;
-    // The selection keeps to what is shown: a bulk action never touches hidden cards.
-    const keep = new Set(
-      rows.filter((r) => next === "all" || filterOf(r.state) === next).map((r) => r.segmentId),
-    );
-    setPicked((prev) => new Set([...prev].filter((id) => keep.has(id))));
   };
 
   const onToggle = useCallback((index: number, range: boolean) => {
@@ -140,9 +139,10 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
 
   /** Focus a card of the grid by id (null: the first card, else the filter strip). */
   const focusCard = useCallback((segmentId: string | null) => {
-    const cards = [...(grid.current?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? [])];
     const card =
-      segmentId === null ? cards[0] : cards.find((el) => el.dataset.segmentId === segmentId);
+      segmentId === null
+        ? grid.current?.querySelector<HTMLElement>("[data-segment-id]")
+        : segmentCard(grid.current, segmentId);
     if (card) card.focus();
     else if (segmentId === null) focusFilters();
   }, []);
@@ -239,8 +239,8 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               onOpen={onOpen}
               onDecide={onDecide}
               onRun={onRun}
-              onCompare={setComparing}
-              onEdit={setEditing}
+              onCompare={ws.openCompare}
+              onEdit={ws.openEditor}
               paperName={paper.display_name}
             />
           ))}
@@ -258,18 +258,6 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
           onRead={() => void readAll()}
           onClear={clear}
         />
-      )}
-      {comparing !== null && (
-        <CardCompare
-          ws={ws}
-          rows={rows}
-          segmentId={comparing}
-          onStarted={started}
-          onClose={() => setComparing(null)}
-        />
-      )}
-      {editing !== null && (
-        <CardEditor ws={ws} segmentId={editing} onClose={() => setEditing(null)} />
       )}
     </>
   );

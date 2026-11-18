@@ -1,6 +1,6 @@
 // The state of one paper workspace: the paper, its segments and steps, the live stream, and the view and focused segment (both in the URL, so reload and Back work).
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
@@ -13,6 +13,9 @@ const isFocusPushed = (state: unknown) =>
   typeof state === "object" && state !== null && (state as { focusPushed?: unknown }).focusPushed === true;
 
 const NO_STEPS: StepOut[] = [];
+
+/** Compare engines or the structure editor, open on one segment (rendered once, by the frame). */
+export type WorkspaceDialog = { kind: "compare" | "edit"; segmentId: string };
 
 export type Workspace = {
   /** Undefined only before the first answer (Workspace mounts this once the paper is in). */
@@ -34,6 +37,11 @@ export type Workspace = {
   /** Adds a history entry, so Back returns to the other view. */
   setView: (view: WorkspaceView) => void;
   live: ReturnType<typeof useLiveEvents>;
+  /** The open dialog; null once its segment is gone (deleted live in another tab). */
+  dialog: WorkspaceDialog | null;
+  openCompare: (segmentId: string) => void;
+  openEditor: (segmentId: string) => void;
+  closeDialog: () => void;
 };
 
 /** Mount only for a paper that exists: a 404 must unmount it, and its live stream with it. */
@@ -53,6 +61,15 @@ export function useWorkspace(id: string): Workspace {
     () => [...(paper?.segments ?? [])].sort((a, b) => a.page - b.page || a.idx - b.idx),
     [paper?.segments],
   );
+
+  const [open, setOpen] = useState<WorkspaceDialog | null>(null);
+  const dialog = open && segments.some((s) => s.id === open.segmentId) ? open : null;
+  const openCompare = useCallback(
+    (segmentId: string) => setOpen({ kind: "compare", segmentId }),
+    [],
+  );
+  const openEditor = useCallback((segmentId: string) => setOpen({ kind: "edit", segmentId }), []);
+  const closeDialog = useCallback(() => setOpen(null), []);
 
   const view: WorkspaceView = params.get("view") === "paper" ? "paper" : "review";
   const selection = params.get("s");
@@ -137,5 +154,9 @@ export function useWorkspace(id: string): Workspace {
     view,
     setView,
     live,
+    dialog,
+    openCompare,
+    openEditor,
+    closeDialog,
   };
 }

@@ -11,11 +11,8 @@ import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
-import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import { ocsrSteps } from "./cardState";
-import type { ReviewRow } from "./useReviewRows";
-import type { Workspace } from "./useWorkspace";
 import {
   depictQuery,
   engineRows,
@@ -361,50 +358,4 @@ export function SegmentCompare({
       tag={tag}
     />
   );
-}
-
-/** Compare opened from a card (grid or Paper view): the segment by id, its `[nn]` tag. */
-export function CardCompare({
-  ws,
-  rows,
-  segmentId,
-  onStarted,
-  onClose,
-}: {
-  ws: Workspace;
-  rows: ReviewRow[];
-  segmentId: string;
-  onStarted: () => void;
-  onClose: () => void;
-}) {
-  const segment = ws.segments.find((s) => s.id === segmentId);
-  const n = rows.find((r) => r.segmentId === segmentId)?.n;
-  if (!ws.paper || !segment || n === undefined) return null;
-  return (
-    <SegmentCompare
-      paperId={ws.paper.id}
-      segment={segment}
-      steps={ws.steps}
-      tag={structureTag(n)}
-      onStarted={onStarted}
-      onClose={onClose}
-      onSaved={() => keepFocusOnCard(segmentId)}
-    />
-  );
-}
-
-/**
- * Focus went back to the card's Compare button, which goes once the card is accepted (it
- * leaves To check): focus the card itself instead of letting it fall to the page. After the
- * next frame, so the card has re-rendered.
- */
-function keepFocusOnCard(segmentId: string) {
-  requestAnimationFrame(() => {
-    const active = document.activeElement;
-    if (active && active !== document.body && active.isConnected) return;
-    const card = [...document.querySelectorAll<HTMLElement>("[data-segment-id]")].find(
-      (el) => el.dataset.segmentId === segmentId,
-    );
-    card?.focus();
-  });
 }

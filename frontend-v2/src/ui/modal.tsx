@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { returnFocus } from "./focus";
 
 // Where focus goes when a dialog closes: back to what had it (the opener). When that cannot
 // take it (gone after a decision or a live update, disabled, or it was the page body), to the
@@ -7,25 +8,6 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 // fallback, focus stays where it fell.
 
 const HOME = "[data-focus-home]";
-
-/** True when focus has nowhere useful to be: the body, a removed element or a disabled one. */
-export function focusLost(el: Element | null = document.activeElement): boolean {
-  return (
-    el === null ||
-    el === document.body ||
-    !el.isConnected ||
-    ((el instanceof HTMLButtonElement || el instanceof HTMLInputElement) && el.disabled)
-  );
-}
-
-/** Gives focus back to `before`, else to `fallback`. */
-export function returnFocus(before: Element | null, fallback: HTMLElement | null): void {
-  if (before instanceof HTMLElement && !focusLost(before)) {
-    before.focus();
-    if (document.activeElement === before) return;
-  }
-  if (fallback?.isConnected) fallback.focus({ preventScroll: true });
-}
 
 /**
  * Opens a native <dialog> as a modal (top layer; the page behind is inert), or in place

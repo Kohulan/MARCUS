@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { returnFocus } from "./modal";
+import { returnFocus } from "./focus";
 
 afterEach(() => {
   document.body.replaceChildren();

@@ -23,6 +23,7 @@ import Stamp from "../ui/Stamp";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
+import { useFocusRescue } from "../ui/focus";
 import { useToast } from "../ui/Toasts";
 import {
   hasDrawing,
@@ -32,11 +33,8 @@ import {
   STATE_WORD,
   type CardState,
 } from "./cardState";
-import { SegmentCompare } from "./Compare";
 import KeyHelp from "./KeyHelp";
-import { SegmentEditor } from "./SegmentEditor";
 import StructureActions from "./StructureActions";
-import { useCardActions } from "./useCardActions";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
@@ -71,12 +69,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const reduce = usePrefersReducedMotion();
   const root = useRef<HTMLElement>(null);
   const [help, setHelp] = useState(false);
-  // Compare engines (C) and the structure editor (E) over focus mode, each pinned to the
-  // segment it opened on (a pending A/R move must not swap it); the review keys hold while
-  // either is open.
-  const [comparingId, setComparingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const { started } = useCardActions(paper.id, ws.live.reconnect);
   const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsRef = useRef(rows);
@@ -120,15 +112,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
   // After a move (a marker click turns that marker into the current one, a step can disable
   // the focused button), the keyboard stays in focus mode instead of falling to the page.
-  useEffect(() => {
-    const active = document.activeElement;
-    const lost =
-      active === null ||
-      active === document.body ||
-      !active.isConnected ||
-      (active instanceof HTMLButtonElement && active.disabled);
-    if (lost) root.current?.focus({ preventScroll: true });
-  }, [id, drawable]);
+  useFocusRescue(root, [id, drawable]);
 
   /**
    * The review keys act only inside the region (useReviewKeys), so a step or decision made
@@ -196,14 +180,15 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     root.current?.focus({ preventScroll: true });
   };
 
-  // Opening the editor or Compare cancels the move after A or R: they work on this structure.
+  // Opening the editor or Compare cancels the move after A or R: they work on this structure
+  // (the workspace pins the dialog to it; the review keys hold while it is open).
   const openEditor = () => {
     clearTimer();
-    setEditingId(id);
+    ws.openEditor(id);
   };
   const openCompare = () => {
     clearTimer();
-    setComparingId(id);
+    ws.openCompare(id);
   };
 
   // The keys act only while focus is inside this region. While Keys, Compare or the editor
@@ -219,22 +204,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     close: () => onClose(id),
     help: () => setHelp(true),
   });
-
-  const segmentById = (sid: string | null) =>
-    sid === null ? undefined : sid === id ? segment : ws.segments.find((s) => s.id === sid);
-  const comparingSegment = segmentById(comparingId);
-  const editingSegment = segmentById(editingId);
-  // A pinned structure deleted live (another tab): its dialog is gone, so the keys come back.
-  const comparingGone = comparingId !== null && comparingSegment === undefined;
-  const editingGone = editingId !== null && editingSegment === undefined;
-  useEffect(() => {
-    if (comparingGone) setComparingId(null);
-    if (editingGone) setEditingId(null);
-  }, [comparingGone, editingGone]);
-  const tagOf = (sid: string) => {
-    const at = rows.findIndex((r) => r.segmentId === sid);
-    return structureTag(rows[at]?.n ?? at + 1);
-  };
 
   const left = rows.filter((r) => r.state === "to-check").length;
 
@@ -395,24 +364,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
       </div>
 
       {help && <KeyHelp onClose={() => setHelp(false)} />}
-      {comparingSegment && (
-        <SegmentCompare
-          paperId={paper.id}
-          segment={comparingSegment}
-          steps={ws.steps}
-          tag={tagOf(comparingSegment.id)}
-          onStarted={started}
-          onClose={() => setComparingId(null)}
-        />
-      )}
-      {editingSegment && (
-        <SegmentEditor
-          paperId={paper.id}
-          paperEngine={paper.engine}
-          segment={editingSegment}
-          onClose={() => setEditingId(null)}
-        />
-      )}
     </section>
   );
 }
