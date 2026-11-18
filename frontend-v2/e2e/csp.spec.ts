@@ -146,6 +146,20 @@ test.describe("ketcher", () => {
     expect(await response.text()).toBe(distFile("ketcher/index.html"));
   });
 
+  test("a missing file under /ketcher/ is a 404 with the Ketcher headers, not the editor page", async ({
+    request,
+  }) => {
+    for (const url of ["/ketcher/templates/missing.svg", "/ketcher/fonts/missing.woff2", "/ketcher/x"]) {
+      const response = await request.get(url);
+      expect(response.status(), url).toBe(404);
+      expectKetcherHeaders(response);
+      expect(await response.text(), url).not.toBe(distFile("ketcher/index.html"));
+    }
+    const index = await request.get("/ketcher/index.html");
+    expect(index.status()).toBe(200);
+    expectKetcherHeaders(index);
+  });
+
   test("the Indigo .wasm under /ketcher/ is application/wasm with the Ketcher headers", async ({
     request,
   }) => {
@@ -163,6 +177,11 @@ test.describe("ketcher", () => {
     const violations = collectCspViolations(page);
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    // console.error from the page and its frames: Ketcher reports its own errors (an Indigo
+    // failure that still returns a SMILES) through console.error, not as a page error.
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(`console (${msg.location().url}): ${msg.text()}`);
+    });
     await page.goto("/app");
 
     // Insert the frame and wait for its ready message (from that frame, same origin).

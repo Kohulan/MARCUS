@@ -3,22 +3,29 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const dist = join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
+// CHECK_DIST_DIR: another tree to check (src/test/checkDist.test.ts); default ../dist.
+const dist =
+  process.env.CHECK_DIST_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
 const failures = [];
 const fail = (message) => failures.push(message);
 const read = (file) => readFileSync(join(dist, file), "utf8");
+
+const isKetcher = (rel) => rel === "ketcher" || rel.startsWith(`ketcher${sep}`);
 
 function htmlFiles(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     const rel = relative(dist, path);
-    if (rel === "ketcher" || rel.startsWith(`ketcher${sep}`)) continue; // own CSP (F1b)
     if (statSync(path).isDirectory()) out.push(...htmlFiles(path));
     else if (name.endsWith(".html")) out.push(rel);
   }
   return out;
 }
+
+// An inline event handler (onclick=, onerror=, ...) in a tag: script-src without
+// 'unsafe-inline' blocks it under both CSPs. Text that only mentions one is escaped (&lt;).
+const HANDLER = /<[a-zA-Z][^>]*?\s(on[a-zA-Z]+)\s*=/g;
 
 const required = [
   "index.html",
@@ -53,10 +60,16 @@ if (has("app/index.html") && !read("app/index.html").includes('<div id="root"></
 
 for (const file of existsSync(dist) ? htmlFiles(dist) : []) {
   const html = read(file);
-  if (html.includes(" style=")) fail(`dist/${file}: inline style attribute (CSP style-src 'self')`);
+  // Scripts: no inline code under either CSP (the Ketcher page included).
   for (const tag of html.match(/<script\b[^>]*>/gi) ?? []) {
     if (!/\ssrc=/i.test(tag)) fail(`dist/${file}: inline <script> (CSP script-src 'self'): ${tag}`);
   }
+  for (const m of html.matchAll(HANDLER)) {
+    fail(`dist/${file}: inline event handler ${m[1]}= (CSP script-src 'self')`);
+  }
+  // Styles: the Ketcher CSP allows 'unsafe-inline' styles (F1b); the app CSP does not.
+  if (isKetcher(file)) continue;
+  if (html.includes(" style=")) fail(`dist/${file}: inline style attribute (CSP style-src 'self')`);
   if (/<style\b/i.test(html)) fail(`dist/${file}: inline <style> block (CSP style-src 'self')`);
   // Light mode only (spec §7 decision 5): no theme script, no theme switch.
   if (html.includes("theme.js")) fail(`dist/${file}: references theme.js (light mode only)`);

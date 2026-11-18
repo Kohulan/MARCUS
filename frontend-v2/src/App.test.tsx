@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useNavigate } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { api } from "./api/client";
 
@@ -9,6 +9,19 @@ const realInnerWidth = window.innerWidth;
 function setWidth(px: number) {
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: px });
 }
+
+// The routes' lazy chunks, loaded once before any test: under a full-suite run the first
+// dynamic import (transform included) could take longer than a findBy's 1 s, so the first
+// lazy route timed out about one run in five. With the modules cached, React.lazy resolves
+// at once and each test measures its own page, not the transform.
+beforeAll(async () => {
+  await Promise.all([
+    import("./tool/ToolHome"),
+    import("./workspace/Workspace"),
+    import("./images/ImageResult"),
+    import("./api/QueryProvider"),
+  ]);
+}, 60_000);
 
 beforeEach(() => {
   vi.spyOn(api, "listPapers").mockResolvedValue({ papers: [] });

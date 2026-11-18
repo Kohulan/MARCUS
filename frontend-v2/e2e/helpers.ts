@@ -1,7 +1,7 @@
 // Shared e2e helpers. e2e runs against the local nginx (`npm run serve:local`) in front of
 // the fake stack, never production.
 import { readFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 
@@ -65,6 +65,23 @@ export async function routeMatomo(page: Page): Promise<void> {
   );
 }
 
+const MIME: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+  ".webp": "image/webp",
+};
+
+/** The upload's media type from its extension (the types the API accepts). */
+export function mimeTypeOf(file: string): string {
+  const type = MIME[extname(file).toLowerCase()];
+  if (!type) throw new Error(`no upload type for ${file}`);
+  return type;
+}
+
 /**
  * Uploads a PDF through the API with the page's own cookies (`page.request` shares the
  * browser context's cookie jar, so the paper belongs to the page's owner).
@@ -78,7 +95,7 @@ export async function uploadPaperViaApi(
   const path = resolve(file);
   const response = await page.request.post("/api/v2/papers", {
     multipart: {
-      file: { name: basename(path), mimeType: "application/pdf", buffer: await readFile(path) },
+      file: { name: basename(path), mimeType: mimeTypeOf(path), buffer: await readFile(path) },
       engine: opts.engine ?? "fake",
       ocsr: opts.ocsr ?? "auto",
     },

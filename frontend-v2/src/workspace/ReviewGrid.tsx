@@ -42,7 +42,6 @@ async function runPool<T>(
   return ok;
 }
 
-
 /** Focus the filter strip's pressed button. */
 const focusFilters = () =>
   document.querySelector<HTMLElement>('.rg-filters [aria-pressed="true"]')?.focus();
