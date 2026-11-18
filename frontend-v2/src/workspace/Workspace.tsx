@@ -8,6 +8,7 @@ import { GlassButton } from "../ui/GlassButton";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
 import GonePage from "./GonePage";
+import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import StatusBar from "./StatusBar";
 import { useReviewRows } from "./useReviewRows";
@@ -185,7 +186,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       />
 
       {ws.view === "paper" ? (
-        <section className="ws-view" aria-label="Paper view" />
+        <section className="ws-view ws-view--paper" aria-label="Paper view">
+          <PaperView ws={ws} rows={rows} />
+        </section>
       ) : (
         <section className="ws-view ws-view--review" aria-label="Review view">
           {focused && (

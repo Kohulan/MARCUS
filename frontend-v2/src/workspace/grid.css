@@ -296,6 +296,72 @@
   margin-top: 4px;
 }
 
+/* Compact: the Paper view's list. The drawing beside the text, one ruled column; a click
+   on the card selects it. */
+.card--compact {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-areas:
+    "tag tag"
+    "fig body";
+  gap: 10px 14px;
+  border-right: 0;
+  cursor: pointer;
+  contain-intrinsic-size: auto 200px;
+}
+
+.card--compact .card__tagrow {
+  grid-area: tag;
+}
+
+.card--compact .card__figure {
+  grid-area: fig;
+  height: 112px;
+}
+
+.card--compact .card__body {
+  grid-area: body;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Only a card with actions gets their row. */
+.card--compact .card__actions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.card--compact .stamp--sm {
+  width: 56px;
+  height: 56px;
+  font-size: 9px;
+}
+
+.card--compact[aria-current="true"] {
+  outline-offset: -2px;
+}
+
+/* Linked: its marker on the page is hovered. An inner orange frame with the board's corner
+   square, drawn over the state's own edge (spec §7 signature interaction). */
+.card--linked::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 2px solid var(--orange);
+  pointer-events: none;
+}
+
+.card--linked::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: var(--orange);
+  pointer-events: none;
+}
+
 /* Engine menu: a small ruled list under its button ---------------------------- */
 
 /* An open menu must not be clipped by the card's paint containment (content-visibility),

@@ -91,6 +91,15 @@ export type StructureCardProps = {
   onOpen: (segmentId: string) => void;
   onDecide: (segmentId: string, status: CurationStatus) => void;
   onRun: (segmentId: string, engine: Engine) => void;
+  /**
+   * The Paper view's list: the drawing beside the text, no checkbox (no bulk actions
+   * there), and a click on the card calls `onOpen` (the Paper view selects with it).
+   */
+  compact?: boolean;
+  /** Its page marker is hovered: the card is outlined (spec §7 signature interaction). */
+  linked?: boolean;
+  /** The pointer or keyboard focus entered (the segment id) or left (null) the card. */
+  onHover?: ((segmentId: string | null) => void) | undefined;
 };
 
 /**
@@ -113,6 +122,9 @@ function StructureCard({
   onOpen,
   onDecide,
   onRun,
+  compact = false,
+  linked = false,
+  onHover,
 }: StructureCardProps) {
   const ref = useRef<HTMLElement>(null);
   const near = useNearViewport(ref);
@@ -145,9 +157,18 @@ function StructureCard({
     if ((e.target as Element).closest("button, input, a")) return;
     onOpen(segment.id);
   };
+  // The compact card (Paper view) opens on a single click; its controls keep their own.
+  const click = (e: MouseEvent<HTMLElement>) => {
+    if ((e.target as Element).closest("button, input, a, label")) return;
+    onOpen(segment.id);
+  };
+  const enter = onHover && (() => onHover(segment.id));
+  const leave = onHover && (() => onHover(null));
 
   const classes = ["card", `card--${state}`];
   if (selected) classes.push("card--selected");
+  if (compact) classes.push("card--compact");
+  if (linked) classes.push("card--linked");
 
   return (
     <article
@@ -158,19 +179,28 @@ function StructureCard({
       aria-current={current ? "true" : undefined}
       data-segment-id={segment.id}
       onKeyDown={ownKey}
-      onDoubleClick={doubleClick}
+      onDoubleClick={compact ? undefined : doubleClick}
+      onClick={compact ? click : undefined}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+      onFocus={enter}
+      onBlur={leave}
     >
       <div className="card__tagrow">
-        <label className="card__pick">
-          <input
-            type="checkbox"
-            className="card__check"
-            checked={selected}
-            aria-label={`Select ${tag}`}
-            onChange={(e) => onToggle(index, (e.nativeEvent as globalThis.MouseEvent).shiftKey)}
-          />
+        {compact ? (
           <span className="card__tag">{where}</span>
-        </label>
+        ) : (
+          <label className="card__pick">
+            <input
+              type="checkbox"
+              className="card__check"
+              checked={selected}
+              aria-label={`Select ${tag}`}
+              onChange={(e) => onToggle(index, (e.nativeEvent as globalThis.MouseEvent).shiftKey)}
+            />
+            <span className="card__tag">{where}</span>
+          </label>
+        )}
         <StateBadge state={state} />
       </div>
 

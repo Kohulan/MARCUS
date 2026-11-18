@@ -1,0 +1,359 @@
+/*
+ * Paper view (Field Sheet board's "paper view" layout in the Survey Sheet look): three
+ * ruled columns under the status bar, each scrolling on its own: pages with the
+ * found-structure markers on sunken ground | the paper's text on paper | the structure list.
+ * The view is one window tall, so a column's end is always reachable.
+ * Light only; tokens only. Marker boxes come in as left/top/width/height from the
+ * client-only PageWithBoxes (the bbox scaled to the shown image).
+ */
+
+.pv {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 560px;
+  border-top: 1px solid var(--line);
+}
+
+.pv-col {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.pv-col + .pv-col {
+  border-left: 1px solid var(--line);
+}
+
+.pv-col--pages {
+  background-color: var(--sunken);
+}
+
+.pv-col--text,
+.pv-col--list {
+  background-color: var(--paper);
+}
+
+/* Column caption: a mono label row that stays at the top of its column. */
+.pv-cap {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  background-color: inherit;
+}
+
+.pv-col--pages > .pv-cap {
+  background-color: var(--sunken);
+}
+
+.pv-col--text > .pv-cap,
+.pv-col--list > .pv-cap {
+  background-color: var(--paper);
+}
+
+.pv .pv-cap__title {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.pv-cap__count {
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pv-empty {
+  margin: 0;
+  padding: 32px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Pages ---------------------------------------------------------------------- */
+
+.pv-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 16px 20px 40px;
+}
+
+.pv-page {
+  margin: 0;
+}
+
+.pv-page__cap {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pv-page__cap > [aria-hidden="true"] {
+  color: var(--ink);
+}
+
+.pv-page__sheet {
+  position: relative;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+  box-shadow: 0 1px 2px rgb(28 33 29 / 0.06), 0 10px 24px -14px rgb(28 33 29 / 0.3);
+}
+
+/* Until it loads, a lazy page holds an A4 page's room (2480 × 3508 px at 300 DPI). */
+.pv-page__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 2480 / 3508;
+}
+
+.pv-page__sheet--empty,
+.pv-page__sheet--failed {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2480 / 3508;
+  padding: 24px;
+  box-shadow: none;
+}
+
+.pv-page__sheet--empty {
+  border-style: dashed;
+  border-color: var(--control-border);
+  background-color: var(--paper);
+}
+
+.pv-page__sheet--failed {
+  border-color: var(--charcoal);
+  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
+}
+
+.pv-page__why {
+  margin: 0;
+  max-width: 24ch;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-page__sheet--failed .pv-page__why {
+  padding: 4px 8px;
+  background-color: var(--charcoal);
+  color: var(--on-charcoal);
+}
+
+/* Markers: the state's shape on the page (spec §7 state table). The box is the bbox; the
+   outline sits just outside it, so the drawing stays uncovered. */
+.pv-marker {
+  --mark: var(--orange);
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: none;
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+  cursor: pointer;
+  transition:
+    outline-offset 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pv-marker--reading {
+  outline-style: dashed;
+}
+
+.pv-marker--accepted {
+  --mark: var(--accepted);
+}
+
+.pv-marker--rejected,
+.pv-marker--failed {
+  --mark: var(--charcoal);
+}
+
+.pv-marker--not-read {
+  --mark: var(--muted);
+  outline-style: dashed;
+}
+
+.pv-marker__tag {
+  position: absolute;
+  bottom: 100%;
+  left: -4px;
+  margin-bottom: 4px;
+  padding: 1px 5px;
+  background-color: var(--mark);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--on-orange);
+}
+
+.pv-marker--accepted .pv-marker__tag {
+  color: var(--on-green);
+}
+
+.pv-marker--rejected .pv-marker__tag,
+.pv-marker--failed .pv-marker__tag {
+  color: var(--on-charcoal);
+}
+
+/* Reading… and Not read yet: an outlined tag, the word's ink on paper. */
+.pv-marker--reading .pv-marker__tag,
+.pv-marker--not-read .pv-marker__tag {
+  outline: 1px dashed var(--mark);
+  outline-offset: -1px;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+.pv-marker:hover {
+  background-color: rgb(250 54 0 / 0.08);
+}
+
+/* Lit: the card is hovered or selected, or this marker is. Thicker, with the board's
+   corner square, above its neighbours. */
+.pv-marker--lit {
+  z-index: 2;
+  outline-width: 3px;
+  outline-offset: 4px;
+}
+
+.pv-marker--lit::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--mark);
+}
+
+.pv-marker--lit .pv-marker__tag {
+  margin-bottom: 8px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.pv-marker:focus-visible {
+  z-index: 2;
+  box-shadow:
+    0 0 0 8px var(--surface),
+    0 0 0 10px var(--focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-marker {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .pv-marker {
+    outline-color: Highlight;
+  }
+
+  .pv-marker__tag {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* Text ----------------------------------------------------------------------- */
+
+.pv-text {
+  padding: 18px 28px 48px;
+}
+
+.pv .pv-text__later {
+  max-width: 68ch;
+  margin: 0 0 22px;
+  padding: 10px 12px;
+  border: 1px dashed var(--control-border);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.pv-text__body {
+  max-width: 68ch;
+}
+
+.pv .pv-text__heading {
+  margin: 26px 0 8px;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  text-wrap: balance;
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+
+.pv .pv-text__heading:first-child {
+  margin-top: 0;
+}
+
+.pv .pv-text__para {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.pv-text__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-text__state > p {
+  margin: 0;
+}
+
+/* Structures ----------------------------------------------------------------- */
+
+.pv-list {
+  display: flex;
+  flex-direction: column;
+}
