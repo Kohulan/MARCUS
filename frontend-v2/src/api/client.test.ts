@@ -103,6 +103,15 @@ describe("api", () => {
     expect(calls[0]?.init.credentials).toBe("same-origin");
   });
 
+  it("reads pass the query signal to fetch, so a cancelled query aborts its request", async () => {
+    reply = json(200, {});
+    const ctrl = new AbortController();
+    await api.getPaper("p1", { signal: ctrl.signal });
+    await api.getSteps("p1", { signal: ctrl.signal });
+    expect(calls[0]?.init.signal).toBe(ctrl.signal);
+    expect(calls[1]?.init.signal).toBe(ctrl.signal);
+  });
+
   it("uploadPaper sends multipart/form-data with engine and ocsr", async () => {
     reply = json(202, { paper_id: "p9", status: "checking" });
     const file = new File(["%PDF-1.4"], "a.pdf", { type: "application/pdf" });

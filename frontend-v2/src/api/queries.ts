@@ -1,6 +1,6 @@
 // Server state of the tool (TanStack Query): query keys, the client defaults, the read
 // hooks, and the one way the UI writes a single curation.
-import { QueryClient, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { api, ApiError } from "./client";
 import { curationBody, type CurationChange } from "./curation";
@@ -34,29 +34,94 @@ export function createQueryClient(): QueryClient {
   });
 }
 
-/** Mark a paper and its steps stale: what a live event or a poll tick does. */
+// Live events and poll ticks ask for a paper refresh. A running 200-structure paper sends
+// hundreds of events (one per step state change), and every refresh is 2 GETs in the plain
+// 300/min IP bucket, so refreshes are coalesced per paper: at most one per REFRESH_MS, the
+// last request of a burst is never dropped (a trailing refresh), and a refresh never starts
+// while the paper or its steps are still being fetched (it waits for that fetch, then
+// refetches, so data newer than that fetch is read).
+export const REFRESH_MS = 1000;
+
+type RefreshState = {
+  timer: ReturnType<typeof setTimeout> | null;
+  pending: boolean;
+  last: number;
+};
+
+const refreshes = new WeakMap<QueryClient, Map<string, RefreshState>>();
+
+function refreshState(client: QueryClient, id: string): RefreshState {
+  let map = refreshes.get(client);
+  if (!map) {
+    map = new Map();
+    refreshes.set(client, map);
+  }
+  let state = map.get(id);
+  if (!state) {
+    state = { timer: null, pending: false, last: -Infinity };
+    map.set(id, state);
+  }
+  return state;
+}
+
+function fetchingPaper(client: QueryClient, id: string): boolean {
+  return (
+    client.isFetching({ queryKey: keys.paper(id) }) > 0 ||
+    client.isFetching({ queryKey: keys.steps(id) }) > 0
+  );
+}
+
+/** Refetch a paper and its steps (only these two): what a live event or a poll tick does. */
 export function refreshPaper(client: QueryClient, id: string): void {
-  void client.invalidateQueries({ queryKey: keys.paper(id) });
-  void client.invalidateQueries({ queryKey: keys.steps(id) });
+  const state = refreshState(client, id);
+  state.pending = true;
+  if (state.timer !== null) return; // the scheduled refresh will cover this request
+
+  const run = () => {
+    state.pending = false;
+    state.last = Date.now();
+    // cancelRefetch false: never cancel (and so never repeat) a fetch already on the wire
+    void client.invalidateQueries({ queryKey: keys.paper(id) }, { cancelRefetch: false });
+    void client.invalidateQueries({ queryKey: keys.steps(id) }, { cancelRefetch: false });
+  };
+  const schedule = (delay: number) => {
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      if (!state.pending) return;
+      if (fetchingPaper(client, id)) schedule(REFRESH_MS);
+      else run();
+    }, delay);
+  };
+
+  const since = Date.now() - state.last;
+  if (since >= REFRESH_MS && !fetchingPaper(client, id)) run();
+  else schedule(Math.max(REFRESH_MS - since, 0) || REFRESH_MS);
 }
 
 export function usePapers() {
-  return useQuery({ queryKey: keys.papers(), queryFn: api.listPapers });
+  return useQuery({ queryKey: keys.papers(), queryFn: ({ signal }) => api.listPapers({ signal }) });
 }
 
 export function usePaper(id: string) {
-  return useQuery({ queryKey: keys.paper(id), queryFn: () => api.getPaper(id) });
+  return useQuery({ queryKey: keys.paper(id), queryFn: paperFn(id) });
+}
+
+function paperFn(id: string) {
+  return ({ signal }: { signal: AbortSignal }) => api.getPaper(id, { signal });
 }
 
 export function useSteps(id: string) {
-  return useQuery({ queryKey: keys.steps(id), queryFn: () => api.getSteps(id) });
+  return useQuery({
+    queryKey: keys.steps(id),
+    queryFn: ({ signal }) => api.getSteps(id, { signal }),
+  });
 }
 
 /** The queue position; refetched every 10 s while `active` (a paper checking or processing). */
 export function useQueue(active: boolean) {
   return useQuery({
     queryKey: keys.queue(),
-    queryFn: api.getQueue,
+    queryFn: ({ signal }) => api.getQueue({ signal }),
     enabled: active,
     refetchInterval: active ? QUEUE_REFRESH_MS : false,
   });
@@ -65,18 +130,21 @@ export function useQueue(active: boolean) {
 export function useText(id: string, enabled = true) {
   return useQuery({
     queryKey: keys.text(id),
-    queryFn: () => api.getText(id),
+    queryFn: ({ signal }) => api.getText(id, { signal }),
     enabled,
     staleTime: Infinity,
   });
 }
 
 export function useImages() {
-  return useQuery({ queryKey: keys.images(), queryFn: api.listImages });
+  return useQuery({ queryKey: keys.images(), queryFn: ({ signal }) => api.listImages({ signal }) });
 }
 
 export function useImageJob(id: string) {
-  return useQuery({ queryKey: keys.image(id), queryFn: () => api.getImageJob(id) });
+  return useQuery({
+    queryKey: keys.image(id),
+    queryFn: ({ signal }) => api.getImageJob(id, { signal }),
+  });
 }
 
 // Saves of one segment run one after another, across every hook instance of one client.
@@ -91,13 +159,31 @@ function chainFor(client: QueryClient): Map<string, Promise<unknown>> {
   return map;
 }
 
-function cachedCuration(client: QueryClient, key: QueryKey, segmentId: string) {
-  const paper = client.getQueryData<PaperDetail>(key);
-  return paper?.segments.find((s) => s.id === segmentId)?.curation ?? null;
+/** Thrown by save() when the segment is not in the paper: nothing is written. */
+export const SEGMENT_GONE = "This structure is not here any more.";
+
+/**
+ * The segment's stored curation (null: it has none yet). A paper missing from the cache is
+ * fetched first; a segment missing from the paper rejects. Never a guessed null: a body
+ * built from null would clear the stored smiles, molfile and note.
+ */
+async function currentCuration(
+  client: QueryClient,
+  paperId: string,
+  segmentId: string,
+): Promise<CurationOut | null> {
+  const key = keys.paper(paperId);
+  const paper: PaperDetail =
+    client.getQueryData<PaperDetail>(key) ??
+    (await client.fetchQuery<PaperDetail>({ queryKey: key, queryFn: paperFn(paperId) }));
+  const segment = paper.segments.find((s) => s.id === segmentId);
+  if (!segment) throw new ApiError(404, SEGMENT_GONE);
+  return segment.curation;
 }
 
 /**
- * `save(segmentId, change)`: PUT the full curation built by curationBody from the cached one,
+ * `save(segmentId, change)`: PUT the full curation built by curationBody from the cached one
+ * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved),
  * then write the reply into the ["paper", paperId] cache so the next change builds on it.
  * The only way the UI writes a single curation (PUT replaces the whole record).
  */
@@ -113,7 +199,7 @@ export function useSaveCuration(paperId: string): {
       const run = previous
         .catch(() => undefined) // a failed save does not block the next one
         .then(async () => {
-          const body = curationBody(cachedCuration(client, key, segmentId), change);
+          const body = curationBody(await currentCuration(client, paperId, segmentId), change);
           const out = await api.putCuration(segmentId, body);
           // A paper fetch that started before this PUT would bring back the old curation
           // and the next change would build on it: cancel it, write, then fetch again.

@@ -100,6 +100,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** Options of a read: TanStack Query's `signal`, so a cancelled query aborts its request. */
+export type ReadOpts = { signal?: AbortSignal };
+
+function get<T>(path: string, opts: ReadOpts = {}): Promise<T> {
+  return request<T>(path, opts.signal ? { signal: opts.signal } : {});
+}
+
 function sendJson<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
   return request<T>(path, {
     method,
@@ -112,9 +119,9 @@ const enc = encodeURIComponent;
 
 export const api = {
   // papers
-  listPapers: () => request<PaperList>("/papers"),
-  getPaper: (id: string) => request<PaperDetail>(`/papers/${enc(id)}`),
-  getSteps: (id: string) => request<StepList>(`/papers/${enc(id)}/steps`),
+  listPapers: (opts?: ReadOpts) => get<PaperList>("/papers", opts),
+  getPaper: (id: string, opts?: ReadOpts) => get<PaperDetail>(`/papers/${enc(id)}`, opts),
+  getSteps: (id: string, opts?: ReadOpts) => get<StepList>(`/papers/${enc(id)}/steps`, opts),
   uploadPaper(file: File, opts: { engine: Engine; ocsr: OcsrMode }): Promise<UploadPaperReply> {
     const form = new FormData();
     form.append("file", file);
@@ -129,8 +136,8 @@ export const api = {
   /** `page0` is the 0-based API page. */
   retryPage: (paperId: string, page0: number) =>
     request<StepAccepted>(`/papers/${enc(paperId)}/pages/${page0}/retry`, { method: "POST" }),
-  getQueue: () => request<QueueOut>("/queue"),
-  getText: (id: string) => request<DoclingDoc>(`/papers/${enc(id)}/text`),
+  getQueue: (opts?: ReadOpts) => get<QueueOut>("/queue", opts),
+  getText: (id: string, opts?: ReadOpts) => get<DoclingDoc>(`/papers/${enc(id)}/text`, opts),
   exportUrl(id: string, format: ExportFormat, status?: ExportStatus): string {
     const q = new URLSearchParams({ format });
     if (status) q.set("status", status);
@@ -177,8 +184,8 @@ export const api = {
     form.append("engine", engine);
     return request<UploadImageReply>("/images", { method: "POST", body: form });
   },
-  listImages: () => request<ImageJobList>("/images"),
-  getImageJob: (id: string) => request<ImageJobOut>(`/images/${enc(id)}`),
+  listImages: (opts?: ReadOpts) => get<ImageJobList>("/images", opts),
+  getImageJob: (id: string, opts?: ReadOpts) => get<ImageJobOut>(`/images/${enc(id)}`, opts),
   runImagePrediction: (id: string, engine: Engine) =>
     sendJson<StepAccepted>("POST", `/images/${enc(id)}/predictions`, { engine }),
   imageUrl: (id: string) => `${BASE}/images/${enc(id)}/image`,
