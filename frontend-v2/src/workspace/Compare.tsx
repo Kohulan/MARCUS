@@ -100,6 +100,7 @@ export default function Compare({
     tooManyText(runError) ??
     (runError !== null ? `Not started: ${errorDetail(runError)}` : null) ??
     toolErrors.map(tooManyText).find((t) => t !== null) ??
+    (common && part.errors.length > 0 ? "Common part unavailable" : null) ??
     (part.none ? "No common part" : null);
 
   const title = (
@@ -357,6 +358,7 @@ export function SegmentCompare({
   tag,
   onStarted,
   onClose,
+  onSaved,
 }: {
   paperId: string;
   segment: SegmentOut;
@@ -365,6 +367,8 @@ export function SegmentCompare({
   tag: string;
   onStarted: () => void;
   onClose: () => void;
+  /** After a "Use this one" save landed (the card may have lost the button focus was on). */
+  onSaved?: (() => void) | undefined;
 }) {
   const { save } = useSaveCuration(paperId);
   const toast = useToast();
@@ -374,7 +378,10 @@ export function SegmentCompare({
     save(segment.id, {
       status: "accepted",
       structure: { smiles: p.smiles, molfile: p.molfile ?? null },
-    }).catch((err: unknown) => toast(`Not saved: ${errorDetail(err)}`, "error"));
+    }).then(
+      () => onSaved?.(),
+      (err: unknown) => toast(`Not saved: ${errorDetail(err)}`, "error"),
+    );
   };
   return (
     <Compare
@@ -414,6 +421,23 @@ export function CardCompare({
       tag={structureTag(n)}
       onStarted={onStarted}
       onClose={onClose}
+      onSaved={() => keepFocusOnCard(segmentId)}
     />
   );
+}
+
+/**
+ * Focus went back to the card's Compare button, which goes once the card is accepted (it
+ * leaves To check): focus the card itself instead of letting it fall to the page. After the
+ * next frame, so the card has re-rendered.
+ */
+function keepFocusOnCard(segmentId: string) {
+  requestAnimationFrame(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    const card = [...document.querySelectorAll<HTMLElement>("[data-segment-id]")].find(
+      (el) => el.dataset.segmentId === segmentId,
+    );
+    card?.focus();
+  });
 }

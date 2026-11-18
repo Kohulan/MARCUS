@@ -403,6 +403,21 @@ describe("the card menu (More)", () => {
   });
 });
 
+describe("Compare from a card (F10 review)", () => {
+  it("after Use this one from a To check card, focus goes to that card, not the page", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }));
+    renderGrid(paper([segment("s1"), segment("s2")]));
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    const compare = within(card("[02]")).getByRole("button", { name: "Compare [02]" });
+    compare.focus();
+    fireEvent.click(compare);
+    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
+    await waitFor(() => expect(card("[02]")).toHaveAttribute("aria-label", "[02] · Page 1, Accepted"));
+    await waitFor(() => expect(card("[02]")).toHaveFocus());
+  });
+});
+
 describe("selection and bulk review", () => {
   it("select 2 + Accept 2 sends one bulk call with both ids and no note key", async () => {
     let answer: () => void = () => undefined;

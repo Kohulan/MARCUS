@@ -245,6 +245,27 @@ describe("Compare", () => {
     );
   });
 
+  it("a common part that fails (not a 429) says so", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    vi.spyOn(api, "mcs").mockRejectedValue(new ApiError(500, "boom"));
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN" }),
+      ],
+    });
+    expect(screen.queryByText("Common part unavailable")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
+    expect(await screen.findByText("Common part unavailable", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText(/boom/)).toBeNull();
+  });
+
   it("a failed engine shows its reason", () => {
     renderCompare({
       predictions: [prediction({ engine: "decimer" })],
