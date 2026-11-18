@@ -107,3 +107,18 @@ def test_0004_adds_predictions_cached(migrated_db):
         assert "cached" not in _columns(engine, "predictions")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0005_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        assert "title" in _columns(engine, "papers")
+        command.downgrade(cfg, "0004")
+        assert "title" not in _columns(engine, "papers")
+    finally:
+        command.upgrade(cfg, "head")

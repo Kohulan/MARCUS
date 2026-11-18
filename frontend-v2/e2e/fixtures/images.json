@@ -1,0 +1,12 @@
+{
+ "jobs": [
+  {
+   "id": "f5882bb3-c71b-47f3-abc5-099b9c61bbf4",
+   "display_name": "Figure 2b.png",
+   "status": "done",
+   "engine": "decimer",
+   "created_at": "2026-11-18T11:50:40.929003Z",
+   "expires_at": "2026-12-18T11:50:41.350137Z"
+  }
+ ]
+}

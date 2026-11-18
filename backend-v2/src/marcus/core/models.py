@@ -85,6 +85,7 @@ class Paper(Base):
     bytes: Mapped[int] = mapped_column(Integer)
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     doi: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
     engine: Mapped[str] = mapped_column(Text)
     ocsr_mode: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text)

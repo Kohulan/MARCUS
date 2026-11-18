@@ -25,10 +25,16 @@ class PaperSummary(_Orm):
     status: str
     pages: int | None
     doi: str | None
+    title: str | None
     engine: str
     ocsr_mode: str
     created_at: datetime
     expires_at: datetime
+    structures: int
+    accepted: int
+    rejected: int
+    to_review: int
+    failed_pages: int
 
 
 class PaperList(BaseModel):
@@ -81,6 +87,7 @@ class StepOut(_Orm):
     status: str
     attempts: int
     error_class: str | None
+    engine: str | None  # set for ocsr steps
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -137,6 +144,46 @@ class CurationIn(BaseModel):
         return value.strip() if value is not None else None
 
 
+MAX_BULK_ITEMS = 500
+
+
+class BulkCurationItem(BaseModel):
+    """Status for one segment. A `note` key that is absent keeps the stored note; a present
+    one (a string or null) replaces it. smiles and molfile are never touched."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: uuid.UUID
+    status: CurationStatus
+    note: str | None = Field(None, max_length=MAX_NOTE_CHARS)
+
+    @field_validator("note")
+    @classmethod
+    def _clean(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if "\x00" in value:
+            raise ValueError("must not contain NUL characters")
+        return value if value.strip() else None
+
+
+class BulkCurationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[BulkCurationItem] = Field(min_length=1, max_length=MAX_BULK_ITEMS)
+
+    @field_validator("items")
+    @classmethod
+    def _unique(cls, items: list[BulkCurationItem]) -> list[BulkCurationItem]:
+        if len({i.segment_id for i in items}) != len(items):
+            raise ValueError("segment_id appears more than once")
+        return items
+
+
+class BulkCurationOut(BaseModel):
+    updated: int
+
+
 class QueuePaper(BaseModel):
     id: uuid.UUID
     steps_ahead_by_queue: dict[str, int]
@@ -146,3 +193,47 @@ class QueuePaper(BaseModel):
 class QueueOut(BaseModel):
     papers: list[QueuePaper]
     estimate_s: float
+
+
+class ImagePrediction(_Orm):
+    smiles: str
+    molfile: str | None
+    valid: bool
+    engine: str
+    engine_version: str
+    ms: int
+
+
+class ImageStepOut(BaseModel):
+    """One ocsr step of an image job. No error text: only the coarse `error_class`."""
+
+    engine: str
+    status: str
+    error_class: str | None
+
+
+class ImageJobSummary(BaseModel):
+    id: uuid.UUID
+    display_name: str
+    status: str
+    engine: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class ImageJobList(BaseModel):
+    jobs: list[ImageJobSummary]
+
+
+class ImageJobOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    engine: str
+    display_name: str
+    created_at: datetime
+    expires_at: datetime
+    prediction: ImagePrediction | None  # the newest one
+    predictions: list[PredictionOut]  # all, newest first
+    error_class: str | None  # of the newest failed step
+    steps: list[ImageStepOut]  # newest first
+    error: str | None  # kept for API compatibility; the UI never shows it

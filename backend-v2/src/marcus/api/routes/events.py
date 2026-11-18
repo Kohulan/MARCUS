@@ -1,7 +1,7 @@
-"""`GET /papers/{id}/events`: live step and segment updates as server-sent events.
+"""`GET /papers/{id}/events` and `GET /images/{id}/events`: live updates as server-sent events.
 
-The stream starts with one `event: snapshot` ({status, counts}) and then forwards each
-worker event published on `marcus:paper:{id}` as a `data:` line, with a `: ping` comment
+The stream starts with one `event: snapshot` ({status, counts}; an image job's is {status})
+and then forwards each worker event published on `marcus:paper:{id}` (`marcus:image:{id}`) as a `data:` line, with a `: ping` comment
 every `sse_ping_interval_s` seconds. Events are only a hint: the database stays the source
 of truth, and a client that reconnects re-reads `GET /papers/{id}`.
 
@@ -31,7 +31,7 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 
 import anyio
@@ -42,13 +42,13 @@ from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import current_owner, get_owned_paper
+from marcus.api.deps import current_owner, get_owned_image_job, get_owned_paper
 from marcus.api.read import steps_by_status
 from marcus.api.redisutil import incr_with_ttl
 from marcus.core.db import get_db
-from marcus.core.enums import FINISHED_STEPS, PaperStatus
-from marcus.core.events import paper_channel
-from marcus.core.models import Owner, Paper
+from marcus.core.enums import FINISHED_STEPS, ImageJobStatus, PaperStatus
+from marcus.core.events import image_channel, paper_channel
+from marcus.core.models import ImageJob, Owner, Paper
 from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -60,6 +60,11 @@ CLOSE_S = 2.0  # longest wait for unsubscribe + close when the stream ends
 SLOT_TTL_S = 60  # stream slot counter TTL, refreshed on every ping
 RETRY_MS = 15000
 TERMINAL = {PaperStatus.DONE.value, PaperStatus.FAILED.value, PaperStatus.DELETED.value}
+assert TERMINAL == {  # image jobs end on the same three words
+    ImageJobStatus.DONE.value,
+    ImageJobStatus.FAILED.value,
+    ImageJobStatus.DELETED.value,
+}
 TOO_MANY_STREAMS = "Too many open event streams"
 ERROR_FRAME = f"retry: {RETRY_MS}\n\n", 'event: error\ndata: {"detail": "events unavailable"}\n\n'
 
@@ -93,7 +98,7 @@ def _end_frame(status: str) -> str:
     return f"event: end\ndata: {json.dumps({'status': status})}\n\n"
 
 
-async def _snapshot(db: AsyncSession, paper_id: uuid.UUID) -> dict:
+async def _paper_snapshot(db: AsyncSession, paper_id: uuid.UUID) -> dict:
     status = await db.scalar(select(Paper.status).where(Paper.id == paper_id))
     counts = await steps_by_status(db, paper_id)
     await db.commit()  # end the read transaction: release the pooled connection
@@ -104,6 +109,16 @@ async def _paper_status(db: AsyncSession, paper_id: uuid.UUID) -> str:
     status = await db.scalar(select(Paper.status).where(Paper.id == paper_id))
     await db.commit()
     return status or PaperStatus.DELETED.value  # purged rows count as deleted
+
+
+async def _image_snapshot(db: AsyncSession, job_id: uuid.UUID) -> dict:
+    return {"status": await _image_status(db, job_id)}
+
+
+async def _image_status(db: AsyncSession, job_id: uuid.UUID) -> str:
+    status = await db.scalar(select(ImageJob.status).where(ImageJob.id == job_id))
+    await db.commit()
+    return status or ImageJobStatus.DELETED.value
 
 
 # --- stream slots ---------------------------------------------------------------------------
@@ -148,15 +163,21 @@ async def _refresh_slot(key: str | None) -> None:
 
 
 async def _stream(
-    request: Request, db: AsyncSession, paper_id: uuid.UUID, slot: str | None
+    request: Request,
+    db: AsyncSession,
+    row_id: uuid.UUID,
+    channel: str,
+    snapshot_of: Callable[[AsyncSession, uuid.UUID], Awaitable[dict]],
+    status_of: Callable[[AsyncSession, uuid.UUID], Awaitable[str]],
+    slot: str | None,
 ) -> AsyncIterator[str]:
     settings = get_settings()
     ping_s = settings.sse_ping_interval_s
     deadline = time.monotonic() + settings.sse_max_duration_s
     pubsub = redis_client().pubsub(ignore_subscribe_messages=True)
     try:
-        await pubsub.subscribe(paper_channel(paper_id))
-        snapshot = await _snapshot(db, paper_id)  # after subscribe: no event can fall between
+        await pubsub.subscribe(channel)
+        snapshot = await snapshot_of(db, row_id)  # after subscribe: no event can fall between
         yield f"event: snapshot\ndata: {json.dumps(snapshot)}\n\n"
         if snapshot["status"] in TERMINAL:
             yield _end_frame(snapshot["status"])
@@ -165,7 +186,7 @@ async def _stream(
         while not await request.is_disconnected():
             left = deadline - time.monotonic()
             if left <= 0:
-                return  # no `end`: the paper is still running, the client reconnects
+                return  # no `end`: the work is still running, the client reconnects
             msg = await pubsub.get_message(timeout=min(POLL_S, ping_s, left))
             check = False
             if msg is not None and msg.get("type") == "message":
@@ -180,12 +201,12 @@ async def _stream(
                 yield ": ping\n\n"
                 check = True  # a deletion publishes no event
             if check:
-                status = await _paper_status(db, paper_id)
+                status = await status_of(db, row_id)
                 if status in TERMINAL:
                     yield _end_frame(status)
                     return
     except RedisError:
-        log.warning("event stream for paper %s lost Redis", paper_id, exc_info=True)
+        log.warning("event stream %s lost Redis", channel, exc_info=True)
         for frame in ERROR_FRAME:
             yield frame
     finally:
@@ -197,7 +218,7 @@ async def _stream(
             try:
                 await pubsub.aclose()
             except Exception:
-                log.warning("could not close pub/sub for paper %s", paper_id, exc_info=True)
+                log.warning("could not close pub/sub %s", channel, exc_info=True)
             await _give_back(slot)
 
 
@@ -212,5 +233,26 @@ async def paper_events(
     await db.commit()  # the stream reads the snapshot itself, after subscribing
     slot = await _take_slot(owner.id)
     return StreamingResponse(
-        _stream(request, db, paper.id, slot), media_type="text/event-stream", headers=SSE_HEADERS
+        _stream(
+            request, db, paper.id, paper_channel(paper.id), _paper_snapshot, _paper_status, slot
+        ),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
+@router.get("/images/{job_id}/events")
+async def image_events(
+    job_id: uuid.UUID,
+    request: Request,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    job = await get_owned_image_job(db, owner, job_id)
+    await db.commit()
+    slot = await _take_slot(owner.id)
+    return StreamingResponse(
+        _stream(request, db, job.id, image_channel(job.id), _image_snapshot, _image_status, slot),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )

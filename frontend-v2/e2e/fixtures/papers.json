@@ -1,0 +1,21 @@
+{
+ "papers": [
+  {
+   "id": "00efacdd-8b70-446b-aa9e-b6acd3b333e0",
+   "display_name": "Sample paper (synthetic).pdf",
+   "status": "done",
+   "pages": 5,
+   "doi": "10.1039/d5dd00313j",
+   "title": "Synthetic alkaloids from a sample paper",
+   "engine": "decimer",
+   "ocsr_mode": "auto",
+   "created_at": "2026-11-18T11:48:59.358622Z",
+   "expires_at": "2026-12-18T11:48:59.386449Z",
+   "structures": 10,
+   "accepted": 1,
+   "rejected": 1,
+   "to_review": 8,
+   "failed_pages": 0
+  }
+ ]
+}

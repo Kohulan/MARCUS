@@ -1,0 +1,145 @@
+/*
+ * The structure editor dialog (F11): a drawing sheet over the dimmed tool. Header cell,
+ * the SMILES row, then the Ketcher frame filling the rest. Paper ground, so the glass
+ * buttons sit on light; the frame itself is surface white like Ketcher's canvas.
+ */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, calc(100vw - 48px));
+  height: calc(100vh - 48px);
+  height: calc(100dvh - 48px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--charcoal);
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+}
+
+.editor::backdrop {
+  background-color: rgba(28, 33, 29, 0.42);
+}
+
+/* jsdom and old engines without showModal get the open attribute: keep it on top. */
+.editor[open]:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editor[open] {
+    animation: editor-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .editor[open]::backdrop {
+    animation: editor-dim 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes editor-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+.editor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.editor__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.editor__smiles {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.editor .editor__label {
+  color: var(--text-2);
+}
+
+.editor__input {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 2px;
+  background-color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.editor__input:focus-visible {
+  outline-offset: 1px;
+}
+
+.editor__error {
+  margin: 0;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface);
+  color: var(--orange-ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.editor__frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background-color: var(--surface);
+}
+
+.editor__ketcher {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.editor__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  background-color: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

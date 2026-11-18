@@ -55,14 +55,21 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/papers/{paper_id}/segments"),
     ("GET", "/api/v2/papers/{paper_id}/steps"),
     ("GET", "/api/v2/papers/{paper_id}/pages/{n}/image"),
+    ("POST", "/api/v2/papers/{paper_id}/pages/{n}/retry"),
     ("GET", "/api/v2/papers/{paper_id}/text"),
     ("GET", "/api/v2/papers/{paper_id}/export"),
     ("GET", "/api/v2/papers/{paper_id}/events"),
     ("POST", "/api/v2/images"),
+    ("GET", "/api/v2/images"),
     ("GET", "/api/v2/images/{job_id}"),
+    ("GET", "/api/v2/images/{job_id}/image"),
+    ("GET", "/api/v2/images/{job_id}/events"),
+    ("POST", "/api/v2/images/{job_id}/predictions"),
     ("GET", "/api/v2/segments/{segment_id}/image"),
+    ("GET", "/api/v2/segments/{segment_id}/depiction"),
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
     ("PUT", "/api/v2/segments/{segment_id}/curation"),
+    ("PUT", "/api/v2/papers/{paper_id}/curation"),
     ("GET", "/api/v2/queue"),
     ("POST", "/api/v2/tools/depict"),
     ("POST", "/api/v2/tools/smiles-to-molfile"),
@@ -279,7 +286,7 @@ async def test_http_exception_detail_kept(app):
 def test_rate_limit_defaults():
     s = Settings()
     assert (s.rate_limit_upload_per_min, s.rate_limit_tools_per_min) == (10, 60)
-    assert s.rate_limit_ip_per_min == 300
+    assert s.rate_limit_ip_per_min == 300 and s.rate_limit_ip_assets_per_min == 3000
     assert s.cors_origins == [] and s.expose_docs is False
 
 
@@ -326,6 +333,62 @@ async def test_rate_limit_hits_429(app, real_redis, frozen_time):
         assert (await c.get("/api/v2/health")).status_code == 200
     ttl = await real_redis.ttl(f"rl:ip:{peer[0]}:{int(FIXED_NOW) // 60}")
     assert 0 < ttl <= 120
+
+
+SEG_ID = "0b1f6d3e-5a4c-4e8f-9a7b-1c2d3e4f5a6b"
+
+
+def fresh_peer() -> tuple[str, int]:
+    return (f"198.51.100.{uuid.uuid4().int % 250 + 1}", 1000)
+
+
+async def test_400_asset_gets_not_limited(app, frozen_time):
+    """Defaults (300 ip / 3000 assets): a page of 400 crops is not throttled."""
+    async with client(app, fresh_peer()) as c:
+        for _ in range(400):
+            r = await c.get(f"/api/v2/segments/{SEG_ID}/image")
+            assert r.status_code != 429
+
+
+async def test_depiction_get_with_query_uses_asset_bucket(app, monkeypatch, frozen_time):
+    env(monkeypatch, rate_limit_ip_per_min="3")
+    async with client(app, fresh_peer()) as c:
+        for _ in range(10):
+            r = await c.get(f"/api/v2/segments/{SEG_ID}/depiction?v=abc123")
+            assert r.status_code != 429
+
+
+async def test_plain_gets_still_limited_at_301(app, frozen_time):
+    peer = fresh_peer()
+    async with client(app, peer) as c:
+        codes = [(await c.get("/api/v2/nope")).status_code for _ in range(301)]
+    assert codes[:300] == [404] * 300 and codes[300] == 429
+
+
+async def test_post_to_asset_path_uses_plain_bucket(app, monkeypatch, frozen_time):
+    env(monkeypatch, rate_limit_ip_per_min="3")
+    async with client(app, fresh_peer()) as c:
+        codes = [(await c.post(f"/api/v2/segments/{SEG_ID}/image")).status_code for _ in range(5)]
+    assert codes[:3] != [429] * 3 and codes[3:] == [429, 429]
+
+
+def test_asset_regex_rejects_traversal():
+    ok = [
+        f"/api/v2/papers/{SEG_ID}/pages/0/image",
+        f"/api/v2/segments/{SEG_ID}/image",
+        f"/api/v2/segments/{SEG_ID}/depiction",
+        f"/api/v2/images/{SEG_ID}/image",
+    ]
+    assert all(security.ASSET_GET.match(p) for p in ok)
+    bad = [
+        "/api/v2/segments/../papers/x/image",
+        f"/api/v2/segments/{SEG_ID}/image/",
+        f"/api/v2/segments/{SEG_ID}/image/../x",
+        f"/api/v2/papers/{SEG_ID}/pages/12345/image",
+        f"/api/v2/segments/{SEG_ID}/curation",
+        f"/x/api/v2/segments/{SEG_ID}/image",
+    ]
+    assert not any(security.ASSET_GET.match(p) for p in bad)
 
 
 async def test_other_owner_has_own_upload_bucket(app, frozen_time):

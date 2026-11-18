@@ -1,0 +1,496 @@
+/*
+ * Review grid (board: "In the tool: review"). A ruled sheet of structure cards: 1 px
+ * --line gaps between surface cells, a filter strip above, a bulk bar that stays at the
+ * bottom of the window. Light only; tokens only; no style props.
+ * Accepted text (--accepted) sits on surface only, never on sunken or the selection tint.
+ * Fast at 200 cards: off-screen cards skip layout and paint (content-visibility).
+ */
+
+/* Filter strip --------------------------------------------------------------- */
+
+.rg-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 24px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.rg-filters__set {
+  display: inline-flex;
+  border: 1px solid var(--control-border);
+}
+
+.rg-filters__button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 0;
+  background-color: var(--surface);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rg-filters__button + .rg-filters__button {
+  border-left: 1px solid var(--control-border);
+}
+
+.rg-filters__button:hover {
+  background-color: var(--sunken);
+}
+
+.rg-filters__button[aria-pressed="true"] {
+  background-color: var(--green);
+  color: var(--on-green);
+  cursor: default;
+}
+
+.rg-filters__button:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.rg-filters__count {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.rg-filters__button[aria-pressed="true"] .rg-filters__count {
+  color: inherit;
+}
+
+.rg-filters__all {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+
+.rg-filters__all:hover:not(:disabled) {
+  text-decoration-color: currentColor;
+}
+
+.rg-filters__all:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.rg-empty {
+  margin: 0;
+  padding: 48px 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The sheet of cards -------------------------------------------------------- */
+
+/* Each cell rules its own right and bottom edge, so a short last row leaves the view's
+   ground, not a block of rule colour; the rightmost rule tucks under the sheet's frame. */
+.ws-view--review {
+  overflow-x: clip; /* clip, not hidden: hidden would make a scroll box and break sticky */
+}
+
+.rg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  margin-right: -1px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 330px;
+}
+
+.card:focus-visible {
+  z-index: 1;
+  outline-offset: 0;
+  border-radius: 0;
+}
+
+.card[aria-current="true"] {
+  z-index: 1;
+  outline: 2px solid var(--green);
+  outline-offset: 0;
+}
+
+/* To check: a 2 px orange edge inside the cell. Selected: a green ring inside that. */
+.card--to-check {
+  box-shadow: inset 0 0 0 2px var(--orange);
+}
+
+.card--selected {
+  box-shadow: inset 0 0 0 3px var(--green);
+}
+
+.card--to-check.card--selected {
+  box-shadow:
+    inset 0 0 0 2px var(--orange),
+    inset 0 0 0 5px var(--green);
+}
+
+/* Failed: the hatched ground, the charcoal tag. */
+.card--failed {
+  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
+}
+
+.card__tagrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.card__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.card__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+.card__tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.card__figure {
+  position: relative;
+  height: 150px;
+}
+
+.card__figure .structure {
+  min-height: 0;
+}
+
+.card__crop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--control-border);
+  background-color: var(--surface);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card:hover .card__crop,
+.card:focus-within .card__crop,
+.card__crop[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.card__crop[aria-pressed="true"] {
+  border-color: var(--green);
+  background-color: var(--green);
+  color: var(--on-green);
+}
+
+.card__stamp {
+  position: absolute;
+  z-index: 1; /* over the Rejected strike, as a stamp lands on a crossed-out sheet */
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.card__stamp .stamp--charcoal {
+  background-color: var(--surface);
+}
+
+.card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+}
+
+.card .card__meta,
+.card .card__note,
+.card .card__reason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.card__differ {
+  color: var(--orange-ink);
+}
+
+.card .card__note {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.card .card__reason {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* Compact: the Paper view's list. The drawing beside the text, one ruled column; a click
+   on the card selects it. */
+.card--compact {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-areas:
+    "tag tag"
+    "fig body";
+  gap: 10px 14px;
+  border-right: 0;
+  cursor: pointer;
+  contain-intrinsic-size: auto 200px;
+}
+
+.card--compact .card__tagrow {
+  grid-area: tag;
+}
+
+.card--compact .card__figure {
+  grid-area: fig;
+  height: 112px;
+}
+
+.card--compact .card__body {
+  grid-area: body;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Only a card with actions gets their row. */
+.card--compact .card__actions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.card--compact .card__body {
+  position: relative;
+  min-height: 112px; /* the figure's height: the stamp sits at the row's foot */
+}
+
+/* Selected and keyboard rings sit inside the To check edge (inset 0-2 px), not over it,
+   and inside the list column, which would clip a ring drawn outside the card. */
+.card--compact[aria-current="true"],
+.card--compact:focus-visible {
+  outline-offset: -4px;
+}
+
+/* Linked: its marker on the page is hovered. An inner orange frame with the board's corner
+   square, drawn over the state's own edge (spec §7 signature interaction). */
+.card--linked::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 2px solid var(--orange);
+  pointer-events: none;
+}
+
+.card--linked::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: var(--orange);
+  pointer-events: none;
+}
+
+/* Engine menu: a small ruled list under its button ---------------------------- */
+
+/* An open menu must not be clipped by the card's paint containment (content-visibility),
+   and it lies over the neighbouring cards. */
+.card:has(.engine-menu__panel),
+.card:has(.card-menu__panel) {
+  z-index: 2;
+  content-visibility: visible;
+}
+
+.engine-menu {
+  position: relative;
+}
+
+.engine-menu__panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  border: 1px solid var(--control-border);
+  background-color: var(--surface);
+  box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+}
+
+/* After another button, an engine menu opens to the left, inside the card's width; a menu
+   button first in the row (a Failed card) keeps its menu anchored left. */
+.engine-menu:not(:first-child) .engine-menu__panel {
+  right: 0;
+  left: auto;
+}
+
+.engine-menu__item {
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.engine-menu__item + .engine-menu__item {
+  border-top: 1px solid var(--hair);
+}
+
+/* Compare, the last entry, set apart from the engines. */
+.engine-menu__item + .engine-menu__item--compare {
+  border-top-color: var(--line);
+}
+
+.engine-menu__item:hover {
+  background-color: var(--sunken);
+}
+
+.engine-menu__item:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The card menu ("More"): last in the row, pushed to the card's right edge; its panel
+   opens upwards and to the left, inside the card's width. */
+.card-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.card-menu__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  width: max-content;
+  max-width: 280px;
+  padding: 12px 12px 4px;
+  border: 1px solid var(--control-border);
+  background-color: var(--surface);
+  box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+}
+
+/* In the menu the actions are a list: one pill per line, in their order. */
+.card-menu__panel .structure-actions__row {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Bulk bar ------------------------------------------------------------------ */
+
+.rg-bulk {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+  background-color: var(--paper);
+  animation: rg-bulk-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.rg-bulk > :last-child {
+  margin-left: auto;
+}
+
+@keyframes rg-bulk-in {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rg-bulk {
+    animation: none;
+  }
+}

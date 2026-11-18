@@ -6,7 +6,8 @@ Order of the ASGI stack (outermost first):
                          catch-all 500
     CORSMiddleware       only when settings.cors_origins is non-empty
     IpRateLimitMiddleware  300/min per client IP (IPv6: per /64), every route but
-                           GET /api/v2/health
+                           GET /api/v2/health; GETs of page, crop and depiction images
+                           have their own 3000/min bucket
     FastAPI app          per-owner limits are dependencies (`upload_limit`, `tools_limit`)
 
 Both middlewares are pure ASGI (not BaseHTTPMiddleware), so SSE streams pass through
@@ -62,6 +63,12 @@ _REQUEST_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 _PAPER_PATH = re.compile(
     r"/api/v2/papers/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:/|$)"
 )
+
+ASSET_GET = re.compile(
+    r"^/api/v2/(papers/[0-9a-f-]{36}/pages/\d{1,4}/image"
+    r"|segments/[0-9a-f-]{36}/(image|depiction)"
+    r"|images/[0-9a-f-]{36}/image)$"
+)  # matched against scope["path"] (no query string)
 
 WINDOW_S = 60
 EXEMPT = ("GET", "/api/v2/health")
@@ -230,6 +237,7 @@ class RateLimiter:
             "upload": settings.rate_limit_upload_per_min,
             "tools": settings.rate_limit_tools_per_min,
             "ip": settings.rate_limit_ip_per_min,
+            "ip_assets": settings.rate_limit_ip_assets_per_min,
         }[scope]
 
     async def hit(self, scope: str, key: str, *, fail_open: bool) -> int | None:
@@ -284,7 +292,8 @@ class IpRateLimitMiddleware:
             await self.app(scope, receive, send)
             return
         key = rate_key_for_ip(client_ip(Request(scope)))
-        retry = await self.limiter.hit("ip", key, fail_open=True)
+        is_asset = scope["method"] == "GET" and ASSET_GET.match(scope["path"]) is not None
+        retry = await self.limiter.hit("ip_assets" if is_asset else "ip", key, fail_open=True)
         if retry is not None:
             response = JSONResponse(
                 {"detail": RATE_LIMITED}, status_code=429, headers={"Retry-After": str(retry)}

@@ -1,11 +1,13 @@
 import asyncio
 import io
 import threading
+import uuid
 
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from marcus.api.routes import images as images_route
+from marcus.api.security import ASSET_GET
 from marcus.core import storage
 from marcus.core.models import ImageJob, Prediction, Step
 from marcus.core.pipeline import complete_step
@@ -256,3 +258,164 @@ async def test_image_decode_concurrency_setting(monkeypatch):
     get_settings.cache_clear()
     app = create_app()
     assert app.state.decode_slots._value == 5
+
+
+# --- F0-6: list, bytes, extra predictions, job out ---------------------------------------------
+
+
+async def run_and_finish(db, step, result=None, fail=None):
+    from marcus.core.enums import ErrorClass
+    from marcus.core.pipeline import fail_step
+
+    step.status = "running"
+    step.attempts += 1
+    await db.commit()
+    if fail:
+        await db.run_sync(lambda s: fail_step(s, step.id, ErrorClass(fail), "secret boom", False))
+    else:
+        await db.run_sync(lambda s: complete_step(s, step.id, result or ocsr_result("CCO")))
+    await db.commit()
+
+
+async def test_list_images_only_mine(app, async_db_session):
+    async with make_client(app) as c:
+        a = (await upload_image(c, name="a.png")).json()["image_job_id"]
+        b = (await upload_image(c, name="b.png")).json()["image_job_id"]
+        gone = (await upload_image(c, name="c.png")).json()["image_job_id"]
+        job = await async_db_session.get(ImageJob, uuid.UUID(gone))
+        job.status = "deleted"
+        await async_db_session.commit()
+        body = (await c.get("/api/v2/images")).json()
+    _, token = await new_owner(async_db_session)
+    async with make_client(app, token) as other:
+        theirs = (await other.get("/api/v2/images")).json()
+    assert theirs == {"jobs": []}
+    assert [j["id"] for j in body["jobs"]] == [b, a]
+    assert set(body["jobs"][0]) == {
+        "id",
+        "display_name",
+        "status",
+        "engine",
+        "created_at",
+        "expires_at",
+    }
+    assert body["jobs"][0]["display_name"] == "b.png"
+
+
+async def test_image_bytes_owner_only(app, async_db_session):
+    data = image_bytes()
+    async with make_client(app) as c:
+        job_id = (await upload_image(c, data)).json()["image_job_id"]
+        r = await c.get(f"/api/v2/images/{job_id}/image")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert r.headers["cache-control"] == "private, max-age=3600"
+    assert r.content.startswith(b"\x89PNG")
+    assert ASSET_GET.match(f"/api/v2/images/{job_id}/image")
+    _, token = await new_owner(async_db_session)
+    async with make_client(app, token) as other:
+        theirs = await other.get(f"/api/v2/images/{job_id}/image")
+        missing = await other.get(f"/api/v2/images/{uuid.uuid4()}/image")
+    assert theirs.status_code == missing.status_code == 404
+    assert theirs.content == missing.content
+
+
+async def _job_and_step(c, db):
+    job_id = (await upload_image(c)).json()["image_job_id"]
+    step = (await db.execute(select(Step))).scalar_one()
+    return job_id, step
+
+
+async def test_image_predictions_second_engine(app, async_db_session):
+    db = async_db_session
+    async with make_client(app) as c:
+        job_id, first = await _job_and_step(c, db)
+        await run_and_finish(db, first)
+        assert (await c.get(f"/api/v2/images/{job_id}")).json()["status"] == "done"
+        r = await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+        assert r.status_code == 202
+        step_id = r.json()["step_id"]
+        body = (await c.get(f"/api/v2/images/{job_id}")).json()
+    assert body["status"] == "queued"
+    new = await db.get(Step, uuid.UUID(step_id))
+    assert (new.kind, new.engine, new.status, new.image_job_id) == (
+        "ocsr",
+        "molnextr",
+        "pending",
+        uuid.UUID(job_id),
+    )
+    assert new.queue == "q.molnextr"
+
+
+async def test_image_predictions_repeat_click_same_step(app, async_db_session):
+    db = async_db_session
+    async with make_client(app) as c:
+        job_id, _ = await _job_and_step(c, db)
+        url = f"/api/v2/images/{job_id}/predictions"
+        one = await c.post(url, json={"engine": "molscribe"})
+        two = await c.post(url, json={"engine": "molscribe"})
+        same_engine_as_upload = await c.post(url, json={"engine": "decimer"})
+    assert one.status_code == two.status_code == 202
+    assert one.json() == two.json()
+    assert same_engine_as_upload.json()["step_id"] == str(
+        (await db.execute(select(Step.id).where(Step.engine == "decimer"))).scalar_one()
+    )
+    assert (await db.execute(select(func.count()).select_from(Step))).scalar_one() == 2
+
+
+async def test_image_predictions_fake_engine_refused(app, monkeypatch):
+    monkeypatch.delenv("MARCUS_ENABLE_FAKE_ENGINES", raising=False)
+    get_settings.cache_clear()
+    async with make_client(app) as c:
+        job_id = (await upload_image(c)).json()["image_job_id"]
+        r = await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "fake"})
+    assert r.status_code == 422 and r.json() == {"detail": "Engine not available"}
+
+
+async def test_image_job_out_lists_all_predictions_and_steps(app, async_db_session):
+    db = async_db_session
+    async with make_client(app) as c:
+        job_id, first = await _job_and_step(c, db)
+        await run_and_finish(db, first, ocsr_result("CCO"))
+        step_id = (
+            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+        ).json()["step_id"]
+        second = await db.get(Step, uuid.UUID(step_id))
+        await run_and_finish(db, second, ocsr_result("CCC"))
+        body = (await c.get(f"/api/v2/images/{job_id}")).json()
+    assert body["status"] == "done"
+    assert [p["smiles"] for p in body["predictions"]] == ["CCC", "CCO"]
+    assert body["prediction"]["smiles"] == "CCC"
+    assert [(s["engine"], s["status"], s["error_class"]) for s in body["steps"]] == [
+        ("molnextr", "done", None),
+        ("decimer", "done", None),
+    ]
+    assert body["error_class"] is None
+
+
+async def test_image_job_second_engine_fails_job_stays_done(app, async_db_session):
+    db = async_db_session
+    async with make_client(app) as c:
+        job_id, first = await _job_and_step(c, db)
+        await run_and_finish(db, first)
+        step_id = (
+            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+        ).json()["step_id"]
+        await run_and_finish(db, await db.get(Step, uuid.UUID(step_id)), fail="timeout")
+        body = (await c.get(f"/api/v2/images/{job_id}")).json()
+    assert body["status"] == "done" and body["error"] is None
+    assert body["error_class"] == "timeout"
+    assert body["steps"][0] == {"engine": "molnextr", "status": "failed", "error_class": "timeout"}
+    assert len(body["predictions"]) == 1
+
+
+async def test_image_job_only_engine_fails_job_failed_with_error_class(app, async_db_session):
+    db = async_db_session
+    async with make_client(app) as c:
+        job_id, first = await _job_and_step(c, db)
+        await run_and_finish(db, first, fail="engine_error")
+        r = await c.get(f"/api/v2/images/{job_id}")
+    body = r.json()
+    assert body["status"] == "failed"
+    assert body["error_class"] == "engine_error"
+    assert body["predictions"] == [] and body["prediction"] is None
+    assert body["error"] == "secret boom"  # kept for compatibility, never shown by the UI

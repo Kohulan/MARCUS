@@ -2,14 +2,78 @@
 
 import uuid
 from collections import defaultdict
+from typing import NamedTuple
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.schemas import CurationOut, PredictionOut, SegmentOut, StepOut
-from marcus.core.models import Curation, Prediction, Segment, Step
+from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
+from marcus.core.enums import StepStatus
+from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.pipeline import PAGE_KINDS, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
+
+
+class Counts5(NamedTuple):
+    structures: int
+    accepted: int
+    rejected: int
+    to_review: int
+    failed_pages: int
+
+
+async def paper_counts(db: AsyncSession, paper_ids: list[uuid.UUID]) -> dict[uuid.UUID, Counts5]:
+    """Structure and failure counts per paper: two grouped queries, whatever the number of papers.
+
+    structures = segments; accepted / rejected = curations with that status; to_review = the
+    rest (every segment has a curation row). failed_pages = distinct pages whose newest
+    render_page or segment_page step, across both kinds (the order retry_page uses), is failed.
+    A retry in flight (pending, queued, running) is the newest step, so the page is not counted
+    while it runs; retry_page itself still sees the old failure standing and answers "busy"."""
+    if not paper_ids:
+        return {}
+    seg_rows = await db.execute(
+        select(
+            Segment.paper_id,
+            func.count(),
+            func.count().filter(Curation.status == "accepted"),
+            func.count().filter(Curation.status == "rejected"),
+        )
+        .select_from(Segment)
+        .outerjoin(Curation, Curation.segment_id == Segment.id)
+        .where(Segment.paper_id.in_(paper_ids))
+        .group_by(Segment.paper_id)
+    )
+    newest = (
+        select(Step.paper_id, Step.page, Step.status)
+        .ext(distinct_on(Step.paper_id, Step.page))
+        .where(
+            Step.paper_id.in_(paper_ids),
+            Step.page.is_not(None),
+            Step.kind.in_(PAGE_KINDS),
+        )
+        .order_by(Step.paper_id, Step.page, *page_step_order(), Step.id)
+        .subquery()
+    )
+    failed_rows = await db.execute(
+        select(newest.c.paper_id, func.count(func.distinct(newest.c.page)))
+        .where(newest.c.status == StepStatus.FAILED.value)
+        .group_by(newest.c.paper_id)
+    )
+    failed = dict(failed_rows.all())
+    out = {pid: Counts5(0, 0, 0, 0, failed.get(pid, 0)) for pid in paper_ids}
+    for pid, total, accepted, rejected in seg_rows.all():
+        out[pid] = Counts5(
+            total, accepted, rejected, total - accepted - rejected, failed.get(pid, 0)
+        )
+    return out
+
+
+def paper_summary(paper: Paper, counts: Counts5) -> PaperSummary:
+    fields = PaperSummary.model_fields.keys() - Counts5._fields
+    return PaperSummary(**{f: getattr(paper, f) for f in fields}, **counts._asdict())
 
 
 async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, int]:
@@ -75,7 +139,9 @@ async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:
     """The paper's steps, oldest first (created_at, seq)."""
     rows = (
         await db.execute(
-            select(Step).where(Step.paper_id == paper_id).order_by(Step.created_at, Step.seq, Step.id)
+            select(Step)
+            .where(Step.paper_id == paper_id)
+            .order_by(Step.created_at, Step.seq, Step.id)
         )
     ).scalars()
     return [StepOut.model_validate(s) for s in rows]

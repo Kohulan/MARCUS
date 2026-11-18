@@ -22,6 +22,7 @@ import re
 import shutil
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -61,6 +62,11 @@ ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+# One page's render_page and segment_page steps are read newest first in this order (segment_page
+# follows render_page when created_at ties). retry_page and the failed_pages count share it, so
+# "the newest step across both kinds" means the same thing in both.
+PAGE_KINDS = (StepKind.RENDER_PAGE.value, StepKind.SEGMENT_PAGE.value)
+MANUAL_PAGE_RETRIES = 2  # extra render_page steps one page may get through retry_page
 MAX_VERSION_CHARS = 200
 RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of the cache key
 CROP_SOURCES_TRIED = 20  # live papers tried per crop on a cache hit
@@ -82,6 +88,19 @@ class BadResult(ValueError):
     Raised by complete_step before any state changes. The caller must roll back and may then
     record the failure with fail_step in a fresh transaction.
     """
+
+
+class RetryNotAllowed(Exception):
+    """retry_page refused: the page has not failed, is still running, or has no retries left."""
+
+    def __init__(self, reason: Literal["not_failed", "busy", "limit"]):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def page_step_order() -> tuple:
+    """ORDER BY terms (newest first) over one page's render_page/segment_page steps."""
+    return Step.created_at.desc(), Step.kind.desc(), Step.seq.desc()
 
 
 def start_paper(
@@ -396,6 +415,9 @@ def _check_doi_result(result: dict) -> None:
     doi = result["doi"]
     if doi is not None and not _is_text(doi):
         raise BadResult("doi: 'doi' must be a string or null")
+    title = result.get("title")
+    if title is not None and not _is_text(title):
+        raise BadResult("doi: 'title' must be a string or null")
 
 
 def _check_nothing(result: dict) -> None:
@@ -621,6 +643,7 @@ def _after_ocsr(session: Session, paper: Paper, step: Step, result: dict) -> lis
 
 def _after_doi(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     paper.doi = result["doi"]
+    paper.title = result.get("title")
     return []
 
 
@@ -640,6 +663,33 @@ _AFTER = {
 
 
 # --- public API ----------------------------------------------------------------------------
+
+
+def _settle_image_job(session: Session, job: ImageJob, error: str | None = None) -> None:
+    """Image job status after one of its ocsr steps finished (flushes).
+
+    While any ocsr step of the job is active it is `queued`; when the last one finishes it is
+    `done` if the job has a prediction, else `failed` (with `error`). A failed extra engine
+    therefore never turns a job with a good result into `failed`."""
+    session.flush()
+    active = session.execute(
+        select(func.count())
+        .select_from(Step)
+        .where(Step.image_job_id == job.id, Step.status.in_(ACTIVE))
+    ).scalar_one()
+    if active:
+        job.status = ImageJobStatus.QUEUED.value
+        return
+    predicted = session.execute(
+        select(func.count()).select_from(Prediction).where(Prediction.image_job_id == job.id)
+    ).scalar_one()
+    if predicted:
+        job.status = ImageJobStatus.DONE.value
+        job.error = None
+    else:
+        job.status = ImageJobStatus.FAILED.value
+        job.error = error
+    session.flush()
 
 
 def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[Step]:
@@ -664,9 +714,7 @@ def complete_step(session: Session, step_id: uuid.UUID, result: dict) -> list[St
 
     if job is not None:
         session.add(_prediction(step, result))
-        job.status = ImageJobStatus.DONE.value
-        job.error = None
-        session.flush()
+        _settle_image_job(session, job)
         return []
 
     new = _AFTER.get(step.kind, _no_successors)(session, paper, step, result)
@@ -702,8 +750,7 @@ def fail_step(
         step.status = StepStatus.FAILED.value
         step.finished_at = _now()
         if job is not None:
-            job.status = ImageJobStatus.FAILED.value
-            job.error = error
+            _settle_image_job(session, job, error)
     if paper is not None:
         _finish_check(session, paper)
     session.flush()
@@ -773,5 +820,82 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     session.add(step)
     if paper.status == PaperStatus.DONE.value:
         paper.status = PaperStatus.PROCESSING.value
+    session.flush()
+    return step
+
+
+def retry_page(session: Session, paper_id: uuid.UUID, page: int) -> Step:
+    """Retry one failed page (0-based): a new pending `render_page` step, whose normal
+    successors (segment_page, ocsr) follow. A `done`/`failed` paper goes back to `processing`.
+    Caller commits.
+
+    Locks the paper first. Raises ValueError for a missing or deleted paper, or a page outside
+    the paper; RetryNotAllowed("not_failed") unless the page's newest finished render_page/
+    segment_page step failed, ("busy") while any step of that page is pending, queued or running, and
+    ("limit") after MANUAL_PAGE_RETRIES earlier manual retries.
+    """
+    paper = _lock(session, Paper, paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper not found")
+    if paper.pages is None or not 0 <= page < paper.pages:
+        raise ValueError("page not found")
+    session.flush()
+    rows = session.execute(
+        select(Step.kind, Step.status, Step.created_at)
+        .where(
+            Step.paper_id == paper.id,
+            Step.page == page,
+            Step.kind.in_(PAGE_KINDS),
+        )
+        .order_by(*page_step_order())
+    ).all()
+    # the newest step that has finished decides; a pending retry leaves the old failure standing
+    settled = [r for r in rows if r.status not in ACTIVE]
+    if not settled or settled[0].status != StepStatus.FAILED.value:
+        raise RetryNotAllowed("not_failed")
+    busy = session.execute(
+        select(func.count())
+        .select_from(Step)
+        .where(Step.paper_id == paper.id, Step.page == page, Step.status.in_(ACTIVE))
+    ).scalar_one()
+    if busy:
+        raise RetryNotAllowed("busy")
+    renders = sum(1 for r in rows if r.kind == StepKind.RENDER_PAGE.value)
+    if renders - 1 >= MANUAL_PAGE_RETRIES:
+        raise RetryNotAllowed("limit")
+    step = _new_step(paper, StepKind.RENDER_PAGE, page, page=page, created_at=_now())
+    session.add(step)
+    if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
+        paper.status = PaperStatus.PROCESSING.value
+        paper.error = None
+    session.flush()
+    return step
+
+
+def request_image_ocsr(session: Session, job_id: uuid.UUID, engine: Engine) -> Step:
+    """Create a pending `ocsr` step for an image job with the given engine and reopen the job
+    (status `queued`). Caller commits.
+
+    Raises ValueError for an unknown or deleted image job, or a disabled engine.
+    """
+    engine = Engine(engine)
+    if engine == Engine.FAKE and not fake_enabled():
+        raise ValueError("engine 'fake' is disabled")
+    job = _lock(session, ImageJob, job_id)
+    if job is None or job.status == ImageJobStatus.DELETED.value:
+        raise ValueError("image job not found")
+    seq = session.execute(
+        select(func.count()).select_from(Step).where(Step.image_job_id == job.id)
+    ).scalar_one()
+    step = Step(
+        image_job_id=job.id,
+        kind=StepKind.OCSR.value,
+        queue=queue_for(StepKind.OCSR, engine),
+        engine=engine.value,
+        seq=seq,
+        status=StepStatus.PENDING.value,
+    )
+    session.add(step)
+    job.status = ImageJobStatus.QUEUED.value
     session.flush()
     return step

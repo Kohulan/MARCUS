@@ -1,0 +1,530 @@
+/*
+ * COCONUT batch submit (F13): a drawing sheet over the dimmed tool, like the editor. Header
+ * cell; then two ruled cells: the paper's fields (filled once) and the structures as ruled
+ * rows on white; a glass-bed footer (.glassbed) with the progress line and the green Send. Light only;
+ * classes only (no style props).
+ */
+
+.coconut {
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, calc(100vw - 48px));
+  height: calc(100vh - 48px);
+  height: calc(100dvh - 48px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--charcoal);
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+}
+
+.coconut::backdrop {
+  background-color: rgba(28, 33, 29, 0.42);
+}
+
+.coconut[open]:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .coconut[open] {
+    animation: coconut-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .coconut[open]::backdrop {
+    animation: coconut-dim 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes coconut-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes coconut-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+.coconut__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.coconut__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.coconut__head-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Controls ------------------------------------------------------------------------------ */
+
+.coconut-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.coconut .coconut-field__label {
+  color: var(--text-2);
+}
+
+.coconut-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 2px;
+  background-color: var(--surface);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.coconut-input::placeholder {
+  font-style: italic;
+}
+
+.coconut-input--area {
+  min-height: 0;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.coconut-input--mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.coconut-input:focus-visible {
+  outline-offset: 1px;
+}
+
+.coconut-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Login --------------------------------------------------------------------------------- */
+
+.coconut__login {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.coconut-login {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(420px, 100%);
+  margin: 56px auto;
+  padding: 28px 28px 24px;
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+}
+
+.coconut-login__title {
+  font-size: 22px;
+  line-height: 1.1;
+  color: var(--green);
+}
+
+.coconut-login__note {
+  margin-top: -8px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.coconut-login__error {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--orange-ink);
+}
+
+.coconut-login__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+/* The form: two ruled cells and the footer ----------------------------------------------- */
+
+.coconut__form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.coconut__columns {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 1px;
+  min-height: 0;
+  background-color: var(--line);
+}
+
+.coconut-paper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 18px 20px 24px;
+  border: 0;
+  overflow: auto;
+  background-color: var(--paper);
+}
+
+/* The legend sits in the flow like a cell caption, not in the fieldset's border. */
+.coconut-paper__legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.coconut-paper__add {
+  display: flex;
+}
+
+.coconut-organism {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+
+.coconut-organism__name {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.coconut-organism__name > .coconut-field {
+  flex: 1 1 auto;
+}
+
+.coconut-organism__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.coconut-organism__grid > :first-child {
+  grid-column: 1 / -1;
+}
+
+.coconut-organism__remove,
+.coconut-row__more {
+  flex: none;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+  cursor: pointer;
+}
+
+.coconut-organism__remove:hover,
+.coconut-row__more:hover {
+  color: var(--ink);
+  text-decoration-thickness: 2px;
+}
+
+/* Structures: ruled rows on white -------------------------------------------------------- */
+
+.coconut-structures {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background-color: var(--surface);
+}
+
+.coconut-structures__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 260px 150px 64px;
+  column-gap: 14px;
+  padding: 8px 14px 8px 20px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--sunken);
+}
+
+.coconut-structures__head > :first-child {
+  grid-column: 1 / 3;
+}
+
+.coconut-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coconut-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 260px 150px 64px;
+  align-items: center;
+  column-gap: 14px;
+  padding: 8px 14px 8px 20px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.coconut-row__tag {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.coconut-row__smiles {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.coconut-row__state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coconut-row__sent {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border: 1px solid var(--accepted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accepted);
+}
+
+.coconut-row__sent--unknown {
+  border-color: var(--orange);
+  color: var(--orange-ink);
+}
+
+.coconut-row__again {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.coconut-row__again input {
+  margin: 0;
+}
+
+.coconut-row--out .coconut-row__tag,
+.coconut-row--out .coconut-row__smiles {
+  color: var(--muted);
+}
+
+.coconut-row--out .coconut-row__smiles {
+  text-decoration: line-through;
+  text-decoration-color: var(--tick);
+}
+
+.coconut-row__more {
+  justify-self: end;
+}
+
+.coconut-row__more[aria-expanded="true"] {
+  color: var(--green);
+}
+
+.coconut-row__detail {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 20px;
+  min-width: 0;
+  margin: 10px 0 6px 70px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--hair);
+  background-color: var(--paper);
+}
+
+.coconut-row__detail > .coconut-organism {
+  grid-column: 1 / -1;
+}
+
+/* Footer: progress line and the one main action on the glass bed ------------------------- */
+
+.coconut__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px 14px 20px;
+  border-top: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.coconut__status {
+  min-height: 1.4em;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Results ------------------------------------------------------------------------------- */
+
+.coconut-results {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.coconut-results__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 14px 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.coconut-results__title {
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.coconut-results__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.coconut-results > .coconut-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background-color: var(--surface);
+}
+
+.coconut-row--result {
+  grid-template-columns: 56px minmax(0, 0.8fr) minmax(0, 1.2fr);
+  min-height: 48px;
+}
+
+.coconut-row__ok {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--accepted);
+}
+
+/* Failed: a filled charcoal tag on the hatched ground (.hatch), then COCONUT's reason as text. */
+.coconut-row__failed {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.coconut-row__failtag {
+  flex: none;
+  padding: 1px 6px;
+  background-color: var(--charcoal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-charcoal);
+}
+
+.coconut-row__error {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Down to the tool's 1024 px minimum: a narrower paper cell and name column keep the SMILES. */
+@media (max-width: 1279px) {
+  .coconut__columns {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .coconut-structures__head,
+  .coconut-row {
+    grid-template-columns: 48px minmax(0, 1fr) 190px 124px 44px;
+    column-gap: 12px;
+    padding-left: 16px;
+    padding-right: 12px;
+  }
+
+  .coconut-row--result {
+    grid-template-columns: 48px minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .coconut-row__detail {
+    margin-left: 0;
+  }
+}

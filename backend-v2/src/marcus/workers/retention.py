@@ -18,7 +18,11 @@
 5. orphans: entries under `data_root/papers` and `data_root/images` with a server-made name
    (a uuid) whose paper / image job has no row, or a `deleted` one, and whose mtime is older
    than one day (younger ones may belong to an upload that is still committing). This also
-   retries files that `cancel_paper` or step 1/2 could not remove.
+   retries files that `cancel_paper` or step 1/2 could not remove;
+6. depictions (`data_root/depictions`, the API's stored structure drawings and `.nodraw`
+   markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the directory holds
+   more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing is drawn again
+   on its next request.
 
 Rows go in batches of `batch_size`, one transaction each, locked with SKIP LOCKED (a row a
 worker holds right now is left for the next run), so a run never holds a long transaction.
@@ -31,7 +35,9 @@ step: no Step row, not seen by the dispatcher.
 """
 
 import logging
+import os
 import shutil
+import stat
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -57,6 +63,8 @@ HARD_LIMIT_S = 1900
 BATCH_SIZE = 200
 ORPHAN_MIN_AGE = timedelta(days=1)
 LOOKUP_CHUNK = 500  # ids per "which of these still exist" query in the orphan sweep
+DEPICTION_MAX_DAYS = 30
+DEPICTIONS_MAX_BYTES = 2 * 1024**3
 
 # Distribution that carries each engine's version (the cpu worker image has none of them).
 _ENGINE_DISTS = {
@@ -76,6 +84,7 @@ class PurgeReport:
     ocsr_cache: int = 0
     orphan_paper_dirs: int = 0
     orphan_image_files: int = 0
+    depictions: int = 0  # files removed under data_root/depictions (age, then size cap)
     file_errors: int = 0
     errors: list[str] = field(default_factory=list)  # phases that failed (logged with traceback)
 
@@ -334,6 +343,45 @@ def _sweep_orphans(session: Session, now: datetime, report: PurgeReport) -> None
     )
 
 
+# --- depictions -----------------------------------------------------------------------------
+
+
+def _depiction_files(root: Path) -> list[tuple[float, int, Path]]:
+    """(mtime, size, path) of the regular files in `root/<xx>/` (symlinks are never followed)."""
+    found = []
+    try:
+        subdirs = [d for d in root.iterdir() if d.is_dir() and not d.is_symlink()]
+    except FileNotFoundError:
+        return []
+    for subdir in subdirs:
+        try:
+            entries = list(subdir.iterdir())
+        except FileNotFoundError:
+            continue
+        for path in entries:
+            try:
+                st = path.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                found.append((st.st_mtime, st.st_size, path))
+    return found
+
+
+def _purge_depictions(now: datetime, report: PurgeReport) -> None:
+    files = sorted(_depiction_files(storage.depictions_dir()))  # oldest first
+    cutoff_ts = (now - timedelta(days=DEPICTION_MAX_DAYS)).timestamp()
+    total = sum(size for _, size, _ in files)
+    for mtime, size, path in files:
+        if mtime >= cutoff_ts and total <= DEPICTIONS_MAX_BYTES:
+            break  # the rest are younger and the directory is within its cap
+        if _remove(path, report):
+            report.depictions += 1
+            total -= size
+        elif not os.path.lexists(path):
+            total -= size  # gone meanwhile; one that could not be removed still counts
+
+
 # --- entry points ----------------------------------------------------------------------------
 
 
@@ -368,6 +416,7 @@ def purge_expired(
             lambda: _purge_ocsr_cache(session, cache_cutoff, versions, batch_size, report),
         ),
         ("orphans", lambda: _sweep_orphans(session, now, report)),
+        ("depictions", lambda: _purge_depictions(now, report)),
     ]
     for name, run in phases:
         try:

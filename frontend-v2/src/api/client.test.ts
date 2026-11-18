@@ -1,0 +1,303 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api, ApiError, ownerReady, resetOwnerGate, svgBlobUrl } from "./client";
+
+type Call = { url: string; init: RequestInit };
+
+let calls: Call[];
+let reply: () => Response;
+
+function json(status: number, body: unknown, headers: Record<string, string> = {}) {
+  return () =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", ...headers },
+    });
+}
+
+beforeEach(() => {
+  calls = [];
+  reply = json(200, {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return reply();
+    }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+async function caught(p: Promise<unknown>): Promise<ApiError> {
+  try {
+    await p;
+  } catch (err) {
+    expect(err).toBeInstanceOf(ApiError);
+    return err as ApiError;
+  }
+  throw new Error("expected an ApiError");
+}
+
+describe("ApiError", () => {
+  it("404 → ApiError(404) with the JSON detail", async () => {
+    reply = json(404, { detail: "Not found" });
+    const err = await caught(api.getPaper("p1"));
+    expect(err.status).toBe(404);
+    expect(err.detail).toBe("Not found");
+    expect(err.retryAfter).toBeUndefined();
+  });
+
+  it("429 with Retry-After: 7 → retryAfter 7", async () => {
+    reply = json(429, { detail: "Too many requests" }, { "Retry-After": "7" });
+    const err = await caught(api.listPapers());
+    expect(err.status).toBe(429);
+    expect(err.retryAfter).toBe(7);
+    expect(err.detail).toBe("Too many requests");
+  });
+
+  it("422 with a list detail → the msg texts joined", async () => {
+    reply = json(422, {
+      detail: [
+        { type: "value_error", loc: ["body", "smiles"], msg: "cannot parse SMILES" },
+        { type: "missing", loc: ["body", "status"], msg: "Field required" },
+      ],
+    });
+    const err = await caught(
+      api.putCuration("s1", { status: "accepted", smiles: "C1", molfile: null, note: null }),
+    );
+    expect(err.status).toBe(422);
+    expect(err.detail).toBe("cannot parse SMILES; Field required");
+  });
+
+  it("nginx 413 HTML → the size text", async () => {
+    reply = () =>
+      new Response("<html><body><h1>413 Request Entity Too Large</h1></body></html>", {
+        status: 413,
+        headers: { "Content-Type": "text/html" },
+      });
+    const file = new File(["%PDF-1.4"], "a.pdf", { type: "application/pdf" });
+    const err = await caught(api.uploadPaper(file, { engine: "decimer", ocsr: "auto" }));
+    expect(err.status).toBe(413);
+    expect(err.detail).toBe("This file is larger than 20 MB.");
+  });
+
+  it("502, 503 and 504 without JSON → the busy text; others → HTTP code", async () => {
+    for (const status of [502, 503, 504]) {
+      reply = () => new Response("<html>bad gateway</html>", { status });
+      expect((await caught(api.getQueue())).detail).toBe(
+        "The server is busy, try again in a moment.",
+      );
+    }
+    reply = () => new Response(null, { status: 500 });
+    expect((await caught(api.getQueue())).detail).toBe("Something went wrong (HTTP 500).");
+  });
+});
+
+describe("api", () => {
+  it("every call is same-origin under /api/v2", async () => {
+    reply = json(200, { papers: [] });
+    await api.listPapers();
+    expect(calls[0]?.url).toBe("/api/v2/papers");
+    expect(calls[0]?.init.credentials).toBe("same-origin");
+  });
+
+  it("reads pass the query signal to fetch, so a cancelled query aborts its request", async () => {
+    reply = json(200, {});
+    const ctrl = new AbortController();
+    await api.getPaper("p1", { signal: ctrl.signal });
+    await api.getSteps("p1", { signal: ctrl.signal });
+    expect(calls[0]?.init.signal).toBe(ctrl.signal);
+    expect(calls[1]?.init.signal).toBe(ctrl.signal);
+  });
+
+  it("uploadPaper sends multipart/form-data with engine and ocsr", async () => {
+    reply = json(202, { paper_id: "p9", status: "checking" });
+    const file = new File(["%PDF-1.4"], "a.pdf", { type: "application/pdf" });
+    const out = await api.uploadPaper(file, { engine: "molnextr", ocsr: "off" });
+    expect(out.paper_id).toBe("p9");
+    const { url, init } = calls[0]!;
+    expect(url).toBe("/api/v2/papers");
+    expect(init.method).toBe("POST");
+    const body = init.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get("engine")).toBe("molnextr");
+    expect(body.get("ocsr")).toBe("off");
+    expect((body.get("file") as File).name).toBe("a.pdf");
+    // the browser sets the multipart boundary itself
+    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("compare posts exactly smiles_a and smiles_b", async () => {
+    reply = json(200, { tanimoto: 0.5, identical: false, same_structure: false, agree: false });
+    await api.compare("CCO", "CCN");
+    expect(calls[0]?.url).toBe("/api/v2/tools/compare");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({ smiles_a: "CCO", smiles_b: "CCN" });
+  });
+
+  it("putCuration sends the full record as JSON", async () => {
+    const body = { status: "accepted", smiles: "CCO", molfile: null, note: "n" } as const;
+    reply = json(200, body);
+    expect(await api.putCuration("s1", body)).toEqual(body);
+    expect(calls[0]?.url).toBe("/api/v2/segments/s1/curation");
+    expect(calls[0]?.init.method).toBe("PUT");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual(body);
+  });
+
+  it("putBulkCuration keeps an absent note key absent", async () => {
+    reply = json(200, { updated: 1 });
+    await api.putBulkCuration("p1", [{ segment_id: "s1", status: "accepted" }]);
+    expect(calls[0]?.url).toBe("/api/v2/papers/p1/curation");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
+      items: [{ segment_id: "s1", status: "accepted" }],
+    });
+  });
+
+  it("retryPage and runPrediction post to their routes", async () => {
+    reply = json(202, { step_id: "x" });
+    await api.retryPage("p1", 4);
+    await api.runPrediction("s1", "molscribe");
+    await api.runImagePrediction("i1", "decimer-hand");
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/v2/papers/p1/pages/4/retry",
+      "/api/v2/segments/s1/predictions",
+      "/api/v2/images/i1/predictions",
+    ]);
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ engine: "molscribe" });
+  });
+
+  it("deletePaper accepts an empty 204", async () => {
+    reply = () => new Response(null, { status: 204 });
+    await expect(api.deletePaper("p1")).resolves.toBeUndefined();
+    expect(calls[0]?.init.method).toBe("DELETE");
+  });
+
+  it("builds URLs", () => {
+    expect(api.depictionUrl("s1", "abc", "molnextr")).toBe(
+      "/api/v2/segments/s1/depiction?v=abc&engine=molnextr",
+    );
+    expect(api.depictionUrl("s1", "abc")).toBe("/api/v2/segments/s1/depiction?v=abc");
+    expect(api.exportUrl("p1", "sdf", "accepted")).toBe(
+      "/api/v2/papers/p1/export?format=sdf&status=accepted",
+    );
+    expect(api.pageImageUrl("p1", 4)).toBe("/api/v2/papers/p1/pages/4/image");
+    expect(api.segmentImageUrl("s1")).toBe("/api/v2/segments/s1/image");
+    expect(api.imageUrl("i1")).toBe("/api/v2/images/i1/image");
+  });
+
+  it("svgBlobUrl makes an image/svg+xml object URL", () => {
+    const made: Blob[] = [];
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: (b: Blob) => {
+        made.push(b);
+        return "blob:x";
+      },
+    });
+    expect(svgBlobUrl({ format: "svg", data: "<svg/>" })).toBe("blob:x");
+    expect(made[0]?.type).toBe("image/svg+xml");
+  });
+});
+
+describe("one owner: no parallel requests before the first success", () => {
+  type Pending = { url: string; resolve: (r: Response) => void; reject: (e: unknown) => void };
+  let pending: Pending[];
+
+  beforeEach(() => {
+    resetOwnerGate();
+    pending = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise<Response>((resolve, reject) => pending.push({ url, resolve, reject })),
+      ),
+    );
+  });
+
+  afterEach(() => resetOwnerGate());
+
+  const ok = () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("ownerReady() resolves after the first success, not after a failure", async () => {
+    let ready = false;
+    void ownerReady().then(() => (ready = true));
+    const first = api.listPapers();
+    await tick();
+    pending[0]!.resolve(new Response("", { status: 502 }));
+    await expect(first).rejects.toBeInstanceOf(ApiError);
+    await tick();
+    expect(ready).toBe(false);
+    const second = api.listPapers();
+    await tick();
+    pending[1]!.resolve(ok());
+    await second;
+    await tick();
+    expect(ready).toBe(true);
+  });
+
+  it("holds every request until the first one succeeded, then lets them all go", async () => {
+    const list = api.listPapers();
+    const images = api.listImages();
+    const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+    await tick();
+    expect(pending.map((p) => p.url)).toEqual(["/api/v2/papers"]);
+    pending[0]!.resolve(ok());
+    await list;
+    await tick();
+    expect(pending).toHaveLength(3); // both waiting requests went out together
+    pending[1]!.resolve(ok());
+    pending[2]!.resolve(ok());
+    await Promise.all([images, upload]);
+  });
+
+  it("after a failed first request (error status or network), the next one goes alone", async () => {
+    const list = api.listPapers();
+    const images = api.listImages();
+    images.catch(() => undefined); // it rejects (network) before allSettled below sees it
+    const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+    await tick();
+    expect(pending).toHaveLength(1);
+    pending[0]!.resolve(new Response("", { status: 502 }));
+    await expect(list).rejects.toBeInstanceOf(ApiError);
+    await tick();
+    expect(pending).toHaveLength(2); // only one of the two waiting requests
+    pending[1]!.reject(new TypeError("network"));
+    await tick();
+    await tick();
+    expect(pending).toHaveLength(3); // the last one, still alone
+    pending[2]!.resolve(ok());
+    await Promise.allSettled([images, upload]);
+    const next = api.listPapers();
+    await tick();
+    expect(pending).toHaveLength(4); // ready: no more waiting
+    pending[3]!.resolve(ok());
+    await next;
+  });
+
+  it("a first request that never answers holds the others 20 s at most, then the next goes alone", async () => {
+    vi.useFakeTimers();
+    try {
+      void api.listPapers(); // a stalled connection: never settles
+      const images = api.listImages();
+      const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(pending).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(pending).toHaveLength(2); // one of the two waiting requests, alone
+      expect(pending[1]!.url).toBe("/api/v2/images");
+      pending[1]!.resolve(ok());
+      await images;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(3); // the owner is set: the upload goes
+      pending[2]!.resolve(ok());
+      await upload;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

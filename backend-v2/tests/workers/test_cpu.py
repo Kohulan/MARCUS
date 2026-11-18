@@ -3,6 +3,7 @@
 Handlers are called directly with a fake Step view; no Celery or database needed.
 """
 
+import io
 import json
 import resource
 import shutil
@@ -13,6 +14,9 @@ from types import SimpleNamespace
 
 import pymupdf
 import pytest
+import requests
+from requests.adapters import BaseAdapter
+from requests.models import Response
 
 from marcus.core.storage import page_image_path, paper_dir, pdf_path
 from marcus.workers import cpu, pdfsafe
@@ -145,20 +149,159 @@ def test_doi_timeout_returns_none(monkeypatch):
     monkeypatch.setattr(cpu, "DOI_OP", "_sleep")
     monkeypatch.setattr(cpu, "DOI_TOTAL_S", 2)
     start = time.monotonic()
-    assert cpu.doi(view(pid), None) == {"doi": None}
+    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
     assert time.monotonic() - start < 8
 
 
 def test_doi_error_returns_none(monkeypatch):
     pid = make_paper_with("two_page.pdf")
     monkeypatch.setattr(cpu, "DOI_OP", "_fail")
-    assert cpu.doi(view(pid), None) == {"doi": None}
+    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
 
 
 def test_doi_is_normalised(monkeypatch):
     pid = make_paper_with("two_page.pdf")
     monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: " https://doi.org/10.1000/ABC.123 ")
-    assert cpu.doi(view(pid), None) == {"doi": "10.1000/ABC.123"}
+    monkeypatch.setattr(cpu, "fetch_title", lambda doi, timeout_s: "A title")
+    assert cpu.doi(view(pid), None) == {"doi": "10.1000/ABC.123", "title": "A title"}
+
+
+class FakeAdapter(BaseAdapter):
+    """Answers by URL prefix: {prefix: (status, body bytes or Exception, headers)}."""
+
+    def __init__(self, routes):
+        super().__init__()
+        self.routes = routes
+        self.urls = []
+
+    def send(self, request, **kwargs):
+        self.urls.append(request.url)
+        for prefix, (status, body, headers) in self.routes.items():
+            if request.url.startswith(prefix):
+                if isinstance(body, Exception):
+                    raise body
+                resp = Response()
+                resp.status_code = status
+                resp.headers.update(headers)
+                resp.raw = io.BytesIO(body)
+                resp.url = request.url
+                return resp
+        raise AssertionError(request.url)
+
+    def close(self):
+        pass
+
+
+def fake_web(monkeypatch, routes):
+    adapter = FakeAdapter(routes)
+    real = requests.Session
+
+    def session():
+        s = real()
+        s.mount("https://", adapter)
+        return s
+
+    monkeypatch.setattr(cpu.requests, "Session", session)
+    return adapter
+
+
+def crossref(title):
+    return json.dumps({"message": {"title": [title]}}).encode()
+
+
+def datacite(title):
+    return json.dumps({"data": {"attributes": {"titles": [{"title": title}]}}}).encode()
+
+
+def test_fetch_title_crossref_then_datacite(monkeypatch):
+    web = fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (404, b"", {}),
+            "https://api.datacite.org/": (200, datacite("From DataCite"), {}),
+        },
+    )
+    assert cpu.fetch_title("10.1/x", 5) == "From DataCite"
+    assert len(web.urls) == 2
+
+
+def test_fetch_title_uses_crossref_first(monkeypatch):
+    web = fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("Crossref one"), {})})
+    assert cpu.fetch_title("10.1/x", 5) == "Crossref one"
+    assert len(web.urls) == 1
+
+
+def test_fetch_title_strips_markup_and_cuts(monkeypatch):
+    fake_web(
+        monkeypatch,
+        {"https://api.crossref.org/": (200, crossref("<i>Coffea</i>  alkaloids &amp; more\n"), {})},
+    )
+    assert cpu.fetch_title("10.1/x", 5) == "Coffea alkaloids & more"
+    fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("a" * 600), {})})
+    assert cpu.fetch_title("10.1/x", 5) == "a" * 500
+    fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (200, crossref(" <b></b> "), {}),
+            "https://api.datacite.org/": (404, b"", {}),
+        },
+    )
+    assert cpu.fetch_title("10.1/x", 5) is None
+
+
+def test_fetch_title_quotes_doi_in_path(monkeypatch):
+    web = fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("T"), {})})
+    cpu.fetch_title("10.1/../x?y", 5)
+    assert web.urls[0] == "https://api.crossref.org/works/10.1%2F..%2Fx%3Fy"
+
+
+def test_fetch_title_redirect_is_none(monkeypatch):
+    web = fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (302, b"", {"Location": "https://evil.example/"}),
+            "https://api.datacite.org/": (301, b"", {"Location": "https://evil.example/"}),
+        },
+    )
+    assert cpu.fetch_title("10.1/x", 5) is None
+    assert len(web.urls) == 2
+
+
+def test_fetch_title_error_is_none(monkeypatch):
+    fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (200, requests.ConnectionError("down"), {}),
+            "https://api.datacite.org/": (200, b"not json", {}),
+        },
+    )
+    assert cpu.fetch_title("10.1/x", 5) is None
+
+
+def test_fetch_title_oversized_body_is_none(monkeypatch):
+    big = crossref("t") + b" " * cpu.TITLE_MAX_BYTES
+    fake_web(
+        monkeypatch,
+        {"https://api.crossref.org/": (200, big, {}), "https://api.datacite.org/": (404, b"", {})},
+    )
+    assert cpu.fetch_title("10.1/x", 5) is None
+
+
+def test_doi_step_skips_title_when_budget_spent(monkeypatch):
+    pid = make_paper_with("two_page.pdf")
+    monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: "10.1/x")
+    monkeypatch.setattr(cpu, "DOI_TOTAL_S", 0.5)
+    called = []
+    monkeypatch.setattr(cpu, "fetch_title", lambda *a: called.append(a) or "T")
+    assert cpu.doi(view(pid), None) == {"doi": "10.1/x", "title": None}
+    assert not called
+
+
+def test_doi_step_no_title_call_without_doi(monkeypatch):
+    pid = make_paper_with("two_page.pdf")
+    monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: None)
+    monkeypatch.setattr(cpu, "fetch_title", lambda *a: pytest.fail("called"))
+    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
 
 
 def test_child_timeouts_are_below_celery_soft_limits():

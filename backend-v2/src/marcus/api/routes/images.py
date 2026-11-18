@@ -1,47 +1,43 @@
 import asyncio
 import hashlib
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import client_ip, current_owner, get_owned_image_job, require_engine_enabled
+from marcus.api.deps import (
+    client_ip,
+    current_owner,
+    get_owned_image_job,
+    not_found,
+    require_engine_enabled,
+    visible,
+)
 from marcus.api.limits import enforce_active_limits
+from marcus.api.read import IMAGE_HEADERS
+from marcus.api.schemas import (
+    ImageJobList,
+    ImageJobOut,
+    ImageJobSummary,
+    ImagePrediction,
+    ImageStepOut,
+    PredictionOut,
+    PredictionRequest,
+    StepAccepted,
+)
 from marcus.api.security import upload_limit
 from marcus.api.uploads import normalize_to_png, read_limited, sanitize_display_name, sniff_image
+from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine
-from marcus.core.models import Owner, Prediction
-from marcus.core.pipeline import new_image_job, store_image
+from marcus.core.enums import Engine, StepKind
+from marcus.core.models import ImageJob, Owner, Prediction, Step
+from marcus.core.pipeline import ACTIVE, new_image_job, request_image_ocsr, store_image
 from marcus.core.settings import get_settings
 
 router = APIRouter()
-
-
-class ImagePrediction(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    smiles: str
-    molfile: str | None
-    valid: bool
-    engine: str
-    engine_version: str
-    ms: int
-
-
-class ImageJobOut(BaseModel):
-    id: uuid.UUID
-    status: str
-    engine: str
-    display_name: str
-    created_at: datetime
-    expires_at: datetime
-    prediction: ImagePrediction | None
-    error: str | None
 
 
 async def decode_image(slots: asyncio.Semaphore, data: bytes) -> bytes:
@@ -78,6 +74,76 @@ async def upload_image(
     return {"image_job_id": str(job.id), "status": job.status}
 
 
+@router.get("/images", response_model=ImageJobList)
+async def list_image_jobs(
+    owner: Owner = Depends(current_owner), db: AsyncSession = Depends(get_db)
+) -> ImageJobList:
+    rows = (
+        await db.execute(
+            select(ImageJob)
+            .where(ImageJob.owner_id == owner.id, *visible(ImageJob))
+            .order_by(ImageJob.created_at.desc(), ImageJob.id)
+        )
+    ).scalars()
+    return ImageJobList(
+        jobs=[
+            ImageJobSummary(
+                id=j.id,
+                display_name=j.display_name,
+                status=j.status,
+                engine=j.engine,
+                created_at=j.created_at,
+                expires_at=j.expires_at,
+            )
+            for j in rows
+        ]
+    )
+
+
+@router.get("/images/{job_id}/image")
+async def image_job_image(
+    job_id: uuid.UUID,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    job = await get_owned_image_job(db, owner, job_id)
+    path = storage.image_job_path(job.id)
+    if not path.is_file():
+        raise not_found()
+    return FileResponse(path, media_type="image/png", headers=IMAGE_HEADERS)
+
+
+@router.post("/images/{job_id}/predictions", status_code=202, response_model=StepAccepted)
+async def run_image_prediction(
+    job_id: uuid.UUID,
+    body: PredictionRequest,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> StepAccepted:
+    job = await get_owned_image_job(db, owner, job_id)
+    require_engine_enabled(body.engine)
+    # Same duplicate-click guard as POST /segments/{id}/predictions.
+    waiting = await db.scalar(
+        select(Step.id)
+        .where(
+            Step.image_job_id == job.id,
+            Step.kind == StepKind.OCSR.value,
+            Step.engine == body.engine.value,
+            Step.status.in_(ACTIVE),
+        )
+        .limit(1)
+    )
+    if waiting is not None:
+        return StepAccepted(step_id=waiting)
+    try:
+        step = await db.run_sync(lambda s: request_image_ocsr(s, job.id, body.engine))
+    except ValueError:
+        raise not_found() from None  # deleted meanwhile
+    step_id = step.id
+    await db.commit()
+    return StepAccepted(step_id=step_id)
+
+
 @router.get("/images/{job_id}", response_model=ImageJobOut)
 async def get_image_job(
     job_id: uuid.UUID,
@@ -85,14 +151,25 @@ async def get_image_job(
     db: AsyncSession = Depends(get_db),
 ) -> ImageJobOut:
     job = await get_owned_image_job(db, owner, job_id)
-    pred = (
-        await db.execute(
-            select(Prediction)
-            .where(Prediction.image_job_id == job.id)
-            .order_by(Prediction.created_at.desc(), Prediction.id)
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    preds = list(
+        (
+            await db.execute(
+                select(Prediction)
+                .where(Prediction.image_job_id == job.id)
+                .order_by(Prediction.created_at.desc(), Prediction.id)
+            )
+        ).scalars()
+    )
+    steps = list(
+        (
+            await db.execute(
+                select(Step)
+                .where(Step.image_job_id == job.id, Step.kind == StepKind.OCSR.value)
+                .order_by(Step.created_at.desc(), Step.seq.desc(), Step.id)
+            )
+        ).scalars()
+    )
+    failed = next((s for s in steps if s.status == "failed"), None)
     return ImageJobOut(
         id=job.id,
         status=job.status,
@@ -100,6 +177,12 @@ async def get_image_job(
         display_name=job.display_name,
         created_at=job.created_at,
         expires_at=job.expires_at,
-        prediction=ImagePrediction.model_validate(pred) if pred else None,
+        prediction=ImagePrediction.model_validate(preds[0]) if preds else None,
+        predictions=[PredictionOut.model_validate(p) for p in preds],
+        error_class=failed.error_class if failed else None,
+        steps=[
+            ImageStepOut(engine=s.engine or job.engine, status=s.status, error_class=s.error_class)
+            for s in steps
+        ],
         error=job.error,
     )

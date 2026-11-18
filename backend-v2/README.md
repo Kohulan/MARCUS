@@ -9,6 +9,15 @@ FastAPI + Celery + Postgres. One Python distribution `marcus` (`src/marcus/`).
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 ```
 
+### Web UI
+
+nginx serves the web UI as well as the API: its image (`marcus-v2-nginx:local`) is built from
+`../frontend-v2/` (`frontend-v2/Dockerfile`: `npm ci && npm run build`, then `dist/` and
+`deploy/ui-locations.conf` on top of `nginx-unprivileged`). `docker/nginx.conf` stays a bind
+mount and includes the locations file inside its `server {}`: the pages, `/app/...`, the assets
+and the Ketcher editor, each with its own full header set (the app and Ketcher CSPs). A UI
+change needs `up -d --build nginx`. The app is at http://localhost:18090/.
+
 ### Networks
 
 `internal` is an internal Docker network (no route out of the host); every service is on it.

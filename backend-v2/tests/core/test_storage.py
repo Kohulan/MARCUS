@@ -37,3 +37,21 @@ def test_storage_rejects_non_uuid():
         storage.image_job_path("x")
     with pytest.raises(TypeError):
         storage.paper_dir("x")
+
+
+def test_depiction_paths():
+    root = get_settings().data_root
+    sha = "ab" + "0" * 62
+    assert storage.depiction_path(sha) == root / "depictions" / "ab" / f"{sha}.svg"
+    assert storage.depiction_marker_path(sha) == root / "depictions" / "ab" / f"{sha}.nodraw"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["A" * 64, "a" * 63, "a" * 65, "../" + "a" * 61, "g" * 64, "a" * 63 + "\n", b"a" * 64, None],
+)
+def test_depiction_path_rejects_bad_sha(bad):
+    with pytest.raises(ValueError):
+        storage.depiction_path(bad)
+    with pytest.raises(ValueError):
+        storage.depiction_marker_path(bad)
