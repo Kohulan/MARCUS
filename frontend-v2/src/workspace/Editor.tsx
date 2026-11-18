@@ -8,6 +8,7 @@ import { ApiError } from "../api/client";
 import type { CurationChange } from "../api/curation";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { returnFocus } from "../ui/modal";
 import { listenToFrame, postToFrame } from "./editorBridge";
 import "./editor.css";
 
@@ -80,9 +81,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
       else el.setAttribute("open", "");
     }
     field.current?.focus();
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
+    return () => returnFocus(before);
   }, []);
 
   useEffect(

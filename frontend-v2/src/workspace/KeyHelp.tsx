@@ -1,5 +1,7 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from "react";
+import { useId, useRef, type KeyboardEvent } from "react";
+import { GlassButton } from "../ui/GlassButton";
 import Kbd from "../ui/Kbd";
+import { useModal } from "../ui/modal";
 
 /** The focus-mode keys (Global Constraints, exact). */
 export const REVIEW_KEYS: { keys: string[]; label: string }[] = [
@@ -39,18 +41,11 @@ export function trapTab(e: KeyboardEvent<HTMLElement>, box: HTMLElement | null):
  */
 export default function KeyHelp({ onClose }: { onClose: () => void }) {
   const titleId = useId();
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
+  useModal(box, close);
 
-  useEffect(() => {
-    const before = document.activeElement;
-    close.current?.focus();
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
     if (e.key === "Escape") {
       e.stopPropagation(); // Esc closes the list, not focus mode
       e.preventDefault();
@@ -61,38 +56,40 @@ export default function KeyHelp({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="keyhelp" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div
-        ref={box}
-        className="keyhelp__sheet"
-        role="dialog"
-        // A click on the list keeps focus in the box (not the body), so Esc still closes it.
-        tabIndex={-1}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
-      >
-        <div className="keyhelp__head">
-          <h2 id={titleId} className="keyhelp__title">
-            Keys
-          </h2>
-          <button ref={close} type="button" className="keyhelp__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <dl className="keyhelp__list">
-          {REVIEW_KEYS.map(({ keys, label }) => (
-            <div key={label} className="keyhelp__row">
-              <dt>
-                {keys.map((k) => (
-                  <Kbd key={k}>{k}</Kbd>
-                ))}
-              </dt>
-              <dd>{label}</dd>
-            </div>
-          ))}
-        </dl>
+    <dialog
+      ref={box}
+      className="keyhelp"
+      // A click on the list keeps focus in the box (not the body), so Esc still closes it.
+      tabIndex={-1}
+      aria-labelledby={titleId}
+      onKeyDown={onKeyDown}
+      onCancel={(e) => {
+        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
+        onClose();
+      }}
+      // A press on the backdrop lands on the dialog itself.
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="keyhelp__head">
+        <h2 id={titleId} className="keyhelp__title">
+          Keys
+        </h2>
+        <GlassButton ref={close} tint="clear" size="sm" onClick={onClose}>
+          Close
+        </GlassButton>
       </div>
-    </div>
+      <dl className="keyhelp__list">
+        {REVIEW_KEYS.map(({ keys, label }) => (
+          <div key={label} className="keyhelp__row">
+            <dt>
+              {keys.map((k) => (
+                <Kbd key={k}>{k}</Kbd>
+              ))}
+            </dt>
+            <dd>{label}</dd>
+          </div>
+        ))}
+      </dl>
+    </dialog>
   );
 }

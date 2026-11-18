@@ -105,7 +105,7 @@
   z-index: 20;
   border: 1px solid var(--line);
   background-color: var(--surface);
-  box-shadow: 0 12px 28px -10px rgba(15, 30, 22, 0.35);
+  box-shadow: var(--lift-menu);
   animation: ws-pop 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

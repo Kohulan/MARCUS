@@ -1,11 +1,12 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { api } from "../api/client";
 import { useDepiction } from "../api/depictions";
 import { asEngine } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { useModal } from "../ui/modal";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
@@ -243,8 +244,8 @@ export default function Compare({
 }
 
 /**
- * The modal frame: focus moves in (to Close), Tab stays inside, Esc or Close closes it and
- * focus goes back. Keys pressed inside stop here, so a page's own shortcuts (the review keys
+ * The modal frame, a native <dialog> (top layer; the page behind is inert): focus moves in
+ * (to Close), Tab stays inside, Esc or Close closes it and focus goes back (ui/modal). Keys pressed inside stop here, so a page's own shortcuts (the review keys
  * of focus mode) never act on the structure underneath.
  */
 function CompareDialog({
@@ -258,18 +259,11 @@ function CompareDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDialogElement>(null);
   const close = useRef<HTMLButtonElement>(null);
+  useModal(box, close);
 
-  useEffect(() => {
-    const before = document.activeElement;
-    close.current?.focus();
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
     e.stopPropagation();
     if (e.key === "Escape") {
       e.preventDefault();
@@ -280,26 +274,28 @@ function CompareDialog({
   };
 
   return (
-    <div className="cmp-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div
-        ref={box}
-        className="cmp"
-        role="dialog"
-        // A click on the table keeps focus in the box (not the body), so Esc still closes it.
-        tabIndex={-1}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
-      >
-        <div className="cmp__head">
-          {title}
-          <button ref={close} type="button" className="cmp__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        {children}
+    <dialog
+      ref={box}
+      className="cmp cmp--dialog"
+      // A click on the table keeps focus in the box (not the body), so Esc still closes it.
+      tabIndex={-1}
+      aria-labelledby={titleId}
+      onKeyDown={onKeyDown}
+      onCancel={(e) => {
+        e.preventDefault(); // the dialog closes by unmounting, which the caller owns
+        onClose();
+      }}
+      // A press on the backdrop lands on the dialog itself.
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="cmp__head">
+        {title}
+        <GlassButton ref={close} tint="clear" size="sm" onClick={onClose}>
+          Close
+        </GlassButton>
       </div>
-    </div>
+      {children}
+    </dialog>
   );
 }
 

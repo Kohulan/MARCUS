@@ -410,7 +410,7 @@ describe("focus mode", () => {
     const region = await focusRegion();
     press("?");
     const dialog = await screen.findByRole("dialog", { name: "Keys" });
-    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog.tagName).toBe("DIALOG"); // native: the page behind is inert
     expect(within(dialog).getByText("Accept")).toBeInTheDocument();
     expect(within(dialog).getByText("Compare engines")).toBeInTheDocument();
     expect(dialog.contains(document.activeElement)).toBe(true);

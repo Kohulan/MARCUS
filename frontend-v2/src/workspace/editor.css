@@ -17,11 +17,11 @@
   border: 1px solid var(--charcoal);
   background-color: var(--paper);
   color: var(--ink);
-  box-shadow: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+  box-shadow: var(--lift-dialog);
 }
 
 .editor::backdrop {
-  background-color: rgba(28, 33, 29, 0.42);
+  background-color: var(--scrim);
 }
 
 /* jsdom and old engines without showModal get the open attribute: keep it on top. */

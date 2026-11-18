@@ -393,7 +393,7 @@
   min-width: 200px;
   border: 1px solid var(--control-border);
   background-color: var(--surface);
-  box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+  box-shadow: var(--lift-glass);
 }
 
 /* After another button, an engine menu opens to the left, inside the card's width; a menu
@@ -450,7 +450,7 @@
   padding: 12px 12px 4px;
   border: 1px solid var(--control-border);
   background-color: var(--surface);
-  box-shadow: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+  box-shadow: var(--lift-glass);
 }
 
 /* In the menu the actions are a list: one pill per line, in their order. */

@@ -122,7 +122,7 @@
   position: relative;
   border: 1px solid var(--hair);
   background-color: var(--surface);
-  box-shadow: 0 1px 2px rgb(28 33 29 / 0.06), 0 10px 24px -14px rgb(28 33 29 / 0.3);
+  box-shadow: 0 1px 0 var(--hair); /* a drawing sheet lies flat */
 }
 
 /* Until it loads, a lazy page holds an A4 page's room (2480 × 3508 px at 300 DPI). */

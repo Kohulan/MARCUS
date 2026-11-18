@@ -6,6 +6,7 @@
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
+import { returnFocus } from "../ui/modal";
 import { structureTag } from "../ui/tag";
 import {
   AUTH_ERROR,
@@ -97,9 +98,7 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
       if (typeof el.showModal === "function") el.showModal();
       else el.setAttribute("open", "");
     }
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
+    return () => returnFocus(before);
   }, []);
 
   // showModal focuses the first button (Close): start in the first field instead, also when

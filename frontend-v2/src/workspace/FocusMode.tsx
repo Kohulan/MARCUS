@@ -253,7 +253,14 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const rejected = state === "rejected";
 
   return (
-    <section ref={root} className="fm" aria-label={`Focus ${tag}`} tabIndex={-1}>
+    <section
+      ref={root}
+      className="fm"
+      aria-label={`Focus ${tag}`}
+      tabIndex={-1}
+      // A dialog whose opener is gone gives focus back here (ui/modal), so the keys stay live.
+      data-focus-home=""
+    >
       <div className="fm-bar">
         <GlassButton tint="clear" size="sm" onClick={() => onClose(id)}>
           Grid <Kbd>Esc</Kbd>
