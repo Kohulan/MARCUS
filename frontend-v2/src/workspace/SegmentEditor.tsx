@@ -4,22 +4,20 @@
 import { useState } from "react";
 import { useSaveCuration } from "../api/queries";
 import type { SegmentOut } from "../api/types";
-import { shownPrediction } from "./cardState";
+import { shownStructure } from "./cardState";
 import Editor, { editorChange, type EditorStructure } from "./Editor";
 import type { Workspace } from "./useWorkspace";
 
 /**
- * What the editor opens with: the curated structure when there is one, else the prediction
- * the card shows (a curator who presses E on a prediction wants to fix that one), else empty.
+ * What the editor opens with: the structure the card shows (the curated one, else the shown
+ * prediction: a curator who presses E on a prediction wants to fix that one), else empty.
  */
-export function editorStart(
+function editorStart(
   segment: SegmentOut,
   paperEngine: string,
 ): { smiles: string | null; molfile: string | null } {
-  const c = segment.curation;
-  if (c?.smiles || c?.molfile) return { smiles: c.smiles ?? null, molfile: c.molfile ?? null };
-  const p = shownPrediction(segment, paperEngine);
-  return { smiles: p?.smiles ?? null, molfile: p?.molfile ?? null };
+  const { smiles, molfile } = shownStructure(segment, paperEngine);
+  return { smiles, molfile };
 }
 
 export function SegmentEditor({

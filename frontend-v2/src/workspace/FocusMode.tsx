@@ -24,7 +24,14 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
-import { hasDrawing, shownPrediction, STATE_WORD, type CardState } from "./cardState";
+import {
+  hasDrawing,
+  metaText,
+  sentence,
+  shownStructure,
+  STATE_WORD,
+  type CardState,
+} from "./cardState";
 import { SegmentCompare } from "./Compare";
 import KeyHelp from "./KeyHelp";
 import { SegmentEditor } from "./SegmentEditor";
@@ -244,10 +251,10 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
   const depictionUrl = drawable ? api.depictionUrl(id, depictionKey(segment)) : null;
   const depiction = useDepiction(depictionUrl);
-  const prediction = shownPrediction(segment, paper.engine);
+  const shown = shownStructure(segment, paper.engine);
+  const { smiles, edited } = shown;
+  const meta = metaText(shown);
   const curation = segment.curation;
-  const smiles = curation?.smiles ?? (curation?.molfile ? null : (prediction?.smiles ?? null));
-  const edited = Boolean(curation?.smiles || curation?.molfile);
   const rejected = state === "rejected";
 
   return (
@@ -334,14 +341,8 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           </div>
 
           <div className="fm-facts">
-            {smiles !== null && smiles !== "" && <Smiles value={smiles} struck={rejected} />}
-            {(edited || prediction) && (
-              <p className="fm-meta">
-                {edited
-                  ? "Edited"
-                  : `${engineName(prediction!.engine)} · ${prediction!.valid ? "Valid" : "Invalid"}`}
-              </p>
-            )}
+            {smiles !== null && <Smiles value={smiles} struck={rejected} />}
+            {meta !== null && <p className="fm-meta">{meta}</p>}
             {state === "failed" && row?.reason && <p className="fm-reason">{sentence(row.reason)}</p>}
           </div>
 
@@ -389,9 +390,8 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               n={row?.n ?? index + 1}
               smiles={smiles}
               curatedMolfile={curation?.molfile ?? null}
-              predictionMolfile={edited ? null : (prediction?.molfile ?? null)}
+              predictionMolfile={edited ? null : shown.molfile}
               depictionUrl={depictionUrl}
-              copySmiles={false}
             />
           </div>
         </div>
@@ -432,10 +432,6 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
       )}
     </section>
   );
-}
-
-function sentence(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
 /** The newest prediction of each engine (predictions come newest first). */

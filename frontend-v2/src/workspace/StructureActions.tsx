@@ -24,11 +24,6 @@ export type StructureActionsProps = {
    * blob: in connect-src.
    */
   image?: (() => Blob) | undefined;
-  /**
-   * False where a `<Smiles>` with its own Copy is beside these actions (focus mode, the card,
-   * the image page): one "Copy SMILES" per place, not two of the same name.
-   */
-  copySmiles?: boolean;
   onEdit?: (() => void) | undefined;
   onCompare?: (() => void) | undefined;
   /** Injectable for tests; defaults to api.smilesToMolfile. */
@@ -69,7 +64,6 @@ export default function StructureActions({
   predictionMolfile,
   depictionUrl,
   image,
-  copySmiles = true,
   onEdit,
   onCompare,
   convert = api.smilesToMolfile,
@@ -128,8 +122,7 @@ export default function StructureActions({
   async function downloadImage() {
     try {
       if (image) {
-        const blob = image();
-        saveBlob(blob, `${stem}.${blob.type === "image/png" ? "png" : "svg"}`);
+        saveBlob(image(), `${stem}.svg`);
         setNote(null);
         return;
       }
@@ -163,16 +156,6 @@ export default function StructureActions({
   return (
     <div className="structure-actions">
       <div className="structure-actions__row">
-        {copySmiles && (
-          <GlassButton
-            tint="clear"
-            size="sm"
-            disabled={!has}
-            onClick={() => void copy(smiles ?? "", "SMILES copied")}
-          >
-            Copy SMILES
-          </GlassButton>
-        )}
         <GlassButton
           tint="clear"
           size="sm"

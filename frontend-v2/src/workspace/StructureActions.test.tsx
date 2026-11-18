@@ -82,17 +82,8 @@ describe("StructureActions", () => {
     expect(convert).toHaveBeenCalledWith("CCO");
   });
 
-  it("copies the SMILES", async () => {
+  it("leaves Copy SMILES out: the SMILES beside it has its own Copy", () => {
     render(<StructureActions {...base} />);
-    fireEvent.click(screen.getByText("Copy SMILES"));
-    await waitFor(() =>
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("CCO"),
-    );
-    expect(await screen.findByText("SMILES copied")).toBeTruthy();
-  });
-
-  it("leaves Copy SMILES out where the SMILES has its own Copy", () => {
-    render(<StructureActions {...base} copySmiles={false} />);
     expect(screen.queryByText("Copy SMILES")).toBeNull();
     expect(screen.getByText("Copy molfile")).toBeInTheDocument();
   });

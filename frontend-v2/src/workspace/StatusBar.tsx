@@ -6,8 +6,8 @@ import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
 import type { PaperDetail, StepOut } from "../api/types";
 import type { useLiveEvents } from "../api/useLiveEvents";
-import { ItemState } from "../tool/PapersList";
 import { GlassButton } from "../ui/GlassButton";
+import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
 import { checkFailure as checkFailureOf, pageFailures, progress } from "./pageFailures";
 import "./workspace.css";
@@ -116,12 +116,12 @@ export default function StatusBar({ paper, steps, live }: Props) {
             {failedPages.map((f) =>
               f.retrying ? (
                 <li key={f.page0} className="ws-fail ws-fail--retrying">
-                  <span className="state badge badge--dashed">Reading…</span>
+                  <StateBadge state="reading" />
                   <p className="ws-fail__text">{`Page ${f.page0 + 1}: retrying…`}</p>
                 </li>
               ) : (
                 <li key={f.page0} className="ws-fail hatch">
-                  <span className="state tag tag--charcoal">Failed</span>
+                  <StateBadge state="failed" />
                   <p className="ws-fail__text">
                     {`Page ${f.page0 + 1} could not be read: ${reasonText(f.errorClass)}`}
                   </p>

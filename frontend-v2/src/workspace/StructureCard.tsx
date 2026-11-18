@@ -23,7 +23,9 @@ import {
   CARD_OPEN_HINT,
   enginesDiffer,
   hasDrawing,
-  shownPrediction,
+  metaText,
+  sentence,
+  shownStructure,
   STATE_WORD,
   type CardState,
 } from "./cardState";
@@ -72,20 +74,19 @@ export type StructureCardProps = {
   segment: SegmentOut;
   /** 1-based position in (page, idx) order: the `[nn]` tag. */
   n: number;
-  /** Position in the shown list (for Shift-click ranges). */
-  index: number;
+  /** Position in the shown list (for Shift-click ranges); the grid's cards only. */
+  index?: number;
   state: CardState;
   /** The paper's engine (wire value). */
   paperEngine: string;
-  /** There is a structure to accept (a curated one or a valid prediction). */
-  canAccept: boolean;
   /** For a failed card: the reason (reasonText) and the engine that failed. */
   reason: string | null;
   failedEngine: string | null;
-  selected: boolean;
+  /** Ticked for a bulk action; the grid's cards only. */
+  selected?: boolean;
   /** The focused segment (`?s=`). */
   current: boolean;
-  onToggle: (index: number, range: boolean) => void;
+  onToggle?: ((index: number, range: boolean) => void) | undefined;
   onOpen: (segmentId: string) => void;
   onDecide: (segmentId: string, status: CurationStatus) => void;
   onRun: (segmentId: string, engine: Engine) => void;
@@ -118,10 +119,9 @@ function StructureCard({
   index,
   state,
   paperEngine,
-  canAccept,
   reason,
   failedEngine,
-  selected,
+  selected = false,
   current,
   onToggle,
   onOpen,
@@ -139,9 +139,8 @@ function StructureCard({
   const drawable = hasDrawing(segment);
   const [crop, setCrop] = useState(false);
   const showCrop = crop || !drawable;
-  const depiction = useDepiction(
-    near && !showCrop ? api.depictionUrl(segment.id, depictionKey(segment)) : null,
-  );
+  const depictionUrl = drawable ? api.depictionUrl(segment.id, depictionKey(segment)) : null;
+  const depiction = useDepiction(near && !showCrop ? depictionUrl : null);
   // A decision made while the card is on screen lands its stamp (signature interaction).
   const firstState = useRef(state);
   const landed = state !== firstState.current;
@@ -149,9 +148,9 @@ function StructureCard({
   const tag = structureTag(n);
   const where = `${tag} · Page ${segment.page + 1}`;
   const curation = segment.curation;
-  const prediction = shownPrediction(segment, paperEngine);
-  const smiles = curation?.smiles ?? (curation?.molfile ? null : (prediction?.smiles ?? null));
-  const edited = Boolean(curation?.smiles || curation?.molfile);
+  const shown = shownStructure(segment, paperEngine);
+  const { smiles, edited } = shown;
+  const meta = metaText(shown);
   const note = curation?.note?.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const rejected = state === "rejected";
 
@@ -210,7 +209,9 @@ function StructureCard({
               className="card__check"
               checked={selected}
               aria-label={`Select ${tag}`}
-              onChange={(e) => onToggle(index, (e.nativeEvent as globalThis.MouseEvent).shiftKey)}
+              onChange={(e) =>
+                onToggle?.(index ?? 0, (e.nativeEvent as globalThis.MouseEvent).shiftKey)
+              }
             />
             <span className="card__tag">{where}</span>
           </label>
@@ -249,14 +250,10 @@ function StructureCard({
       </div>
 
       <div className="card__body">
-        {smiles !== null && smiles !== "" && <Smiles value={smiles} struck={rejected} />}
-        {(edited || prediction) && (
+        {smiles !== null && <Smiles value={smiles} struck={rejected} />}
+        {meta !== null && (
           <p className="card__meta">
-            <span>
-              {edited
-                ? "Edited"
-                : `${engineName(prediction!.engine)} · ${prediction!.valid ? "Valid" : "Invalid"}`}
-            </span>
+            <span>{meta}</span>
             {enginesDiffer(segment) && <span className="card__differ">Engines differ</span>}
           </p>
         )}
@@ -272,7 +269,7 @@ function StructureCard({
           tag={tag}
           state={state}
           paperEngine={paperEngine}
-          canAccept={canAccept}
+          canAccept={drawable}
           failedEngine={failedEngine}
           onDecide={onDecide}
           onRun={onRun}
@@ -285,9 +282,8 @@ function StructureCard({
           smiles={smiles}
           curatedMolfile={curation?.molfile ?? null}
           // Only for the prediction shown: an edited structure never takes its molfile.
-          predictionMolfile={edited ? null : (prediction?.molfile ?? null)}
-          depictionUrl={drawable ? api.depictionUrl(segment.id, depictionKey(segment)) : null}
-          copySmiles={false}
+          predictionMolfile={edited ? null : shown.molfile}
+          depictionUrl={depictionUrl}
           onEdit={onEdit && (() => onEdit(segment.id))}
           onCompare={onCompare && (() => onCompare(segment.id))}
         />
@@ -297,10 +293,6 @@ function StructureCard({
 }
 
 export default memo(StructureCard);
-
-function sentence(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
-}
 
 function CardActions({
   segmentId,

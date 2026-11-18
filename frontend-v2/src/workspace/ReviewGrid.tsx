@@ -231,7 +231,6 @@ export default function ReviewGrid({ ws, rows }: { ws: Workspace; rows: ReviewRo
               index={index}
               state={r.state}
               paperEngine={paper.engine}
-              canAccept={hasDrawing(byId.get(r.segmentId)!)}
               reason={r.reason}
               failedEngine={r.failedEngine}
               selected={picked.has(r.segmentId)}

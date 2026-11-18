@@ -314,7 +314,6 @@ function Result({
             depictionUrl={null}
             image={drawing.reply ? () => depictBlob(drawing.reply!) : undefined}
             onEdit={() => setEditing(true)}
-            copySmiles={false}
             {...(Compare ? { onCompare: openCompare } : {})}
           />
           {localNote && (

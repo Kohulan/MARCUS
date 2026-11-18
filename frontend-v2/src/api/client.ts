@@ -278,13 +278,9 @@ export const api = {
   imageUrl: (id: string) => `${BASE}/images/${enc(id)}/image`,
 };
 
-/** A /tools/depict reply as a file: an SVG, or a PNG from its base64. */
+/** A /tools/depict reply as a file (api.depict always asks for SVG). */
 export function depictBlob(reply: DepictReply): Blob {
-  return reply.format === "png"
-    ? new Blob([Uint8Array.from(atob(reply.data), (c) => c.charCodeAt(0))], {
-        type: "image/png",
-      })
-    : new Blob([reply.data], { type: "image/svg+xml" });
+  return new Blob([reply.data], { type: "image/svg+xml" });
 }
 
 /** An object URL for a /tools/depict reply, for `<img src>`. The caller revokes it. */

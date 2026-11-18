@@ -3,19 +3,11 @@
 // paper or steps change, for up to hundreds of segments.
 import { isPaperBusy, isStepActive } from "../api/status";
 import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import { engineName } from "../api/engines";
+import { STATE_WORD, type CardState } from "../ui/StateBadge";
 import { newestFirst } from "./pageFailures";
 
-export type CardState = "accepted" | "rejected" | "to-check" | "reading" | "failed" | "not-read";
-
-/** The state's word (exact, spec §7 state table). */
-export const STATE_WORD: Record<CardState, string> = {
-  accepted: "Accepted",
-  rejected: "Rejected",
-  "to-check": "To check",
-  reading: "Reading…",
-  failed: "Failed",
-  "not-read": "Not read yet",
-};
+export { STATE_WORD, type CardState };
 
 /** The segment's `ocsr` steps, newest first. `steps` may hold the whole paper's steps. */
 export function ocsrSteps(segment: SegmentOut, steps: StepOut[]): StepOut[] {
@@ -58,6 +50,44 @@ export function shownPrediction(segment: SegmentOut, paperEngine: string): Predi
   );
 }
 
+/** The structure a segment shows (card, focus mode, editor start, COCONUT list). */
+export type ShownStructure = {
+  /** shownPrediction: what the server draws when nothing is curated. */
+  prediction: PredictionOut | null;
+  /** A curated SMILES or molfile: the curated structure is shown, never the prediction. */
+  edited: boolean;
+  /** Null without one, and for a curated molfile without SMILES (never the prediction's). */
+  smiles: string | null;
+  /** The curated molfile when edited, else the prediction's. */
+  molfile: string | null;
+};
+
+export function shownStructure(segment: SegmentOut, paperEngine: string): ShownStructure {
+  const c = segment.curation;
+  const prediction = shownPrediction(segment, paperEngine);
+  if (c?.smiles || c?.molfile) {
+    return { prediction, edited: true, smiles: c.smiles || null, molfile: c.molfile ?? null };
+  }
+  return {
+    prediction,
+    edited: false,
+    smiles: prediction?.smiles || null,
+    molfile: prediction?.molfile ?? null,
+  };
+}
+
+/** "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. */
+export function metaText({ edited, prediction }: ShownStructure): string | null {
+  if (edited) return "Edited";
+  if (!prediction) return null;
+  return `${engineName(prediction.engine)} · ${prediction.valid ? "Valid" : "Invalid"}`;
+}
+
+/** A reason as a sentence: "it took too long" → "It took too long." */
+export function sentence(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
 /** True when the server has something to draw (a curated structure or a valid prediction). */
 export function hasDrawing(segment: SegmentOut): boolean {
   return Boolean(
@@ -78,10 +108,10 @@ export type GridFilter = "all" | "to-check" | "accepted" | "rejected" | "failed"
 
 export const FILTERS: { filter: GridFilter; label: string }[] = [
   { filter: "all", label: "All" },
-  { filter: "to-check", label: "To check" },
-  { filter: "accepted", label: "Accepted" },
-  { filter: "rejected", label: "Rejected" },
-  { filter: "failed", label: "Failed" },
+  ...(["to-check", "accepted", "rejected", "failed"] as const).map((filter) => ({
+    filter,
+    label: STATE_WORD[filter],
+  })),
 ];
 
 /** The filter a state counts under ("Reading…" and "Not read yet" count as To check). */

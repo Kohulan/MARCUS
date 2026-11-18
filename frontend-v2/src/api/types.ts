@@ -183,7 +183,7 @@ export interface ImageJobOut {
 
 export type UploadPaperReply = { paper_id: string; status: string };
 export type UploadImageReply = { image_job_id: string; status: string };
-export type DepictReply = { format: "svg" | "png"; data: string };
+export type DepictReply = { format: "svg"; data: string };
 
 export type CompareReply = {
   tanimoto: number;

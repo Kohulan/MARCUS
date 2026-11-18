@@ -1,7 +1,7 @@
 // What "Send N to COCONUT" hands the submit form. Pure, so the rules are pinned by tests.
 import type { SegmentOut } from "../api/types";
 import type { SubmitStructure } from "../coconut/types";
-import { hasDrawing, shownPrediction } from "./cardState";
+import { hasDrawing, shownStructure } from "./cardState";
 
 /**
  * The accepted structures that have a structure (the rule of bulk Accept: `hasDrawing`), in
@@ -13,8 +13,7 @@ import { hasDrawing, shownPrediction } from "./cardState";
 export function coconutStructures(segments: SegmentOut[], paperEngine: string): SubmitStructure[] {
   return segments.flatMap((s, i): SubmitStructure[] => {
     if (s.curation?.status !== "accepted" || !hasDrawing(s)) return [];
-    const c = s.curation;
-    const smiles = c.smiles || (c.molfile ? null : shownPrediction(s, paperEngine)?.smiles);
+    const { smiles } = shownStructure(s, paperEngine);
     return smiles ? [{ segmentId: s.id, n: i + 1, smiles }] : [];
   });
 }

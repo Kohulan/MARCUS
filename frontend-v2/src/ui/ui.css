@@ -575,6 +575,16 @@
   color: var(--green);
 }
 
+/* A finished paper: a filled green square and the word, like a finished step. */
+.item-done__mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  vertical-align: 1px;
+  background-color: var(--accepted);
+}
+
 /* Gone (404), or a paper or image that could not be opened ----------------- */
 
 .gone {

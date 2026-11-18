@@ -5,7 +5,7 @@ import { api, errorText } from "../api/client";
 import { keys } from "../api/queries";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
-import StateBadge from "../ui/StateBadge";
+import { ItemState } from "../ui/StateBadge";
 import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
 import "./tool.css";
@@ -36,21 +36,6 @@ export function deletionText(expiresAt: string, now = Date.now()): string {
   const days = (Date.parse(expiresAt) - now) / DAY_MS;
   if (!(days >= 1)) return "Deleted today"; // also an unreadable date
   return `Deleted in ${plural(Math.ceil(days), "day")}`;
-}
-
-/** A paper's or image job's state as its word and its shape. */
-export function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
-  if (status === "failed") return <StateBadge state="failed" />;
-  if (status === "done") {
-    if (notRead) return <StateBadge state="not-read" />;
-    return (
-      <span className="state item-done">
-        <span className="item-done__mark" aria-hidden="true" />
-        Done
-      </span>
-    );
-  }
-  return <StateBadge state="reading" />;
 }
 
 function PaperRow({ paper }: { paper: PaperSummary }) {

@@ -12,7 +12,6 @@ import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
-import { hasDrawing } from "./cardState";
 import { CardCompare } from "./Compare";
 import { CardEditor } from "./SegmentEditor";
 import { pageSteps } from "./pageFailures";
@@ -25,7 +24,6 @@ import type { Workspace } from "./useWorkspace";
 import "./paper.css";
 
 const NO_MARKERS: PageMarker[] = [];
-const NOOP = () => undefined;
 
 /**
  * Per page: can its image be shown? Yes once a render_page step of the page is done. Its
@@ -247,7 +245,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </p>
         ) : (
           <div className="pv-list">
-            {rows.map((r, index) => {
+            {rows.map((r) => {
               const segment = byId.get(r.segmentId)!;
               return (
                 <StructureCard
@@ -255,16 +253,12 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   compact
                   segment={segment}
                   n={r.n}
-                  index={index}
                   state={r.state}
                   paperEngine={paper.engine}
-                  canAccept={hasDrawing(segment)}
                   reason={r.reason}
                   failedEngine={r.failedEngine}
-                  selected={false}
                   current={selection === r.segmentId}
                   linked={hovered === r.segmentId}
-                  onToggle={NOOP}
                   onOpen={onSelect}
                   onDecide={onDecide}
                   onRun={onRun}
