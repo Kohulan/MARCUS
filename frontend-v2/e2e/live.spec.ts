@@ -71,6 +71,19 @@ test("the first card appears while the paper is read, and the open stream is nev
   const offset = await page.evaluate(() => Date.now() - performance.now());
   const navigationsAtOpen = navigations;
 
+  // The first look at the opened paper: still being read, no card on screen yet, so the
+  // card the next look finds arrived live.
+  const first = await page.waitForFunction(
+    () => {
+      const status = document.querySelector('section[aria-label="Status"]');
+      if (!/Reading…/.test(status?.textContent ?? "")) return false;
+      return { articles: document.querySelectorAll("article").length };
+    },
+    undefined,
+    { timeout: 60_000, polling: 50 },
+  );
+  expect(await first.jsonValue()).toEqual({ articles: 0 });
+
   // In one look: a structure card is shown and the status still says the paper is being
   // read ("Reading…" is the UI word for the API's `processing`).
   await page.waitForFunction(

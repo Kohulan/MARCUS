@@ -219,6 +219,13 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     sid === null ? undefined : sid === id ? segment : ws.segments.find((s) => s.id === sid);
   const comparingSegment = segmentById(comparingId);
   const editingSegment = segmentById(editingId);
+  // A pinned structure deleted live (another tab): its dialog is gone, so the keys come back.
+  const comparingGone = comparingId !== null && comparingSegment === undefined;
+  const editingGone = editingId !== null && editingSegment === undefined;
+  useEffect(() => {
+    if (comparingGone) setComparingId(null);
+    if (editingGone) setEditingId(null);
+  }, [comparingGone, editingGone]);
   const tagOf = (sid: string) => {
     const at = rows.findIndex((r) => r.segmentId === sid);
     return structureTag(rows[at]?.n ?? at + 1);

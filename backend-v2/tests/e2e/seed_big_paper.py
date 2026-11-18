@@ -9,12 +9,15 @@ Creates a browser owner, a `done` paper with 10 pages (white 1240 x 1754 PNGs), 
 (20 per page on a 4 x 5 grid) with their crop PNGs, an `unchecked` curation each and one valid
 `decimer` prediction each with 200 distinct SMILES. Their stored depictions (from an earlier
 run) are removed, so the tools worker has 200 depictions to draw on every run. Prints one JSON line: {"paper_id": ..., "token": ...}. The token is the owner cookie
-value (`marcus_owner`). Only for the local `marcus-v2` project, never production.
+value (`marcus_owner`). Only for the local `marcus-v2` project, never production: it refuses
+(exit 2, nothing written) unless the fake engines are on (MARCUS_ENABLE_FAKE_ENGINES, set only
+by docker-compose.fake.yml).
 """
 
 import hashlib
 import io
 import json
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -24,6 +27,7 @@ from marcus.core import storage
 from marcus.core.db import sync_session
 from marcus.core.enums import Engine, OwnerKind, PaperStatus, PriorityClass
 from marcus.core.models import Curation, Owner, Paper, Prediction, Segment
+from marcus.core.settings import get_settings
 from marcus.core.tokens import hash_token, new_token
 
 PAGES = 10
@@ -67,6 +71,12 @@ def bbox(slot: int) -> list[int]:
 
 
 def main() -> None:
+    if not get_settings().enable_fake_engines:
+        print(
+            "seed_big_paper: refusing, the fake engines are off (not the local e2e stack)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     token = new_token()
     now = datetime.now(UTC)
     with sync_session() as s:

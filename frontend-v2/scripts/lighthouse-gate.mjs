@@ -28,6 +28,8 @@ try {
       "--only-categories=performance",
       "--output=json",
       "--quiet",
+      // Never load the real tracker: a gate run is not a visit (as routeMatomo in e2e).
+      "--blocked-url-patterns=https://matomo.nfdi4chem.de/*",
       // --no-sandbox as Playwright launches it: Ubuntu 23.10+ blocks Chromium's user
       // namespace sandbox; the page is the local stack only.
       "--chrome-flags=--headless --no-sandbox",

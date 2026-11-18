@@ -10,7 +10,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { routeMatomo } from "./helpers";
 
 const STRUCTURES = 200;
-// The local stack's api container (project marcus-v2); the seed refuses nothing else.
+// The local stack's api container (project marcus-v2). The seed refuses (exit 2, nothing
+// written) any api without the fake engines (MARCUS_ENABLE_FAKE_ENGINES).
 const API_CONTAINER = "marcus-v2-api-1";
 const SEED = resolve("../backend-v2/tests/e2e/seed_big_paper.py");
 

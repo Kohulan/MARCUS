@@ -531,6 +531,36 @@ describe("focus mode", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("?s=s1&focus=1");
   });
 
+  it.each([
+    ["e", "Edit structure"],
+    ["c", /Compare engines/],
+  ] as const)(
+    "a pinned dialog (%s) whose structure is deleted live closes and the review keys work again",
+    async (key, dialogName) => {
+      const put = putSpy();
+      renderAt(paper([segment("s1"), segment("s2"), segment("s3")]), "?s=s1&focus=1");
+      const region = await focusRegion();
+      // The dialog opens on [01]; a marker behind it moves focus mode to [02] (the dialog stays
+      // pinned to [01]); then [01] is deleted in another tab.
+      const page = within(region).getByRole("img", { name: "Page 1" });
+      Object.defineProperty(page, "naturalWidth", { value: 2480 });
+      Object.defineProperty(page, "naturalHeight", { value: 3510 });
+      fireEvent.load(page);
+      press(key);
+      await screen.findByRole("dialog", { name: dialogName });
+      fireEvent.click(await within(region).findByRole("button", { name: "Open [02]" }));
+      await waitFor(() => expect(region).toHaveAccessibleName("Focus [02]"));
+      act(() => {
+        client.setQueryData(keys.paper(ID), paper([segment("s2"), segment("s3")]));
+      });
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: dialogName })).toBeNull());
+      (await focusRegion()).focus();
+      press("a");
+      await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+      expect(put.mock.calls[0]![0]).toBe("s2");
+    },
+  );
+
   it("an edited structure opens with its curated SMILES and molfile; C still opens Compare", async () => {
     putSpy();
     renderAt(
