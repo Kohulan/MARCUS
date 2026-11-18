@@ -35,7 +35,8 @@ vi.mock("../api/useLiveEvents", () => ({
 }));
 
 // Depictions: the src is the depiction URL itself (the real loader is tested on its own).
-vi.mock("../api/depictions", () => ({
+vi.mock("../api/depictions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/depictions")>()),
   useDepiction: (url: string | null) => ({ src: url, failed: false }),
 }));
 

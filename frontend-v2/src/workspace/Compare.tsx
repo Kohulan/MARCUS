@@ -1,7 +1,7 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
-import { useDepiction } from "../api/depictions";
+import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
 import { asEngine } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
@@ -14,12 +14,10 @@ import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
 import { ocsrSteps } from "./cardState";
 import {
-  depictQuery,
   engineRows,
   enginesToRun,
   tooManyText,
   useCommonPart,
-  useReplyUrl,
   useRunAll,
   useSimilarity,
   type CompareStep,

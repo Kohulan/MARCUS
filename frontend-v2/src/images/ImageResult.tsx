@@ -6,13 +6,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { api, depictBlob, errorText, isGone, isUuid, svgBlobUrl } from "../api/client";
+import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
+import { depictQuery, useReplyUrl } from "../api/depictions";
+import { engineName } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isImageActive } from "../api/status";
 import type { DepictReply, Engine, ImageJobOut, PredictionOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
+import { returnFocus } from "../ui/focus";
 import { GlassButton } from "../ui/GlassButton";
 import GonePage, { OpenFailed } from "../ui/GonePage";
 import Smiles from "../ui/Smiles";
@@ -50,16 +53,6 @@ type ImageResultProps = {
   /** The Compare component; defaults to COMPARE above (tests pass a fake). */
   compare?: ComponentType<ImageCompareProps> | undefined;
 };
-
-const ENGINE_LABEL: Record<string, string> = {
-  decimer: "DECIMER",
-  "decimer-hand": "DECIMER hand-drawn",
-  molnextr: "MolNexTR",
-  molscribe: "MolScribe",
-};
-
-const engineName = (p: Pick<PredictionOut, "engine" | "engine_version">) =>
-  `${ENGINE_LABEL[p.engine] ?? p.engine} ${p.engine_version}`.trim();
 
 const duration = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
@@ -130,37 +123,17 @@ function ImageJobPage({
 }
 
 /**
- * The drawing of `smiles` from /tools/depict as an object URL, revoked when it changes, and
- * the reply itself (Download saves it as is).
+ * The drawing of `smiles` from /tools/depict (Compare's query for a plain drawing, so it is
+ * drawn once) as an object URL, and the reply itself (Download saves it as is).
  */
 function useDrawing(smiles: string | null): {
   src: string | null;
   failed: boolean;
   reply: DepictReply | null;
 } {
-  const query = useQuery({
-    // the same key Compare uses for a drawing without a highlight, so it is drawn once
-    queryKey: ["depict", smiles, null],
-    queryFn: () => api.depict(smiles!),
-    enabled: smiles !== null,
-    staleTime: Infinity,
-  });
-  const [src, setSrc] = useState<string | null>(null);
-  const reply = query.data;
-  useEffect(() => {
-    if (!reply) {
-      setSrc(null);
-      return;
-    }
-    const url = svgBlobUrl(reply);
-    setSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [reply]);
-  return {
-    src: query.isError ? null : src,
-    failed: query.isError,
-    reply: query.isError ? null : (reply ?? null),
-  };
+  const query = useQuery({ ...depictQuery(smiles ?? "", null), enabled: smiles !== null });
+  const reply = smiles !== null && !query.isError ? query.data : undefined;
+  return { src: useReplyUrl(reply), failed: query.isError, reply: reply ?? null };
 }
 
 function Result({
@@ -184,15 +157,15 @@ function Result({
   const [comparing, setComparing] = useState(false);
   const [retrying, setRetrying] = useState(false);
   // Compare opens below the sheet: focus goes to its Close, and back to what opened it.
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<Element | null>(null);
   const closeCompare = useRef<HTMLButtonElement>(null);
   const openCompare = () => {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    opener.current = document.activeElement;
     setComparing(true);
   };
   const endCompare = () => {
     setComparing(false);
-    opener.current?.focus();
+    returnFocus(opener.current, null);
   };
   useEffect(() => {
     if (!comparing) return;
@@ -214,6 +187,7 @@ function Result({
   async function retry() {
     setRetrying(true);
     try {
+      // as sent: the job may run an engine the UI does not offer (the fake stack's "fake")
       await api.runImagePrediction(job.id, job.engine as Engine);
       live.reconnect();
       void client.invalidateQueries({ queryKey: keys.image(job.id) }, { cancelRefetch: false });
@@ -225,7 +199,9 @@ function Result({
   }
 
   const rows: [string, string][] = [];
-  if (prediction) rows.push(["Engine", engineName(prediction)]);
+  if (prediction) {
+    rows.push(["Engine", `${engineName(prediction.engine)} ${prediction.engine_version}`.trim()]);
+  }
   if (edit) rows.push(["Structure", "Edited"]);
   else if (prediction) {
     rows.push(["Valid", prediction.valid ? "Yes" : "No"], ["Time", duration(prediction.ms)]);

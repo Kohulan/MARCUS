@@ -3,12 +3,12 @@
 // /tools routes (per-owner bucket of 60/min); each is a TanStack Query entry keyed by its
 // inputs with staleTime Infinity, so a second look at the same structures costs nothing.
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, svgBlobUrl } from "../api/client";
+import { useCallback, useState } from "react";
+import { api, ApiError } from "../api/client";
 import { ENGINES, engineName } from "../api/engines";
 import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
-import type { CompareReply, DepictReply, Engine, PredictionOut } from "../api/types";
+import type { CompareReply, Engine, PredictionOut } from "../api/types";
 
 export type CompareTarget = { kind: "segment" | "image"; id: string };
 
@@ -210,26 +210,4 @@ export function useCommonPart(
     none: on && mcs.data !== undefined && smarts === null,
     errors: [...molfiles.map((q) => q.error), mcs.error].filter((e) => e !== null),
   };
-}
-
-/** A /tools/depict drawing: key ["depict", smiles, highlight] (null: a plain drawing). */
-export function depictQuery(smiles: string, highlight: string | null) {
-  return {
-    queryKey: ["depict", smiles, highlight] as const,
-    queryFn: (): Promise<DepictReply> =>
-      highlight === null ? api.depict(smiles) : api.depict(smiles, { highlight }),
-    staleTime: Infinity,
-  };
-}
-
-/** A blob: URL for a depict reply (null without one), revoked when it changes or unmounts. */
-export function useReplyUrl(reply: DepictReply | undefined): string | null {
-  const [shown, setShown] = useState<{ reply: DepictReply; url: string } | null>(null);
-  useEffect(() => {
-    if (!reply) return;
-    const url = svgBlobUrl(reply);
-    setShown({ reply, url });
-    return () => URL.revokeObjectURL(url);
-  }, [reply]);
-  return reply !== undefined && shown?.reply === reply ? shown.url : null;
 }

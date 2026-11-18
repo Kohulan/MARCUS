@@ -15,7 +15,8 @@ vi.mock("../api/useLiveEvents", () => ({
   useLiveEvents: () => ({ mode: "live", reconnect: () => undefined }),
 }));
 
-vi.mock("../api/depictions", () => ({
+vi.mock("../api/depictions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/depictions")>()),
   useDepiction: (url: string | null) => ({ src: url, failed: false }),
 }));
 

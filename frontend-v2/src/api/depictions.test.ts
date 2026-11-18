@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { createDepictionLoader, useDepiction } from "./depictions";
+import { createDepictionLoader, forgetDrawings, useDepiction } from "./depictions";
 
 // The tab's loader waits for the owner gate; here a gated request has already succeeded.
 vi.mock("./client", async (importOriginal) => ({
@@ -45,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  forgetDrawings();
 });
 
 describe("createDepictionLoader", () => {
@@ -162,19 +163,26 @@ describe("owner gate", () => {
 });
 
 describe("useDepiction", () => {
-  it("gives a blob URL once loaded and revokes it on unmount", async () => {
+  it("gives a blob URL once loaded, and the same one at once to the next view of it", async () => {
     const revoked: string[] = [];
     vi.stubGlobal("URL", {
       ...URL,
       createObjectURL: () => "blob:svg-1",
       revokeObjectURL: (u: string) => revoked.push(u),
     });
-    const hook = renderHook(() => useDepiction("/api/v2/segments/s1/depiction?v=k"));
+    const url = "/api/v2/segments/s1/depiction?v=k";
+    const hook = renderHook(() => useDepiction(url));
     expect(hook.result.current).toMatchObject({ src: null, failed: false });
     await waitFor(() => expect(pending).toHaveLength(1));
     pending[0]!.resolve(svg());
     await waitFor(() => expect(hook.result.current.src).toBe("blob:svg-1"));
     hook.unmount();
+    expect(revoked).toEqual([]); // kept for the tab
+    const again = renderHook(() => useDepiction(url));
+    expect(again.result.current.src).toBe("blob:svg-1");
+    expect(pending).toHaveLength(1);
+    again.unmount();
+    forgetDrawings();
     expect(revoked).toEqual(["blob:svg-1"]);
   });
 

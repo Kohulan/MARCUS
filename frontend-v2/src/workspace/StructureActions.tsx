@@ -3,6 +3,7 @@
 // callbacks out: it touches no workspace state. Third-party text is rendered as text only.
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { loadedDrawing } from "../api/depictions";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
 import "./structureActions.css";
@@ -127,12 +128,14 @@ export default function StructureActions({
         return;
       }
       if (!depictionUrl) return;
-      const res = await fetch(depictionUrl, { credentials: "same-origin" });
-      if (!res.ok) throw new Error(String(res.status));
-      saveBlob(
-        new Blob([await res.text()], { type: "image/svg+xml" }),
-        `${stem}.svg`,
-      );
+      // The drawing on screen when this tab has loaded it, else asked for once more.
+      let blob = loadedDrawing(depictionUrl);
+      if (!blob) {
+        const res = await fetch(depictionUrl, { credentials: "same-origin" });
+        if (!res.ok) throw new Error(String(res.status));
+        blob = new Blob([await res.text()], { type: "image/svg+xml" });
+      }
+      saveBlob(blob, `${stem}.svg`);
       setNote(null);
     } catch {
       setNote("Could not download the image");
