@@ -263,15 +263,45 @@ describe("status bar", () => {
   });
 
   it("a 409 from the retry shows its detail as an error toast", async () => {
-    vi.spyOn(api, "retryPage").mockRejectedValue(
-      new ApiError(409, "This page is already being read again."),
-    );
+    // the API's own 409 details: "Page has not failed", "Page is still running",
+    // "No retries left for this page" (backend-v2 api/routes/papers.py)
+    vi.spyOn(api, "retryPage").mockRejectedValue(new ApiError(409, "No retries left for this page"));
     renderWorkspace({ steps: failedPage4("timeout") });
     fireEvent.click(await screen.findByRole("button", { name: "Retry page 5" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This page is already being read again.",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("No retries left for this page");
     expect(live.reconnect).not.toHaveBeenCalled();
+  });
+
+  it("a retry that gets 404 (the paper was deleted meanwhile) shows the gone page", async () => {
+    vi.spyOn(api, "retryPage").mockRejectedValue(new ApiError(404, "Not found"));
+    renderWorkspace({ steps: failedPage4("timeout") });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry page 5" }));
+    vi.mocked(api.getPaper).mockRejectedValue(new ApiError(404, "Not found"));
+    expect(await screen.findByText("This paper is not here any more.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeEmptyDOMElement();
+  });
+
+  it("Retry stays disabled after a 202 until the refresh after it lands", async () => {
+    vi.spyOn(api, "retryPage").mockResolvedValue({ step_id: "new" });
+    renderWorkspace({ steps: failedPage4("timeout") });
+    const button = await screen.findByRole("button", { name: "Retry page 5" });
+    let answer!: (v: { steps: StepOut[] }) => void;
+    vi.mocked(api.getSteps).mockReturnValue(new Promise((r) => (answer = r)));
+    fireEvent.click(button);
+    await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getSteps).toHaveBeenCalledTimes(2)); // the refresh is out
+    expect(screen.getByRole("button", { name: "Retry page 5" })).toBeDisabled();
+    // the refresh lands (here still failed: the button is offered again)
+    await act(async () => answer({ steps: failedPage4("timeout") }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry page 5" })).toBeEnabled());
+  });
+
+  it("failed pages are in a polite live region that is there before a page fails", async () => {
+    renderWorkspace({ paper: paper({ status: "processing" }) });
+    await title();
+    const region = screen.getByRole("status", { name: "Failed pages" });
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toBeEmptyDOMElement();
   });
 
   it("a failed check_pdf with bad_input shows one line instead of the progress", async () => {
@@ -321,7 +351,7 @@ describe("status bar", () => {
       paper: paper({ status: "checking" }),
       queue: { papers: [{ id: ID, steps_ahead_by_queue: {}, estimate_s: 40 }], estimate_s: 40 },
     });
-    expect(await screen.findByText("Less than a minute in the queue")).toBeInTheDocument();
+    expect(await screen.findByText("Less than a minute")).toBeInTheDocument();
   });
 
   it("a finished paper does not ask for the queue", async () => {

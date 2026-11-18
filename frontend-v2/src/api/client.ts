@@ -98,19 +98,36 @@ export async function toApiError(res: Response): Promise<ApiError> {
 // land on the other one. So until one request has succeeded in this page (from then on the
 // cookie is there), requests go out one at a time; a failed one (a 502 while the API
 // restarts, a network error, a 429) lets the next waiting request try.
-let ownerReady = false;
+//
+// The gate covers every `api.*` call (they all go through send()). It does NOT cover what
+// the browser requests by itself: an EventSource (useLiveEvents), an <img src> of an API URL
+// (page, crop and image URLs), an export <a href>, or a raw fetch. Rule: mount those only
+// after a gated request has answered 2xx (the paper workspace mounts its frame only after
+// getPaper did; an image page must wait for getImageJob the same way), or await
+// ownerReady() first (the depiction loader does).
+let ownerSet = false;
 let firstInFlight: Promise<unknown> | null = null;
+let markReady: () => void = () => undefined;
+let readyPromise = new Promise<void>((resolve) => (markReady = resolve));
+
+/** Resolves once a request of this page has succeeded (the owner cookie is set). */
+export function ownerReady(): Promise<void> {
+  return readyPromise;
+}
 
 async function send(url: string, init: RequestInit): Promise<Response> {
-  while (!ownerReady && firstInFlight) {
+  while (!ownerSet && firstInFlight) {
     await firstInFlight.catch(() => undefined);
   }
-  if (ownerReady) return fetch(url, init);
+  if (ownerSet) return fetch(url, init);
   const attempt = fetch(url, init);
   firstInFlight = attempt;
   try {
     const res = await attempt;
-    if (res.ok) ownerReady = true;
+    if (res.ok && !ownerSet) {
+      ownerSet = true;
+      markReady();
+    }
     return res;
   } finally {
     if (firstInFlight === attempt) firstInFlight = null;
@@ -119,8 +136,9 @@ async function send(url: string, init: RequestInit): Promise<Response> {
 
 /** Tests only: forget that a request has succeeded (a new page). */
 export function resetOwnerGate(): void {
-  ownerReady = false;
+  ownerSet = false;
   firstInFlight = null;
+  readyPromise = new Promise<void>((resolve) => (markReady = resolve));
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, resetOwnerGate, svgBlobUrl } from "./client";
+import { api, ApiError, ownerReady, resetOwnerGate, svgBlobUrl } from "./client";
 
 type Call = { url: string; init: RequestInit };
 
@@ -220,6 +220,23 @@ describe("one owner: no parallel requests before the first success", () => {
 
   const ok = () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
   const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("ownerReady() resolves after the first success, not after a failure", async () => {
+    let ready = false;
+    void ownerReady().then(() => (ready = true));
+    const first = api.listPapers();
+    await tick();
+    pending[0]!.resolve(new Response("", { status: 502 }));
+    await expect(first).rejects.toBeInstanceOf(ApiError);
+    await tick();
+    expect(ready).toBe(false);
+    const second = api.listPapers();
+    await tick();
+    pending[1]!.resolve(ok());
+    await second;
+    await tick();
+    expect(ready).toBe(true);
+  });
 
   it("holds every request until the first one succeeded, then lets them all go", async () => {
     const list = api.listPapers();

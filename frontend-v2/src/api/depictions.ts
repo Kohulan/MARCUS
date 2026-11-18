@@ -8,12 +8,14 @@
 // - a 503 or 429 (or a gateway 502/504) pauses the whole queue for Retry-After seconds
 //   (default 5, at most 30) and puts the load back at the front; after 6 attempts it fails;
 // - any other error fails at once (404: nothing to draw);
-// - an aborted load leaves the queue (unmounted card).
+// - an aborted load leaves the queue (unmounted card);
+// - the tab's loader waits for the owner gate (client.ts ownerReady) before its first fetch:
+//   a raw fetch bypasses the gate, and a cookie-less one would make a second owner.
 //
 // The browser HTTP cache still applies (Cache-Control: private, max-age=86400 and the
 // `v=<depictionKey>` in the URL), so a revisit is served from disk.
 import { useEffect, useState } from "react";
-import { toApiError } from "./client";
+import { ownerReady, toApiError } from "./client";
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const DEFAULT_WAIT_S = 5;
@@ -34,7 +36,7 @@ function abortError(): DOMException {
 }
 
 export function createDepictionLoader(
-  opts: { maxActive?: number; maxAttempts?: number } = {},
+  opts: { maxActive?: number; maxAttempts?: number; gate?: () => Promise<void> } = {},
 ): DepictionLoader {
   const maxActive = opts.maxActive ?? 4;
   const maxAttempts = opts.maxAttempts ?? 6;
@@ -62,6 +64,7 @@ export function createDepictionLoader(
     active += 1;
     job.attempts += 1;
     try {
+      if (opts.gate) await opts.gate();
       const init: RequestInit = { credentials: "same-origin" };
       if (job.signal) init.signal = job.signal;
       const res = await fetch(job.url, init);
@@ -108,7 +111,7 @@ export function createDepictionLoader(
 }
 
 /** The one loader of the tab. */
-export const depictionLoader = createDepictionLoader();
+export const depictionLoader = createDepictionLoader({ gate: ownerReady });
 
 /**
  * A blob: URL for `<Structure src>` (null while loading or for a null `url`); `failed` when

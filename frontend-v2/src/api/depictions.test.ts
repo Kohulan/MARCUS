@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import { createDepictionLoader, useDepiction } from "./depictions";
 
+// The tab's loader waits for the owner gate; here a gated request has already succeeded.
+vi.mock("./client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./client")>()),
+  ownerReady: () => Promise.resolve(),
+}));
+
 type Pending = { url: string; resolve: (r: Response) => void; signal: AbortSignal | undefined };
 let pending: Pending[];
 
@@ -118,6 +124,22 @@ describe("createDepictionLoader", () => {
     pending[0]!.resolve(svg());
     await flush();
     expect(pending.map((p) => p.url)).toEqual(["a", "c"]);
+  });
+});
+
+describe("owner gate", () => {
+  it("a gated loader fetches nothing until the gate opens", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const loader = createDepictionLoader({ gate: () => gate });
+    const blob = loader.load("a");
+    await flush();
+    expect(pending).toHaveLength(0);
+    open();
+    await flush();
+    expect(pending.map((p) => p.url)).toEqual(["a"]);
+    pending[0]!.resolve(svg());
+    await expect(blob).resolves.toHaveProperty("size", 6);
   });
 });
 
