@@ -8,7 +8,14 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient, keys } from "../api/queries";
-import type { PaperDetail, QueueOut, StepOut } from "../api/types";
+import type {
+  CurationOut,
+  PaperDetail,
+  PredictionOut,
+  QueueOut,
+  SegmentOut,
+  StepOut,
+} from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { useWorkspace } from "./useWorkspace";
 import Workspace from "./Workspace";
@@ -67,6 +74,29 @@ function paper(over: Partial<PaperDetail> = {}): PaperDetail {
     counts: { steps_by_status: {} },
     segments: [],
     ...over,
+  };
+}
+
+function seg(id: string, curation: Partial<CurationOut> | null, predictions?: PredictionOut[]): SegmentOut {
+  return {
+    id,
+    page: 0,
+    idx: Number(id.replace(/\D/g, "")),
+    bbox: [0, 0, 10, 10],
+    curation: curation && { status: "unchecked", smiles: null, molfile: null, note: null, ...curation },
+    predictions: predictions ?? [
+      {
+        id: `pr-${id}`,
+        engine: "decimer",
+        engine_version: "2.7",
+        smiles: "CCO",
+        molfile: null,
+        valid: true,
+        ms: 1,
+        cached: false,
+        created_at: "2026-11-18T10:00:00Z",
+      },
+    ],
   };
 }
 
@@ -199,14 +229,47 @@ describe("header", () => {
     expect(coconut.count).not.toHaveBeenCalled();
   });
 
-  it("Send N to COCONUT names the accepted count; with none it is disabled with a reason", async () => {
-    const { unmount } = renderWorkspace();
-    expect(await screen.findByRole("button", { name: "Send 9 to COCONUT" })).toBeEnabled();
+  it("Send N to COCONUT counts accepted structures that have one; with none it is disabled", async () => {
+    const segs = [
+      seg("s1", null),
+      seg("s2", { status: "accepted" }),
+      seg("s3", { status: "accepted", smiles: "CCBr" }),
+      seg("s4", { status: "accepted" }, []), // accepted, nothing to send
+      seg("s5", { status: "rejected" }),
+    ];
+    const { unmount } = renderWorkspace({ paper: paper({ segments: segs, accepted: 3 }) });
+    expect(await screen.findByRole("button", { name: "Send 2 to COCONUT" })).toBeEnabled();
     unmount();
-    renderWorkspace({ paper: paper({ accepted: 0, to_review: 13 }) });
+    renderWorkspace({ paper: paper({ segments: [seg("s1", null)], accepted: 0 }) });
     const send = await screen.findByRole("button", { name: "Send 0 to COCONUT" });
     expect(send).toBeDisabled();
     expect(send).toHaveAccessibleDescription("Accept a structure first");
+  });
+
+  it("opens the COCONUT form with those structures, tagged as on their cards", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t"); // logged in: the form, not the login
+    try {
+      renderWorkspace({
+        paper: paper({
+          segments: [seg("s1", null), seg("s2", { status: "accepted" }), seg("s3", { status: "accepted", smiles: "CCBr" })],
+        }),
+      });
+      fireEvent.click(await screen.findByRole("button", { name: "Send 2 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      const rows = within(form).getAllByRole("listitem");
+      expect(rows.map((r) => within(r).getByText(/^\[\d+\]$/).textContent)).toEqual([
+        "[02]",
+        "[03]",
+      ]);
+      expect(within(form).getByText("CCBr")).toBeInTheDocument();
+      // The paper API has no first author or year: the title keeps only what is known.
+      expect(within(form).getByLabelText("Title")).toHaveValue("MARCUS_Submission");
+      expect(within(form).getByLabelText("DOI")).toHaveValue("10.1039/d5dd00313j");
+      fireEvent.click(within(form).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
   });
 });
 

@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { usePaper } from "../api/queries";
 import type { PaperDetail } from "../api/types";
+import SubmitForm from "../coconut/SubmitForm";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
@@ -11,6 +12,7 @@ import FocusMode from "./FocusMode";
 import GonePage from "./GonePage";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
+import { coconutStructures, submissionTitle } from "./coconutList";
 import StatusBar from "./StatusBar";
 import { useReviewRows } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
@@ -130,8 +132,14 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     closeFocus();
   };
 
-  const accepted = paper.accepted;
   const inCoconut = useCoconutCount(paper.doi);
+  // Accepted structures that have one, numbered as their tags (all segments, before filters).
+  const toCoconut = useMemo(
+    () => coconutStructures(ws.segments, paper.engine),
+    [ws.segments, paper.engine],
+  );
+  const [sending, setSending] = useState(false);
+  const count = toCoconut.length;
   return (
     <main className="ws">
       <header className="ws-head">
@@ -164,15 +172,16 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         <div className="ws-head__actions glassbed">
           <ExportMenu paperId={paper.id} />
           <div className="ws-send">
-            {/* F13 opens the COCONUT form from here. */}
             <GlassButton
               tint="green"
-              disabled={accepted === 0}
-              describedBy={accepted === 0 ? reasonId : undefined}
+              disabled={count === 0}
+              describedBy={count === 0 ? reasonId : undefined}
+              hasPopup="dialog"
+              onClick={() => setSending(true)}
             >
-              {`Send ${accepted} to COCONUT`}
+              {`Send ${count} to COCONUT`}
             </GlassButton>
-            {accepted === 0 && (
+            {count === 0 && (
               <span id={reasonId} className="ws-send__why">
                 Accept a structure first
               </span>
@@ -230,6 +239,17 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             <ReviewGrid ws={ws} rows={rows} />
           </div>
         </section>
+      )}
+
+      {sending && (
+        <SubmitForm
+          paper={{ id: paper.id, title: paper.title, doi: paper.doi }}
+          structures={toCoconut}
+          // The paper API gives no first author or year (v1 read them from the DOI's
+          // metadata): the title keeps what is known.
+          initial={{ title: submissionTitle({}) }}
+          onClose={() => setSending(false)}
+        />
       )}
     </main>
   );
