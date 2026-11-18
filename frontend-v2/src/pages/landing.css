@@ -252,7 +252,7 @@
   position: absolute;
   padding: calc(3 * var(--u)) calc(6 * var(--u));
   font-family: var(--font-mono);
-  font-size: max(10px, calc(11 * var(--u)));
+  font-size: max(11px, calc(11 * var(--u)));
   line-height: 1.4;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -772,7 +772,7 @@
 }
 
 .cite__text p {
-  max-width: 72ch;
+  max-width: 58ch; /* about 75 characters of Geist a line */
   font-size: 16px;
   line-height: 1.6;
 }
