@@ -40,9 +40,29 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 def segment_crop_path(paper_id: uuid.UUID, sha256: str) -> Path:
     """Content-addressed crop: the segment worker does not know Segment ids yet."""
-    if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
+    return paper_dir(paper_id) / "segments" / "by-sha" / f"{_sha256(sha256)}.png"
+
+
+def _sha256(value: object) -> str:
+    if not isinstance(value, str) or not _SHA256.fullmatch(value):
         raise ValueError("sha256 must be 64 lowercase hex characters")
-    return paper_dir(paper_id) / "segments" / "by-sha" / f"{sha256}.png"
+    return value
+
+
+def depictions_dir() -> Path:
+    return get_settings().data_root / "depictions"
+
+
+def depiction_path(smiles_sha256: str) -> Path:
+    """The stored SVG drawing of one SMILES (keyed by sha256 of its UTF-8 text)."""
+    sha = _sha256(smiles_sha256)
+    return depictions_dir() / sha[:2] / f"{sha}.svg"
+
+
+def depiction_marker_path(smiles_sha256: str) -> Path:
+    """Empty marker: the tools worker could not read this SMILES, so it is never redrawn."""
+    sha = _sha256(smiles_sha256)
+    return depictions_dir() / sha[:2] / f"{sha}.nodraw"
 
 
 def disk_is_full() -> bool:

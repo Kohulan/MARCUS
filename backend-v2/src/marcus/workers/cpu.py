@@ -6,9 +6,14 @@ The daily purge (`marcus.retention.purge_expired`, a plain Celery task, not a st
 marcus.workers.retention and is registered by the import below.
 """
 
+import html
+import json
 import logging
 import re
+import time
+from urllib.parse import quote
 
+import requests
 from sqlalchemy import select
 
 from marcus.core.enums import StepKind
@@ -32,6 +37,13 @@ DOI_CALL_TIMEOUT_S = 5
 DOI_TOTAL_S = 12
 DOI_OP = "doi"
 DOI_MAX_CHARS = 255
+TITLE_MAX_CHARS = 500
+TITLE_MAX_BYTES = 256 * 1024
+TITLE_MIN_LEFT_S = 1
+CROSSREF_URL = "https://api.crossref.org/works/{}"
+DATACITE_URL = "https://api.datacite.org/dois/{}"
+_TAGS = re.compile(r"<[^>]+>")
+_SPACES = re.compile(r"\s+")
 _DOI_PREFIX = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.IGNORECASE)
 
 
@@ -80,16 +92,83 @@ def normalise_doi(value) -> str | None:
     return doi
 
 
+def _crossref_title(data) -> object:
+    return data["message"]["title"][0]
+
+
+def _datacite_title(data) -> object:
+    return data["data"]["attributes"]["titles"][0]["title"]
+
+
+def _clean_title(raw) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    text = html.unescape(_TAGS.sub("", raw))
+    text = _SPACES.sub(" ", text).strip()[:TITLE_MAX_CHARS].strip()
+    return text or None
+
+
+def _get_json(http, url: str, timeout_s: float):
+    """One GET: no redirects, at most TITLE_MAX_BYTES read, JSON object or None."""
+    resp = http.get(url, timeout=timeout_s, allow_redirects=False, stream=True)
+    try:
+        if resp.status_code != 200:
+            return None
+        body = b""
+        for chunk in resp.iter_content(16 * 1024):
+            body += chunk
+            if len(body) > TITLE_MAX_BYTES:
+                return None
+        return json.loads(body)
+    finally:
+        resp.close()
+
+
+def fetch_title(doi: str, timeout_s: float) -> str | None:
+    """Paper title from Crossref, then DataCite. `timeout_s` is the whole budget; each call gets
+    min(DOI_CALL_TIMEOUT_S, time left). The DOI comes from an untrusted PDF, so it is quoted into
+    the path. Any error, redirect or non-200 means no title."""
+    deadline = time.monotonic() + timeout_s
+    quoted = quote(doi, safe="")
+    with requests.Session() as http:
+        for url, pick in (
+            (CROSSREF_URL.format(quoted), _crossref_title),
+            (DATACITE_URL.format(quoted), _datacite_title),
+        ):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return None
+            try:
+                data = _get_json(http, url, min(DOI_CALL_TIMEOUT_S, left))
+                title = _clean_title(pick(data)) if data is not None else None
+            except Exception as exc:  # noqa: BLE001
+                log.info("title lookup gave nothing: %s", type(exc).__name__)
+                continue
+            if title:
+                return title
+    return None
+
+
 def doi(step, session) -> dict:
-    """Never fails the paper: any error or timeout means no DOI."""
+    """Never fails the paper: any error or timeout means no DOI (and no title). The title call
+    runs only for a found DOI and shares the DOI_TOTAL_S budget."""
+    start = time.monotonic()
     try:
         raw = pdfsafe.run_op(
             DOI_OP, [str(pdf_path(step.paper_id)), DOI_CALL_TIMEOUT_S], DOI_TOTAL_S
         )
-        return {"doi": normalise_doi(raw)}
+        found = normalise_doi(raw)
     except Exception as exc:  # noqa: BLE001
         log.info("doi lookup gave nothing: %s", type(exc).__name__)
-        return {"doi": None}
+        return {"doi": None, "title": None}
+    title = None
+    left = DOI_TOTAL_S - (time.monotonic() - start)
+    if found and left >= TITLE_MIN_LEFT_S:
+        try:
+            title = fetch_title(found, left)
+        except Exception as exc:  # noqa: BLE001
+            log.info("title lookup gave nothing: %s", type(exc).__name__)
+    return {"doi": found, "title": title}
 
 
 register(StepKind.CHECK_PDF, check_pdf)

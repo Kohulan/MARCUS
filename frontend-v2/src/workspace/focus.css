@@ -1,0 +1,520 @@
+/*
+ * Focus mode (review view, `?focus=1`): one structure on a drawing sheet. A ruled bar
+ * (back, tag, state, what is left, steps, keys), then two columns: the structure (drawing,
+ * crop, SMILES, engines, note, decision) | its page with the orange marker and `[nn]` tag
+ * and the bbox readout. Light only; tokens only. The markers' boxes come in as custom
+ * properties (--l, --t, --w, --h), set by the client-only component.
+ */
+
+.fm {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+/* A region that takes focus so the keys work at once; not a control, so no ring. */
+.fm:focus {
+  outline: none;
+}
+
+/* Bar ------------------------------------------------------------------------- */
+
+.fm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fm-bar__where {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.fm-bar__of {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.fm-bar__left {
+  margin: 0 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.fm-bar__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fm-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--control-border);
+  background-color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fm-step:hover:not(:disabled) {
+  background-color: var(--sunken);
+}
+
+.fm-step:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.fm-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.fm-keys:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+/* Two columns ---------------------------------------------------------------- */
+
+.fm-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+
+.fm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px 24px 24px;
+  background-color: var(--surface);
+}
+
+.fm-figures {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 34%);
+  gap: 14px;
+  align-items: start;
+}
+
+.fm-drawing {
+  position: relative;
+  height: clamp(220px, 32vh, 300px);
+  padding: 12px;
+  border: 1px solid var(--hair);
+}
+
+.fm-stamp {
+  position: absolute;
+  z-index: 1; /* over the Rejected strike */
+  right: 14px;
+  bottom: 14px;
+  pointer-events: none;
+}
+
+.fm-stamp .stamp--charcoal {
+  background-color: var(--surface);
+}
+
+.fm-crop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.fm-crop .structure {
+  height: clamp(110px, 17vh, 180px);
+  padding: 6px;
+  border: 1px solid var(--hair);
+  background-color: var(--paper);
+}
+
+.fm-crop__cap {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fm-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.fm-facts .smiles__value {
+  font-size: 14px;
+}
+
+.fm-meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fm-reason {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.fm-pred {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.fm-pred__smiles {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fm-pred__meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.fm-pred__meta--bad {
+  color: var(--orange-ink);
+}
+
+.fm-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fm-note__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fm-note__field {
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 0;
+  background-color: var(--surface);
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.fm-note__field:focus-visible {
+  outline-offset: 0;
+}
+
+.fm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--hair);
+  background-color: var(--paper);
+}
+
+/* The page and its boxes ----------------------------------------------------- */
+
+.fm-page {
+  min-width: 0;
+  padding: 14px 24px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.fm-page__cap {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fm-page__cap > [aria-hidden="true"] {
+  color: var(--ink);
+}
+
+/* Shrink-wraps the image, so the markers' percentages are of the image itself. */
+.fm-page__sheet {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+  box-shadow: 0 1px 0 var(--hair);
+}
+
+.fm-page__img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(100vh - 120px);
+}
+
+.fm-marker {
+  position: absolute;
+  top: var(--t);
+  left: var(--l);
+  width: var(--w);
+  height: var(--h);
+  padding: 0;
+  border: 0;
+  background: none;
+  outline: 1px solid var(--control-border);
+  outline-offset: 2px;
+}
+
+button.fm-marker {
+  cursor: pointer;
+  transition: outline-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hovering another structure's marker outlines it in orange (the signature link). */
+button.fm-marker:hover {
+  outline: 2px solid var(--orange);
+}
+
+button.fm-marker:focus-visible {
+  outline: 2px solid var(--focus);
+  border-radius: 0;
+}
+
+/* The page's other structures: their state's shape (spec §7 table) at 1 px, under the
+   open one's 2 px. */
+.fm-marker--to-check:not(.fm-marker--current) {
+  outline-color: var(--orange);
+}
+
+.fm-marker--reading:not(.fm-marker--current) {
+  outline: 1px dashed var(--orange);
+}
+
+.fm-marker--accepted:not(.fm-marker--current) {
+  outline-color: var(--accepted);
+}
+
+.fm-marker--rejected:not(.fm-marker--current),
+.fm-marker--failed:not(.fm-marker--current) {
+  outline-color: var(--charcoal);
+}
+
+.fm-marker--not-read:not(.fm-marker--current) {
+  outline: 1px dashed var(--muted);
+}
+
+.fm-marker--current {
+  z-index: 1;
+  outline: 2px solid var(--orange);
+  outline-offset: 4px;
+}
+
+.fm-marker--current.fm-marker--reading {
+  outline-style: dashed;
+}
+
+.fm-marker--current.fm-marker--accepted {
+  outline-color: var(--accepted);
+}
+
+.fm-marker--current.fm-marker--rejected,
+.fm-marker--current.fm-marker--failed {
+  outline-color: var(--charcoal);
+}
+
+.fm-marker--current.fm-marker--not-read {
+  outline: 2px dashed var(--control-border);
+}
+
+/* The board's corner square on the marker that is open. */
+.fm-marker--current::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 8px;
+  height: 8px;
+  background-color: currentColor;
+  color: var(--orange);
+}
+
+.fm-marker--current.fm-marker--accepted::before {
+  color: var(--accepted);
+}
+
+.fm-marker--current.fm-marker--rejected::before,
+.fm-marker--current.fm-marker--failed::before,
+.fm-marker--current.fm-marker--not-read::before {
+  color: var(--charcoal);
+}
+
+.fm-marker__tag {
+  position: absolute;
+  bottom: 100%;
+  left: -4px;
+  margin-bottom: 4px;
+  padding: 1px 5px;
+  background-color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.fm-marker--current .fm-marker__tag {
+  left: 0;
+  margin-bottom: 14px;
+  padding: 2px 6px;
+  background-color: var(--charcoal);
+  font-size: 11px;
+  color: var(--on-charcoal);
+}
+
+.fm-bbox {
+  margin: 12px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Key list ------------------------------------------------------------------- */
+
+.keyhelp {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background-color: rgb(28 33 29 / 0.32);
+}
+
+.keyhelp__sheet {
+  width: min(360px, 100%);
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  box-shadow: 0 12px 32px rgb(28 33 29 / 0.18);
+}
+
+/* Takes focus only so a click on the list keeps Esc working; not a control, so no ring. */
+.keyhelp__sheet:focus {
+  outline: none;
+}
+
+.keyhelp__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.keyhelp__title {
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--green);
+}
+
+.keyhelp__close {
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.keyhelp__close:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.keyhelp__list {
+  margin: 0;
+  padding: 4px 0 8px;
+}
+
+.keyhelp__row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  padding: 7px 16px;
+}
+
+.keyhelp__row + .keyhelp__row {
+  border-top: 1px solid var(--hair);
+}
+
+.keyhelp__row dt {
+  color: var(--ink);
+}
+
+.keyhelp__row dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-2);
+}

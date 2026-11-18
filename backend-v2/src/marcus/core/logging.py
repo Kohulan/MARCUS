@@ -104,7 +104,13 @@ def _stream():
 
 
 # Loggers that servers configure themselves (own handlers, no propagation): pull them in.
-_SERVER_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "gunicorn.error", "gunicorn.access")
+_SERVER_LOGGERS = (
+    "uvicorn",
+    "uvicorn.error",
+    "uvicorn.access",
+    "gunicorn.error",
+    "gunicorn.access",
+)
 
 
 def configure_logging(service: str, level: str | None = None) -> None:

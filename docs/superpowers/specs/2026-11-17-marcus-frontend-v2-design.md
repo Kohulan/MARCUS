@@ -1,6 +1,7 @@
 # MARCUS frontend v2: design
 
-Date: 2026-11-17. Status: approved by the owner on 2026-11-17.
+Date: 2026-11-17. Status: approved by the owner on 2026-11-17. §7 updated the same day
+for the owner's "Survey Sheet" direction (light only, glass buttons, Geist fonts).
 Owner decisions are marked **(decided)**. My own calls are marked **(call)** and can be changed.
 Backend this builds on: `docs/superpowers/specs/2026-11-16-marcus-v2-backend-design.md` (v2 API, section 9).
 
@@ -96,8 +97,9 @@ Kept from v1 **(decided)**: upload, DOI shown as a link, COCONUT DOI check (coun
 molecules already in COCONUT for this DOI), engine choice incl. DECIMER hand-drawn,
 depiction, SMILES copy, structure image download, Ketcher editor, compare engines
 (run all engines on one segment; Tanimoto similarity; MCS highlight; pick one),
-PubChem lookup of a structure, text view and download, JSON export, theme toggle
-(light/dark, follows system by default), notifications, footer links, Matomo.
+PubChem lookup of a structure, text view and download, JSON export, notifications,
+footer links, Matomo. The v1 theme toggle (light/dark) is **not** kept: the owner chose
+light mode only on 2026-11-17 (§7), so it is not a missing v1 feature.
 
 New with v2: live results; queue position; per-page failures with reasons; explicit
 accept / reject with note **(decided)**; edit SMILES or molfile (curation stored on the
@@ -126,40 +128,100 @@ v1 rough edges not carried over: dead feature links, the non-existent router lin
 - **Brand (decided):** keep the MARCUS logo (navy papers + green hexagon lens) and the
   Gmarket Sans wordmark; build a fresh visual style around them. The maintenance page
   (`maintenance/site/maintenance/index.html`) is the first sketch of that direction.
-- **Direction (decided 2026-11-17): "Field Sheet"** (Remix A on the design canvas
-  https://claude.ai/artifact/XnHN4XgbKyB6ggUfLKTkRC, board 6). The owner looked at
-  5 directions and picked a remix of 4 "Specimen Sheet" and 5 "Clean Standard": the clean
-  light page of 5 with the specimen craft of 4. Made with `/impeccable` (seed key
-  6b4eb402). No image generation is available, so the build is **code-led**: the board
-  and the contract below are the reference; there is no comp. A copy of the board is in
-  `frontend-v2/reference/field-sheet-board.html` and `field-sheet-board.png`.
+- **Direction (decided 2026-11-17): "Survey Sheet".** The owner first picked "Field Sheet"
+  (a remix of directions 4 "Specimen Sheet" and 5 "Clean Standard"; board copy kept for
+  history in `frontend-v2/reference/field-sheet-board.html` and `.png`). On the same day
+  the owner asked for a remix of Field Sheet with heronaiapp.com (screenshot
+  `frontend-v2/reference/heron-hero.png`), looked at three mockups (A Survey Sheet,
+  B Green Ledger, C Night Plate; canvas https://claude.ai/artifact/FJzPyqJpGLGUCMaCxQeLhs)
+  and chose **A, Survey Sheet**. It **replaces Field Sheet as the visual truth**. From
+  Field Sheet it keeps two parts: the specimen label table (dark header bar, ruled rows)
+  and the round accepted stamp. Made with `/impeccable` (seed key 6b4eb402). The build is
+  **code-led**: the board `frontend-v2/reference/survey-sheet-board.html` (a canvas
+  artboard source, read as source; it uses inline styles and Google Fonts only because it
+  is a mockup) and the contract below are the reference; there is no comp.
+- **Owner decisions (2026-11-17), Survey Sheet:**
+  1. **Drawing-sheet look (decided).** Field Sheet remixed with heronaiapp.com: a
+     drawing-sheet frame (hairline borders, ruler ticks, "+" corners), UPPERCASE tight
+     headlines, mono uppercase labels, numbered tags `[01]`, bbox and step readouts. The
+     landing hero is a paper page with orange-marked structures.
+  2. **Green leads, orange asks (decided).** Green `#1E4D33` is the primary colour
+     (headings, links, nav, accept and send); accepted is `#2D7A46`. Bold orange `#FA3600`
+     means "needs your eyes": found-structure markers, the main call to action, the
+     "To check" state. Small orange **text** on paper uses `#B82800` (contrast); text on an
+     orange fill is `#141414`.
+  3. **States (decided):** Accepted = green stamp and word; To check = orange badge;
+     Rejected = charcoal and a cross-out (no red); Failed = charcoal tag on a hatched
+     ground; "Reading…" and "Not read yet" stay. The red (rust) and amber state colours
+     are removed.
+  4. **Liquid-glass pill buttons (decided).** Reference liquid-glass.glassapp.dev, made
+     with CSS only (no WebGPU library): `backdrop-filter` blur + saturate, an SVG
+     `feDisplacementMap` refraction filter where supported (Chromium), inset highlight
+     edges; tints orange (primary), green (accept, send), clear (secondary). A solid
+     fallback under `prefers-reduced-transparency: reduce` and where `backdrop-filter` is
+     not supported. Text contrast is WCAG AA on every tint. The SVG filter is an inline
+     `<svg>` in the DOM, mounted once, with classes only (no `style` attribute in
+     pre-rendered pages); the app CSP already allows it.
+  5. **Light mode only (decided).** No dark theme, no theme toggle, no theme script, no
+     dark tokens.
+  6. **Fonts (decided):** Geist (headings and text) and Geist Mono (labels, SMILES, keys),
+     self-hosted, at most two weights each. Gmarket Sans Light stays for the wordmark
+     only. Bricolage Grotesque, Hanken Grotesk and JetBrains Mono are dropped.
+  7. **Minimal copy (decided):** "reduce text, do not be chatty". UI copy is short; the
+     landing keeps a headline, one sentence, two buttons and three short cards; tool labels
+     are terse.
+  8. **Tokens (decided, light, exact):** paper `#F4F3EA`, surface `#FFFFFF`, sunken
+     `#ECEBE1`, ink `#1C211D`, text-2 `#3F443D`, muted `#5E625B`, line `#B9BCB2`, hair
+     `#D9DACF`, tick `#9FA398`, green `#1E4D33`, accepted `#2D7A46`, orange `#FA3600`,
+     orange-ink `#B82800`, on-orange `#141414`, charcoal `#1C211D`. Line `#B9BCB2` is
+     about 1.7:1 on paper, so it is for hairlines only; control borders use control-border
+     `#7E8279` (3.5:1 on paper, 3.9:1 on surface, 3.3:1 on sunken) **(call)**.
 - **Contract** (goes as an HTML comment, first child of `<body>` in the root layout):
-  - THESIS: every structure is a labelled specimen tied to its page; no generic SaaS
-    card dashboard.
-  - OWN-WORLD: warm white paper `#FAFAF7`, ink `#15241B`, deep green `#1E4D33` for
-    actions and headings, `#2D7A46` accepted, amber `#9A5B0C` to check, rust `#B23A2A`
-    rejected or failed. Specimen label tables (dark header bar, ruled rows) on every
-    structure. Round rotated stamps show a decision. Tape strips only on the landing
-    sheet. Bricolage Grotesque headings, Hanken Grotesk text, JetBrains Mono SMILES,
-    Gmarket Sans wordmark.
-  - STORY: the visitor sees a molecule tied to its paper, page and organism, trusts where
-    it came from, and uploads a PDF.
-  - FIRST VIEWPORT: left, "Every molecule has a source." (80 px, deep green), one
-    paragraph, "Upload a PDF" (primary) and "Try a sample paper"; right, a taped specimen
-    sheet with caffeine, an ACCEPTED stamp and its label table; three numbered features
-    below.
-  - FORM: Field Sheet, owner remix of directions 4 + 5; seed key 6b4eb402.
+  - THESIS: every structure is a marked find on its page, numbered and measured like a
+    drawing sheet; no generic SaaS card dashboard.
+  - OWN-WORLD: light only. Drawing-sheet paper `#F4F3EA` in a hairline frame (`#B9BCB2`)
+    with ruler ticks and "+" corners; ink `#1C211D`. Green `#1E4D33` leads (headings,
+    links, accept, send), `#2D7A46` accepted. Bold orange `#FA3600` only for what needs
+    your eyes: found-structure markers, the main action, To check; small orange text
+    `#B82800`, text on orange `#141414`. Rejected and failed are charcoal (cross-out,
+    hatched ground), never red. Specimen label tables and round stamps show decisions.
+    Liquid-glass pill buttons: orange, green, clear. Geist UPPERCASE tight headings and
+    Geist text, Geist Mono uppercase labels and numbered tags [01], Gmarket Sans wordmark.
+  - STORY: the visitor sees a paper page where MARCUS has marked every structure,
+    follows a marker to its checked structure, trusts where it came from, and uploads a
+    PDF.
+  - FIRST VIEWPORT: the drawing-sheet hero, a paper page with orange-marked structures
+    ([01] found, [02] Reading…) and bbox and step readouts; under it "Every molecule has a
+    source." (UPPERCASE, green), one sentence, a CTA cell with "Upload a PDF" (orange
+    glass) and "Try a sample paper" (clear glass); three numbered cards Find, Read, Curate.
+  - FORM: Survey Sheet, owner remix of Field Sheet with heronaiapp.com (2026-11-17);
+    seed key 6b4eb402.
   - FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
     review, the verdict, and DESIGN.md.
 - **Signature interaction (call):** pressing A or R lands a stamp on the structure
-  (scale and rotate in about 160 ms; instant with reduced motion). Every state also has a
-  word and a shape, never colour alone.
-- **Tool screens:** the board shows the Paper view (page, text, structure list). The
-  Review grid and focus mode use the same parts: label tables, stamps, the same state
-  colours.
-- Light and dark mode, both first-class. Dark mode is a builder call in the same world:
-  deep green-black base, paper surfaces become dark green-grey, state colours lightened to
-  keep WCAG AA contrast.
+  (scale and rotate in about 160 ms; instant with reduced motion). The orange marker and
+  its card are one thing: a marker on a page and its structure card carry the same
+  numbered tag `[nn]`; hovering or selecting either outlines the other, and clicking a
+  marker selects and scrolls to its card (Paper view and focus mode; the landing hero
+  shows the markers without cards). Every state also has a word and a shape, never
+  colour alone.
+- **States (decided):**
+
+  | State | Word (exact) | Shape | Colour |
+  |---|---|---|---|
+  | Accepted | "Accepted" | round stamp rotated −12° with the word; the word in the card's tag row | green `#2D7A46` |
+  | To check | "To check" | filled badge; the card gets a 2 px orange outline; a solid orange marker on the page | `#FA3600` fill, `#141414` text |
+  | Rejected | "Rejected" | "✕" and the word; the drawing is crossed by a diagonal line and dimmed, the SMILES struck through; with R a round charcoal stamp lands | charcoal `#1C211D`, muted text |
+  | Failed | "Failed" | filled charcoal tag on a hatched ground (135° stripes `#E6E5DC` on paper), the reason, a retry | charcoal `#1C211D`, tag text `#F4F3EA` |
+  | Reading… | "Reading…" | dashed orange marker on the page; the word on the card | orange outline, ink word |
+  | Not read yet | "Not read yet" | hollow square "□" and the word | muted `#5E625B` |
+
+- **Tool screens:** the Survey Sheet board shows the review grid (tag row `[03] · PAGE 2`,
+  structure, SMILES, state, glass Accept / Reject / Compare, the keys line, the export
+  line). The Paper view keeps the Field Sheet board's layout (page, text, structure list)
+  in the Survey Sheet look; focus mode uses the same parts: drawing-sheet frame, numbered
+  tags, orange markers, label tables, stamps.
+- Light mode only **(decided 2026-11-17)**: no dark theme and no theme toggle.
 - `DESIGN.md` is written from the finished build by the impeccable documenter.
 
 ## 8. Technical calls

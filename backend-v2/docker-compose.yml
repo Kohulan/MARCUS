@@ -395,7 +395,12 @@ services:
     command: ["pytest", "-m", "ml", "tests/workers/test_torch_ocsr.py", "-q", "-s"]
 
   nginx:
-    image: nginxinc/nginx-unprivileged:1.27-alpine
+    # The edge image with the web UI baked in (frontend-v2/Dockerfile: dist/ and
+    # deploy/ui-locations.conf); the context is frontend-v2/ only, not the repo root.
+    build:
+      context: ../frontend-v2
+      dockerfile: Dockerfile
+    image: marcus-v2-nginx:local
     restart: unless-stopped
     read_only: true
     # Request bodies over 1 MB spool to /tmp/client_temp (tmpfs = memory): sized and inside

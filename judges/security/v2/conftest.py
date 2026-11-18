@@ -3,8 +3,8 @@
 Run (local fake-engine stack; nginx is the only published port):
 
     cd /home/kohulan/MARCUS/judges
-    MARCUS_BACKEND_URL=http://localhost:18090 MARCUS_FS_PROBE=docker:marcus-v2-api-1 \
-        uv run pytest security/v2 -v
+    MARCUS_BACKEND_URL=http://localhost:18090 MARCUS_FRONTEND_URL=http://localhost:18090 \
+        MARCUS_FS_PROBE=docker:marcus-v2-api-1 uv run pytest security/v2 -v
 
 `common/target.py` picks the URL and refuses production hosts, as in v1 (the `backend` fixture
 here calls it). The v1 conftest one directory up still loads: its `fs_probe` fixture is reused,
@@ -32,13 +32,6 @@ from common import target  # noqa: E402
 from v2.helpers import API, SharedPaper, V2Owner, upload_paper, wait_paper  # noqa: E402
 
 UP_TIMEOUT_S = 300
-
-
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers",
-        "needs_frontend: needs the v2 React UI, which does not exist yet (skipped until it does)",
-    )
 
 
 @pytest.fixture(scope="session")

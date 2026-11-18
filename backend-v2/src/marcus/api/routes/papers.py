@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import (
@@ -7,6 +8,7 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     Query,
     Request,
     Response,
@@ -28,15 +30,39 @@ from marcus.api.deps import (
     visible,
 )
 from marcus.api.limits import enforce_active_limits
-from marcus.api.read import IMAGE_HEADERS, load_segments, segments_out, steps_by_status, steps_out
-from marcus.api.schemas import Counts, PaperDetail, PaperList, PaperSummary, SegmentList, StepList
+from marcus.api.read import (
+    IMAGE_HEADERS,
+    load_segments,
+    paper_counts,
+    paper_summary,
+    segments_out,
+    steps_by_status,
+    steps_out,
+)
+from marcus.api.schemas import (
+    BulkCurationIn,
+    BulkCurationOut,
+    Counts,
+    PaperDetail,
+    PaperList,
+    SegmentList,
+    StepAccepted,
+    StepList,
+)
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
-from marcus.core.models import Owner, Paper
-from marcus.core.pipeline import cancel_paper, new_paper, remove_paper_files, store_pdf
+from marcus.core.models import Curation, Owner, Paper, Segment
+from marcus.core.pipeline import (
+    RetryNotAllowed,
+    cancel_paper,
+    new_paper,
+    remove_paper_files,
+    retry_page,
+    store_pdf,
+)
 from marcus.core.settings import get_settings
 
 router = APIRouter()
@@ -71,14 +97,17 @@ async def upload_paper(
 async def list_papers(
     owner: Owner = Depends(current_owner), db: AsyncSession = Depends(get_db)
 ) -> PaperList:
-    papers = (
-        await db.execute(
-            select(Paper)
-            .where(Paper.owner_id == owner.id, *visible(Paper))
-            .order_by(Paper.created_at.desc(), Paper.id)
-        )
-    ).scalars()
-    return PaperList(papers=[PaperSummary.model_validate(p) for p in papers])
+    papers = list(
+        (
+            await db.execute(
+                select(Paper)
+                .where(Paper.owner_id == owner.id, *visible(Paper))
+                .order_by(Paper.created_at.desc(), Paper.id)
+            )
+        ).scalars()
+    )
+    counts = await paper_counts(db, [p.id for p in papers])
+    return PaperList(papers=[paper_summary(p, counts[p.id]) for p in papers])
 
 
 @router.get("/papers/{paper_id}", response_model=PaperDetail)
@@ -90,7 +119,7 @@ async def get_paper(
     paper = await get_owned_paper(db, owner, paper_id)
     counts = await steps_by_status(db, paper.id)
     return PaperDetail(
-        **PaperSummary.model_validate(paper).model_dump(),
+        **paper_summary(paper, (await paper_counts(db, [paper.id]))[paper.id]).model_dump(),
         counts=Counts(steps_by_status=counts),
         segments=await segments_out(db, paper.id),
     )
@@ -104,6 +133,47 @@ async def get_segments(
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id)
     return SegmentList(segments=await segments_out(db, paper.id))
+
+
+@router.put("/papers/{paper_id}/curation", response_model=BulkCurationOut)
+async def put_bulk_curation(
+    paper_id: uuid.UUID,
+    body: BulkCurationIn,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> BulkCurationOut:
+    """Status (and note, when the key is present) for many segments of one paper, atomically."""
+    paper = await get_owned_paper(db, owner, paper_id)
+    ids = [item.segment_id for item in body.items]
+    locked = set(
+        (
+            await db.execute(
+                select(Segment.id)
+                .where(Segment.paper_id == paper.id, Segment.id.in_(ids))
+                .order_by(Segment.id)  # one lock order: overlapping bulk calls cannot deadlock
+                .with_for_update()
+            )
+        ).scalars()
+    )
+    if len(locked) != len(ids):
+        await db.rollback()
+        raise not_found()
+    rows = {
+        c.segment_id: c
+        for c in (await db.execute(select(Curation).where(Curation.segment_id.in_(ids)))).scalars()
+    }
+    now = datetime.now(UTC)
+    for item in body.items:
+        cur = rows.get(item.segment_id)
+        if cur is None:
+            cur = Curation(segment_id=item.segment_id)
+            db.add(cur)
+        cur.status = item.status
+        if "note" in item.model_fields_set:
+            cur.note = item.note
+        cur.updated_at = now
+    await db.commit()
+    return BulkCurationOut(updated=len(ids))
 
 
 @router.get("/papers/{paper_id}/steps", response_model=StepList)
@@ -148,6 +218,35 @@ async def page_image(
     return FileResponse(path, media_type="image/png", headers=IMAGE_HEADERS)
 
 
+RETRY_DETAIL = {
+    "not_failed": "Page has not failed",
+    "busy": "Page is still running",
+    "limit": "No retries left for this page",
+}
+
+
+@router.post("/papers/{paper_id}/pages/{n}/retry", status_code=202, response_model=StepAccepted)
+async def retry_page_route(
+    paper_id: uuid.UUID,
+    n: int,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> StepAccepted:
+    paper = await get_owned_paper(db, owner, paper_id)
+    if paper.pages is None or not 0 <= n < paper.pages:
+        raise not_found()
+    try:
+        step = await db.run_sync(lambda s: retry_page(s, paper.id, n))
+    except RetryNotAllowed as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=RETRY_DETAIL[exc.reason]) from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None  # deleted meanwhile
+    await db.commit()
+    return StepAccepted(step_id=step.id)
+
+
 @router.get("/papers/{paper_id}/text")
 async def paper_text(
     paper_id: uuid.UUID,
@@ -165,13 +264,14 @@ async def paper_text(
 async def export_paper(
     paper_id: uuid.UUID,
     format: export.ExportFormat = Query("json"),
+    status: export.ExportStatus | None = Query(None),
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
-    content = await CHEM.run(export.build, format, paper, segments, curations, predictions)
+    content = await CHEM.run(export.build, format, paper, segments, curations, predictions, status)
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],

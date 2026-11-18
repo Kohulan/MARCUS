@@ -1,0 +1,323 @@
+{
+ "id": "00efacdd-8b70-446b-aa9e-b6acd3b333e0",
+ "display_name": "Sample paper (synthetic).pdf",
+ "status": "done",
+ "pages": 5,
+ "doi": "10.1039/d5dd00313j",
+ "title": "Synthetic alkaloids from a sample paper",
+ "engine": "decimer",
+ "ocsr_mode": "auto",
+ "created_at": "2026-11-18T11:48:59.358622Z",
+ "expires_at": "2026-12-18T11:48:59.386449Z",
+ "structures": 10,
+ "accepted": 1,
+ "rejected": 1,
+ "to_review": 8,
+ "failed_pages": 0,
+ "counts": {
+  "steps_by_status": {
+   "done": 18
+  }
+ },
+ "segments": [
+  {
+   "id": "01d64c05-a61f-4a6e-9669-73b1c293006f",
+   "page": 0,
+   "idx": 0,
+   "bbox": [
+    310,
+    438,
+    1550,
+    1315
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "11111111-1111-4111-8111-111111111111",
+     "engine": "molnextr",
+     "engine_version": "1.0",
+     "smiles": "c1ccccc1O",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:03.523686Z"
+    },
+    {
+     "id": "657b051d-58fd-4cf9-afb9-45ac6e48657c",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:03.523686Z"
+    }
+   ]
+  },
+  {
+   "id": "e199ca55-dfff-4327-80b9-0d93476d44d6",
+   "page": 0,
+   "idx": 1,
+   "bbox": [
+    310,
+    2192,
+    1550,
+    3069
+   ],
+   "curation": {
+    "status": "accepted",
+    "smiles": null,
+    "molfile": null,
+    "note": "Checked against the SI"
+   },
+   "predictions": [
+    {
+     "id": "faf42cdb-c08f-43ca-a225-ed7e51727c1d",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:04.750706Z"
+    }
+   ]
+  },
+  {
+   "id": "e1b8e3f9-2d3d-4617-8485-80417fd2e8c9",
+   "page": 1,
+   "idx": 0,
+   "bbox": [
+    310,
+    438,
+    1550,
+    1315
+   ],
+   "curation": {
+    "status": "rejected",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "efc27906-24b8-49e6-800d-2d54675c7877",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:06.047193Z"
+    }
+   ]
+  },
+  {
+   "id": "b8b12b14-80f0-43b3-888c-22de6e5aaea6",
+   "page": 1,
+   "idx": 1,
+   "bbox": [
+    310,
+    2192,
+    1550,
+    3069
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "aedf12b0-29a8-407f-991a-1a4223584461",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:07.243502Z"
+    }
+   ]
+  },
+  {
+   "id": "a7622ded-1402-495d-83da-6fcc3920d7f1",
+   "page": 2,
+   "idx": 0,
+   "bbox": [
+    310,
+    438,
+    1550,
+    1315
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": []
+  },
+  {
+   "id": "284bd696-3273-4397-af45-8b1975f381f9",
+   "page": 2,
+   "idx": 1,
+   "bbox": [
+    310,
+    2192,
+    1550,
+    3069
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "7a653711-99f1-4e28-8fae-9d160de196b2",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:08.654247Z"
+    }
+   ]
+  },
+  {
+   "id": "d94987ca-c6b3-4f91-a321-ca4ddc7cf8bd",
+   "page": 3,
+   "idx": 0,
+   "bbox": [
+    310,
+    438,
+    1550,
+    1315
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "eaab1d4d-200c-498c-b2d8-36f25f1d32e3",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:10.514277Z"
+    }
+   ]
+  },
+  {
+   "id": "a7de296f-3d51-4638-be36-30b39a6f9f70",
+   "page": 3,
+   "idx": 1,
+   "bbox": [
+    310,
+    2192,
+    1550,
+    3069
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "7708da15-5ba4-4103-b60c-8b765b406e7b",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:12.046073Z"
+    }
+   ]
+  },
+  {
+   "id": "0dfec0e9-2cdd-43ce-a1e4-80c597d758ce",
+   "page": 4,
+   "idx": 0,
+   "bbox": [
+    310,
+    438,
+    1550,
+    1315
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "99335f67-33a3-4a20-9d16-ea9e27245b23",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:13.325972Z"
+    }
+   ]
+  },
+  {
+   "id": "c15d3033-4a4e-4799-b700-c871c7814c69",
+   "page": 4,
+   "idx": 1,
+   "bbox": [
+    310,
+    2192,
+    1550,
+    3069
+   ],
+   "curation": {
+    "status": "unchecked",
+    "smiles": null,
+    "molfile": null,
+    "note": null
+   },
+   "predictions": [
+    {
+     "id": "4ba62f41-ce51-4221-b8e8-963b8098cf57",
+     "engine": "decimer",
+     "engine_version": "2.7.1",
+     "smiles": "c1ccccc1",
+     "molfile": null,
+     "valid": true,
+     "ms": 1000,
+     "cached": false,
+     "created_at": "2026-11-18T11:49:15.277767Z"
+    }
+   ]
+  }
+ ]
+}

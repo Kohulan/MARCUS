@@ -1,0 +1,57 @@
+/*
+ * Survey Sheet design tokens (spec §7 decision 8, seed key 6b4eb402). Light only.
+ *
+ * Every value is fixed by the plan's Global Constraints. Contrast (WCAG 2.x) is
+ * pinned in styles.test.ts. Notes for use:
+ * - line is about 1.7:1 on paper: hairlines and frames only, never a control edge
+ *   (controls use control-border, 3.3:1 or more on every ground).
+ * - orange is 3.4:1 on paper: shapes only (markers, outlines, fills). Small orange
+ *   text is orange-ink; text on an orange fill is on-orange.
+ * - accepted is 4.4:1 on sunken: accepted text sits on paper or surface only.
+ * - States always pair a colour with a word and a shape, never colour alone.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Grounds */
+  --paper: #F4F3EA;
+  --surface: #FFFFFF;
+  --sunken: #ECEBE1;
+
+  /* Text */
+  --ink: #1C211D;
+  --text-2: #3F443D;
+  --muted: #5E625B;
+
+  /* Drawing-sheet rules: frame, inner hairline, ruler ticks, failed-ground stripes */
+  --line: #B9BCB2;
+  --hair: #D9DACF;
+  --tick: #9FA398;
+  --hatch: #E6E5DC;
+
+  /* Every control edge: inputs, checkboxes, selects, the solid clear button */
+  --control-border: #7E8279;
+
+  /* Green leads; orange asks; charcoal for rejected and failed */
+  --green: #1E4D33;
+  --accepted: #2D7A46;
+  --orange: #FA3600;
+  --orange-ink: #B82800;
+  --charcoal: #1C211D;
+
+  /* Text set on a filled ground */
+  --on-green: #FFFFFF;
+  --on-orange: #141414;
+  --on-charcoal: #F4F3EA;
+
+  /* Browser surfaces */
+  --focus: var(--green);
+  --selection: #DCEBDF;
+
+  /* Type */
+  --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-text: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mark: "Gmarket Sans", var(--font-text);
+}

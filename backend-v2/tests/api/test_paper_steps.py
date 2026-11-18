@@ -1,4 +1,5 @@
 """GET /api/v2/papers/{id}/steps: read-only step list (timestamps, error_class), no raw error text."""
+
 import uuid
 
 from sqlalchemy import update
@@ -7,7 +8,7 @@ from marcus.core.models import Paper, Step
 from tests.api.conftest import make_client, new_owner, seed_paper
 
 FIELDS = {"id", "kind", "page", "segment_id", "status", "attempts", "error_class",
-          "created_at", "started_at", "finished_at"}  # fmt: skip
+          "created_at", "started_at", "finished_at", "engine"}  # fmt: skip
 
 
 async def test_steps_shape_and_order(app, async_db_session):
@@ -66,3 +67,14 @@ async def test_steps_never_leak_error_text(app, async_db_session):
     assert "Traceback" not in r.text and "secret-path" not in r.text and "/srv/" not in r.text
     failed = [s for s in r.json()["steps"] if s["status"] == "failed"]
     assert failed and failed[0]["error_class"] == "engine_error"
+
+
+async def test_step_out_has_engine(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    async with make_client(app, token) as c:
+        steps = (await c.get(f"/api/v2/papers/{seeded.paper_id}/steps")).json()["steps"]
+    ocsr = [s for s in steps if s["kind"] == "ocsr"]
+    assert ocsr and all(s["engine"] == "decimer" for s in ocsr)
+    assert all(s["engine"] is None for s in steps if s["kind"] != "ocsr")

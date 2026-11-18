@@ -1,0 +1,429 @@
+/*
+ * Paper workspace (/app/papers/:id, Operate mode), in the Survey Sheet vocabulary of the
+ * board's "In the tool: review" strip: a ruled header row (title | glass bed with the
+ * actions), a tool strip (view toggle, counts), then the status bar both views share, with
+ * hatched lines for failed pages. Light only; tokens only; no style props.
+ * base.css loads after this file: rules that refine a base element (h1, a) carry one more
+ * class.
+ */
+
+.ws {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+/* Header row: title | actions ----------------------------------------------- */
+
+.ws-head {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.ws-head__title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px 24px 16px;
+}
+
+/* The paper's own title is data: sentence case as on the board, not a sheet heading. */
+.ws .ws-title {
+  max-width: 60ch;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  text-wrap: balance;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.ws-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.ws-meta:empty {
+  display: none;
+}
+
+.ws-meta__file {
+  overflow-wrap: anywhere;
+}
+
+.ws .ws-meta__doi {
+  overflow-wrap: anywhere;
+}
+
+.ws-head__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-left: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.ws-send {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ws-send__why {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Export: a disclosure over the sheet, a small label table of six links ----- */
+
+.ws-export {
+  position: relative;
+}
+
+.ws-export__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+  box-shadow: 0 12px 28px -10px rgba(15, 30, 22, 0.35);
+  animation: ws-pop 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ws-export__table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ws-export__table th,
+.ws-export__table td {
+  padding: 0;
+  border-top: 1px solid var(--hair);
+}
+
+.ws-export__table tr:first-child > * {
+  border-top: 0;
+}
+
+.ws-export__table th {
+  padding: 10px 16px 10px 14px;
+  font-weight: 400;
+  text-align: left;
+  color: var(--muted);
+  border-right: 1px solid var(--hair);
+}
+
+.ws .ws-export__link {
+  display: block;
+  padding: 10px 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.ws .ws-export__link:hover {
+  background-color: var(--selection);
+  color: var(--green);
+}
+
+.ws .ws-export__link:focus-visible {
+  outline-offset: -2px;
+}
+
+@keyframes ws-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Tool strip: view toggle, counts ------------------------------------------ */
+
+.ws-tools {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+/* A segmented control: two square-cornered cells with the control edge; the pressed one is
+   filled green (state by fill and by aria-pressed, read out by screen readers). */
+.ws-toggle {
+  display: inline-flex;
+  border: 1px solid var(--control-border);
+}
+
+.ws-toggle__button {
+  min-width: 84px;
+  padding: 7px 14px;
+  border: 0;
+  background-color: var(--surface);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ws-toggle__button + .ws-toggle__button {
+  border-left: 1px solid var(--control-border);
+}
+
+.ws-toggle__button:hover {
+  background-color: var(--sunken);
+}
+
+.ws-toggle__button[aria-pressed="true"] {
+  background-color: var(--green);
+  color: var(--on-green);
+  cursor: default;
+}
+
+.ws-toggle__button:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.ws-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Each count carries its state's shape: round green, square orange, a charcoal cross. */
+.ws-counts__accepted::before,
+.ws-counts__check::before,
+.ws-counts__rejected::before,
+.ws-counts__failed::before {
+  display: inline-block;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+
+.ws-counts__accepted::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accepted);
+}
+
+.ws-counts__check::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background-color: var(--orange);
+}
+
+.ws-counts__rejected::before {
+  content: "✕";
+  content: "✕" / ""; /* decorative: the word follows (older engines keep the line above) */
+  vertical-align: 0;
+  color: var(--charcoal);
+}
+
+/* Failed: the hatch of a failed card, drawn dark enough to read at 8 px. */
+.ws-counts__failed::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  box-shadow: inset 0 0 0 1px var(--muted);
+  background: repeating-linear-gradient(135deg, var(--muted) 0 1px, var(--paper) 1px 3px);
+}
+
+/* Status bar --------------------------------------------------------------- */
+
+.ws-status {
+  border-bottom: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.ws-status__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 40px;
+}
+
+.ws-status__cell {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 8px 24px;
+  border-right: 1px solid var(--hair);
+}
+
+.ws-status__readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.ws-status__problem {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+/* Polling: the live note sits at the far end, with a dashed mark like Reading…. */
+.ws-status__live {
+  margin-left: auto;
+  border-right: 0;
+  border-left: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ws-status__live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border: 1px dashed var(--orange);
+}
+
+.ws-status__failures {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-fail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  padding: 8px 16px 8px 24px;
+  border-top: 1px solid var(--line);
+}
+
+.ws .ws-fail__text {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.ws-fail--retrying .ws-fail__text {
+  color: var(--text-2);
+}
+
+/* The views (F7 grid, F9 paper view) ---------------------------------------- */
+
+.ws-view {
+  flex: 1 0 auto;
+  min-height: 320px;
+  background-color: var(--sunken);
+}
+
+/* Loading: the header's shape in hair, no spinner ----------------------------- */
+
+.ws-skeleton {
+  display: block;
+  background-color: var(--hair);
+}
+
+.ws-skeleton--title {
+  width: min(420px, 60%);
+  height: 22px;
+}
+
+.ws-skeleton--meta {
+  width: 180px;
+  height: 12px;
+}
+
+/* Gone (404) and a paper that could not be opened --------------------------- */
+
+.ws-gone {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.ws-gone__sheet {
+  position: relative;
+  max-width: 560px;
+  padding: 40px 44px 36px;
+  border: 1px dashed var(--control-border);
+}
+
+.ws-gone__corner {
+  position: absolute;
+  top: -8px;
+  left: -6px;
+  padding: 0 2px;
+  background-color: var(--paper);
+  font-size: 16px;
+}
+
+.ws-gone .ws-gone__title {
+  font-size: 32px;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.ws-gone .ws-gone__why {
+  margin-top: 14px;
+  max-width: 46ch;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.ws-gone__bed {
+  display: inline-flex;
+  margin-top: 24px;
+  padding: 8px;
+}
