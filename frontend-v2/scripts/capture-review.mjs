@@ -10,6 +10,10 @@ import { basename, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 
 const BASE = process.env.MARCUS_UI_URL ?? "http://localhost:18090";
+if (!["localhost", "127.0.0.1"].includes(new URL(BASE).hostname)) {
+  console.error(`capture-review: refusing ${BASE} (local stack only)`);
+  process.exit(2);
+}
 const OUT = resolve(".impeccable/review");
 const PDF = resolve("public/sample/synth_015.pdf");
 // A real crop of synth_015 (page 1, structure 1), for a realistic single-image result.

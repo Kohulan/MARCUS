@@ -12,20 +12,19 @@ import { ToastHost, ToastProvider } from "./ui/Toasts";
 // caller: BrowserRouter in main.tsx, StaticRouter in entry-server.tsx, MemoryRouter in tests.
 // Each navigation sends one Matomo page view (effects never run in the pre-render).
 /**
- * One Matomo page view per navigation, with the route template (src/analytics.ts). A
- * replace on the same path (the tool dropping ?sample=1 or its picker flag) is not a new page.
+ * One Matomo page view per real page change, with the route template (src/analytics.ts):
+ * only when the path changes, whatever the navigation type. A search or hash change on the
+ * same path (focus mode, the view switch, Back from focus mode, the tool dropping
+ * ?sample=1) is the same page.
  */
 function usePageViews() {
   const location = useLocation();
-  const type = useNavigationType();
-  const last = useRef<{ key: string; path: string } | null>(null);
+  const last = useRef<string | null>(null);
   useEffect(() => {
-    const previous = last.current;
-    if (previous?.key === location.key) return; // StrictMode runs the effect twice
-    last.current = { key: location.key, path: location.pathname };
-    if (type === "REPLACE" && previous?.path === location.pathname) return;
+    if (last.current === location.pathname) return; // also StrictMode's second run
+    last.current = location.pathname;
     trackPage(location.pathname);
-  }, [location.key, location.pathname, type]);
+  }, [location.pathname]);
 }
 
 /** The element a "#id" names; null for none, or for a malformed hash ("#%E0%A4%A"). */

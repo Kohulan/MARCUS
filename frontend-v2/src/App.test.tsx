@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -109,6 +109,32 @@ describe("App routes", () => {
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     const views = (window._paq as unknown[][]).filter((c) => c[0] === "trackPageView");
     expect(views).toHaveLength(1);
+  });
+
+  it("counts a page view only when the path changes, not for ?s=, focus or view, or Back", async () => {
+    window._paq = [];
+    let go!: ReturnType<typeof useNavigate>;
+    function Nav() {
+      go = useNavigate();
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/about"]}>
+        <App />
+        <Nav />
+      </MemoryRouter>,
+    );
+    const views = () => (window._paq as unknown[][]).filter((c) => c[0] === "trackPageView").length;
+    expect(views()).toBe(1);
+    act(() => void go("/about?s=x&focus=1")); // focus mode: a push on the same path
+    act(() => void go("/about?view=paper")); // a view switch
+    act(() => void go(-1)); // Back from focus mode
+    act(() => void go("/about#team"));
+    expect(views()).toBe(1);
+    act(() => void go("/privacy"));
+    expect(views()).toBe(2);
+    act(() => void go(-1)); // Back to another page is a page view
+    await waitFor(() => expect(views()).toBe(3));
   });
 
   it("frames every page with the header, the footer and the one glass filter", () => {

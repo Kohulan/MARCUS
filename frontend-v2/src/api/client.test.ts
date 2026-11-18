@@ -276,4 +276,28 @@ describe("one owner: no parallel requests before the first success", () => {
     pending[3]!.resolve(ok());
     await next;
   });
+
+  it("a first request that never answers holds the others 20 s at most, then the next goes alone", async () => {
+    vi.useFakeTimers();
+    try {
+      void api.listPapers(); // a stalled connection: never settles
+      const images = api.listImages();
+      const upload = api.uploadPaper(new File(["%PDF"], "a.pdf"), { engine: "decimer", ocsr: "auto" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(pending).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(pending).toHaveLength(2); // one of the two waiting requests, alone
+      expect(pending[1]!.url).toBe("/api/v2/images");
+      pending[1]!.resolve(ok());
+      await images;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(3); // the owner is set: the upload goes
+      pending[2]!.resolve(ok());
+      await upload;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

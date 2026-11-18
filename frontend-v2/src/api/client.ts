@@ -97,7 +97,8 @@ export async function toApiError(res: Response): Promise<ApiError> {
 // and the Set-Cookie that arrives last decides which one the browser keeps: an upload could
 // land on the other one. So until one request has succeeded in this page (from then on the
 // cookie is there), requests go out one at a time; a failed one (a 502 while the API
-// restarts, a network error, a 429) lets the next waiting request try.
+// restarts, a network error, a 429) lets the next waiting request try, and so does one that
+// has not answered in 20 s.
 //
 // The gate covers every `api.*` call (they all go through send()). It does NOT cover what
 // the browser requests by itself: an EventSource (useLiveEvents), an <img src> of an API URL
@@ -115,9 +116,28 @@ export function ownerReady(): Promise<void> {
   return readyPromise;
 }
 
+// A first request that never answers (a stalled connection) must not hold every other
+// request for good: after this long the next waiting one goes (alone) in its place.
+const GATE_WAIT_MS = 20_000;
+
+/** True when `first` settled; false when GATE_WAIT_MS passed first. */
+function settledInTime(first: Promise<unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), GATE_WAIT_MS);
+  });
+  return Promise.race([first.then(() => true, () => true), late]).finally(() =>
+    clearTimeout(timer),
+  );
+}
+
 async function send(url: string, init: RequestInit): Promise<Response> {
   while (!ownerSet && firstInFlight) {
-    await firstInFlight.catch(() => undefined);
+    const first = firstInFlight;
+    if (!(await settledInTime(first)) && firstInFlight === first) {
+      firstInFlight = null; // stalled: this request takes its place (the others still wait)
+      break;
+    }
   }
   if (ownerSet) return fetch(url, init);
   const attempt = fetch(url, init);
