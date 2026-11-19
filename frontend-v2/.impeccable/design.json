@@ -628,7 +628,7 @@
       },
       {
         "name": "The Beams",
-        "body": "The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (the muted facts line 5.0:1 on its darkest ground; the drop hint uses text-2).",
+        "body": "The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (measured over 20 s of motion at 1440 × 900: the muted facts line at worst 4.75:1, the drop hint in text-2 8.0:1; \"and\" and \"for\" are large text).",
         "section": "elevation"
       }
     ],

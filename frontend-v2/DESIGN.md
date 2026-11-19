@@ -351,7 +351,7 @@ The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the 
 ### Named Rules
 **The Flat Sheet Rule.** Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, the footer bubbles, menus, toasts, dialogs) lift. The landing's drop ring is printed on the sheet: no glass, no lift.
 
-**The Beams.** The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (the muted facts line 5.0:1 on its darkest ground; the drop hint uses text-2).
+**The Beams.** The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (measured over 20 s of motion at 1440 × 900: the muted facts line at worst 4.75:1, the drop hint in text-2 8.0:1; "and" and "for" are large text).
 
 **The Light Ground Rule.** Glass pills sit on light grounds only: paper, surface, sunken, or the glass bed. Never on charcoal or on a picture (the clear tint drops to 2.3:1 there).
 
