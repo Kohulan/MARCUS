@@ -5,6 +5,7 @@ import App from "./App";
 import { api } from "./api/client";
 
 const realInnerWidth = window.innerWidth;
+const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
 
 function setWidth(px: number) {
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: px });
@@ -45,13 +46,11 @@ function renderAt(path: string | { pathname: string; search?: string; state?: un
 describe("App routes", () => {
   it("renders the landing headline at /", () => {
     renderAt("/");
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Every molecule has a source." }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: HEADLINE })).toBeInTheDocument();
   });
 
   it("loads the lazy tool home at /app and gives it its own title", async () => {
-    document.title = "MARCUS · Every molecule has a source";
+    document.title = `MARCUS · ${HEADLINE}`;
     renderAt("/app");
     expect(
       await screen.findByRole("heading", { level: 1, name: "Drop a PDF here" }),
@@ -104,14 +103,21 @@ describe("App routes", () => {
     expect(api.listPapers).not.toHaveBeenCalled();
   });
 
-  it("the landing's Upload a PDF opens the picker once and counts one page view", async () => {
+  it("a PDF dropped on the landing is uploaded by the tool, with one page view each", async () => {
     window._paq = [];
-    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
-    renderAt({ pathname: "/app", state: { openPicker: true } });
-    await screen.findByRole("heading", { level: 1, name: "Drop a PDF here" });
-    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
-    const views = (window._paq as unknown[][]).filter((c) => c[0] === "trackPageView");
-    expect(views).toHaveLength(1);
+    vi.stubGlobal("scrollTo", vi.fn());
+    vi.spyOn(api, "uploadPaper").mockResolvedValue({ paper_id: "p-new", status: "checking" });
+    vi.spyOn(api, "getPaper").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api, "getSteps").mockReturnValue(new Promise(() => {}));
+    const { container } = renderAt("/");
+    const file = new File(["%PDF"], "alkaloids.pdf", { type: "application/pdf" });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    await waitFor(() => expect(api.uploadPaper).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.uploadPaper).mock.calls[0]![0]).toBe(file);
+    const views = () =>
+      (window._paq as unknown[][]).filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
+    await waitFor(() => expect(views()).toEqual(["/", "/app", "/app/papers/:id"]));
+    vi.unstubAllGlobals();
   });
 
   it("counts a page view only when the path changes, not for ?s=, focus or view, or Back", async () => {
@@ -198,7 +204,7 @@ describe("scroll on navigation", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "go" }));
     expect(scrollTo).toHaveBeenCalledWith(0, 0);
-    expect(screen.queryByRole("heading", { level: 1, name: "Every molecule has a source." })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1, name: HEADLINE })).toBeNull();
     vi.unstubAllGlobals();
   });
 });

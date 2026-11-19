@@ -1,14 +1,9 @@
-import { Fragment } from "react";
+import { faCopyright } from "@fortawesome/free-regular-svg-icons";
+import { faMugHot, faScaleBalanced, faShieldHalved } from "@fortawesome/free-solid-svg-icons";
+import type { ReactNode } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
+import Icon from "./Icon";
 import "./ui.css";
-
-const LINKS: { label: string; to: string; internal?: boolean }[] = [
-  { label: "About", to: "/about", internal: true },
-  { label: "Disclaimer", to: "/disclaimer", internal: true },
-  { label: "GitHub", to: "https://github.com/Kohulan/MARCUS" },
-  { label: "MIT License", to: "https://opensource.org/license/MIT" },
-  { label: "Privacy", to: "/privacy", internal: true },
-];
 
 /** The review workspace (focus mode and the paper view included) keeps the thin line. */
 function isWorkspace(pathname: string): boolean {
@@ -37,31 +32,51 @@ function ThinFooter() {
   );
 }
 
-/** One band of three ruled cells: copyright, credit, links. Stacks on a phone. */
-function BandFooter() {
+/** A link that opens in a new tab, and says so to a screen reader. */
+function Away({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <footer className="site-footer site-footer--band">
-      <p className="site-footer__cell site-footer__copy">© 2025 MARCUS</p>
-      <p className="site-footer__cell site-footer__credit">
-        by <a href="https://kohulanr.com">Kohulan Rajan</a> @{" "}
-        <a href="https://github.com/Steinbeck-Lab">Steinbeck Lab</a>
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+      <span className="visually-hidden"> (opens in a new tab)</span>
+    </a>
+  );
+}
+
+/**
+ * Three porcelain bubbles: the copyright far left, the credit in the middle, the two small
+ * links far right. Sticky at the bottom of the window from 1024 px, in the flow after the
+ * page (so at the end of a page it rests below the content); below 1024 px they stack.
+ */
+function BubbleFooter() {
+  return (
+    <footer className="site-footer site-footer--bubbles">
+      <p className="site-footer__copy">
+        <Icon icon={faCopyright} />
+        <span className="visually-hidden">Copyright </span>2026 MARCUS
       </p>
-      <nav aria-label="Footer" className="site-footer__cell site-footer__nav">
-        {LINKS.map(({ label, to, internal }, i) => (
-          <Fragment key={label}>
-            {i > 0 && (
-              <span className="site-footer__dot" aria-hidden="true">
-                ·
-              </span>
-            )}
-            {internal ? <Link to={to}>{label}</Link> : <a href={to}>{label}</a>}
-          </Fragment>
-        ))}
+      <p className="site-footer__credit">
+        Built with <Icon icon={faMugHot} className="fa-mug" />
+        <span className="visually-hidden">coffee</span> by <Away href="https://kohulanr.com">Kohulan.R</Away> at the{" "}
+        <Away href="https://github.com/Steinbeck-Lab">Steinbeck Lab</Away>,{" "}
+        <Away href="https://www.uni-jena.de">Friedrich Schiller University Jena</Away>
+      </p>
+      <nav aria-label="Footer" className="site-footer__nav">
+        <Link to="/disclaimer">
+          <Icon icon={faScaleBalanced} />
+          Disclaimer
+        </Link>
+        <span className="site-footer__dot" aria-hidden="true">
+          ·
+        </span>
+        <Link to="/privacy">
+          <Icon icon={faShieldHalved} />
+          Privacy
+        </Link>
       </nav>
     </footer>
   );
 }
 
 export default function Footer() {
-  return isWorkspace(useLocation().pathname) ? <ThinFooter /> : <BandFooter />;
+  return isWorkspace(useLocation().pathname) ? <ThinFooter /> : <BubbleFooter />;
 }

@@ -1,814 +1,438 @@
 /*
- * The landing (Persuade mode), values from frontend-v2/reference/survey-sheet-board.html.
- * Light only; every size is a class here (no style attributes: CSP style-src 'self').
- * Hairlines between cells come from a 1 px grid gap over --line, so they follow the layout
- * at every width. Cell fills use background-color only, so a .glassbed cell keeps its grid.
- * base.css loads after this file: where a rule here refines a base class (.mono-label, h1,
- * h2), it is written with one more class.
+ * The landing: the name spelled out and one sentence on the left; the benzene-ring drop zone
+ * and the sample paper on the right; soft beams behind. Light only; every size is a class
+ * here (no style attributes: CSP style-src 'self'). base.css loads after this file: where a
+ * rule here refines a base rule (.mono-label, h1), it is written with one more class.
+ * At 1440 × 900 and 1280 × 720 the page does not scroll.
  */
 
 .landing {
+  position: relative;
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 40%);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Beams (ui/Beams.tsx): drawn small on the canvas, blurred here; behind everything, fainter
+   under the words. The pre-rendered page shows plain paper until the canvas draws. */
+.beams {
+  position: absolute;
+  top: -40px;
+  left: -40px;
+  z-index: -1;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  max-width: none;
+  pointer-events: none;
+  filter: blur(22px);
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.45), #000 66%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.45), #000 66%);
+}
+
+/* The lead: the acrostic, then the sentence and the facts ------------------ */
+
+.lead {
   display: flex;
   flex-direction: column;
-}
-
-/*
- * First viewport (spec §7 contract): the hero, then the whole headline row with both
- * buttons, on a laptop screen too (1280 × 800, 1366 × 768, 1024 × 768). The example page
- * takes the height that is left: --hero-reserve is everything else above the fold, in px
- * plus the headline's two lines (its size is clamp(36px, 4vw + 18px, 76px), line-height
- * 0.92: 2 lines = 7.36vw + 33px). Measured parts (px): frame and header 74; hero caption,
- * ticks and field padding 128; the row's 12 px gap; the title cell's padding 62; 16 to spare.
- */
-.landing {
-  --hero-reserve: calc(325px + 7.36vw);
-  /* The page is 546 px tall at 560 px wide: its width follows the height that is left. */
-  --page-w: min(560px, max(220px, calc((100vh - var(--hero-reserve)) * 560 / 546)));
-}
-
-@supports (height: 100svh) {
-  .landing {
-    --page-w: min(560px, max(220px, calc((100svh - var(--hero-reserve)) * 560 / 546)));
-  }
-}
-
-/* 1200-1279 px: the headline takes three lines (+ 3.68vw + 17px). */
-@media (min-width: 1200px) and (max-width: 1279.98px) {
-  .landing {
-    --hero-reserve: calc(342px + 11.04vw);
-  }
-}
-
-/* 1024-1199 px: the sentence and the buttons are a second row under the headline (+ 140). */
-@media (min-width: 1024px) and (max-width: 1199.98px) {
-  .landing {
-    --hero-reserve: calc(465px + 7.36vw);
-  }
-}
-
-/* Hero: the drawing sheet ------------------------------------------------- */
-
-.hero {
-  padding: 20px 24px 0;
-}
-
-.hero__caption {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 16px;
-}
-
-.hero .hero__caption .mono-label {
-  text-align: center;
-  line-height: 1.4;
-}
-
-.hero__caption + .hero__ticks {
-  margin-top: 6px;
-}
-
-.hero__body {
-  display: flex;
-}
-
-.hero__body > .vticks {
-  flex: 0 0 7px;
-}
-
-.hero__field {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--page-w)) minmax(0, 1fr);
-  grid-template-areas: "bbox page steps";
-  align-items: center;
-  column-gap: 32px;
-  row-gap: 28px;
   min-width: 0;
-  padding: 28px 24px;
+  border-right: 1px solid var(--line);
 }
 
-/* The example page: a container, so everything on it scales with its width
-   (--u is one board pixel of a 560 px page). */
-.xpage {
-  grid-area: page;
-  justify-self: center;
-  width: min(var(--page-w), 100%);
-  container-type: inline-size;
-  border: 1px solid var(--hair);
-  background-color: var(--surface);
-  box-shadow: 0 1px 0 var(--hair); /* a drawing sheet lies flat */
+.lead__title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  padding: clamp(24px, 4.4vh, 40px) 24px clamp(26px, 4.8vh, 44px);
 }
 
-.xpage__inner {
-  --u: calc(100cqw / 560);
-  padding: calc(32 * var(--u)) calc(38 * var(--u)) calc(46 * var(--u));
-}
-
-.xpage .xpage__title {
-  margin: 0 0 calc(50 * var(--u)); /* clear of the [01] tag above its marker */
-  max-width: 70%;
-  font-family: var(--font-text);
-  font-weight: 600;
-  font-size: calc(11 * var(--u));
-  line-height: 1.3;
-  letter-spacing: 0;
-  text-transform: none;
+/* The h1 spells the name: bold green initials (Display, 700), the rest Geist 400 in ink,
+   "and" and "for" in muted (an approved exception to Display = 700, DESIGN.md). */
+.landing .acro {
+  font-size: clamp(34px, min(5.3vw, 8.8vh), 84px);
+  font-weight: 400;
+  line-height: 0.96;
+  letter-spacing: -0.035em;
   color: var(--ink);
 }
 
-.xpage__row {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(30 * var(--u));
+.acro__line {
+  display: block;
+  white-space: nowrap;
 }
 
-.xpage__row--end {
-  align-items: flex-end;
+.acro b {
+  font-weight: 700;
+  color: var(--green);
 }
 
-.xpage__column {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-top: calc(6 * var(--u));
+.acro__link {
+  color: var(--muted);
 }
 
-.xpage__para {
-  margin: calc(24 * var(--u)) 0 calc(22 * var(--u));
+.lead__text {
+  padding: 24px 24px 28px;
+  border-top: 1px solid var(--line);
 }
 
-/* The page's own text, typeset small as on the sheet. */
-.xpage .xpage__text {
-  font-family: var(--font-text);
-  font-weight: 400;
-  font-size: calc(8 * var(--u));
+.lead__text > p:first-child {
+  max-width: 44ch;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.lead .lead__facts {
+  margin-top: 12px;
+  letter-spacing: 0.05em;
   line-height: 1.6;
-  text-transform: none;
+}
+
+/* The actions: the drop zone, then the sample paper ------------------------ */
+
+.act {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 40px 32px;
+}
+
+.act__corner {
+  position: absolute;
+}
+
+.act__corner:nth-child(1) {
+  top: 20px;
+  left: 24px;
+}
+
+.act__corner:nth-child(2) {
+  top: 20px;
+  right: 24px;
+}
+
+.act__corner:nth-child(3) {
+  bottom: 20px;
+  left: 24px;
+}
+
+.act__corner:nth-child(4) {
+  bottom: 20px;
+  right: 24px;
+}
+
+/*
+ * The empty ring: a benzene ring drawn in dashes, waiting for a structure. Hover or focus
+ * draws its double bonds; drag-over turns it orange and the dashes run (the Reading mark);
+ * while a PDF goes to the tool the double bonds alternate (resonance); a refused file strikes
+ * it through like a rejected structure. Printed flat on the sheet: no glass, no lift.
+ */
+.dz {
+  --dz-ink: var(--control-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 12px 20px 14px;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+}
+
+.dz:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dz__ring {
+  width: 124px;
+  height: 136px;
+  margin-bottom: 12px;
+  overflow: visible;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dz__hex {
+  fill: var(--surface);
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-dasharray: 6 5;
+  transition: stroke 200ms;
+}
+
+.dz__bond {
+  fill: none;
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-linecap: butt;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition:
+    stroke-dashoffset 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    stroke 200ms;
+}
+
+.dz__bonds--b .dz__bond {
+  stroke-dashoffset: 0;
+}
+
+.dz__bonds--b {
+  opacity: 0;
+}
+
+.dz__mark path,
+.dz__mark rect {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dz__strike {
+  display: none;
+  stroke: var(--charcoal);
+  stroke-width: 2;
+}
+
+.dz__title {
+  max-width: 26ch;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.dz__browse {
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.dz__hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-2);
 }
 
-/* Markers: [01] found (solid), [02] Reading… (dashed, the dashes run). */
-.marker {
-  position: relative;
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
+.dz__mark--desk,
+.dz__title--desk,
+.dz.is-done .dz__title--idle,
+.dz.is-error .dz__title--idle {
+  display: none;
 }
 
-.marker__img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+/* Hover and focus: the ring becomes aromatic. */
+.dz:hover,
+.dz:focus-visible {
+  --dz-ink: var(--green);
 }
 
-.marker--found {
-  width: calc(214 * var(--u));
-  aspect-ratio: 546 / 449;
-  outline: 2px solid var(--orange);
-  outline-offset: calc(6 * var(--u));
+.dz:hover .dz__bonds--a .dz__bond,
+.dz:focus-visible .dz__bonds--a .dz__bond,
+.dz.is-drag .dz__bonds--a .dz__bond,
+.dz.is-done .dz__bonds--a .dz__bond {
+  stroke-dashoffset: 0;
 }
 
-.marker--reading {
-  width: calc(160 * var(--u));
-  height: calc(132 * var(--u));
-  padding: calc(4 * var(--u));
+/* Drag-over: the moment that needs you, so orange (DESIGN.md: orange also means drag-over). */
+.dz.is-drag {
+  --dz-ink: var(--orange);
 }
 
-.marker__ants {
-  position: absolute;
-  top: calc(-6 * var(--u));
-  left: calc(-6 * var(--u));
-  width: calc(100% + 12 * var(--u));
-  height: calc(100% + 12 * var(--u));
-  max-width: none;
-  overflow: visible;
-  pointer-events: none;
+.dz.is-drag .dz__ring {
+  transform: scale(1.06);
 }
 
-.marker__ants rect {
-  fill: none;
-  stroke: var(--orange);
+.dz.is-drag .dz__hex {
   stroke-width: 2;
   stroke-dasharray: 7 5;
 }
 
-/* The one authored motion of the page: the dashes of the marker being read run. */
+/* Uploading: a closed green ring. */
+.dz.is-done {
+  --dz-ink: var(--accepted);
+  cursor: progress;
+}
+
+.dz.is-done .dz__hex {
+  stroke-dasharray: none;
+}
+
+/* Refused: struck through, as a rejected structure is. */
+.dz.is-error {
+  --dz-ink: var(--charcoal);
+}
+
+.dz.is-error .dz__hex {
+  stroke-dasharray: none;
+}
+
+.dz.is-error .dz__strike {
+  display: block;
+}
+
+.dz.is-error .dz__mark {
+  opacity: 0.45;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .marker__ants rect {
-    animation: marker-read 1.2s linear infinite;
+  .dz__arrow {
+    animation: dz-bob 3.2s ease-in-out infinite;
+  }
+
+  .dz.is-drag .dz__hex {
+    animation: dz-run 1.2s linear infinite;
+  }
+
+  .dz.is-done .dz__bonds--a {
+    animation: dz-resonance 1.6s ease-in-out infinite;
+  }
+
+  .dz.is-done .dz__bonds--b {
+    animation: dz-resonance 1.6s ease-in-out -0.8s infinite;
   }
 }
 
-@keyframes marker-read {
+@keyframes dz-bob {
+  0%,
+  100% {
+    transform: translateY(1.5px);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes dz-run {
   to {
     stroke-dashoffset: -24;
   }
 }
 
-.marker__corner {
-  position: absolute;
-  width: calc(12 * var(--u));
-  height: calc(12 * var(--u));
-  background-color: var(--orange);
-}
+@keyframes dz-resonance {
+  0%,
+  40% {
+    opacity: 1;
+  }
 
-.marker__corner--start {
-  top: calc(-14 * var(--u));
-  left: calc(-14 * var(--u));
-}
+  50%,
+  90% {
+    opacity: 0;
+  }
 
-.marker__corner--end {
-  right: calc(-14 * var(--u));
-  bottom: calc(-14 * var(--u));
-}
-
-.marker__tag {
-  position: absolute;
-  padding: calc(3 * var(--u)) calc(6 * var(--u));
-  font-family: var(--font-mono);
-  font-size: max(11px, calc(11 * var(--u)));
-  line-height: 1.4;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.marker__tag--charcoal {
-  bottom: calc(100% + 14 * var(--u));
-  left: calc(-8 * var(--u));
-  background-color: var(--charcoal);
-  color: var(--on-charcoal);
-}
-
-.marker__tag--orange {
-  top: calc(100% + 14 * var(--u));
-  right: calc(-8 * var(--u));
-  background-color: var(--orange);
-  color: var(--on-orange);
-}
-
-/* Readouts beside the page. */
-.readout {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.9;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.hero__bbox {
-  grid-area: bbox;
-  align-self: end;
-  justify-self: start;
-  color: var(--muted);
-}
-
-.hero__bbox p {
-  margin: 0;
-  white-space: nowrap; /* one line per box */
-}
-
-/* Below 1280 px the side columns are too narrow for a whole box on one line. */
-@media (max-width: 1279.98px) {
-  .hero__bbox p {
-    white-space: normal;
+  100% {
+    opacity: 1;
   }
 }
 
-.hero__steps {
-  grid-area: steps;
-  align-self: start;
-  justify-self: end;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
+@media (forced-colors: active) {
+  .dz__hex,
+  .dz__bond,
+  .dz__strike {
+    stroke: ButtonText;
+  }
+
+  .dz__mark path,
+  .dz__mark rect {
+    stroke: ButtonText;
+  }
 }
 
-.step {
+.act__sample {
   display: flex;
   align-items: center;
-  gap: 9px;
-}
-
-.step__mark {
-  flex: none;
-  width: 9px;
-  height: 9px;
-}
-
-.step--done .step__mark {
-  background-color: var(--accepted);
-}
-
-.step--running .step__mark {
-  background-color: var(--orange);
-}
-
-.step--todo {
-  color: var(--muted);
-}
-
-.step--todo .step__mark {
-  border: 1px solid var(--muted);
-}
-
-/* Narrower than the tool (tablet): the page follows the width only; the readouts sit in
-   a row under it. */
-@media (max-width: 1023.98px) {
-  .landing {
-    --page-w: 560px;
-  }
-
-  .hero__field {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "page page"
-      "bbox steps";
-    align-items: start;
-    padding: 40px 16px 32px;
-  }
-
-  .hero__bbox {
-    align-self: start;
-  }
-}
-
-/* Phone: the page scales to the width; the readouts are left out. */
-@media (max-width: 719.98px) {
-  .hero {
-    padding: 20px 16px 0;
-  }
-
-  .hero__field {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "page";
-    padding: 36px 10px 32px;
-  }
-
-  .hero__bbox,
-  .hero__steps {
-    display: none;
-  }
-}
-
-/* Headline row: h1 | sentence | CTA cell ---------------------------------- */
-
-.lead {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px 260px;
-  gap: 1px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  background-color: var(--line);
-}
-
-.lead > * {
-  background-color: var(--paper);
-}
-
-.lead__title {
-  padding: 28px 24px 34px;
-}
-
-.lead .lead__title h1 {
-  font-size: clamp(36px, 4vw + 18px, 76px);
-  max-width: 14ch;
-}
-
-.lead__text {
-  padding: 22px 18px;
-  font-size: 16px;
-  line-height: 1.5;
-}
-
-.lead__text > p:first-child {
-  max-width: 40ch;
-}
-
-.lead .lead__facts {
-  margin-top: 14px;
-  letter-spacing: 0.05em;
-  line-height: 1.6;
-}
-
-.lead__cta {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px;
-}
-
-.lead__cta .glass {
-  justify-content: space-between;
-  padding: 15px 22px;
-}
-
-/* Only below 1024 px, where /app has only its desktop note. */
-.lead .lead__desk {
-  display: none;
-  letter-spacing: 0.05em;
-}
-
-@media (max-width: 1023.98px) {
-  .lead .lead__desk {
-    display: block;
-  }
+  gap: 14px;
 }
 
 @media (max-width: 1199.98px) {
-  .lead {
-    grid-template-columns: minmax(0, 1fr) 260px;
-    grid-template-areas:
-      "title title"
-      "text cta";
+  .landing {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 38%);
   }
 
-  .lead__title { grid-area: title; }
-  .lead__text { grid-area: text; }
-  .lead__cta { grid-area: cta; }
+  .act {
+    padding: 40px 24px;
+  }
 }
 
-@media (max-width: 719.98px) {
-  /* Phone: the headline and its buttons come first, the example page after them. */
-  .lead {
-    order: -1;
-    margin-top: 0;
-    border-top: 0;
-    border-bottom: 1px solid var(--line);
+/* Below the tool's width: one column, and the zone only says what /app needs. The sample
+   pill still works: it leads to the tool's desktop note. */
+@media (max-width: 1023.98px) {
+  .landing {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "title"
-      "text"
-      "cta";
+  }
+
+  .landing .acro {
+    font-size: clamp(34px, 8.6vw, 72px);
+  }
+
+  .lead {
+    border-right: 0;
   }
 
   .lead__title {
-    padding: 24px 16px 28px;
+    padding: 36px 24px 40px;
   }
 
-  .lead__text {
-    padding: 20px 16px;
+  .act {
+    padding: 44px 24px 48px;
+    border-top: 1px solid var(--line);
   }
 
-  .lead__cta {
-    padding: 20px 16px;
-  }
-}
-
-/* Three numbered cards ------------------------------------------------------ */
-
-.how {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  border-top: 1px solid var(--line);
-  background-color: var(--line);
-  scroll-margin-top: 16px;
-}
-
-.how__card {
-  padding: 22px 24px 30px;
-  background-color: var(--paper);
-}
-
-/* The step number on the heading's first line, set as a [nn] tag (no label above). */
-.how__tag {
-  margin-right: 0.15em;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 13px;
-  letter-spacing: 0;
-  vertical-align: 0.95em;
-  color: var(--orange-ink);
-}
-
-.how .how__title {
-  max-width: 14ch;
-  margin: 0 0 10px;
-  font-size: 30px;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.how__line {
-  max-width: 42ch;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-2);
-}
-
-@media (max-width: 899.98px) {
-  .how {
-    grid-template-columns: minmax(0, 1fr);
+  .dz {
+    cursor: default;
   }
 
-  .how__card {
-    padding: 20px 16px 26px;
+  .dz:hover {
+    --dz-ink: var(--control-border);
   }
 
-  .how .how__title {
-    max-width: none;
-    font-size: 26px;
-  }
-}
-
-/* Review preview: the tool's grid, drawn ---------------------------------- */
-
-.preview {
-  border-top: 1px solid var(--line);
-  background-color: var(--sunken);
-}
-
-.preview__bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 1px;
-  border-bottom: 1px solid var(--line);
-  background-color: var(--line);
-}
-
-/* Paper, not sunken: the green "Accepted" count needs paper (sunken is 4.4:1). */
-.preview__bar > * {
-  background-color: var(--paper);
-}
-
-.preview__name {
-  display: flex;
-  align-items: center;
-  padding: 16px 24px;
-}
-
-.preview__title {
-  font-weight: 700;
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.preview__counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 18px;
-  padding: 12px 20px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.count {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-}
-
-.count__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-
-.count__dot--accepted {
-  background-color: var(--accepted);
-}
-
-.count__dot--check {
-  background-color: var(--orange);
-}
-
-.preview__send {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-}
-
-/* A pill in the illustration: drawn, never pressed. */
-.glass.glass--still {
-  cursor: default;
-  pointer-events: none;
-}
-
-.preview__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  border-bottom: 1px solid var(--line);
-  background-color: var(--line);
-}
-
-.pcard {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 290px;
-  padding: 14px;
-  background-color: var(--surface);
-}
-
-.pcard__tags {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.pcard__draw {
-  height: 156px;
-  padding: 8px 6px;
-}
-
-.pcard__smiles {
-  display: block;
-  padding-top: 8px;
-  border-top: 1px solid var(--hair);
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  color: var(--ink);
-}
-
-.pcard__smiles--struck {
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
-.pcard__stamp {
-  position: absolute;
-  right: 14px;
-  bottom: 44px;
-}
-
-.pcard--check {
-  outline: 2px solid var(--orange);
-  outline-offset: -2px;
-}
-
-.pcard__note {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.pcard__note--check {
-  color: var(--orange-ink);
-}
-
-.pcard__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.pcard__reason {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 0;
-  font-size: 14px;
-  color: var(--text-2);
-}
-
-.pcard__reason .pcard__reason-title {
-  font-weight: 700;
-  font-size: 18px;
-  line-height: 1.25;
-  color: var(--ink);
-}
-
-.pcard--failed .pcard__actions {
-  margin-top: 0;
-}
-
-.preview__foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 24px;
-  padding: 12px 24px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.6;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-@media (max-width: 1099.98px) {
-  .preview__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 899.98px) {
-  .preview__bar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 599.98px) {
-  .preview__grid {
-    grid-template-columns: minmax(0, 1fr);
+  .dz:hover .dz__bonds--a .dz__bond {
+    stroke-dashoffset: 1;
   }
 
-  .pcard {
-    min-height: 0;
+  .dz__mark--up,
+  .dz__title--idle,
+  .dz__hint--size {
+    display: none;
   }
 
-  .pcard--failed .pcard__reason {
-    padding: 28px 0;
+  .dz__mark--desk,
+  .dz__title--desk {
+    display: block;
   }
 
-  .preview__name,
-  .preview__counts,
-  .preview__foot {
-    padding-right: 16px;
-    padding-left: 16px;
+  .beams {
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), #000 60%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), #000 60%);
   }
-}
-
-/* How to cite ------------------------------------------------------------- */
-
-.cite {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) auto;
-  gap: 1px;
-  border-top: 1px solid var(--line);
-  background-color: var(--line);
-  scroll-margin-top: 16px;
-}
-
-.cite > * {
-  background-color: var(--paper);
-}
-
-.cite__label {
-  padding: 22px 24px;
-}
-
-.cite .cite__heading {
-  font-family: var(--font-mono);
-  font-weight: 400;
-  font-size: 11px;
-  line-height: 1.6;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.cite__text {
-  padding: 20px 24px 22px;
-}
-
-.cite__text p {
-  max-width: 58ch; /* about 75 characters of Geist a line */
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-.cite__text a {
-  overflow-wrap: anywhere;
-}
-
-.cite__copy {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 28px;
 }
 
 @media (max-width: 719.98px) {
-  .cite {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+  .lead__title {
+    padding: 28px 16px 30px;
   }
 
-  .cite__label {
-    padding: 18px 16px 4px;
+  .lead__text {
+    padding: 20px 16px 24px;
   }
 
-  .cite__text {
-    padding: 4px 16px 18px;
-  }
-
-  .cite__copy {
-    justify-content: flex-start;
-    padding: 16px;
-    border-top: 1px solid var(--line);
+  .act {
+    padding: 40px 16px 44px;
   }
 }

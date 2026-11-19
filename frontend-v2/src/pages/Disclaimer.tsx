@@ -46,8 +46,12 @@ export default function Disclaimer() {
         <p>
           MARCUS is released under the MIT licence, as is, without warranty. The models and
           parts it uses (DECIMER, MolNexTR, MolScribe, Docling) have their own licences. If you
-          use MARCUS in your research, please cite it (<Link to="/#cite">How to cite</Link>) and the
-          tools it builds on (<Link to="/about">About</Link>).
+          use MARCUS in your research, please cite it (<Link to="/about#cite">How to cite</Link>)
+          and the tools it builds on (<Link to="/about">About</Link>).
+        </p>
+        <p>
+          Icons: Font Awesome Free 6.7.2 by Fonticons, Inc., under{" "}
+          <a href="https://fontawesome.com/license/free">CC BY 4.0</a>.
         </p>
       </InfoSection>
 

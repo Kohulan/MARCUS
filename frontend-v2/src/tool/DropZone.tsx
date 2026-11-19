@@ -4,48 +4,11 @@ import { TOO_LARGE } from "../api/client";
 import { ENGINES } from "../api/engines";
 import type { Engine } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { ACCEPT, fileKind, MAX_BYTES, type FileKind } from "./files";
 import "./tool.css";
 
-/** What the backend takes (marcus/api/uploads.py): a PDF, or one PNG, JPEG, TIFF or WebP image. */
-export const MAX_BYTES = 20 * 1024 * 1024;
 export const WRONG_TYPE = "Use a PDF or a PNG, JPEG, TIFF or WebP image.";
 const ONE_FILE = "Drop one file at a time.";
-
-export type FileKind = "pdf" | "image";
-
-const BY_TYPE: Record<string, FileKind> = {
-  "application/pdf": "pdf",
-  "image/png": "image",
-  "image/jpeg": "image",
-  "image/tiff": "image",
-  "image/webp": "image",
-};
-
-// Some systems give no type for a TIFF or WebP: then the extension decides. The server
-// checks the bytes either way.
-const BY_EXTENSION: Record<string, FileKind> = {
-  pdf: "pdf",
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
-  tif: "image",
-  tiff: "image",
-  webp: "image",
-};
-
-const ACCEPT = [...Object.keys(BY_TYPE), ...Object.keys(BY_EXTENSION).map((e) => `.${e}`)].join(
-  ",",
-);
-
-/** "pdf", "image", or null for a type the backend refuses. */
-function fileKind(file: File): FileKind | null {
-  const byType = BY_TYPE[file.type];
-  if (byType) return byType;
-  if (file.type !== "" && file.type !== "application/octet-stream") return null;
-  const ext = file.name.toLowerCase().split(".").pop() ?? "";
-  return BY_EXTENSION[ext] ?? null;
-}
-
 
 type DropZoneProps = {
   engine: Engine;
@@ -59,9 +22,6 @@ type DropZoneProps = {
   onRefuse: (reason: string) => void;
   /** What is being uploaded, or null. Everything is disabled meanwhile. */
   busy: string | null;
-  /** Open the file picker once on mount (the landing's "Upload a PDF"). */
-  openPicker: boolean;
-  onPickerOpened: () => void;
   /** Problems of the last try (refused file, upload error), shown in the drop area. */
   message: ReactNode;
   /** A live countdown shown under the message, outside the alert (never re-announced). */
@@ -80,21 +40,11 @@ export default function DropZone({
   onFile,
   onRefuse,
   busy,
-  openPicker,
-  onPickerOpened,
   message,
   wait,
 }: DropZoneProps) {
   const input = useRef<HTMLInputElement>(null);
-  const opened = useRef(false);
   const [over, setOver] = useState(false);
-
-  useEffect(() => {
-    if (!openPicker || opened.current) return;
-    opened.current = true; // StrictMode runs this effect twice; the picker opens once
-    input.current?.click();
-    onPickerOpened();
-  }, [openPicker, onPickerOpened]);
 
   // A file dropped beside the drop area would make the browser leave the tool to show it.
   useEffect(() => {

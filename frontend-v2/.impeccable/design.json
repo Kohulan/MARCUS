@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-18T19:27:47+00:00",
+  "generatedAt": "2026-11-19T13:00:00+00:00",
   "title": "Design System: MARCUS",
   "extensions": {
     "colorMeta": {
@@ -338,6 +338,10 @@
         "displayName": "Data",
         "purpose": "SMILES and machine strings; case kept, wraps anywhere."
       },
+      "display-acrostic": {
+        "displayName": "Display acrostic",
+        "purpose": "The landing's h1 only: the name spelled out, initials Geist 700 forest green, the rest Geist 400 ink, \"and\"/\"for\" muted (approved exception to Display = 700)."
+      },
       "display-info": {
         "displayName": "Display info",
         "purpose": "The h1 of About, Privacy and Disclaimer; clamp(36px, 2.6vw + 18px, 60px)."
@@ -410,6 +414,16 @@
         "name": "sheet-flat",
         "value": "0 1px 0 #D9DACF",
         "purpose": "A drawing sheet lying flat (the landing's example page, the paper-view page); the most a printed sheet may carry."
+      },
+      {
+        "name": "water-drop",
+        "value": "inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.35), inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55), 0 5px 10px -7px rgba(15, 30, 22, 0.45)",
+        "purpose": "The Waterline nav's drop of green water. Token --water-drop."
+      },
+      {
+        "name": "porcelain",
+        "value": "inset 0 1px 0 #FFFFFF, inset 0 -1.5px 2px rgba(28, 33, 29, 0.1), inset 0 0 0 1px rgba(28, 33, 29, 0.07), 0 1px 1px rgba(15, 30, 22, 0.1), 0 8px 16px -10px rgba(15, 30, 22, 0.45)",
+        "purpose": "The footer's opaque porcelain bubbles. Token --porcelain."
       }
     ],
     "motion": [
@@ -440,23 +454,19 @@
         "value": "560px"
       },
       {
-        "name": "lead-stack",
+        "name": "phone-inset",
         "value": "720px"
       },
       {
-        "name": "cards-stack",
-        "value": "900px"
-      },
-      {
-        "name": "nav-row",
-        "value": "960px"
+        "name": "info-stack",
+        "value": "860px"
       },
       {
         "name": "tool-min",
         "value": "1024px"
       },
       {
-        "name": "lead-wide",
+        "name": "landing-wide",
         "value": "1200px"
       },
       {
@@ -495,12 +505,28 @@
       "css": ".ds-glassbed { padding: 18px; background-color: #F4F3EA; background-image: linear-gradient(#D9DACF 1px, transparent 1px), linear-gradient(90deg, #D9DACF 1px, transparent 1px); background-size: 16px 16px; } .ds-glass-clear { font-family: var(--font-mono, 'Geist Mono', monospace); font-weight: 500; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border: 0; border-radius: 999px; cursor: pointer; -webkit-backdrop-filter: blur(3px) saturate(1.8); backdrop-filter: blur(3px) saturate(1.8); box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(255,255,255,0.3), inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -12px 18px -12px rgba(0,0,0,0.22), 0 10px 24px -8px rgba(15,30,22,0.35); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.25)); color: #1C211D; } .ds-glass-clear:hover { transform: scale(1.03); } .ds-glass-clear:focus-visible { outline: 2px solid var(--green, #1E4D33); outline-offset: 2px; }"
     },
     {
-      "name": "Header Nav Cells",
+      "name": "Waterline Nav",
       "kind": "nav",
-      "refersTo": "nav-cell",
-      "description": "The header as a row of ruled cells; the tool cell is solid green.",
-      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-cell\" href=\"#\">How it works</a><a class=\"ds-nav-cell\" href=\"#\">Cite</a><a class=\"ds-nav-cell ds-nav-cell--tool\" href=\"#\">Open the tool</a></nav>",
-      "css": ".ds-nav { display: flex; border: 1px solid #B9BCB2; background: #F4F3EA; width: max-content; } .ds-nav-cell { display: block; width: 150px; padding: 12px 14px 26px; border-left: 1px solid #B9BCB2; font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; color: #1C211D; text-decoration: none; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav-cell:first-child { border-left: 0; } .ds-nav-cell:hover { background: #ECEBE1; } .ds-nav-cell--tool { width: 170px; background: #1E4D33; color: #FFFFFF; } .ds-nav-cell--tool:hover { background: #1C211D; } .ds-nav-cell:focus-visible { outline: 2px solid #1E4D33; outline-offset: -4px; } .ds-nav-cell--tool:focus-visible { outline-color: #FFFFFF; }"
+      "refersTo": "nav-waterline",
+      "description": "A clear glass pill of three mono items with green icons; the current page's item holds a drop of green water that stretches to the item under pointer or focus and settles with a ripple.",
+      "html": "<nav class=\"ds-wl\"><span class=\"ds-wl-drop\"></span><a class=\"ds-wl-item\" href=\"#\" aria-current=\"page\">About</a><a class=\"ds-wl-item\" href=\"#\">GitHub</a><a class=\"ds-wl-item\" href=\"#\">Open the tool &rarr;</a></nav>",
+      "css": ".ds-wl { position: relative; display: inline-flex; padding: 4px; border-radius: 999px; background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.25)); backdrop-filter: blur(3px) saturate(1.8); box-shadow: inset 0 1.5px 0 rgba(255,255,255,.9), inset 0 -2px 3px rgba(255,255,255,.3), inset 0 0 0 1px rgba(255,255,255,.45), inset 0 -12px 18px -12px rgba(0,0,0,.22), 0 10px 24px -8px rgba(15,30,22,.35); isolation: isolate; } .ds-wl-item { position: relative; z-index: 2; padding: 10px 18px; border-radius: 999px; font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 12px; line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; color: #1C211D; text-decoration: none; } .ds-wl-item:focus-visible { outline: 2px solid #1E4D33; outline-offset: 1px; } .ds-wl-drop { position: absolute; z-index: 1; top: 4px; bottom: 4px; left: 4px; width: 88px; border-radius: 999px; background: linear-gradient(180deg, rgba(45,122,70,.14), rgba(30,77,51,.3)); box-shadow: inset 0 1.5px 0 rgba(255,255,255,.9), inset 0 0 0 1px rgba(255,255,255,.35), inset 0 -8px 10px -8px rgba(30,77,51,.55), 0 5px 10px -7px rgba(15,30,22,.45); }"
+    },
+    {
+      "name": "Porcelain Footer Bubble",
+      "kind": "footer",
+      "refersTo": "footer-bubble",
+      "description": "An opaque glazed-white pill in the footer (copyright, credit, links); three of them, sticky at the bottom from 1024px.",
+      "html": "<p class=\"ds-bubble\">Disclaimer &middot; Privacy</p>",
+      "css": ".ds-bubble { position: relative; display: inline-block; margin: 0; padding: 3px 14px; border-radius: 999px; line-height: 24px; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #3F443D; background: radial-gradient(120% 90% at 30% 0%, #FFFFFF 0%, #FBFBF7 45%, #EFEFE8 100%); box-shadow: inset 0 1px 0 #FFFFFF, inset 0 -1.5px 2px rgba(28,33,29,.1), inset 0 0 0 1px rgba(28,33,29,.07), 0 1px 1px rgba(15,30,22,.1), 0 8px 16px -10px rgba(15,30,22,.45); }"
+    },
+    {
+      "name": "Drop Ring",
+      "kind": "input",
+      "refersTo": "drop-ring",
+      "description": "The landing's drop zone: an empty benzene ring in dashes; green with double bonds on hover and focus, orange and running on drag-over, closed green with resonance while uploading, struck through in charcoal when a file is refused.",
+      "html": "<button class=\"ds-ring\"><svg viewBox=\"0 0 120 132\" width=\"124\" height=\"136\"><polygon points=\"60,8 110.2,37 110.2,95 60,124 9.8,95 9.8,37\" fill=\"#FFFFFF\" stroke=\"#7E8279\" stroke-width=\"1.5\" stroke-dasharray=\"6 5\"/></svg><span class=\"ds-ring-title\">Drop a PDF here or <u>browse</u></span><span class=\"ds-ring-hint\">PDF up to 20 MB</span></button>",
+      "css": ".ds-ring { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 20px 14px; border: 0; background: none; color: #1C211D; cursor: pointer; } .ds-ring-title { font-family: Geist, sans-serif; font-weight: 700; font-size: 17px; line-height: 1.3; } .ds-ring-title u { color: #1E4D33; } .ds-ring-hint { font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #3F443D; } .ds-ring:focus-visible { outline: 2px solid #1E4D33; outline-offset: 2px; }"
     },
     {
       "name": "Segmented Filter",
@@ -545,18 +571,19 @@
   ],
   "narrative": {
     "northStar": "The Survey Sheet",
-    "overview": "\n**Creative North Star: \"The Survey Sheet\"**\n\nEvery screen is a drawing sheet laid flat on a warm paper ground: a hairline frame, ruled cells, \"+\" corner marks, ruler ticks every 8px, and mono captions that read like a plate's title block. Structures sit in surface-white cells inside that grid, and the curation states are marked on the sheet the way a surveyor marks a field sheet: a round stamp for accepted, a cross-out for rejected, a hatched ground for failed, an orange fill or outline for what still needs a person's eyes.\n\nThe density is a working document, not a brochure. Cells share 1px rules instead of floating as cards; type is either a heavy uppercase Geist heading in forest green or a small uppercase Geist Mono readout. The only objects that rise off the sheet are the liquid-glass pill buttons, which sit on light grounds and carry the actions. Light mode only.\n\nThe world is evidence-first: page numbers, bounding boxes, engine names and counts are printed as readouts, never decorated. Copy is minimal; a state is its exact word.",
+    "overview": "\n**Creative North Star: \"The Survey Sheet\"**\n\nEvery screen is a drawing sheet laid flat on a warm paper ground: a hairline frame, ruled cells, \"+\" corner marks, ruler ticks every 8px, and mono captions that read like a plate's title block. Structures sit in surface-white cells inside that grid, and the curation states are marked on the sheet the way a surveyor marks a field sheet: a round stamp for accepted, a cross-out for rejected, a hatched ground for failed, an orange fill or outline for what still needs a person's eyes.\n\nThe density is a working document, not a brochure. Cells share 1px rules instead of floating as cards; type is either a heavy uppercase Geist heading in forest green or a small uppercase Geist Mono readout. The only objects that rise off the sheet are the liquid-glass pill buttons (the header's Waterline nav among them), which sit on light grounds and carry the actions, and the footer's porcelain bubbles. The header and the footer float free of the ruled sheet: the frame is the page's own. Light mode only.\n\nThe world is evidence-first: page numbers, bounding boxes, engine names and counts are printed as readouts, never decorated. Copy is minimal; a state is its exact word.\n\n",
     "keyCharacteristics": [
       "Warm paper ground (#F4F3EA) with white structure cells, ruled by 1px hairlines.",
       "Forest green leads; orange asks for attention; charcoal marks rejected and failed.",
       "Geist 700 uppercase headings, Geist Mono uppercase labels and readouts; two weights per family.",
       "Square cells and sheets; round only for things that act (pills) or mark (stamps, dots).",
-      "Flat sheet; glass pills, menus, toasts and dialogs are the only lifted objects."
+      "Flat sheet; glass pills (the Waterline nav included), porcelain footer bubbles, menus, toasts and dialogs are the only lifted objects.",
+      "Icons are Font Awesome Free 6.7.2 (CC BY 4.0), inline SVG through one Icon component, always beside a word."
     ],
     "rules": [
       {
         "name": "The Orange Asks Rule",
-        "body": "Orange means a person is needed: to check, being read, or the one first action. It never decorates, never marks success, and never sets small text (use orange-ink).",
+        "body": "Orange means a person is needed: to check, being read, a file being dragged over the drop ring, or the one first action. It never decorates, never marks success, and never sets small text (use orange-ink).",
         "section": "colors"
       },
       {
@@ -591,12 +618,17 @@
       },
       {
         "name": "The Flat Sheet Rule",
-        "body": "Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, menus, toasts, dialogs) lift.",
+        "body": "Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, the footer bubbles, menus, toasts, dialogs) lift. The landing's drop ring is printed on the sheet: no glass, no lift.",
         "section": "elevation"
       },
       {
         "name": "The Light Ground Rule",
         "body": "Glass pills sit on light grounds only: paper, surface, sunken, or the glass bed. Never on charcoal or on a picture (the clear tint drops to 2.3:1 there).",
+        "section": "elevation"
+      },
+      {
+        "name": "The Beams",
+        "body": "The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (measured over 20 s of motion at 1440 × 900: the muted facts line at worst 4.75:1, the drop hint in text-2 8.0:1; \"and\" and \"for\" are large text).",
         "section": "elevation"
       }
     ],
@@ -608,7 +640,8 @@
       "Do give every control a control-border (#7E8279) edge.",
       "Do set headings, labels and buttons uppercase through CSS and keep source text in sentence case.",
       "Do place glass pills on paper, surface, sunken or the glass bed, with their solid fallbacks intact.",
-      "Do keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP).",
+      "Do keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP). Positions that move at run time (the nav's drop) go through the CSSOM (style.setProperty).",
+      "Do draw icons with the Icon component (Font Awesome Free, named imports), next to their word.",
       "Do use the one easing, cubic-bezier(0.16, 1, 0.3, 1), at 160 to 220ms, and drop motion under prefers-reduced-motion."
     ],
     "donts": [
@@ -617,9 +650,10 @@
       "Don't put accepted-green text on sunken.",
       "Don't draw a control edge in line or hair.",
       "Don't put glass pills on charcoal or over a picture.",
-      "Don't cast shadows from things printed on the sheet: cells, cards, tables, the example page.",
+      "Don't cast shadows from things printed on the sheet: cells, cards, tables, the drop ring.",
       "Don't load a weight outside Geist 400/700 and Geist Mono 400/500, or use Gmarket Sans for anything but the wordmark.",
-      "Don't round content containers; radius is for pills, stamps, dots and small control corners."
+      "Don't round content containers; radius is for pills (the nav, the footer bubbles), stamps, dots and small control corners.",
+      "Don't put a box or rule around the header row; the frame belongs to the page."
     ]
   }
 }

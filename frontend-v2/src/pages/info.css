@@ -43,6 +43,7 @@
 }
 
 .info__body {
+  min-width: 0;
   padding: 4px 0 24px;
 }
 
@@ -144,9 +145,407 @@
   overflow-wrap: anywhere;
 }
 
+/* Anchors from other pages ("/about#cite") land a little under the window's top. */
+.info__section[id] {
+  scroll-margin-top: 16px;
+}
+
+/* How it works: three numbered lines, then the sample paper's crop and run ------ */
+
+.steps3 {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.info__section .steps3 li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  max-width: none;
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.info__section .steps3 li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* The step number set as a [nn] tag beside the heading; drawn, not read. */
+.steps3__tag {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--orange-ink);
+}
+
+.info .steps3 h3 {
+  font-size: 17px;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.info__section .steps3 p {
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.how-ex {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+/* The crop: a structure cell, white in a hairline frame, with a mono caption. */
+.crop {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.crop__img {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  padding: 14px;
+  object-fit: contain;
+}
+
+.crop__caption {
+  padding: 6px 10px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.runlog {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.info__section .runlog__head {
+  max-width: none;
+  padding: 6px 10px;
+  background: var(--charcoal);
+  color: var(--on-charcoal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.runlog ol {
+  margin: 0;
+  padding: 8px 10px 10px;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.9;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.info__section .runlog .step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: none;
+  margin: 0;
+}
+
+.step__mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+}
+
+.step--done .step__mark {
+  background-color: var(--accepted);
+}
+
+.step--running .step__mark {
+  background-color: var(--orange);
+}
+
+.step--todo {
+  color: var(--muted);
+}
+
+.step--todo .step__mark {
+  border: 1px solid var(--muted);
+}
+
+/* Example: the review grid, drawn across the reading column ---------------- */
+
+.info__section.info__section--figure {
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
+}
+
+.info .info__section--figure h2 {
+  padding: 0 32px;
+}
+
+.preview {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background-color: var(--sunken);
+}
+
+.preview__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 1px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--line);
+}
+
+/* Paper, not sunken: the green "Accepted" count needs paper (sunken is 4.4:1). */
+.preview__bar > * {
+  background-color: var(--paper);
+}
+
+.preview__name {
+  display: flex;
+  align-items: center;
+  padding: 14px 32px;
+}
+
+.info__section .preview__title {
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.info__section .preview__counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  max-width: none;
+  padding: 12px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.count__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.count__dot--accepted {
+  background-color: var(--accepted);
+}
+
+.count__dot--check {
+  background-color: var(--orange);
+}
+
+.preview__send {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+/* A pill in the illustration: drawn, never pressed. */
+.glass.glass--still {
+  cursor: default;
+  pointer-events: none;
+}
+
+.preview__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--line);
+}
+
+.pcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 290px;
+  padding: 14px;
+  background-color: var(--surface);
+}
+
+.info__section .pcard p {
+  max-width: none;
+  margin-top: 0;
+}
+
+.pcard__tags {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pcard__draw {
+  height: 156px;
+  padding: 8px 6px;
+}
+
+.pcard__smiles {
+  display: block;
+  padding-top: 8px;
+  border-top: 1px solid var(--hair);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.pcard__smiles--struck {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.pcard__stamp {
+  position: absolute;
+  right: 14px;
+  bottom: 44px;
+}
+
+.pcard--check {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+
+.info__section .pcard__note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.info__section .pcard__note--check {
+  color: var(--orange-ink);
+}
+
+.info__section .pcard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pcard__reason {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.info__section .pcard__reason-title {
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.info__section .pcard--failed .pcard__actions {
+  margin-top: 0;
+}
+
+.preview__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 12px 32px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.info__section .preview__foot p {
+  max-width: none;
+  margin: 0;
+}
+
+/* Cite: the citation and its Copy pill on the glass bed -------------------- */
+
+.cite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+}
+
+.cite a {
+  overflow-wrap: anywhere;
+}
+
+.cite__copy {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+}
+
 @media (max-width: 859.98px) {
   .info {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .info .info__section--figure h2 {
+    padding: 0 16px;
+  }
+
+  .preview__name,
+  .preview__foot {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .preview__bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cite {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cite__copy {
+    justify-self: start;
   }
 
   .info__head {
@@ -159,5 +558,19 @@
 
   .info__section {
     padding: 24px 16px 26px;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .preview__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pcard {
+    min-height: 0;
+  }
+
+  .pcard--failed .pcard__reason {
+    padding: 28px 0;
   }
 }

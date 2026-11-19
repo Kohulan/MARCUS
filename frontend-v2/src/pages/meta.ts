@@ -12,19 +12,19 @@ const DESCRIPTION =
   "MARCUS finds the chemical structures in a scientific PDF, reads them with DECIMER, " +
   "MolNexTR or MolScribe, and helps you check them before they go into COCONUT.";
 
-// Every page shows the Gmarket wordmark and a Geist 700 h1 in its first screen; the
-// landing also opens on the Geist Mono readouts of the hero sheet.
+// Every page shows the Gmarket wordmark and Geist 700 (an h1, or the landing's initials) in
+// its first screen; the landing also opens on Geist Mono 400 (the facts line, the drop hint).
 const BASE = ["gmarket-mark", "geist-latin-700-normal"] as const;
 
 const META: Record<string, PageMeta> = {
   "/": {
-    title: "MARCUS · Every molecule has a source",
+    title: "MARCUS · Molecular Annotation and Recognition for Curating Unravelled Structures",
     description: DESCRIPTION,
     preload: [...BASE, "geist-mono-latin-400-normal"],
   },
   "/about": {
     title: "About · MARCUS",
-    description: "Who makes MARCUS, the publications behind it, and how to take part.",
+    description: "How MARCUS works, who makes it, how to cite it, and the publications behind it.",
     preload: BASE,
   },
   "/privacy": {

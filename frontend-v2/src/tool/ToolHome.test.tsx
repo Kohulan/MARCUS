@@ -8,6 +8,7 @@ import { ApiError, api } from "../api/client";
 import { createQueryClient } from "../api/queries";
 import type { ImageJobSummary, PaperSummary } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
+import { handOff } from "./files";
 import ToolHome from "./ToolHome";
 
 const DAY = 86_400_000;
@@ -243,13 +244,13 @@ describe("Where an upload goes", () => {
   });
 });
 
-describe("One owner cookie on the first visit", () => {
-  function deferred() {
-    let resolve!: (v: { papers: PaperSummary[] }) => void;
-    const promise = new Promise<{ papers: PaperSummary[] }>((r) => (resolve = r));
-    return { promise, resolve };
-  }
+function deferred() {
+  let resolve!: (v: { papers: PaperSummary[] }) => void;
+  const promise = new Promise<{ papers: PaperSummary[] }>((r) => (resolve = r));
+  return { promise, resolve };
+}
 
+describe("One owner cookie on the first visit", () => {
   it("asks for the image jobs only after the papers list answered", async () => {
     const reply = deferred();
     renderHome({ papersReply: reply.promise });
@@ -272,23 +273,58 @@ describe("One owner cookie on the first visit", () => {
   });
 });
 
-describe("The landing's Upload a PDF", () => {
-  it("opens the file picker once", async () => {
-    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
-    renderHome({ at: { pathname: "/app", state: { openPicker: true } } });
-    await screen.findByRole("heading", { level: 1 });
-    expect(click).toHaveBeenCalledTimes(1);
-    // a later render (here: the switch) does not open it again
-    fireEvent.click(screen.getByRole("switch", { name: "Find structures automatically" }));
-    await screen.findByText("No papers yet.");
-    expect(click).toHaveBeenCalledTimes(1);
+describe("A PDF handed over by the landing's drop zone", () => {
+  const at = (token: string) => ({ pathname: "/app", state: { handOff: token } });
+
+  it("is taken once, uploaded with the default engine, and opens its paper", async () => {
+    const file = fileOf("alkaloids.pdf", "application/pdf");
+    renderHome({ at: at(handOff(file)) });
+    expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
+    expect(api.uploadPaper).toHaveBeenCalledTimes(1);
+    expect(api.uploadPaper).toHaveBeenCalledWith(file, { engine: "decimer", ocsr: "auto" });
+    expect(api.uploadImage).not.toHaveBeenCalled();
   });
 
-  it("does not open the picker on a plain visit", async () => {
-    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
-    renderHome();
-    await screen.findByRole("heading", { level: 1 });
-    expect(click).not.toHaveBeenCalled();
+  it("a reload or Back with the same token uploads nothing again", async () => {
+    const token = handOff(fileOf("alkaloids.pdf", "application/pdf"));
+    const first = renderHome({ at: at(token) });
+    expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
+    first.unmount();
+    renderHome({ at: at(token) }); // the same history entry, opened again
+    await screen.findByText("No papers yet.");
+    expect(api.uploadPaper).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".drop__problem")).toBeNull();
+  });
+
+  it("a token with nothing behind it (reload, new tab) opens /app as usual", async () => {
+    renderHome({ at: at("h-gone") });
+    await screen.findByText("No papers yet.");
+    expect(api.uploadPaper).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { level: 1, name: "Drop a PDF here" })).toBeInTheDocument();
+    expect(document.querySelector(".drop__problem")).toBeNull();
+  });
+
+  it("waits for the papers list (the owner cookie) before it is sent", async () => {
+    const reply = deferred();
+    renderHome({ at: at(handOff(fileOf("a.pdf", "application/pdf"))), papersReply: reply.promise });
+    expect(await screen.findByText("Uploading a.pdf…")).toBeInTheDocument();
+    expect(api.uploadPaper).not.toHaveBeenCalled();
+    reply.resolve({ papers: [] });
+    expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
+    expect(api.uploadPaper).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the server's refusal in the tool's drop area", async () => {
+    vi.mocked(api.uploadPaper).mockRejectedValue(new ApiError(400, "Not a readable PDF."));
+    renderHome({ at: at(handOff(fileOf("x.pdf", "application/pdf"))) });
+    expect(await screen.findByText("Not a readable PDF.")).toBeInTheDocument();
+    expect(api.uploadPaper).toHaveBeenCalledTimes(1);
+  });
+
+  it("a File in the router state itself is not taken (only the in-memory hand-off is)", async () => {
+    renderHome({ at: { pathname: "/app", state: { upload: fileOf("a.pdf", "application/pdf") } } });
+    await screen.findByText("No papers yet.");
+    expect(api.uploadPaper).not.toHaveBeenCalled();
   });
 });
 

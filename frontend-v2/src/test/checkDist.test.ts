@@ -13,6 +13,16 @@ function page(title: string, body = "<p>ok</p>"): string {
   return `<!doctype html><html><head><title>${title}</title>${MATOMO}</head><body><!-- 6b4eb402 FORM: Survey Sheet -->${body}</body></html>`;
 }
 
+// As React pre-renders it: the acrostic hidden from screen readers, the plain name for them.
+const HOME_H1 =
+  '<h1 class="acro"><span aria-hidden="true"><span class="acro__line"><b>M</b>olecular</span>' +
+  '<span class="acro__line"><b>A</b>nnotation<!-- --> <span class="acro__link">and</span></span>' +
+  '<span class="acro__line"><b>R</b>ecognition<!-- --> <span class="acro__link">for</span></span>' +
+  '<span class="acro__line"><b>C</b>urating</span><span class="acro__line"><b>U</b>nravelled</span>' +
+  '<span class="acro__line"><b>S</b>tructures</span></span>' +
+  '<span class="visually-hidden">Molecular Annotation and Recognition for Curating Unravelled ' +
+  "Structures</span></h1>";
+
 let dist: string;
 
 function write(file: string, text: string) {
@@ -31,7 +41,7 @@ function check(): { status: number | null; out: string } {
 
 beforeEach(() => {
   dist = mkdtempSync(join(tmpdir(), "check-dist-"));
-  write("index.html", page("Home", "<h1>Every molecule has a source.</h1>"));
+  write("index.html", page("Home", HOME_H1));
   write("app/index.html", page("App", '<div id="root"></div>'));
   write("about/index.html", page("About"));
   write("privacy/index.html", page("Privacy"));
@@ -54,6 +64,13 @@ describe("check-dist", () => {
     const { status, out } = check();
     expect(out).toContain("check-dist: ok");
     expect(status).toBe(0);
+  });
+
+  it("fails when the landing's h1 is not the name spelled out", () => {
+    write("index.html", page("Home", "<h1>Every molecule has a source.</h1>"));
+    const { status, out } = check();
+    expect(out).toContain("landing headline not pre-rendered");
+    expect(status).toBe(1);
   });
 
   it("fails on an inline event handler attribute in a page", () => {
