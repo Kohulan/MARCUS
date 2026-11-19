@@ -1,4 +1,5 @@
 import threading
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -776,6 +777,10 @@ def test_retry_page_missing_deleted_or_out_of_range(db_session):
 # --- the address kept on active work (review I-1) ------------------------------------------
 
 
+def _just_now(when) -> bool:
+    return when is not None and abs(datetime.now(UTC) - when) < timedelta(minutes=1)
+
+
 def _paper_from(s, ip="198.51.100.7") -> Paper:
     paper = make_paper(s)
     paper.started_ip = ip
@@ -794,6 +799,9 @@ def test_new_paper_and_image_job_keep_the_starting_address(db_session):
     job = new_image_job(s, owner, "b" * 64, "i.png", Engine.DECIMER,
                         started_ip="2001:db8::/64")  # fmt: skip
     assert (paper.started_ip, job.started_ip) == ("203.0.113.9", "2001:db8::/64")
+    assert _just_now(paper.started_ip_at) and _just_now(job.started_ip_at)
+    plain = new_paper(s, owner, "c" * 64, 9, "q.pdf", Engine.DECIMER, "auto")
+    assert plain.started_ip is None and plain.started_ip_at is None
 
 
 def test_a_paper_that_ends_keeps_no_address(db_session):
@@ -804,10 +812,11 @@ def test_a_paper_that_ends_keeps_no_address(db_session):
     fail_step(s, check.id, ErrorClass.BAD_INPUT, "not a pdf", retryable=False)
     s.refresh(failed)
     assert failed.status == "failed" and failed.started_ip is None
+    assert failed.started_ip_at is None
 
     deleted = _paper_from(s)
     cancel_paper(s, deleted.id, remove_files=False)
-    assert deleted.started_ip is None
+    assert deleted.started_ip is None and deleted.started_ip_at is None
 
 
 def test_a_settled_image_job_keeps_no_address(db_session):
@@ -817,9 +826,10 @@ def test_a_settled_image_job_keeps_no_address(db_session):
     s.flush()
     finish(s, step, OCSR)
     s.refresh(job)
-    assert job.status == "done" and job.started_ip is None
+    assert job.status == "done" and job.started_ip is None and job.started_ip_at is None
     request_image_ocsr(s, job.id, Engine.MOLNEXTR, started_ip="198.51.100.9")
     assert job.status == "queued" and job.started_ip == "198.51.100.9"  # active again
+    assert _just_now(job.started_ip_at)
 
 
 def test_reopened_paper_gets_the_requesting_address(db_session):
@@ -830,5 +840,7 @@ def test_reopened_paper_gets_the_requesting_address(db_session):
     s.add(Segment(paper_id=paper.id, page=0, idx=0, bbox=[0, 0, 1, 1], image_sha256="0" * 64))
     s.flush()
     seg = s.execute(select(Segment).where(Segment.paper_id == paper.id)).scalar_one()
+    paper.created_at = datetime.now(UTC) - timedelta(days=40)  # an old paper, reopened now
     request_ocsr(s, seg.id, Engine.DECIMER, started_ip="203.0.113.77")
     assert paper.status == "processing" and paper.started_ip == "203.0.113.77"
+    assert _just_now(paper.started_ip_at)  # the purge goes by this, not by created_at

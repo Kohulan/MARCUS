@@ -148,8 +148,8 @@ def new_paper(
         ocsr_mode=ocsr_mode,
         status=PaperStatus.CHECKING.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
-        started_ip=started_ip,
     )
+    keep_address(paper, started_ip)
     session.add(paper)
     session.flush()  # assigns paper.id
     session.add(
@@ -209,8 +209,8 @@ def new_image_job(
         engine=engine.value,
         status=ImageJobStatus.QUEUED.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
-        started_ip=started_ip,
     )
+    keep_address(job, started_ip)
     session.add(job)
     session.flush()  # assigns job.id
     session.add(_new_image_step(job, engine, seq=0))
@@ -223,6 +223,13 @@ def new_image_job(
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def keep_address(work: Paper | ImageJob, started_ip: str | None) -> None:
+    """Set (or clear, with None) the address bucket kept on active work, and when it was set:
+    the retention backstop ages the address by that time, not by the work's creation."""
+    work.started_ip = started_ip
+    work.started_ip_at = _now() if started_ip is not None else None
 
 
 def _new_step(paper: Paper, kind: StepKind, seq: int, **kw) -> Step:
@@ -366,7 +373,7 @@ def _finish_check(session: Session, paper: Paper) -> None:
         paper.error = "all pages failed (render or segmentation)"
     else:
         paper.status = PaperStatus.DONE.value
-    paper.started_ip = None  # no longer active work: its address is not kept
+    keep_address(paper, None)  # no longer active work: its address is not kept
 
 
 # --- result validation (runs before any state change) -------------------------------------
@@ -729,7 +736,7 @@ def _settle_image_job(session: Session, job: ImageJob, error: str | None = None)
     else:
         job.status = ImageJobStatus.FAILED.value
         job.error = error
-    job.started_ip = None  # no longer active work: its address is not kept
+    keep_address(job, None)  # no longer active work: its address is not kept
     session.flush()
 
 
@@ -817,7 +824,7 @@ def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = Tru
         .execution_options(synchronize_session="fetch")
     )
     paper.status = PaperStatus.DELETED.value
-    paper.started_ip = None
+    keep_address(paper, None)
     session.execute(
         delete(SegCache)
         .where(SegCache.paper_id == paper_id)
@@ -869,7 +876,7 @@ def request_ocsr(
     session.add(step)
     if paper.status == PaperStatus.DONE.value:
         paper.status = PaperStatus.PROCESSING.value
-        paper.started_ip = started_ip
+        keep_address(paper, started_ip)
     session.flush()
     return step
 
@@ -920,7 +927,7 @@ def retry_page(
     if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
         paper.status = PaperStatus.PROCESSING.value
         paper.error = None
-        paper.started_ip = started_ip
+        keep_address(paper, started_ip)
     session.flush()
     return step
 
@@ -944,7 +951,7 @@ def request_image_ocsr(
     step = _new_image_step(job, engine, seq)
     session.add(step)
     if job.status not in (ImageJobStatus.QUEUED.value, ImageJobStatus.PROCESSING.value):
-        job.started_ip = started_ip  # active again, from this address
+        keep_address(job, started_ip)  # active again, from this address
     job.status = ImageJobStatus.QUEUED.value
     session.flush()
     return step

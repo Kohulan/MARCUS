@@ -99,6 +99,8 @@ class Paper(Base):
     # while it is active: the per-address active-work cap counts it. Cleared when the work
     # finishes, fails or is deleted (and by the retention purge as a backstop).
     started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When started_ip was last set (creation or reopen): the retention backstop ages it by this.
+    started_ip_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
 
 
 class ImageJob(Base):
@@ -124,6 +126,8 @@ class ImageJob(Base):
     # while it is active: the per-address active-work cap counts it. Cleared when the work
     # finishes, fails or is deleted (and by the retention purge as a backstop).
     started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When started_ip was last set (creation or reopen): the retention backstop ages it by this.
+    started_ip_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
 
 
 class Segment(Base):

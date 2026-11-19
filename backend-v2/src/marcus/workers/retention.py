@@ -24,7 +24,8 @@
    The owner row stays; the per-address new-key limit only counts owners of the last hour.
    Backstop for the address kept on active work (`papers.started_ip`,
    `image_jobs.started_ip`, cleared by the planner when the work ends): set to NULL on work
-   that is no longer active, or older than that many days;
+   that is no longer active, or whose address was set (`started_ip_at`: creation or reopen)
+   more than that many days ago;
 7. depictions (`data_root/depictions/<owner id>/<xx>/`, the API's stored structure drawings
    and `.nodraw` markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the
    directory holds more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing
@@ -51,7 +52,7 @@ from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 
 from celery.exceptions import SoftTimeLimitExceeded
-from sqlalchemy import and_, delete, or_, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from marcus.core import storage
@@ -318,7 +319,10 @@ def _purge_work_ips(session: Session, now: datetime, batch: int, report: PurgeRe
                     select(model.id)
                     .where(
                         model.started_ip.is_not(None),
-                        or_(model.status.not_in(active), model.created_at < cutoff),
+                        or_(
+                            model.status.not_in(active),
+                            func.coalesce(model.started_ip_at, model.created_at) < cutoff,
+                        ),
                     )
                     .limit(batch)
                     .with_for_update(skip_locked=True)
@@ -329,7 +333,7 @@ def _purge_work_ips(session: Session, now: datetime, batch: int, report: PurgeRe
             session.execute(
                 update(model)
                 .where(model.id.in_(ids))
-                .values(started_ip=None)
+                .values(started_ip=None, started_ip_at=None)
                 .execution_options(synchronize_session=False)
             )
             session.commit()

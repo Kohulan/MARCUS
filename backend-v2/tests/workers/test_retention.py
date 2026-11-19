@@ -451,6 +451,25 @@ def test_work_addresses_are_a_backstop_purge(db_session):
     assert s.get(ImageJob, job.id).started_ip is None
 
 
+def test_work_address_age_is_when_it_was_set(db_session):
+    """A paper reopened today keeps its address however old the paper; an address set longer
+    ago than the IP retention goes (rows without a set time fall back to created_at)."""
+    s = db_session
+    reopened = make_paper(s)
+    stale = make_paper(s)
+    for row, ip, days in ((reopened, "198.51.100.5", 1), (stale, "198.51.100.6", 31)):
+        row.started_ip = ip
+        row.created_at = NOW - timedelta(days=40)
+        row.started_ip_at = NOW - timedelta(days=days)
+    s.commit()
+
+    assert purge(s).work_ips == 1
+    s.expire_all()
+    assert s.get(Paper, reopened.id).started_ip == "198.51.100.5"
+    assert s.get(Paper, stale.id).started_ip is None
+    assert s.get(Paper, stale.id).started_ip_at is None
+
+
 # --- depictions -----------------------------------------------------------------------
 
 
