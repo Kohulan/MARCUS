@@ -190,7 +190,10 @@ describe("api", () => {
       expect(calls[0]?.init.signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       expect(calls[0]?.init.signal?.aborted).toBe(true);
-      expect(await settled).toBeInstanceOf(DOMException);
+      // a timeout is a 504 ApiError: the outcome is unknown, as for a gateway timeout
+      const err = await settled;
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(504);
     } finally {
       vi.useRealTimers();
     }

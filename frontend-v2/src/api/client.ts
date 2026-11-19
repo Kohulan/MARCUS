@@ -207,13 +207,23 @@ function sendJson<T>(
   };
   if (timeoutMs === undefined) return request<T>(path, init);
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  return request<T>(path, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, timeoutMs);
+  return request<T>(path, { ...init, signal: ctrl.signal })
+    .catch((err: unknown) => {
+      // no answer in time: like a gateway timeout, the outcome is unknown
+      throw timedOut ? new ApiError(504, BUSY) : err;
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 /**
- * A curation PUT not answered in this time is aborted: the save fails and rolls back, and the
- * paper's live refreshes, held while it is on the wire, go on.
+ * A curation PUT not answered in this time is aborted (a 504 ApiError): the save fails and
+ * rolls back, the paper's live refreshes, held while it is on the wire, go on, and the paper
+ * is fetched again (the PUT may have been saved after all).
  */
 export const SAVE_TIMEOUT_MS = 30_000;
 
