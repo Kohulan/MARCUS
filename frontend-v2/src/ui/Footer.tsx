@@ -49,7 +49,11 @@ function BandFooter() {
       <nav aria-label="Footer" className="site-footer__cell site-footer__nav">
         {LINKS.map(({ label, to, internal }, i) => (
           <Fragment key={label}>
-            {i > 0 && <span aria-hidden="true">·</span>}
+            {i > 0 && (
+              <span className="site-footer__dot" aria-hidden="true">
+                ·
+              </span>
+            )}
             {internal ? <Link to={to}>{label}</Link> : <a href={to}>{label}</a>}
           </Fragment>
         ))}

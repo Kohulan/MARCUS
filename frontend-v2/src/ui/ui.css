@@ -253,6 +253,15 @@
   .site-footer__cell {
     padding: 10px 16px;
   }
+
+  /* The links wrap here: a gap instead of dots, so no line ends on a dangling dot. */
+  .site-footer__nav {
+    gap: 0 16px;
+  }
+
+  .site-footer__dot {
+    display: none;
+  }
 }
 
 /* Specimen label: charcoal header bar, ruled rows -------------------------- */
