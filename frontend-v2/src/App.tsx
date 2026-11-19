@@ -40,7 +40,7 @@ function hashTarget(hash: string): Element | null {
 
 /**
  * A forward navigation (a link) opens the next page at its top, or at the element its hash
- * names ("/#cite"). Back and Forward keep the browser's own scroll restoration; the first
+ * names ("/about#cite"). Back and Forward keep the browser's own scroll restoration; the first
  * load is the browser's too; a replace on the same path (the tool dropping a flag) stays put.
  * Instant, never smooth, so reduced motion holds.
  */
