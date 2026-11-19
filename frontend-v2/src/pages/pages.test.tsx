@@ -5,10 +5,12 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { useState } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { routeTemplate, trackPage } from "../analytics";
+import { takeHandOff } from "../tool/files";
 import Landing from "./Landing";
 import { pageMeta } from "./meta";
 
@@ -41,11 +43,11 @@ function pdf(name: string, size = 1024, type = "application/pdf"): File {
   return file;
 }
 
-/** Where /app was opened, and with what router state. */
+/** Where /app was opened, and what the hand-off held (taken here, as the tool does). */
 function AppProbe() {
   const location = useLocation();
-  const upload = (location.state as { upload?: File } | null)?.upload;
-  return <p>tool opened with {upload ? upload.name : "nothing"}</p>;
+  const [file] = useState(() => takeHandOff((location.state as { handOff?: unknown } | null)?.handOff));
+  return <p>tool opened with {file ? file.name : "nothing"}</p>;
 }
 
 function renderLanding() {
@@ -172,6 +174,32 @@ describe("Landing", () => {
     expect(zone?.querySelector(".dz__title--said")).toHaveTextContent(said);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText(/tool opened/)).toBeNull();
+  });
+
+  it("the same refusal twice is announced twice (new text in the alert)", () => {
+    const { container } = renderLanding();
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [pdf("a.png", 1024, "image/png")] } });
+    const first = screen.getByRole("alert").firstElementChild;
+    fireEvent.change(input, { target: { files: [pdf("b.png", 1024, "image/png")] } });
+    const second = screen.getByRole("alert").firstElementChild;
+    expect(second).toHaveTextContent("That file is not a PDF");
+    expect(second).not.toBe(first);
+  });
+
+  it("of several dropped files, the first PDF goes to the tool", async () => {
+    const { container } = renderLanding();
+    const zone = container.querySelector(".dz")!;
+    const files = [pdf("fig.png", 1024, "image/png"), pdf("paper.pdf"), pdf("other.pdf")];
+    fireEvent.drop(zone, { dataTransfer: { types: ["Files"], files } });
+    expect(await screen.findByText("tool opened with paper.pdf")).toBeInTheDocument();
+  });
+
+  it("dragging text or a link over the ring does not light it", () => {
+    const { container } = renderLanding();
+    const zone = container.querySelector(".dz")!;
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["text/plain"], files: [] } });
+    expect(zone).not.toHaveClass("is-drag");
   });
 });
 

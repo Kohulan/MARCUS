@@ -7,7 +7,7 @@ import type { Engine } from "../api/types";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import DropZone from "./DropZone";
-import type { FileKind } from "./files";
+import { takeHandOff, type FileKind } from "./files";
 import PapersList from "./PapersList";
 import "./tool.css";
 
@@ -59,8 +59,8 @@ function RetryIn({ at }: { at: number }) {
  * /app: upload a PDF or one image (engine, find structures on/off), try the sample paper,
  * and this browser's papers and image jobs. A PDF opens /app/papers/<id> after upload, an
  * image /app/images/<id>. `?sample=1` (the landing's "Try a sample paper") runs the sample
- * button once; router state `{upload: File}` (a PDF dropped on the landing, already checked
- * there) is uploaded once, the same way as a file dropped here.
+ * button once; router state `{handOff: token}` (a PDF dropped on the landing, checked there
+ * and kept in memory) is uploaded once, the same way as a file dropped here.
  */
 export default function ToolHome() {
   usePageTitle("Papers · MARCUS");
@@ -145,20 +145,22 @@ export default function ToolHome() {
     void runSample();
   }, [wantsSample, papers.isSuccess, navigate, location.pathname, runSample]);
 
-  // {upload: File}: the landing's drop zone hands over a PDF it has checked. The file leaves
-  // the history entry first, so a reload or Back from the paper does not upload it again.
-  const handed = (location.state as { upload?: unknown } | null)?.upload;
-  const handedFile = handed instanceof File ? handed : null;
+  // {handOff: token}: the landing's drop zone kept a checked PDF in memory (tool/files.ts).
+  // It is taken once and the token leaves the history entry first, so a reload or Back from
+  // the paper does not upload it again; a token with nothing behind it (a reload, an old
+  // entry) is simply ignored.
+  const handOffToken = (location.state as { handOff?: unknown } | null)?.handOff;
   const handOffRan = useRef(false);
   useEffect(() => {
-    if (!handedFile || handOffRan.current) return;
+    if (handOffToken === undefined || handOffRan.current) return;
     handOffRan.current = true; // StrictMode runs this effect twice; the file is sent once
     navigate(
       { pathname: location.pathname, search: location.search },
       { replace: true, state: null },
     );
-    void upload(handedFile, "pdf", `Uploading ${handedFile.name}…`);
-  }, [handedFile, navigate, location.pathname, location.search, upload]);
+    const file = takeHandOff(handOffToken);
+    if (file) void upload(file, "pdf", `Uploading ${file.name}…`);
+  }, [handOffToken, navigate, location.pathname, location.search, upload]);
 
   const sampleButton = (
     <GlassButton tint="clear" disabled={busy !== null} onClick={() => void runSample()}>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { fileKind, MAX_BYTES } from "../tool/files";
+import { dropHandOff, fileKind, handOff, MAX_BYTES } from "../tool/files";
 import { mediaMatches, subscribeMedia } from "../ui/motion";
 
 // The landing's drop zone: an empty benzene ring drawn in dashes, a structure not read yet.
@@ -10,12 +10,14 @@ import { mediaMatches, subscribeMedia } from "../ui/motion";
 // while the tool opens and uploads it; a refused file strikes it through. Below 1024 px the
 // tool cannot run, so the zone only says "Desktop screen needed" (CSS) and takes no file.
 //
-// One upload path: the PDF is checked here with the tool's own rules (tool/files.ts), then
-// handed to /app in the router state ({upload: file}); the tool home uploads it as if it had
-// been dropped there.
+// One upload path: the PDF is checked here with the tool's own rules (tool/files.ts), kept in
+// memory (handOff), and /app opens with only its token in the router state; the tool home
+// takes it once and uploads it as if it had been dropped there.
 
 export const NOT_PDF = "That file is not a PDF";
 export const TOO_BIG = "That PDF is larger than 20 MB";
+/** The tool's own words for an upload that could not start (tool/ToolHome.tsx). */
+export const NO_CONNECTION = "The upload did not reach the server. Check your connection.";
 
 const NARROW = "(max-width: 1023.98px)";
 const subscribeNarrow = (onChange: () => void) => subscribeMedia(NARROW, onChange);
@@ -23,7 +25,10 @@ const subscribeNarrow = (onChange: () => void) => subscribeMedia(NARROW, onChang
 /** The tool's chunks, so the ring shows the upload starting rather than a blank page. */
 const loadTool = () => Promise.all([import("../tool/ToolHome"), import("../api/QueryProvider")]);
 
-type State = { kind: "idle" | "drag" } | { kind: "done" | "error"; text: string };
+// `n` counts refusals, so the same refusal twice is announced twice (a new text node).
+type State = { kind: "idle" | "drag" } | { kind: "done" | "error"; text: string; n: number };
+
+const hasFiles = (e: DragEvent<HTMLElement>) => e.dataTransfer.types.includes("Files");
 
 export default function RingDrop() {
   const navigate = useNavigate();
@@ -53,18 +58,34 @@ export default function RingDrop() {
     };
   }, []);
 
-  function take(file: File | undefined) {
+  const refuse = (text: string) =>
+    setState((prev) => ({ kind: "error", text, n: ("n" in prev ? prev.n : 0) + 1 }));
+
+  /** The first PDF among the files (or the first file, to say why it is refused). */
+  function take(files: ArrayLike<File> | null | undefined) {
+    const list = files ? Array.from(files) : [];
+    const file = list.find((f) => fileKind(f) === "pdf") ?? list[0];
     if (!file) return setState({ kind: "idle" });
-    if (fileKind(file) !== "pdf") return setState({ kind: "error", text: NOT_PDF });
-    if (file.size > MAX_BYTES) return setState({ kind: "error", text: TOO_BIG });
-    setState({ kind: "done", text: `Uploading ${file.name}…` });
-    const go = () => {
-      if (alive.current) navigate("/app", { state: { upload: file } });
+    if (fileKind(file) !== "pdf") return refuse(NOT_PDF);
+    if (file.size > MAX_BYTES) return refuse(TOO_BIG);
+    setState({ kind: "done", text: `Uploading ${file.name}…`, n: 0 });
+    const token = handOff(file);
+    const fail = () => {
+      dropHandOff(token);
+      if (alive.current) refuse(NO_CONNECTION);
     };
-    loadTool().then(go, go);
+    loadTool().then(() => {
+      if (!alive.current) return dropHandOff(token); // left the landing meanwhile: stay there
+      try {
+        navigate("/app", { state: { handOff: token } });
+      } catch {
+        fail();
+      }
+    }, fail);
   }
 
   function onDragOver(e: DragEvent<HTMLButtonElement>) {
+    if (!hasFiles(e)) return; // text or a link: not a drop for this zone
     e.preventDefault();
     if (narrow || busy) {
       e.dataTransfer.dropEffect = "none";
@@ -80,9 +101,10 @@ export default function RingDrop() {
   }
 
   function onDrop(e: DragEvent<HTMLButtonElement>) {
+    if (!hasFiles(e)) return;
     e.preventDefault();
     if (narrow || busy) return;
-    take(e.dataTransfer.files[0]);
+    take(e.dataTransfer.files);
   }
 
   const cls = state.kind === "idle" ? "dz" : `dz is-${state.kind}`;
@@ -139,7 +161,7 @@ export default function RingDrop() {
         {state.kind === "done" ? state.text : ""}
       </p>
       <p className="visually-hidden" role="alert">
-        {state.kind === "error" ? state.text : ""}
+        {state.kind === "error" ? <span key={state.n}>{state.text}</span> : null}
       </p>
       <input
         ref={input}
@@ -149,7 +171,7 @@ export default function RingDrop() {
         tabIndex={-1}
         aria-hidden="true"
         onChange={(e) => {
-          take(e.target.files?.[0]);
+          take(e.target.files);
           e.target.value = ""; // the same file can be chosen again
         }}
       />
