@@ -112,7 +112,8 @@ def verify(key: bytes, token: str, smarts: str, binding_key: str | None) -> bool
         return False
     payload, mac = token.split(".")
     try:
-        if not hmac.compare_digest(_mac(key, payload), mac):
+        # bytes: compare_digest refuses str with non-ASCII characters (a TypeError, a 500)
+        if not hmac.compare_digest(_mac(key, payload).encode(), mac.encode("utf-8")):
             return False
         claims = json.loads(_unb64(payload))
     except (ValueError, UnicodeError):

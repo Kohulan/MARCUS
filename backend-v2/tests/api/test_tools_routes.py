@@ -291,7 +291,7 @@ async def test_mcs_without_a_common_part_has_no_token(app, monkeypatch):
 NEVER_MATCHES = "~".join(["*"] * 19) + "~[#7]"  # 52 s of VF2 on C60 before this fix
 
 
-@pytest.mark.parametrize("token", [None, "", "x", "e30.AAAA", "a" * 100])
+@pytest.mark.parametrize("token", [None, "", "x", "e30.AAAA", "a" * 100, "a.é", "é.a", "e30.ÿÿ"])
 async def test_highlight_without_a_valid_token_is_refused_before_any_search(app, tools, token):
     body = {"smiles": "C1=CC=CC=C1", "highlight": NEVER_MATCHES}
     if token is not None:
