@@ -37,11 +37,12 @@ export default function Landing() {
               "M olecular" at each bold initial. */}
           <h1 className="acro">
             <span aria-hidden="true">
-              <Line initial="M" rest="olecular" />
-              <Line initial="A" rest="nnotation" link="and" />
-              <Line initial="R" rest="ecognition" link="for" />
-              <Line initial="C" rest="urating" />
-              <Line initial="U" rest="nravelled" />
+              {/* the spaces keep a copied selection readable: "Molecular Annotation and …" */}
+              <Line initial="M" rest="olecular" />{" "}
+              <Line initial="A" rest="nnotation" link="and" />{" "}
+              <Line initial="R" rest="ecognition" link="for" />{" "}
+              <Line initial="C" rest="urating" />{" "}
+              <Line initial="U" rest="nravelled" />{" "}
               <Line initial="S" rest="tructures" />
             </span>
             <span className="visually-hidden">{NAME}</span>
