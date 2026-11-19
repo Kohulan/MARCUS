@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import { collectCspViolations, expectNoA11yViolations, routeMatomo } from "./helpers";
 
 const INFO_PAGES = ["/", "/about", "/privacy", "/disclaimer"];
+const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
 
 test.describe("landing and info pages @mocked", () => {
   test.beforeEach(async ({ page }) => {
@@ -14,10 +15,9 @@ test.describe("landing and info pages @mocked", () => {
   test("the pre-rendered / has the headline before any script runs", async ({ page }) => {
     await page.route("**/*.js", (route) => route.abort());
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Every molecule has a source.",
-    );
-    await expect(page.getByText("[01] Structure")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(HEADLINE);
+    await expect(page.getByRole("button", { name: /^Drop a PDF here or browse/ })).toBeVisible();
+    await expect(page.getByText("Every molecule has a source")).toHaveCount(0);
   });
 
   for (const url of INFO_PAGES) {
@@ -79,36 +79,112 @@ test.describe("landing and info pages @mocked", () => {
     });
   }
 
-  test("one glass filter, and Upload a PDF refracts in Chromium", async ({ page }) => {
+  test("one glass filter, and Try a sample paper refracts in Chromium", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
     await expect(page.locator("#marcus-glass")).toHaveCount(1);
-    const upload = page.getByRole("link", { name: /^Upload a PDF/ });
-    const filter = await upload.evaluate((el) => getComputedStyle(el).backdropFilter);
+    const sample = page.getByRole("link", { name: /^Try a sample paper/ });
+    const filter = await sample.evaluate((el) => getComputedStyle(el).backdropFilter);
     expect(filter).toContain("url(");
   });
 
-  // Contract FIRST VIEWPORT: under the hero, the whole headline and both buttons.
+  // One screen: the name, the drop zone and the sample pill in the first viewport.
   for (const [width, height] of [
     [1440, 900],
     [1366, 768],
     [1280, 800],
+    [1280, 720],
     [1024, 768],
   ] as const) {
-    test(`${width} × ${height}: the headline and both buttons are in the first viewport`, async ({
+    test(`${width} × ${height}: the name, the drop zone and the sample pill are in the first viewport`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
       await page.goto("/", { waitUntil: "networkidle" });
       await expect(page.getByRole("heading", { level: 1 })).toBeInViewport({ ratio: 1 });
-      await expect(page.getByRole("link", { name: /^Upload a PDF/ })).toBeInViewport({
+      await expect(page.getByRole("button", { name: /^Drop a PDF here/ })).toBeInViewport({
         ratio: 1,
       });
       await expect(page.getByRole("link", { name: /^Try a sample paper/ })).toBeInViewport({
         ratio: 1,
       });
-      await expect(page.getByText("[01] Structure")).toBeInViewport({ ratio: 1 });
+      if ((width === 1440 && height === 900) || (width === 1280 && height === 720)) {
+        // these two do not scroll at all
+        const [scroll, client] = await page.evaluate(() => [
+          document.documentElement.scrollHeight,
+          document.documentElement.clientHeight,
+        ]);
+        expect(scroll).toBeLessThanOrEqual(client);
+      }
     });
   }
+
+  test("the beams draw on the canvas, and one still frame under reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/", { waitUntil: "networkidle" });
+    const drawn = await page.locator("canvas.beams").evaluate((el) => {
+      const cv = el as HTMLCanvasElement;
+      const data = cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data;
+      let ink = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) ink++;
+      return { ink, width: cv.width, cssWidth: cv.clientWidth };
+    });
+    expect(drawn.ink).toBeGreaterThan(0);
+    expect(drawn.width).toBeLessThan(drawn.cssWidth / 2); // drawn small, blurred in CSS
+  });
+
+  test("a file that is not a PDF is refused on the landing, with no request", async ({ page }) => {
+    const api: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("/api/")) api.push(r.url());
+    });
+    await page.goto("/", { waitUntil: "networkidle" });
+    await page.locator('.act input[type="file"]').setInputFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("not a pdf"),
+    });
+    await expect(page.getByRole("alert")).toHaveText("That file is not a PDF");
+    await expect(page.locator(".dz")).toHaveClass(/is-error/);
+    await expect(page).toHaveURL(/\/$/);
+    expect(api).toEqual([]);
+  });
+
+  test("the header floats free; the nav marks the current page with the drop", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/about", { waitUntil: "networkidle" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect(nav.getByRole("link", { name: "About" })).toHaveAttribute("aria-current", "page");
+    await expect(nav).toHaveClass(/has-drop/);
+    await expect(page.locator(".site-header")).toHaveCSS("border-bottom-width", "0px");
+    await expect(page.locator(".sheet__page")).toHaveCSS("border-top-width", "1px");
+    // arrow keys walk the items
+    await nav.getByRole("link", { name: "About" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(nav.getByRole("link", { name: /^GitHub/ })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(nav.getByRole("link", { name: "Open the tool" })).toBeFocused();
+  });
+
+  test("from 1024 px the footer bubbles stick to the bottom and rest under the page at its end", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/about", { waitUntil: "networkidle" });
+    const footer = page.getByRole("contentinfo");
+    await expect(footer).toBeInViewport();
+    const bottom = await footer.evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(bottom).toBeLessThanOrEqual(900 - 11);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const [pageEnd, footerTop] = await page.evaluate(() => [
+      document.querySelector(".sheet__page")!.getBoundingClientRect().bottom,
+      document.querySelector(".site-footer")!.getBoundingClientRect().top,
+    ]);
+    expect(footerTop).toBeGreaterThanOrEqual(pageEnd);
+  });
 
   test("a footer link opens the info page at its top", async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
@@ -125,7 +201,7 @@ test.describe("landing and info pages @mocked", () => {
     await page.goto("/disclaimer", { waitUntil: "networkidle" });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.getByRole("link", { name: "How to cite" }).click();
-    await expect(page).toHaveURL(/\/#cite$/);
+    await expect(page).toHaveURL(/\/about#cite$/);
     await expect(page.locator("#cite")).toBeInViewport();
   });
 
@@ -149,5 +225,30 @@ test.describe("landing and info pages @mocked", () => {
     expect(paq).toContain('["setSiteId","7"]');
     expect(paq).toContain('["setCustomUrl","/about"]');
     expect(hits.some((u) => u.endsWith("/matomo.js"))).toBe(true);
+  });
+});
+
+// Needs the fake stack behind the UI (the upload goes to the API).
+test.describe("landing upload", () => {
+  test.beforeEach(async ({ page }) => {
+    await routeMatomo(page);
+  });
+
+  test("a PDF chosen on the landing is uploaded by the tool and opens its paper", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/", { waitUntil: "networkidle" });
+    await page.locator('.act input[type="file"]').setInputFiles("public/sample/synth_015.pdf");
+    await expect(page).toHaveURL(/\/app\/papers\/[^/?]+$/, { timeout: 20_000 });
+    // the hand-over left the history entry: Back to /app uploads nothing again
+    const uploads: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().includes("/papers")) uploads.push(r.url());
+    });
+    await page.goBack();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.waitForLoadState("networkidle");
+    expect(uploads).toEqual([]);
   });
 });
