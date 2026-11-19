@@ -247,7 +247,11 @@ def _purge_seg_cache(session: Session, cutoff: datetime, batch: int, report: Pur
     else:
         log.info("retention: MARCUS_SEG_VERSION unset; seg_cache purged by age only")
     report.seg_cache += _delete_in_batches(
-        session, SegCache, [SegCache.pdf_sha256, SegCache.seg_version], or_(*conditions), batch
+        session,
+        SegCache,
+        [SegCache.owner_id, SegCache.pdf_sha256, SegCache.seg_version],
+        or_(*conditions),
+        batch,
     )
 
 
@@ -263,7 +267,7 @@ def _purge_ocsr_cache(
         and_(OcsrCache.engine == engine, OcsrCache.engine_version != version)
         for engine, version in sorted(versions.items())
     ]
-    keys = [OcsrCache.image_sha256, OcsrCache.engine, OcsrCache.engine_version]
+    keys = [OcsrCache.owner_id, OcsrCache.image_sha256, OcsrCache.engine, OcsrCache.engine_version]
     report.ocsr_cache += _delete_in_batches(session, OcsrCache, keys, or_(*conditions), batch)
 
 

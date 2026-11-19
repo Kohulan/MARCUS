@@ -7,12 +7,14 @@ workers finishing the last two steps of one paper cannot both miss the `done` tr
 
 Segmentation cache (spec §7): when the last page of a paper is segmented and every page was
 segmented successfully by one segmenter version, the planner stores the paper's segments under
-(pdf_sha256, seg_cache_key(version)). A later paper with the same PDF bytes, while the
-configured `seg_version` matches, gets each page's segments from that row when the page is
-rendered (no segment_page step): new Segment, Curation and ocsr rows under the new paper, and
-crop files copied by content hash from any live paper that has them. Of that other paper
-only its id is used, to find the file; its rows (ids, curation, predictions, names) are never
-copied. A page whose crops cannot all be found falls back to a normal segment_page step.
+(owner, pdf_sha256, seg_cache_key(version)). A later paper of the same owner with the same PDF
+bytes, while the configured `seg_version` matches, gets each page's segments from that row
+when the page is rendered (no segment_page step): new Segment, Curation and ocsr rows under the
+new paper, and crop files copied by content hash from the owner's live papers that have them.
+Of that other paper only its id is used, to find the file; its rows (ids, curation,
+predictions, names) are never copied. A page whose crops cannot all be found falls back to a
+normal segment_page step. The cache is per owner (security F6): another owner's paper never
+skips a step because of it. Deleting the paper that made a row drops the row (cancel_paper).
 """
 
 import hashlib
@@ -24,7 +26,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -551,9 +553,13 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
     session.execute(
         pg_insert(SegCache)
         .values(
-            pdf_sha256=paper.pdf_sha256, seg_version=seg_cache_key(seg_version), payload=payload
+            owner_id=paper.owner_id,
+            pdf_sha256=paper.pdf_sha256,
+            seg_version=seg_cache_key(seg_version),
+            paper_id=paper.id,
+            payload=payload,
         )
-        .on_conflict_do_nothing(index_elements=["pdf_sha256", "seg_version"])
+        .on_conflict_do_nothing(index_elements=["owner_id", "pdf_sha256", "seg_version"])
     )
 
 
@@ -565,6 +571,7 @@ def _cached_page(session: Session, paper: Paper, page: int) -> list[dict] | None
         return None
     payload = session.execute(
         select(SegCache.payload).where(
+            SegCache.owner_id == paper.owner_id,
             SegCache.pdf_sha256 == paper.pdf_sha256,
             SegCache.seg_version == seg_cache_key(version),
         )
@@ -577,7 +584,7 @@ def _cached_page(session: Session, paper: Paper, page: int) -> list[dict] | None
         log.warning("paper %s: seg_cache row ignored: %s", paper.id, exc)
         return None
     for item in items:
-        if not _copy_crop(session, paper.id, item["image_sha256"]):
+        if not _copy_crop(session, paper, item["image_sha256"]):
             log.info("paper %s page %d: cached crop not found; segmenting", paper.id, page)
             return None
     return items
@@ -607,12 +614,14 @@ def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
     return by_page.get(page, [])
 
 
-def _copy_crop(session: Session, paper_id: uuid.UUID, sha: str) -> bool:
+def _copy_crop(session: Session, paper: Paper, sha: str) -> bool:
     """Put the crop with content hash `sha` into this paper's crop dir.
 
-    Sources are other live (not deleted) papers with a segment of that hash; only the file's
-    bytes are used, and only if they hash to `sha`. True if the crop is in place.
+    Sources are the same owner's other live (not deleted) papers with a segment of that hash;
+    only the file's bytes are used, and only if they hash to `sha`. True if the crop is in
+    place.
     """
+    paper_id = paper.id
     dest = storage.segment_crop_path(paper_id, sha)
     if dest.is_file():
         return True
@@ -622,6 +631,7 @@ def _copy_crop(session: Session, paper_id: uuid.UUID, sha: str) -> bool:
         .where(
             Segment.image_sha256 == sha,
             Segment.paper_id != paper_id,
+            Paper.owner_id == paper.owner_id,
             Paper.status != PaperStatus.DELETED.value,
         )
         .distinct()
@@ -776,7 +786,8 @@ def fail_step(
 
 
 def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = True) -> None:
-    """Cancel all active steps, mark the paper deleted and remove its files. Caller commits.
+    """Cancel all active steps, mark the paper deleted, drop the seg_cache row it made and
+    remove its files. Caller commits.
 
     A running step's late result is dropped by complete_step / fail_step. A file that cannot
     be removed (any OSError) is logged and does not abort the transaction: the paper is
@@ -794,6 +805,11 @@ def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = Tru
         .execution_options(synchronize_session="fetch")
     )
     paper.status = PaperStatus.DELETED.value
+    session.execute(
+        delete(SegCache)
+        .where(SegCache.paper_id == paper_id)
+        .execution_options(synchronize_session=False)
+    )
     session.flush()
     if remove_files:
         remove_paper_files(paper_id)

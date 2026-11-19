@@ -7,13 +7,16 @@ RGB array). For v1-identical accuracy every engine gets that swapped image for a
 the engine unchanged, as in v1's image path. This module is the ONLY place that builds engine
 input from a crop: a new consumer that feeds crops to a model must use `v1_engine_input` too.
 
-OCSR cache (spec §7): before predicting, the handler looks up (sha256 of the bytes the ENGINE
-gets, engine, engine version) in `ocsr_cache`: for a crop the swapped PNG, for an image job its
-file. So a crop and an image job with identical stored bytes never share a row. The version is read without loading the model
+OCSR cache (spec §7): before predicting, the handler looks up (owner, sha256 of the bytes the
+ENGINE gets, engine, engine version) in `ocsr_cache`: for a crop the swapped PNG, for an image
+job its file. So a crop and an image job with identical stored bytes never share a row. The
+cache is per owner (security F3): a hit (`cached`, `ms` 0) only ever follows the same owner's
+own earlier prediction, so it says nothing about other owners; with no owner found (the paper
+or job is gone) the cache is not used. The version is read without loading the model
 (base.engine_version), so a hit never loads one. A hit returns the cached SMILES and molfile
 (`ms` 0, `valid` recomputed with RDKit) without calling the engine; a miss loads the engine if
 needed, predicts and stores a non-empty SMILES in its own short transaction (ON CONFLICT DO
-NOTHING). The cache row holds no owner data: only the hash, the engine and its output. A cache
+NOTHING). The cache row holds only the owner id, the hash, the engine and its output. A cache
 read or write that fails is logged and ignored (the prediction does not depend on it).
 
 The fake engine never reads or writes the cache: its output is not a real result, and the
@@ -26,6 +29,7 @@ import logging
 import os
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 from celery.exceptions import SoftTimeLimitExceeded
@@ -35,7 +39,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from marcus.core.enums import Engine, StepKind
-from marcus.core.models import OcsrCache, Segment
+from marcus.core.models import ImageJob, OcsrCache, Paper, Segment
 from marcus.core.storage import image_job_path, segment_crop_path
 from marcus.workers.ocsr.base import engine_version, get_engine
 from marcus.workers.runtime import BadInput, register
@@ -63,21 +67,31 @@ def v1_engine_input(crop_path: Path) -> bytes:
     return buf.getvalue()
 
 
-def _input_image(step, session) -> tuple[Path, bool]:
-    """(stored input file, is_segment_crop)."""
+def _input_image(step, session) -> tuple[Path, bool, uuid.UUID | None]:
+    """(stored input file, is_segment_crop, owner id: None when unknown)."""
     if step.image_job_id is not None:
-        return image_job_path(step.image_job_id), False
+        owner_id = None
+        if session is not None:
+            try:
+                owner_id = session.execute(
+                    select(ImageJob.owner_id).where(ImageJob.id == step.image_job_id)
+                ).scalar_one_or_none()
+            finally:
+                session.rollback()  # end the read transaction before the long work
+        return image_job_path(step.image_job_id), False, owner_id
     if step.segment_id is None or session is None:
         raise BadInput("ocsr step has no input image")
     try:
         row = session.execute(
-            select(Segment.paper_id, Segment.image_sha256).where(Segment.id == step.segment_id)
+            select(Segment.paper_id, Segment.image_sha256, Paper.owner_id)
+            .join(Paper, Paper.id == Segment.paper_id)
+            .where(Segment.id == step.segment_id)
         ).one_or_none()
     finally:
         session.rollback()  # end the read transaction before the long work
     if row is None:
         raise BadInput("segment not found")
-    return segment_crop_path(row.paper_id, row.image_sha256), True
+    return segment_crop_path(row.paper_id, row.image_sha256), True, row.owner_id
 
 
 def _engine_input(image: Path, is_crop: bool) -> bytes:
@@ -86,13 +100,14 @@ def _engine_input(image: Path, is_crop: bool) -> bytes:
     return v1_engine_input(image) if is_crop else image.read_bytes()
 
 
-def _cache_get(session, sha: str, engine: str, version: str):
-    """(smiles, molfile) from ocsr_cache, or None. Ends its read transaction."""
+def _cache_get(session, owner_id: uuid.UUID, sha: str, engine: str, version: str):
+    """(smiles, molfile) from the owner's ocsr_cache rows, or None. Ends its read transaction."""
     if session is None:
         return None
     try:
         return session.execute(
             select(OcsrCache.smiles, OcsrCache.molfile).where(
+                OcsrCache.owner_id == owner_id,
                 OcsrCache.image_sha256 == sha,
                 OcsrCache.engine == engine,
                 OcsrCache.engine_version == version,
@@ -107,7 +122,9 @@ def _cache_get(session, sha: str, engine: str, version: str):
         session.rollback()  # end the read transaction before the long work
 
 
-def _cache_put(session, sha: str, engine: str, version: str, smiles: str, molfile) -> None:
+def _cache_put(
+    session, owner_id: uuid.UUID, sha: str, engine: str, version: str, smiles: str, molfile
+) -> None:
     """Store one prediction in its own short transaction; an existing row is kept."""
     if session is None or not smiles:
         return
@@ -115,13 +132,16 @@ def _cache_put(session, sha: str, engine: str, version: str, smiles: str, molfil
         session.execute(
             pg_insert(OcsrCache)
             .values(
+                owner_id=owner_id,
                 image_sha256=sha,
                 engine=engine,
                 engine_version=version,
                 smiles=smiles,
                 molfile=molfile,
             )
-            .on_conflict_do_nothing(index_elements=["image_sha256", "engine", "engine_version"])
+            .on_conflict_do_nothing(
+                index_elements=["owner_id", "image_sha256", "engine", "engine_version"]
+            )
         )
         session.commit()
     except Exception:  # noqa: BLE001 - the prediction is done; a lost cache row costs nothing
@@ -136,15 +156,15 @@ def ocsr(step, session) -> dict:
         name = Engine(step.engine)
     except ValueError as exc:
         raise BadInput("unknown engine") from exc
-    image, is_crop = _input_image(step, session)
+    image, is_crop, owner_id = _input_image(step, session)
     if not image.is_file():
         raise BadInput("input image is missing")
     data = _engine_input(image, is_crop)
-    use_cache = name is not Engine.FAKE
+    use_cache = name is not Engine.FAKE and owner_id is not None
     if use_cache:
         sha = hashlib.sha256(data).hexdigest()  # the engine's input, not the stored file
         version = engine_version(name)
-        hit = _cache_get(session, sha, name.value, version)
+        hit = _cache_get(session, owner_id, sha, name.value, version)
         if hit is not None:
             return {
                 "smiles": hit.smiles,
@@ -169,7 +189,9 @@ def ocsr(step, session) -> dict:
         if tmp:
             os.unlink(tmp)
     if use_cache:
-        _cache_put(session, sha, name.value, engine.version, result.smiles, result.molfile)
+        _cache_put(
+            session, owner_id, sha, name.value, engine.version, result.smiles, result.molfile
+        )
     return {
         "smiles": result.smiles,
         "molfile": result.molfile,

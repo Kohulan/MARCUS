@@ -215,20 +215,38 @@ class Curation(Base):
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
-class SegCache(Base):
-    __tablename__ = "seg_cache"
-    __table_args__ = (Index("ix_seg_cache_created_at", "created_at"),)
+def _owner_pk() -> Mapped[uuid.UUID]:
+    return mapped_column(
+        UUID(as_uuid=True), ForeignKey("owners.id", ondelete="CASCADE"), primary_key=True
+    )
 
+
+class SegCache(Base):
+    """Per owner (security F6): one owner's row is never another owner's hit. `paper_id`: the
+    paper whose segmentation the row holds; deleting that paper drops the row."""
+
+    __tablename__ = "seg_cache"
+    __table_args__ = (
+        Index("ix_seg_cache_created_at", "created_at"),
+        Index("ix_seg_cache_paper_id", "paper_id"),
+    )
+
+    owner_id: Mapped[uuid.UUID] = _owner_pk()
     pdf_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     seg_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    paper_id: Mapped[uuid.UUID] = _fk("papers.id")
     payload: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
 class OcsrCache(Base):
+    """Per owner (security F3): a hit, `cached: true` and `ms` 0, only ever follows the same
+    owner's own earlier prediction of the same bytes."""
+
     __tablename__ = "ocsr_cache"
     __table_args__ = (Index("ix_ocsr_cache_created_at", "created_at"),)
 
+    owner_id: Mapped[uuid.UUID] = _owner_pk()
     image_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     engine: Mapped[str] = mapped_column(Text, primary_key=True)
     engine_version: Mapped[str] = mapped_column(Text, primary_key=True)

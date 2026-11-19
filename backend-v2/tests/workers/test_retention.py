@@ -211,12 +211,14 @@ def test_expired_image_job_cancelled_and_purged(db_session):
 
 
 def _seg(s, sha: str, version_key: str, created: datetime) -> None:
-    s.add(SegCache(pdf_sha256=sha * 64, seg_version=version_key, payload={}, created_at=created))
+    paper = make_paper(s)
+    s.add(SegCache(owner_id=paper.owner_id, paper_id=paper.id, pdf_sha256=sha * 64,
+                   seg_version=version_key, payload={}, created_at=created))  # fmt: skip
 
 
 def _ocsr(s, sha: str, engine: str, version: str, created: datetime) -> None:
-    s.add(OcsrCache(image_sha256=sha * 64, engine=engine, engine_version=version, smiles="C",
-                    created_at=created))  # fmt: skip
+    s.add(OcsrCache(owner_id=make_owner(s).id, image_sha256=sha * 64, engine=engine,
+                    engine_version=version, smiles="C", created_at=created))  # fmt: skip
 
 
 def test_seg_cache_purged_by_age_and_version(db_session, monkeypatch):
@@ -523,7 +525,8 @@ def test_a_failing_phase_does_not_skip_the_others(db_session, monkeypatch, caplo
     assert report.errors == ["image_jobs"]
     assert report.papers == 1 and report.seg_cache == 1  # before and after the broken phase
     assert "image_jobs" in caplog.text and "disk on fire" in caplog.text
-    assert count(s, Paper) == 0 and count(s, SegCache) == 0
+    # the paper left is the live one whose segmentation the purged cache row held
+    assert count(s, Paper) == 1 and count(s, SegCache) == 0
 
 
 @pytest.mark.parametrize("bad", [0, -1])

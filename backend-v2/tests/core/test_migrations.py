@@ -139,3 +139,38 @@ def test_migration_0006_up_down(migrated_db):
         assert "first_author" not in cols and "year" not in cols and "title" in cols
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0007_caches_per_owner_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        insp = inspect(engine)
+        seg_pk = insp.get_pk_constraint("seg_cache")["constrained_columns"]
+        ocsr_pk = insp.get_pk_constraint("ocsr_cache")["constrained_columns"]
+        assert seg_pk == ["owner_id", "pdf_sha256", "seg_version"]
+        assert ocsr_pk == ["owner_id", "image_sha256", "engine", "engine_version"]
+        fks = {
+            (t, fk["referred_table"]): fk["options"].get("ondelete")
+            for t in ("seg_cache", "ocsr_cache")
+            for fk in insp.get_foreign_keys(t)
+        }
+        assert fks == {
+            ("seg_cache", "owners"): "CASCADE",
+            ("seg_cache", "papers"): "CASCADE",
+            ("ocsr_cache", "owners"): "CASCADE",
+        }
+        assert ("seg_cache", "ix_seg_cache_paper_id") in _indexes(engine)
+        assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
+        assert ("ocsr_cache", "ix_ocsr_cache_created_at") in _indexes(engine)
+        command.downgrade(cfg, "0006")
+        assert "owner_id" not in _columns(engine, "seg_cache")
+        assert "paper_id" not in _columns(engine, "seg_cache")
+        assert "owner_id" not in _columns(engine, "ocsr_cache")
+        assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
+    finally:
+        command.upgrade(cfg, "head")
