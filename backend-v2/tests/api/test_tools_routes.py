@@ -189,7 +189,9 @@ async def test_tool_waits_have_their_own_bounded_thread_budget(monkeypatch):
 
     monkeypatch.setattr(tools_route, "run_tool", blocking)
     default = anyio.to_thread.current_default_thread_limiter()
-    held = [asyncio.ensure_future(tools_route.call_tool("marcus.tools.depict", {})) for _ in range(2)]
+    held = [
+        asyncio.ensure_future(tools_route.call_tool("marcus.tools.depict", {})) for _ in range(2)
+    ]
     for _ in range(100):
         if len(started) == 2:
             break
@@ -202,3 +204,33 @@ async def test_tool_waits_have_their_own_bounded_thread_budget(monkeypatch):
     release.set()
     assert await asyncio.gather(*held) == ["<svg/>", "<svg/>"]
     assert await tools_route.call_tool("marcus.tools.depict", {}) == "<svg/>"
+
+
+@pytest.mark.parametrize(
+    "highlight",
+    ["~".join(["*"] * 129), "~".join(["[#6]"] * 129), "[$(*~*)]", "C[$(CO)]"],
+    ids=["any-atoms", "bracket-atoms", "recursive", "recursive-mixed"],
+)
+async def test_depict_highlight_over_cap_422(app, calls, highlight):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "C", "highlight": highlight})
+    assert r.status_code == 422
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "highlight",
+    ["~".join(["*"] * 128), "[#6]-&!@[#6]:[#6](-[#8])", "ClC(Br)c1ccccc1", ""],
+)
+async def test_depict_highlight_within_cap_dispatches(app, calls, highlight):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "C", "highlight": highlight})
+    assert r.status_code == 200
+    assert calls[-1][1]["highlight"] == highlight
+
+
+def test_highlight_atom_cap_matches_the_worker():
+    from marcus.api.routes import tools as route
+    from marcus.workers import tools as worker
+
+    assert route.MAX_HIGHLIGHT_ATOMS == worker.MAX_HIGHLIGHT_ATOMS

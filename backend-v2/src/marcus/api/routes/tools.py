@@ -4,10 +4,11 @@ The calls go through marcus.api.tooling (wait limit, error mapping, task expiry 
 own thread budget; see its docstring).
 """
 
+import re
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 from marcus.api.deps import current_owner
 from marcus.api.security import tools_limit
@@ -19,6 +20,9 @@ router = APIRouter(prefix="/tools", tags=["tools"], dependencies=[Depends(tools_
 MAX_MOLFILES = 20
 MAX_MOLFILE_BYTES = 200_000
 MAX_MCS_TOTAL = 1_000_000
+MAX_HIGHLIGHT_ATOMS = 128  # = marcus.workers.tools.MAX_HIGHLIGHT_ATOMS, which checks it again
+# One SMARTS atom: a bracket atom, or an organic-subset / any-atom symbol outside brackets.
+_SMARTS_ATOM = re.compile(r"\[[^\]]*\]|Cl|Br|[BCNOPSFIbcnops*Aa]")
 
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
@@ -30,6 +34,16 @@ class DepictIn(BaseModel):
     width: int = Field(512, ge=50, le=2000)
     height: int = Field(512, ge=50, le=2000)
     highlight: str = Field("", max_length=MAX_SMILES)
+
+    @field_validator("highlight")
+    @classmethod
+    def _highlight_caps(cls, value: str) -> str:
+        """No recursive SMARTS (a search per atom), at most MAX_HIGHLIGHT_ATOMS atoms."""
+        if "$" in value:
+            raise ValueError("recursive SMARTS are not allowed")
+        if len(_SMARTS_ATOM.findall(value)) > MAX_HIGHLIGHT_ATOMS:
+            raise ValueError(f"at most {MAX_HIGHLIGHT_ATOMS} atoms")
+        return value
 
 
 class SmilesIn(BaseModel):

@@ -30,6 +30,11 @@ CDK = "org.openscience.cdk"
 JARS = ("cdk-2.10.jar", "centres.jar")
 MCS_TIMEOUT_S = 3  # below the 5 s task soft limit
 AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
+# A highlight SMARTS (the MCS the compare view shows) is matched with every mapping walked lazily:
+# at most this many distinct atom sets are highlighted, and a pattern over this many atoms, or
+# with recursive SMARTS ($(...), a search per atom), is refused. The API applies the same caps.
+MAX_HIGHLIGHT_MATCHES = 32
+MAX_HIGHLIGHT_ATOMS = 128
 
 
 class ToolInputError(ValueError):
@@ -177,9 +182,11 @@ def depict(
         if highlight.strip():
             try:
                 builder = J(f"{CDK}.silent.SilentChemObjectBuilder").getInstance()
+                _check_highlight(J, builder, highlight)
                 pattern = J(f"{CDK}.smarts.SmartsPattern").create(highlight, builder)
                 J(f"{CDK}.smarts.SmartsPattern").prepare(mol)
-                subs = pattern.matchAll(mol).toSubstructures()
+                matches = pattern.matchAll(mol).uniqueAtoms().limit(MAX_HIGHLIGHT_MATCHES)
+                subs = matches.toSubstructures()
             except jpype.JException as exc:
                 raise ToolInputError(f"invalid highlight SMARTS: {exc}") from exc
             gen = gen.withHighlight(
@@ -197,6 +204,17 @@ def depict(
         raise
     except jpype.JException as exc:
         raise ToolInputError(f"cannot depict molecule: {exc}") from exc
+
+
+def _check_highlight(jclass, builder, highlight: str) -> None:
+    """ToolInputError for a highlight SMARTS that is recursive or over MAX_HIGHLIGHT_ATOMS."""
+    if "$" in highlight:
+        raise ToolInputError("recursive SMARTS are not allowed in a highlight")
+    query = jclass(f"{CDK}.isomorphism.matchers.QueryAtomContainer")(builder)
+    if not jclass(f"{CDK}.smarts.Smarts").parse(query, highlight):
+        raise ToolInputError("invalid highlight SMARTS")
+    if query.getAtomCount() > MAX_HIGHLIGHT_ATOMS:
+        raise ToolInputError(f"highlight has more than {MAX_HIGHLIGHT_ATOMS} atoms")
 
 
 def smiles_to_molfile(smiles: str) -> str:

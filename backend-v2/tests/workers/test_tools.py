@@ -215,3 +215,44 @@ def test_worker_waits_long_enough_for_a_process_warm_up():
     from marcus.core.celery_app import celery_app
 
     assert celery_app.conf.worker_proc_alive_timeout >= 30
+
+
+C60 = (
+    "c12c3c4c5c1c1c6c7c2c2c8c3c3c9c4c4c%10c5c5c1c1c6c6c%11c7c2c2c7c8c3c3c8c9c4c4c9c%10c5c5c1"
+    "c1c6c6c%11c2c2c7c3c3c8c4c4c9c5c1c1c6c2c3c41"
+)
+
+
+@needs_cdk
+def test_depict_highlight_walks_a_bounded_number_of_matches():
+    """A 30-atom any-atom chain has an astronomic number of matches in C60: only the first
+    MAX_HIGHLIGHT_MATCHES (unique atom sets) are walked, well inside the 5 s soft limit."""
+    import time
+
+    from marcus.workers.tools import depict
+
+    start = time.perf_counter()
+    svg = depict(C60, "svg", 300, 300, highlight="~".join(["*"] * 30))
+    assert svg.startswith("<svg") and time.perf_counter() - start < 3
+
+
+@needs_cdk
+@pytest.mark.parametrize(
+    "highlight",
+    ["~".join(["*"] * 129), "[$(*~*~*)]~*", "[$([#6]~[#7])]"],
+    ids=["too-many-atoms", "recursive", "recursive-bracket"],
+)
+def test_depict_refuses_an_over_cap_highlight(highlight):
+    from marcus.workers.tools import ToolInputError, depict
+
+    with pytest.raises(ToolInputError):
+        depict("CCO", "svg", 200, 200, highlight=highlight)
+
+
+@needs_cdk
+def test_depict_highlight_at_the_atom_cap_is_drawn():
+    from marcus.workers.tools import MAX_HIGHLIGHT_ATOMS, depict
+
+    assert MAX_HIGHLIGHT_ATOMS == 128
+    assert depict("CCO", "svg", 200, 200, highlight="~".join(["*"] * 128)).startswith("<svg")
+    assert depict("CCO", "svg", 200, 200, highlight="[#6]-[#8]").startswith("<svg")
