@@ -169,6 +169,36 @@ def test_after_doi_stores_title(db_session):
     assert paper.title == "Coffea alkaloids"
 
 
+def test_after_doi_stores_first_author_and_year(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    finish(s, doi, {"doi": "10.1/x", "title": "T", "first_author": "Rajan", "year": 2025})
+    s.refresh(paper)
+    assert (paper.first_author, paper.year) == ("Rajan", 2025)
+
+
+def test_after_doi_without_author_or_year_stores_null(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    finish(s, doi, {"doi": "10.1/x", "title": "T"})
+    s.refresh(paper)
+    assert (paper.first_author, paper.year) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"first_author": 5}, {"first_author": ["Rajan"]}, {"year": "2025"}, {"year": True},
+     {"year": 2025.0}],
+)  # fmt: skip
+def test_check_doi_result_rejects_odd_author_or_year(extra):
+    with pytest.raises(BadResult):
+        pipeline_module._check_doi_result({"doi": None, **extra})
+
+
 def test_check_doi_result_rejects_non_string_title():
     with pytest.raises(BadResult):
         pipeline_module._check_doi_result({"doi": None, "title": 5})
@@ -177,6 +207,10 @@ def test_check_doi_result_rejects_non_string_title():
 def test_check_doi_result_accepts_missing_title():
     pipeline_module._check_doi_result({"doi": "10.1/x"})
     pipeline_module._check_doi_result({"doi": None, "title": None})
+    pipeline_module._check_doi_result(
+        {"doi": "10.1/x", "title": "T", "first_author": None, "year": None}
+    )
+    pipeline_module._check_doi_result({"doi": "10.1/x", "first_author": "Rajan", "year": 2025})
 
 
 def test_paper_done_when_last_step_finishes(db_session):

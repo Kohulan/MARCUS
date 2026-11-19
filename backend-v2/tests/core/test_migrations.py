@@ -122,3 +122,19 @@ def test_migration_0005_up_down(migrated_db):
         assert "title" not in _columns(engine, "papers")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0006_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        assert {"first_author", "year"} <= _columns(engine, "papers")
+        command.downgrade(cfg, "0005")
+        cols = _columns(engine, "papers")
+        assert "first_author" not in cols and "year" not in cols and "title" in cols
+    finally:
+        command.upgrade(cfg, "head")

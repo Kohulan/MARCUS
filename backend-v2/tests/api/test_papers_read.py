@@ -89,6 +89,29 @@ async def test_get_paper_shape(app, async_db_session):
     assert [p["engine"] for p in preds] == ["molnextr", "decimer"]
 
 
+async def test_paper_shows_doi_title_first_author_and_year(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    found = await seed_paper(db, alice)
+    unknown = await seed_paper(db, alice, ocsr=False)
+    await db.execute(
+        update(Paper)
+        .where(Paper.id == found.paper_id)
+        .values(doi="10.1/x", title="Coffea", first_author="Rajan", year=2025)
+    )
+    await db.commit()
+    meta = {"doi": "10.1/x", "title": "Coffea", "first_author": "Rajan", "year": 2025}
+    none = dict.fromkeys(meta)
+    async with make_client(app, token) as c:
+        detail = (await c.get(f"/api/v2/papers/{found.paper_id}")).json()
+        bare = (await c.get(f"/api/v2/papers/{unknown.paper_id}")).json()
+        listed = {p["id"]: p for p in (await c.get("/api/v2/papers")).json()["papers"]}
+    assert {k: detail[k] for k in meta} == meta
+    assert {k: bare[k] for k in meta} == none
+    assert {k: listed[str(found.paper_id)][k] for k in meta} == meta
+    assert {k: listed[str(unknown.paper_id)][k] for k in meta} == none
+
+
 async def test_segments_route_matches_paper_detail(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)

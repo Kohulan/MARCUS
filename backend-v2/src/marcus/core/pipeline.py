@@ -429,6 +429,12 @@ def _check_doi_result(result: dict) -> None:
     title = result.get("title")
     if title is not None and not _is_text(title):
         raise BadResult("doi: 'title' must be a string or null")
+    first_author = result.get("first_author")
+    if first_author is not None and not _is_text(first_author):
+        raise BadResult("doi: 'first_author' must be a string or null")
+    year = result.get("year")
+    if year is not None and type(year) is not int:
+        raise BadResult("doi: 'year' must be an int or null")
 
 
 def _check_nothing(result: dict) -> None:
@@ -655,6 +661,8 @@ def _after_ocsr(session: Session, paper: Paper, step: Step, result: dict) -> lis
 def _after_doi(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     paper.doi = result["doi"]
     paper.title = result.get("title")
+    paper.first_author = result.get("first_author")
+    paper.year = result.get("year")
     return []
 
 

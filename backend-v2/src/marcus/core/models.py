@@ -86,6 +86,8 @@ class Paper(Base):
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     doi: Mapped[str | None] = mapped_column(Text, nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     engine: Mapped[str] = mapped_column(Text)
     ocsr_mode: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text)
