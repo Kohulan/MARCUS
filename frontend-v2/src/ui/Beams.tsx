@@ -109,8 +109,16 @@ export default function Beams() {
       }
       raf = window.requestAnimationFrame(tick);
     };
+    // A new width re-makes the sky; a height-only change (a phone's URL bar showing or
+    // hiding while scrolling) keeps the beams where they are and only resizes the bitmap.
     const resize = () => {
-      size();
+      const w = Math.max(1, Math.round(cv.clientWidth * SCALE));
+      const h = Math.max(1, Math.round(cv.clientHeight * SCALE));
+      if (w !== W) size();
+      else if (h !== H) {
+        H = h;
+        cv.height = H;
+      } else return;
       run();
     };
 
