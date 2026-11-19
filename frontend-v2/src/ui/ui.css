@@ -780,10 +780,15 @@
   pointer-events: none;
 }
 
-/* From 1024 px the footer's bubbles stick to the bottom: a toast sits above them. */
+/* From 1024 px the footer's bubbles stick to the bottom: a toast sits above them, and
+   anything scrolled into view (a focused link, an anchor) stops above them (WCAG 2.4.11). */
 @media (min-width: 1024px) {
   .toasts {
     bottom: 56px;
+  }
+
+  html {
+    scroll-padding-bottom: 56px;
   }
 }
 

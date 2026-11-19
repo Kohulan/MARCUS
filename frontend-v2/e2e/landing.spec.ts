@@ -186,6 +186,37 @@ test.describe("landing and info pages @mocked", () => {
     expect(footerTop).toBeGreaterThanOrEqual(pageEnd);
   });
 
+  // WCAG 2.4.11: Tab never puts focus under the sticky footer bubbles.
+  for (const url of ["/about", "/disclaimer"]) {
+    test(`${url}: tabbing through the page, focus is never under the footer`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(url, { waitUntil: "networkidle" });
+      const hidden: string[] = [];
+      let seen = 0;
+      for (let i = 0; i < 80; i++) {
+        await page.keyboard.press("Tab");
+        const r = await page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          const footer = document.querySelector(".site-footer")!;
+          if (!el || el === document.body) return null;
+          if (footer.contains(el)) return { inFooter: true, label: "", covered: false };
+          const box = el.getBoundingClientRect();
+          const bubbles = [...footer.children].map((b) => b.getBoundingClientRect());
+          const covered = bubbles.some(
+            (b) => box.bottom > b.top && box.top < b.bottom && box.right > b.left && box.left < b.right,
+          );
+          return { inFooter: false, label: el.textContent?.trim().slice(0, 40) ?? "", covered };
+        });
+        if (!r) continue;
+        if (r.inFooter) break; // reached the footer: the page's own links are done
+        seen++;
+        if (r.covered) hidden.push(r.label);
+      }
+      expect(seen).toBeGreaterThan(3);
+      expect(hidden).toEqual([]);
+    });
+  }
+
   test("a footer link opens the info page at its top", async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.goto("/", { waitUntil: "networkidle" });
@@ -249,6 +280,9 @@ test.describe("landing upload", () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/app$/);
     await page.waitForLoadState("networkidle");
+    expect(uploads).toEqual([]);
+    await page.reload({ waitUntil: "networkidle" }); // a reload of that entry: nothing to send
+    await expect(page.getByRole("heading", { level: 1, name: "Drop a PDF here" })).toBeVisible();
     expect(uploads).toEqual([]);
   });
 });
