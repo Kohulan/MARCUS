@@ -7,37 +7,41 @@
 
 /* App frame ---------------------------------------------------------------- */
 
+/* The header floats free above the page; the ruled frame is the page's own (.sheet__page).
+   The footer follows the page in the flow, 12 px under it. */
 .frame {
   max-width: 1440px;
   margin: 0 auto;
-  padding: 8px;
+  padding: 8px 8px 12px;
 }
 
 .frame > .sheet {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 16px);
-  min-height: calc(100dvh - 16px);
+  min-height: calc(100vh - 20px);
+  min-height: calc(100dvh - 20px);
+  border: 0;
 }
 
 .sheet__page {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
+  border: 1px solid var(--line);
 }
 
-/* Header: a row of hairline cells ------------------------------------------ */
+/* Header: the mark, then the Waterline pill, both free of the sheet -------- */
 
 .site-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 24px;
 }
 
 .site-header__mark {
   display: flex;
-  flex: 1 1 280px;
   align-items: center;
   gap: 12px;
   padding: 14px 24px;
@@ -62,105 +66,276 @@
   letter-spacing: 0.06em;
 }
 
-.site-header__mark:focus-visible,
-.site-nav__cell:focus-visible {
+.site-header__mark:focus-visible {
   outline-offset: -4px;
   border-radius: 0;
 }
 
-.site-nav {
-  display: flex;
-  flex-wrap: wrap;
+.site-header__nav {
+  padding: 10px 24px;
 }
 
-.site-nav__cell {
-  display: block;
-  width: 150px;
-  padding: 12px 14px 26px;
-  border-left: 1px solid var(--line);
+/*
+ * Waterline: a clear glass pill (blur and saturate; no refraction filter, no WebGL). The
+ * marked item is a drop of green water that stretches to the item you pick and settles with
+ * a ripple. Header.tsx sets --wl-l, --wl-r (the drop's edges) and --wl-mx (the pointer)
+ * through the CSSOM, and the classes has-drop, is-settling and data-dir.
+ */
+.wl {
+  --wl-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.25));
+  -webkit-backdrop-filter: blur(3px) saturate(1.8);
+  backdrop-filter: blur(3px) saturate(1.8);
+  box-shadow: var(--glass-shine), var(--lift-glass);
+  isolation: isolate;
+}
+
+/* The meniscus: light lifts on the rim under the pointer, a faint shade below it. */
+.wl::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms var(--wl-ease);
+  background:
+    radial-gradient(64px 20px at var(--wl-mx, 50%) 0, rgba(255, 255, 255, 0.95), transparent 72%),
+    radial-gradient(84px 14px at var(--wl-mx, 50%) 100%, rgba(30, 77, 51, 0.2), transparent 72%);
+}
+
+.wl:hover::before {
+  opacity: 1;
+}
+
+.wl__item {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 18px;
+  border-radius: 999px;
   font-family: var(--font-mono);
+  font-weight: 500;
   font-size: 12px;
   line-height: 1.4;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--ink);
   text-decoration: none;
-  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.site-nav__cell:hover {
-  background: var(--sunken);
+.wl__item:hover {
   color: var(--ink);
 }
 
-.site-nav__cell--tool {
-  width: 170px;
-  background: var(--green);
-  color: var(--on-green);
+.wl__item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 999px;
 }
 
-.site-nav__cell--tool:hover {
-  background: var(--ink);
-  color: var(--on-green);
+.wl__item .fa {
+  color: var(--green);
 }
 
-.site-nav__cell--tool:focus-visible {
-  outline-color: var(--on-green);
+.wl__drop {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  bottom: 4px;
+  left: var(--wl-l, 4px);
+  right: var(--wl-r, 4px);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.72);
+  background: linear-gradient(180deg, rgba(45, 122, 70, 0.14), rgba(30, 77, 51, 0.3));
+  box-shadow: var(--water-drop);
+  transition:
+    opacity 180ms var(--wl-ease),
+    transform 240ms var(--wl-ease);
 }
 
-/* Narrower than the header row: the nav becomes its own ruled row of cells. */
-@media (max-width: 959.98px) {
-  .site-nav {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    width: 100%;
-    border-top: 1px solid var(--line);
+.wl.has-drop .wl__drop {
+  opacity: 1;
+  transform: none;
+}
+
+/* The stretch: the leading edge runs ahead, the trailing edge follows. */
+.wl[data-dir="right"] .wl__drop {
+  transition:
+    right 240ms var(--wl-ease),
+    left 440ms var(--wl-ease) 70ms,
+    opacity 180ms,
+    transform 240ms;
+}
+
+.wl[data-dir="left"] .wl__drop {
+  transition:
+    left 240ms var(--wl-ease),
+    right 440ms var(--wl-ease) 70ms,
+    opacity 180ms,
+    transform 240ms;
+}
+
+.wl__ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(45, 122, 70, 0.7);
+  opacity: 0;
+}
+
+.wl.is-settling .wl__drop {
+  animation: wl-settle 460ms var(--wl-ease);
+}
+
+.wl.is-settling .wl__ripple {
+  animation: wl-ripple 620ms var(--wl-ease);
+}
+
+@keyframes wl-settle {
+  0% {
+    transform: scale(1.05, 0.9);
   }
 
-  .site-nav__cell {
-    width: auto;
+  45% {
+    transform: scale(0.98, 1.05);
   }
 
-  .site-nav__cell:first-child {
-    border-left: 0;
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes wl-ripple {
+  from {
+    opacity: 0.75;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.16, 1.6);
+  }
+}
+
+/* Reduced motion: the drop jumps to its item; no ripple, no meniscus. */
+@media (prefers-reduced-motion: reduce) {
+  .wl .wl__drop {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .wl .wl__ripple {
+    animation: none !important;
+  }
+
+  .wl::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .wl {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border), var(--lift-pill-solid);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .wl {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border), var(--lift-pill-solid);
+  }
+}
+
+@media (forced-colors: active) {
+  .wl {
+    border: 1px solid ButtonBorder;
+  }
+
+  .wl__drop {
+    border: 2px solid Highlight;
+    background: none;
   }
 }
 
 @media (max-width: 559.98px) {
   .site-header__mark {
-    padding: 12px 16px;
+    padding: 12px 16px 8px;
   }
 
-  .site-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .site-header__nav {
+    width: 100%;
+    padding: 0 16px 14px;
   }
 
-  .site-nav__cell {
-    padding: 12px 14px 18px;
+  .wl {
+    display: flex;
+    justify-content: space-between;
   }
 
-  .site-nav__cell:nth-child(odd) {
-    border-left: 0;
+  .wl__item {
+    padding: 10px 12px;
   }
+}
 
-  .site-nav__cell:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-  }
+/* Font Awesome icons (Icon.tsx): inline SVG in the text's colour, 1.05 em. */
+.fa {
+  display: inline-block;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.45em;
+  vertical-align: -0.15em;
+  fill: currentColor;
+  overflow: visible;
+}
+
+.fa.fa--after {
+  margin: 0 0 0 0.5em;
 }
 
 /* Footer ------------------------------------------------------------------- */
 
 .site-footer {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.site-footer a {
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+/* The workspace's thin line: the page's frame continues round it (the review grid keeps
+   its space; a sticky footer there would cover cards while scrolling). */
+.site-footer--thin {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 16px 24px;
-  border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
+  border: 1px solid var(--line);
+  border-top: 0;
   font-size: 11px;
-  line-height: 1.6;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -177,90 +352,148 @@
   gap: 4px 20px;
 }
 
-/* Each link is a 24 px tall target (WCAG 2.5.8): at phone width the links wrap onto two rows,
-   and 11 px text alone would leave them 18 px tall and 22 px apart. */
-.site-footer a {
+/* Each link is a 24 px tall target (WCAG 2.5.8). */
+.site-footer--thin a {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
   color: var(--muted);
-  text-decoration: none;
 }
 
-.site-footer a:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-}
-
-@media (max-width: 559.98px) {
-  .site-footer {
-    padding: 16px;
-  }
-}
-
-/* The band (every page but the review workspace): three ruled cells, copyright left,
-   credit centre, links right, like the header's row. Below 960 px the cells stack. */
-.site-footer--band {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0;
-  padding: 0;
-}
-
-.site-footer__cell {
+/* The bubbles: three opaque porcelain pills (glazed white, unlike the glass header), the
+   copyright far left, the credit in the middle, the links far right. The row lets clicks
+   through; only the bubbles take them. */
+.site-footer--bubbles {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 6px;
-  padding: 14px 24px;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0 12px;
+  font-size: 10px;
+  color: var(--text-2);
+  pointer-events: none;
 }
 
-.site-footer__cell + .site-footer__cell {
-  border-left: 1px solid var(--line);
+.site-footer__copy,
+.site-footer__credit,
+.site-footer__nav {
+  position: relative;
+  margin: 0;
+  padding: 3px 14px;
+  border-radius: 999px;
+  line-height: 24px;
+  white-space: nowrap;
+  pointer-events: auto;
+  background: radial-gradient(120% 90% at 30% 0%, var(--surface) 0%, #fbfbf7 45%, #efefe8 100%);
+  box-shadow: var(--porcelain);
+}
+
+/* The glaze: a soft white highlight on the upper left of each bubble. */
+.site-footer__copy::after,
+.site-footer__credit::after,
+.site-footer__nav::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 12%;
+  width: 38%;
+  height: 38%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+  pointer-events: none;
 }
 
 .site-footer__credit {
-  justify-content: center;
+  flex: 0 1 auto;
+  text-align: center;
 }
 
 .site-footer__nav {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 0 8px;
 }
 
-@media (max-width: 959.98px) {
-  .site-footer--band {
-    grid-template-columns: minmax(0, 1fr);
+/* 24 px tall targets (WCAG 2.5.8), the credit's links too: a link never breaks inside. */
+.site-footer--bubbles a {
+  display: inline-block;
+  min-height: 24px;
+  color: var(--text-2);
+}
+
+.site-footer--bubbles a:hover {
+  color: var(--ink);
+}
+
+.site-footer--bubbles a:focus-visible {
+  outline-offset: 1px;
+}
+
+.site-footer--bubbles .fa {
+  color: var(--green);
+}
+
+.site-footer .fa-mug {
+  margin: 0 0.3em;
+  transform-origin: 50% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-footer .fa-mug {
+    animation: mug-steam 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes mug-steam {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
   }
 
-  .site-footer__cell + .site-footer__cell {
-    border-left: 0;
-    border-top: 1px solid var(--line);
+  30% {
+    transform: translateY(-1.5px) rotate(-4deg);
   }
 
-  .site-footer__credit,
+  60% {
+    transform: translateY(0) rotate(3deg);
+  }
+}
+
+/* Narrower than one line: the footer stops sticking and stacks its bubbles, centred. */
+@media (max-width: 1023.98px) {
+  .site-footer--bubbles {
+    position: static;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .site-footer__credit {
+    border-radius: 16px;
+    white-space: normal;
+  }
+
   .site-footer__nav {
-    justify-content: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 559.98px) {
-  .site-footer--band {
-    padding: 0;
+  .site-footer--thin {
+    padding: 16px;
   }
+}
 
-  .site-footer__cell {
-    padding: 10px 16px;
-  }
-
-  /* The links wrap here: a gap instead of dots, so no line ends on a dangling dot. */
+@media (forced-colors: active) {
+  .site-footer__copy,
+  .site-footer__credit,
   .site-footer__nav {
-    gap: 0 16px;
-  }
-
-  .site-footer__dot {
-    display: none;
+    border: 1px solid CanvasText;
   }
 }
 
@@ -542,6 +775,13 @@
   align-items: flex-end;
   max-width: calc(100vw - 48px);
   pointer-events: none;
+}
+
+/* From 1024 px the footer's bubbles stick to the bottom: a toast sits above them. */
+@media (min-width: 1024px) {
+  .toasts {
+    bottom: 56px;
+  }
 }
 
 .toasts__region {

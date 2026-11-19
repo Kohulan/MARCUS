@@ -9,8 +9,9 @@
  *   text is orange-ink; text on an orange fill is on-orange.
  * - accepted is 4.4:1 on sunken: accepted text sits on paper or surface only.
  * - States always pair a colour with a word and a shape, never colour alone.
- * - The sheet is flat: only what floats above it (glass pills, menus, toasts, dialogs)
- *   takes a lift, and every dialog dims the page with the one scrim (DESIGN.md Elevation).
+ * - The sheet is flat: only what floats above it (glass pills, the nav's water drop, the
+ *   footer's porcelain bubbles, menus, toasts, dialogs) takes a lift, and every dialog
+ *   dims the page with the one scrim (DESIGN.md Elevation).
  */
 
 :root {
@@ -63,6 +64,19 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.45),
     inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22);
   --scrim: rgba(28, 33, 29, 0.42);
+  /* The footer's porcelain bubbles: a glazed top edge, a faint rim and a low lift */
+  --porcelain:
+    inset 0 1px 0 #FFFFFF,
+    inset 0 -1.5px 2px rgba(28, 33, 29, 0.1),
+    inset 0 0 0 1px rgba(28, 33, 29, 0.07),
+    0 1px 1px rgba(15, 30, 22, 0.1),
+    0 8px 16px -10px rgba(15, 30, 22, 0.45);
+  /* The Waterline nav's drop of green water: its meniscus and a small lift */
+  --water-drop:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55),
+    0 5px 10px -7px rgba(15, 30, 22, 0.45);
 
   /* Type */
   --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;

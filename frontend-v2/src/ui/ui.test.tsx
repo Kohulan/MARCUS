@@ -2,6 +2,7 @@
 // shapes, the stamp, numbered tags, the drawing, SMILES copy, the desktop note, and that
 // every part a pre-rendered page uses renders on the server without touching window and
 // without a style attribute (CSP style-src 'self').
+import { faCircleInfo } from "@fortawesome/free-solid-svg-icons";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -12,6 +13,7 @@ import Footer from "./Footer";
 import { GlassButton, GlassLink } from "./GlassButton";
 import GlassFilter from "./GlassFilter";
 import Header from "./Header";
+import Icon from "./Icon";
 import Kbd from "./Kbd";
 import Smiles from "./Smiles";
 import SpecimenLabel from "./SpecimenLabel";
@@ -423,20 +425,86 @@ describe("Kbd", () => {
 });
 
 describe("Header and Footer", () => {
-  it("header has the wordmark, the nav and the way into the tool", () => {
+  const headerAt = (path: string) =>
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <Header />
       </MemoryRouter>,
     );
+
+  it("header has the wordmark and the Waterline nav: About, GitHub, Open the tool", () => {
+    const { container } = headerAt("/");
     expect(screen.getByRole("link", { name: "MARCUS" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/#how");
-    expect(screen.getByRole("link", { name: "Cite" })).toHaveAttribute("href", "/#cite");
-    expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute(
-      "href",
-      "https://github.com/Kohulan/MARCUS",
-    );
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(nav).toHaveClass("wl");
+    const links = [...nav.querySelectorAll("a")];
+    expect(links.map((a) => a.textContent)).toEqual([
+      "About",
+      "GitHub (opens in a new tab)",
+      "Open the tool",
+    ]);
+    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    const github = screen.getByRole("link", { name: "GitHub (opens in a new tab)" });
+    expect(github).toHaveAttribute("href", "https://github.com/Kohulan/MARCUS");
+    expect(github).toHaveAttribute("target", "_blank");
+    expect(github).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByRole("link", { name: "Open the tool" })).toHaveAttribute("href", "/app");
+    // one decorative icon per item, the tool's arrow after its label
+    for (const a of links) expect(a.querySelectorAll("svg.fa[aria-hidden='true']")).toHaveLength(1);
+    expect(links[2]?.lastElementChild).toHaveClass("fa", "fa--after");
+    // no anchors on the landing any more
+    expect(container.querySelector('a[href^="/#"]')).toBeNull();
+  });
+
+  it.each([
+    ["/about", "About"],
+    ["/about/", "About"],
+    ["/app", "Open the tool"],
+  ])("on %s, %s is the current page and holds the drop", (path, name) => {
+    headerAt(path);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const current = nav.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveAccessibleName(name);
+    expect(nav).toHaveClass("has-drop");
+  });
+
+  it.each(["/", "/privacy", "/app/papers/abc"])("on %s no item is current and no drop shows", (path) => {
+    headerAt(path);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(nav.querySelector("[aria-current]")).toBeNull();
+    expect(nav).not.toHaveClass("has-drop");
+  });
+
+  it("the drop follows focus and goes back to rest when focus leaves", () => {
+    headerAt("/about");
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const tool = screen.getByRole("link", { name: "Open the tool" });
+    fireEvent.focus(tool);
+    expect(nav).toHaveClass("has-drop");
+    expect(nav.style.getPropertyValue("--wl-l")).not.toBe("");
+    fireEvent.blur(tool, { relatedTarget: null });
+    expect(nav).toHaveClass("has-drop"); // resting on About again
+  });
+
+  it("arrow keys, Home and End move focus along the items", () => {
+    headerAt("/");
+    const [about, github, tool] = [
+      screen.getByRole("link", { name: "About" }),
+      screen.getByRole("link", { name: "GitHub (opens in a new tab)" }),
+      screen.getByRole("link", { name: "Open the tool" }),
+    ];
+    about.focus();
+    fireEvent.keyDown(about, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(github);
+    fireEvent.keyDown(github, { key: "End" });
+    expect(document.activeElement).toBe(tool);
+    fireEvent.keyDown(tool, { key: "ArrowRight" }); // stays at the end
+    expect(document.activeElement).toBe(tool);
+    fireEvent.keyDown(tool, { key: "Home" });
+    expect(document.activeElement).toBe(about);
+    fireEvent.keyDown(about, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(about);
   });
 
   const footerAt = (path: string) =>
@@ -446,34 +514,52 @@ describe("Header and Footer", () => {
       </MemoryRouter>,
     );
   const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
+  const text = (el: Element | null | undefined) =>
+    (el?.textContent ?? "").replace(/\s+/g, " ").trim();
 
-  it("the band: copyright left, credit centre, the links right", () => {
+  it("the bubbles: copyright left, credit centre, Disclaimer and Privacy right", () => {
     const { container } = footerAt("/");
-    const band = container.querySelector("footer.site-footer--band");
-    expect(band).not.toBeNull();
-    expect(band?.querySelector(".site-footer__copy")?.textContent).toBe("© 2025 MARCUS");
-    expect(band?.querySelector(".site-footer__credit")?.textContent).toBe(
-      "by Kohulan Rajan @ Steinbeck Lab",
+    const footer = container.querySelector("footer.site-footer--bubbles");
+    expect(footer).not.toBeNull();
+    const [copy, credit, nav] = [...(footer?.children ?? [])];
+    expect(copy).toHaveClass("site-footer__copy");
+    expect(text(copy)).toBe("Copyright 2026 MARCUS");
+    expect(copy?.querySelector(".visually-hidden")?.textContent).toBe("Copyright ");
+    expect(credit).toHaveClass("site-footer__credit");
+    expect(text(credit)).toBe(
+      "Built with coffee by Kohulan.R (opens in a new tab) at the Steinbeck Lab (opens in a new tab), " +
+        "Friedrich Schiller University Jena (opens in a new tab)",
     );
-    expect(href("Kohulan Rajan")).toBe("https://kohulanr.com");
-    expect(href("Steinbeck Lab")).toBe("https://github.com/Steinbeck-Lab");
-    expect(href("About")).toBe("/about");
+    expect(credit?.querySelector("svg.fa-mug")).not.toBeNull();
+    expect(nav).toHaveClass("site-footer__nav");
+    expect(screen.getByRole("navigation", { name: "Footer" })).toBe(nav);
+    expect(href("Kohulan.R (opens in a new tab)")).toBe("https://kohulanr.com");
+    expect(href("Steinbeck Lab (opens in a new tab)")).toBe("https://github.com/Steinbeck-Lab");
+    expect(href("Friedrich Schiller University Jena (opens in a new tab)")).toBe(
+      "https://www.uni-jena.de",
+    );
+    for (const a of credit?.querySelectorAll("a") ?? []) {
+      expect(a).toHaveAttribute("target", "_blank");
+      expect(a).toHaveAttribute("rel", "noopener noreferrer");
+      expect(a.querySelector("svg")).toBeNull(); // no icons on the credit's links
+    }
     expect(href("Disclaimer")).toBe("/disclaimer");
-    expect(href("GitHub")).toBe("https://github.com/Kohulan/MARCUS");
-    expect(href("MIT License")).toBe("https://opensource.org/license/MIT");
     expect(href("Privacy")).toBe("/privacy");
-    expect(screen.getByRole("navigation", { name: "Footer" })).toBeInTheDocument();
-    // the citation lives on About and the landing, not here; links stay in this tab
-    expect(container.textContent).not.toContain("10.1039");
-    expect(container.textContent).not.toContain("rights reserved");
-    for (const a of container.querySelectorAll("a")) expect(a.hasAttribute("target")).toBe(false);
+    for (const a of nav?.querySelectorAll("a") ?? []) {
+      expect(a.hasAttribute("target")).toBe(false);
+      expect(a.querySelectorAll("svg.fa")).toHaveLength(1);
+    }
+    // About, GitHub and the licence are not in the footer; the citation lives on About
+    for (const gone of ["About", "GitHub", "MIT", "10.1039", "rights reserved"]) {
+      expect(container.textContent).not.toContain(gone);
+    }
   });
 
   it.each(["/", "/about", "/privacy", "/disclaimer", "/app", "/app/images/7", "/no-such-page"])(
-    "%s gets the band",
+    "%s gets the bubbles",
     (path) => {
       const { container } = footerAt(path);
-      expect(container.querySelector(".site-footer--band")).not.toBeNull();
+      expect(container.querySelector(".site-footer--bubbles")).not.toBeNull();
       expect(container.querySelector(".site-footer--thin")).toBeNull();
     },
   );
@@ -483,7 +569,7 @@ describe("Header and Footer", () => {
     (path) => {
       const { container } = footerAt(path);
       expect(container.querySelector(".site-footer--thin")).not.toBeNull();
-      expect(container.querySelector(".site-footer--band")).toBeNull();
+      expect(container.querySelector(".site-footer--bubbles")).toBeNull();
       expect(container.textContent).toContain(
         "MARCUS · Friedrich Schiller University Jena · NFDI4Chem",
       );
@@ -492,6 +578,18 @@ describe("Header and Footer", () => {
       expect(screen.getByRole("navigation", { name: "Footer" })).toBeInTheDocument();
     },
   );
+});
+
+describe("Icon", () => {
+  it("is an inline, decorative svg with the icon's own viewBox and path", async () => {
+    const { faMugHot } = await import("@fortawesome/free-solid-svg-icons");
+    const { default: Icon } = await import("./Icon");
+    const html = renderToString(<Icon icon={faMugHot} className="fa-mug" />);
+    expect(html).toBe(
+      `<svg class="fa fa-mug" viewBox="0 0 512 512" aria-hidden="true" focusable="false">` +
+        `<path d="${faMugHot.icon[4] as string}"></path></svg>`,
+    );
+  });
 });
 
 describe("server rendering of the pre-rendered parts", () => {
@@ -510,6 +608,7 @@ describe("server rendering of the pre-rendered parts", () => {
   const parts: [string, ReactElement][] = [
     ["Header", <Header key="h" />],
     ["Footer", <Footer key="f" />],
+    ["Icon", <Icon key="i" icon={faCircleInfo} />],
     ["Stamp", <Stamp key="s" state="accepted" />],
     ["Stamp animate", <Stamp key="sa" state="rejected" size="lg" animate />],
     [
