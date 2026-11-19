@@ -76,6 +76,7 @@ class Paper(Base):
         CheckConstraint(_in("engine", ENGINES), name="ck_papers_engine"),
         Index("ix_papers_owner_id_status", "owner_id", "status"),
         Index("ix_papers_expires_at", "expires_at"),
+        Index("ix_papers_started_ip", "started_ip"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -94,6 +95,10 @@ class Paper(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     expires_at: Mapped[datetime] = mapped_column(TZ)
+    # The address bucket (marcus.api.deps.rate_key_for_ip) that started the work, kept only
+    # while it is active: the per-address active-work cap counts it. Cleared when the work
+    # finishes, fails or is deleted (and by the retention purge as a backstop).
+    started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ImageJob(Base):
@@ -103,6 +108,7 @@ class ImageJob(Base):
         CheckConstraint(_in("engine", ENGINES), name="ck_image_jobs_engine"),
         Index("ix_image_jobs_owner_id", "owner_id"),
         Index("ix_image_jobs_expires_at", "expires_at"),
+        Index("ix_image_jobs_started_ip", "started_ip"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -114,6 +120,10 @@ class ImageJob(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     expires_at: Mapped[datetime] = mapped_column(TZ)
+    # The address bucket (marcus.api.deps.rate_key_for_ip) that started the work, kept only
+    # while it is active: the per-address active-work cap counts it. Cleared when the work
+    # finishes, fails or is deleted (and by the retention purge as a backstop).
+    started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Segment(Base):

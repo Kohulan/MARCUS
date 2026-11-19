@@ -766,6 +766,106 @@ async def test_ipv6_active_paper_limit_is_per_64(app, monkeypatch):
         assert r.status_code == 202
 
 
+# --- per-address active cap counts the work's own address (review I-1) ------------------------
+
+PDF = b"%PDF-1.4\n" + b"0" * 100
+
+
+async def _purge_owner_ips(db) -> None:
+    """What the 30-day retention phase does to every owner's recorded IP."""
+    from sqlalchemy import update
+
+    from marcus.core.models import Owner
+
+    await db.execute(update(Owner).values(created_ip=None))
+    await db.commit()
+
+
+async def _papers(db):
+    from sqlalchemy import select
+
+    from marcus.core.models import Paper
+
+    return list(
+        (await db.execute(select(Paper).execution_options(populate_existing=True))).scalars()
+    )
+
+
+async def test_owner_with_purged_ip_still_counts_toward_its_address(
+    app, async_db_session, monkeypatch
+):
+    env(monkeypatch, ip_max_active_papers="2", browser_max_active_papers="5")
+    async with client(app, ("198.51.100.20", 1)) as old, client(app, ("198.51.100.20", 2)) as new:
+        for _ in range(2):
+            assert (
+                await old.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+            ).status_code == 202
+        await _purge_owner_ips(async_db_session)  # the owner is over 30 days old
+        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        assert r.status_code == 429 and "address" in r.json()["detail"]
+        assert {p.started_ip for p in await _papers(async_db_session)} == {"198.51.100.20"}
+
+        # the cap frees as the work finishes; finished work keeps no address
+        from sqlalchemy import select
+
+        from marcus.core.enums import ErrorClass
+        from marcus.core.models import Step
+        from marcus.core.pipeline import fail_step
+
+        paper = (await _papers(async_db_session))[0]
+
+        def fail_check(s):  # the worker finds the PDF bad: the paper fails, its work ends
+            step = s.execute(select(Step).where(Step.paper_id == paper.id)).scalar_one()
+            step.status, step.attempts = "running", 1
+            s.flush()
+            fail_step(s, step.id, ErrorClass.BAD_INPUT, "bad pdf", retryable=False)
+
+        await async_db_session.run_sync(fail_check)
+        await async_db_session.commit()
+        done = [p for p in await _papers(async_db_session) if p.status != "checking"]
+        assert [(p.status, p.started_ip) for p in done] == [("failed", None)]
+        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        assert r.status_code == 202
+
+
+async def test_owners_with_purged_ips_do_not_fill_the_unknown_bucket(
+    app, async_db_session, monkeypatch
+):
+    env(monkeypatch, ip_max_active_papers="2", browser_max_active_papers="5")
+    async with client(app, ("203.0.113.5", 1)) as known:
+        for _ in range(2):
+            assert (
+                await known.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+            ).status_code == 202
+    await _purge_owner_ips(async_db_session)
+    async with client(app, ("a-name", 1)) as unknown:  # an unparseable peer: the unknown bucket
+        r = await unknown.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+    assert r.status_code == 202
+
+
+async def test_image_job_counts_toward_its_address_and_keeps_no_ip_once_settled(
+    app, async_db_session, monkeypatch
+):
+    import io
+
+    from PIL import Image
+    from sqlalchemy import select
+
+    from marcus.core.models import ImageJob
+
+    env(monkeypatch, ip_max_active_papers="1", browser_max_active_papers="5")
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 20), "white").save(buf, "PNG")
+    async with client(app, ("198.51.100.30", 1)) as a, client(app, ("198.51.100.30", 2)) as b:
+        r = await a.post("/api/v2/images", files={"file": ("i.png", buf.getvalue())})
+        assert r.status_code == 202
+        await _purge_owner_ips(async_db_session)
+        r = await b.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        assert r.status_code == 429
+    (job,) = (await async_db_session.execute(select(ImageJob))).scalars()
+    assert job.started_ip == "198.51.100.30"
+
+
 # --- CORS -----------------------------------------------------------------------------------
 
 PREFLIGHT = {"Origin": "https://app.example", "Access-Control-Request-Method": "POST"}

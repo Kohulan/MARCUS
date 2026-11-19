@@ -102,6 +102,11 @@ def client_ip(request: Request) -> str:
     return peer
 
 
+def work_ip(request: Request) -> str:
+    """The address bucket stored on work a request starts (Paper/ImageJob.started_ip)."""
+    return rate_key_for_ip(client_ip(request))
+
+
 def owners_from_ip(ip: str):
     """SQL condition for browser owners created from `ip`'s bucket (`rate_key_for_ip`).
 

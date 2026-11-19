@@ -425,6 +425,32 @@ def test_owner_ip_retention_is_a_setting(db_session, monkeypatch):
     assert str(s.get(Owner, day.id).created_ip) == "203.0.113.9"
 
 
+def test_work_addresses_are_a_backstop_purge(db_session):
+    """The planner clears a paper's or job's address when the work ends; retention clears any
+    left on work that is no longer active, and on work older than the IP retention."""
+    s = db_session
+    active = make_paper(s)
+    ended = make_paper(s)
+    old = make_paper(s)
+    job, _ = make_image_job(s)
+    for row, ip in ((active, "198.51.100.1"), (ended, "198.51.100.2"), (old, "198.51.100.3"),
+                    (job, "198.51.100.4")):  # fmt: skip
+        row.started_ip = ip
+    ended.status = "done"
+    job.status = "failed"
+    old.created_at = NOW - timedelta(days=31)
+    s.commit()
+
+    report = purge(s)
+
+    assert report.work_ips == 3
+    s.expire_all()
+    assert s.get(Paper, active.id).started_ip == "198.51.100.1"
+    assert s.get(Paper, ended.id).started_ip is None
+    assert s.get(Paper, old.id).started_ip is None
+    assert s.get(ImageJob, job.id).started_ip is None
+
+
 # --- depictions -----------------------------------------------------------------------
 
 

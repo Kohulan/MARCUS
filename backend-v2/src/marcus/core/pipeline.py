@@ -112,6 +112,7 @@ def start_paper(
     display_name: str,
     engine: Engine,
     ocsr_mode: str,
+    started_ip: str | None = None,
 ) -> Paper:
     """Create the paper plus its check_pdf step, then store the PDF. Caller commits.
 
@@ -119,7 +120,7 @@ def start_paper(
     the file write do not block its event loop."""
     paper = new_paper(
         session, owner, hashlib.sha256(data).hexdigest(), len(data), display_name, engine,
-        ocsr_mode,
+        ocsr_mode, started_ip,
     )  # fmt: skip
     store_pdf(paper.id, data)
     return paper
@@ -133,9 +134,11 @@ def new_paper(
     display_name: str,
     engine: Engine,
     ocsr_mode: str,
+    started_ip: str | None = None,
 ) -> Paper:
     """The paper row and its check_pdf step (flushed: the paper has its id). Its PDF must be
-    stored (store_pdf) before the commit."""
+    stored (store_pdf) before the commit. `started_ip`: the address bucket that started it
+    (Paper.started_ip)."""
     paper = Paper(
         owner_id=owner.id,
         display_name=display_name,
@@ -145,6 +148,7 @@ def new_paper(
         ocsr_mode=ocsr_mode,
         status=PaperStatus.CHECKING.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
+        started_ip=started_ip,
     )
     session.add(paper)
     session.flush()  # assigns paper.id
@@ -188,10 +192,15 @@ def store_image(job_id: uuid.UUID, png: bytes) -> None:
 
 
 def new_image_job(
-    session: Session, owner: Owner, image_sha256: str, display_name: str, engine: Engine
+    session: Session,
+    owner: Owner,
+    image_sha256: str,
+    display_name: str,
+    engine: Engine,
+    started_ip: str | None = None,
 ) -> ImageJob:
     """The image job row and its ocsr step (flushed: the job has its id). Its PNG must be
-    stored (store_image) before the commit."""
+    stored (store_image) before the commit. `started_ip`: as new_paper's."""
     engine = Engine(engine)
     job = ImageJob(
         owner_id=owner.id,
@@ -200,6 +209,7 @@ def new_image_job(
         engine=engine.value,
         status=ImageJobStatus.QUEUED.value,
         expires_at=datetime.now(UTC) + timedelta(days=get_settings().retention_days),
+        started_ip=started_ip,
     )
     session.add(job)
     session.flush()  # assigns job.id
@@ -356,6 +366,7 @@ def _finish_check(session: Session, paper: Paper) -> None:
         paper.error = "all pages failed (render or segmentation)"
     else:
         paper.status = PaperStatus.DONE.value
+    paper.started_ip = None  # no longer active work: its address is not kept
 
 
 # --- result validation (runs before any state change) -------------------------------------
@@ -718,6 +729,7 @@ def _settle_image_job(session: Session, job: ImageJob, error: str | None = None)
     else:
         job.status = ImageJobStatus.FAILED.value
         job.error = error
+    job.started_ip = None  # no longer active work: its address is not kept
     session.flush()
 
 
@@ -805,6 +817,7 @@ def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = Tru
         .execution_options(synchronize_session="fetch")
     )
     paper.status = PaperStatus.DELETED.value
+    paper.started_ip = None
     session.execute(
         delete(SegCache)
         .where(SegCache.paper_id == paper_id)
@@ -830,8 +843,11 @@ def remove_paper_files(paper_id: uuid.UUID) -> None:
         )
 
 
-def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Step:
+def request_ocsr(
+    session: Session, segment_id: uuid.UUID, engine: Engine, started_ip: str | None = None
+) -> Step:
     """Create a pending `ocsr` step for one segment with the given engine. Caller commits.
+    A `done` paper becomes active again, with `started_ip` (the requesting address bucket).
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
@@ -853,11 +869,14 @@ def request_ocsr(session: Session, segment_id: uuid.UUID, engine: Engine) -> Ste
     session.add(step)
     if paper.status == PaperStatus.DONE.value:
         paper.status = PaperStatus.PROCESSING.value
+        paper.started_ip = started_ip
     session.flush()
     return step
 
 
-def retry_page(session: Session, paper_id: uuid.UUID, page: int) -> Step:
+def retry_page(
+    session: Session, paper_id: uuid.UUID, page: int, started_ip: str | None = None
+) -> Step:
     """Retry one failed page (0-based): a new pending `render_page` step, whose normal
     successors (segment_page, ocsr) follow. A `done`/`failed` paper goes back to `processing`.
     Caller commits.
@@ -901,13 +920,17 @@ def retry_page(session: Session, paper_id: uuid.UUID, page: int) -> Step:
     if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
         paper.status = PaperStatus.PROCESSING.value
         paper.error = None
+        paper.started_ip = started_ip
     session.flush()
     return step
 
 
-def request_image_ocsr(session: Session, job_id: uuid.UUID, engine: Engine) -> Step:
+def request_image_ocsr(
+    session: Session, job_id: uuid.UUID, engine: Engine, started_ip: str | None = None
+) -> Step:
     """Create a pending `ocsr` step for an image job with the given engine and reopen the job
-    (status `queued`). Caller commits.
+    (status `queued`; a finished job gets `started_ip`, the requesting address bucket). Caller
+    commits.
 
     Raises ValueError for an unknown or deleted image job, or a disabled engine.
     """
@@ -920,6 +943,8 @@ def request_image_ocsr(session: Session, job_id: uuid.UUID, engine: Engine) -> S
     ).scalar_one()
     step = _new_image_step(job, engine, seq)
     session.add(step)
+    if job.status not in (ImageJobStatus.QUEUED.value, ImageJobStatus.PROCESSING.value):
+        job.started_ip = started_ip  # active again, from this address
     job.status = ImageJobStatus.QUEUED.value
     session.flush()
     return step

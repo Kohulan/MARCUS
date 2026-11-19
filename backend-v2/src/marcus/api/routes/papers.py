@@ -28,6 +28,7 @@ from marcus.api.deps import (
     not_found,
     require_engine_enabled,
     visible,
+    work_ip,
 )
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import (
@@ -87,7 +88,10 @@ async def upload_paper(
 
     # hash and file write in a thread: up to max_upload_bytes must not block the event loop
     sha = await run_in_threadpool(lambda: hashlib.sha256(data).hexdigest())
-    paper = await db.run_sync(lambda s: new_paper(s, owner, sha, len(data), name, engine, ocsr))
+    ip = work_ip(request)
+    paper = await db.run_sync(
+        lambda s: new_paper(s, owner, sha, len(data), name, engine, ocsr, started_ip=ip)
+    )
     await run_in_threadpool(store_pdf, paper.id, data)  # before the commit, as start_paper
     await db.commit()
     return {"paper_id": str(paper.id), "status": PaperStatus.CHECKING.value}
@@ -227,6 +231,7 @@ RETRY_DETAIL = {
 
 @router.post("/papers/{paper_id}/pages/{n}/retry", status_code=202, response_model=StepAccepted)
 async def retry_page_route(
+    request: Request,
     paper_id: uuid.UUID,
     n: int,
     owner: Owner = Depends(current_owner),
@@ -236,7 +241,8 @@ async def retry_page_route(
     if paper.pages is None or not 0 <= n < paper.pages:
         raise not_found()
     try:
-        step = await db.run_sync(lambda s: retry_page(s, paper.id, n))
+        ip = work_ip(request)
+        step = await db.run_sync(lambda s: retry_page(s, paper.id, n, started_ip=ip))
     except RetryNotAllowed as exc:
         await db.rollback()
         raise HTTPException(status_code=409, detail=RETRY_DETAIL[exc.reason]) from None

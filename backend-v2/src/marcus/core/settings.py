@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     retention_days: int = 30
     # The IP recorded when a browser first gets its key (owners.created_ip) is deleted this
     # many days after it was recorded (daily retention purge). The new-key limit needs 1 hour.
+    # The privacy page (frontend-v2/src/pages/Privacy.tsx, pre-rendered) says "30 days":
+    # change it with this value.
     owner_ip_retention_days: int = Field(30, gt=0)
     browser_max_active_papers: int = 3
     # New browser owners per client address per hour that were used (came back with their

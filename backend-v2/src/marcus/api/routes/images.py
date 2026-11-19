@@ -15,6 +15,7 @@ from marcus.api.deps import (
     not_found,
     require_engine_enabled,
     visible,
+    work_ip,
 )
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import IMAGE_HEADERS, waiting_ocsr_step
@@ -68,7 +69,8 @@ async def upload_image(
     png = await decode_image(request.app.state.decode_slots, data)
     name = sanitize_display_name(file.filename)
     sha = await run_in_threadpool(lambda: hashlib.sha256(png).hexdigest())  # off the event loop
-    job = await db.run_sync(lambda s: new_image_job(s, owner, sha, name, engine))
+    ip = work_ip(request)
+    job = await db.run_sync(lambda s: new_image_job(s, owner, sha, name, engine, started_ip=ip))
     await run_in_threadpool(store_image, job.id, png)  # before the commit, as start_image_job
     await db.commit()
     return {"image_job_id": str(job.id), "status": job.status}
@@ -103,6 +105,7 @@ async def image_job_image(
 
 @router.post("/images/{job_id}/predictions", status_code=202, response_model=StepAccepted)
 async def run_image_prediction(
+    request: Request,
     job_id: uuid.UUID,
     body: PredictionRequest,
     owner: Owner = Depends(current_owner),
@@ -115,7 +118,10 @@ async def run_image_prediction(
     if waiting is not None:
         return StepAccepted(step_id=waiting)
     try:
-        step = await db.run_sync(lambda s: request_image_ocsr(s, job.id, body.engine))
+        ip = work_ip(request)
+        step = await db.run_sync(
+            lambda s: request_image_ocsr(s, job.id, body.engine, started_ip=ip)
+        )
     except ValueError:
         await db.rollback()
         raise not_found() from None  # deleted meanwhile

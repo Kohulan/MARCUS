@@ -174,3 +174,23 @@ def test_migration_0007_caches_per_owner_up_down(migrated_db):
         assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0008_work_started_ip_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        for table in ("papers", "image_jobs"):
+            cols = {c["name"]: c for c in inspect(engine).get_columns(table)}
+            assert cols["started_ip"]["nullable"]
+            assert (table, f"ix_{table}_started_ip") in _indexes(engine)
+        command.downgrade(cfg, "0007")
+        for table in ("papers", "image_jobs"):
+            assert "started_ip" not in _columns(engine, table)
+            assert (table, f"ix_{table}_started_ip") not in _indexes(engine)
+    finally:
+        command.upgrade(cfg, "head")
