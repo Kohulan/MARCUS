@@ -250,6 +250,76 @@ describe("Compare", () => {
     );
   });
 
+  /** Two predictions, Show common part pressed; the MCS replies carry the tokens in turn. */
+  function commonPartWithTokens(tokens: string[]) {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    let n = 0;
+    const mcs = vi.spyOn(api, "mcs").mockImplementation(() =>
+      Promise.resolve({
+        mcs_smarts: "[#6]-[#6]",
+        atom_count: 2,
+        bond_count: 1,
+        original_molecules: [],
+        highlight_token: tokens[Math.min(n++, tokens.length - 1)]!,
+      }),
+    );
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN" }),
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
+    return mcs;
+  }
+
+  const INVALID = new ApiError(422, "highlight not valid for this structure");
+
+  it("an expired highlight token asks the MCS once more and draws again with the new one", async () => {
+    vi.mocked(api.depict).mockImplementation((_smiles, opts) =>
+      opts?.highlightToken === "tok-old"
+        ? Promise.reject(INVALID)
+        : Promise.resolve({ format: "svg", data: "<svg/>" }),
+    );
+    const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
+    for (const name of ["Structure, DECIMER", "Structure, MolNexTR"]) {
+      await waitFor(() =>
+        expect(screen.getByRole("img", { name })).toHaveAttribute("src", "blob:http://localhost/d"),
+      );
+    }
+    // both drawings failed on the old token, yet the MCS is asked again only once
+    expect(mcs).toHaveBeenCalledTimes(2);
+    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-new" };
+    expect(api.depict).toHaveBeenCalledWith("CCO", lit);
+    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
+    expect(api.depict).toHaveBeenCalledTimes(4);
+  });
+
+  it("a highlight still refused with the new token is not asked for again (no loop)", async () => {
+    vi.mocked(api.depict).mockRejectedValue(INVALID);
+    const mcs = commonPartWithTokens(["tok-old", "tok-new", "tok-3", "tok-4"]);
+    await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(4));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mcs).toHaveBeenCalledTimes(2);
+    expect(api.depict).toHaveBeenCalledTimes(4);
+    const tokens = vi.mocked(api.depict).mock.calls.map((c) => c[1]?.highlightToken).sort();
+    expect(tokens).toEqual(["tok-new", "tok-new", "tok-old", "tok-old"]);
+  });
+
+  it("another 4xx on a highlighted drawing does not ask the MCS again", async () => {
+    vi.mocked(api.depict).mockRejectedValue(new ApiError(429, "slow down"));
+    const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
+    await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mcs).toHaveBeenCalledTimes(1);
+  });
+
   it("Show common part is not pressed while it is disabled (fewer than 2 valid)", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
