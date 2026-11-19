@@ -168,10 +168,23 @@ def test_migration_0007_caches_per_owner_up_down(migrated_db):
         assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
         assert ("ocsr_cache", "ix_ocsr_cache_created_at") in _indexes(engine)
         command.downgrade(cfg, "0006")
+        insp = inspect(engine)
         assert "owner_id" not in _columns(engine, "seg_cache")
         assert "paper_id" not in _columns(engine, "seg_cache")
         assert "owner_id" not in _columns(engine, "ocsr_cache")
+        assert insp.get_pk_constraint("seg_cache")["constrained_columns"] == [
+            "pdf_sha256", "seg_version",
+        ]  # fmt: skip
+        assert insp.get_pk_constraint("ocsr_cache")["constrained_columns"] == [
+            "image_sha256", "engine", "engine_version",
+        ]  # fmt: skip
+        assert insp.get_foreign_keys("seg_cache") == insp.get_foreign_keys("ocsr_cache") == []
+        assert ("seg_cache", "ix_seg_cache_paper_id") not in _indexes(engine)
         assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
+        assert ("ocsr_cache", "ix_ocsr_cache_created_at") in _indexes(engine)
+        assert {c["name"] for c in insp.get_columns("ocsr_cache")} == {
+            "image_sha256", "engine", "engine_version", "smiles", "molfile", "created_at",
+        }  # fmt: skip
     finally:
         command.upgrade(cfg, "head")
 
