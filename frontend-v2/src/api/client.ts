@@ -194,13 +194,28 @@ function get<T>(path: string, opts: ReadOpts = {}): Promise<T> {
   return request<T>(path, opts.signal ? { signal: opts.signal } : {});
 }
 
-function sendJson<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
-  return request<T>(path, {
+function sendJson<T>(
+  method: "POST" | "PUT",
+  path: string,
+  body: unknown,
+  timeoutMs?: number,
+): Promise<T> {
+  const init: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  };
+  if (timeoutMs === undefined) return request<T>(path, init);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return request<T>(path, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
+
+/**
+ * A curation PUT not answered in this time is aborted: the save fails and rolls back, and the
+ * paper's live refreshes, held while it is on the wire, go on.
+ */
+export const SAVE_TIMEOUT_MS = 30_000;
 
 const enc = encodeURIComponent;
 
@@ -236,7 +251,7 @@ export const api = {
   // segments
   /** Only through useSaveCuration (curationBody builds the full record). */
   putCuration: (segmentId: string, body: CurationIn) =>
-    sendJson<CurationOut>("PUT", `/segments/${enc(segmentId)}/curation`, body),
+    sendJson<CurationOut>("PUT", `/segments/${enc(segmentId)}/curation`, body, SAVE_TIMEOUT_MS),
   runPrediction: (segmentId: string, engine: Engine) =>
     sendJson<StepAccepted>("POST", `/segments/${enc(segmentId)}/predictions`, { engine }),
   segmentImageUrl: (id: string) => `${BASE}/segments/${enc(id)}/image`,
