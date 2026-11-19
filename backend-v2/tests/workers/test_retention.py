@@ -380,8 +380,11 @@ def test_file_error_is_counted_not_raised(db_session, monkeypatch):
 # --- depictions -----------------------------------------------------------------------
 
 
-def _depiction(sha: str, days_old: float, size: int = 10, suffix: str = ".svg"):
-    path = storage.depiction_path(sha)
+DEPICTION_OWNER = uuid.UUID(int=42)
+
+
+def _depiction(sha: str, days_old: float, size: int = 10, suffix: str = ".svg", owner=None):
+    path = storage.depiction_path(owner or DEPICTION_OWNER, sha)
     path = path.with_suffix(suffix)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)
@@ -401,6 +404,28 @@ def test_retention_purges_old_depictions(db_session):
     assert report.depictions == 3
     assert not old.exists() and not old_marker.exists() and not old_tmp.exists()
     assert young.is_file() and young_marker.is_file()
+
+
+def test_retention_purges_depictions_of_every_owner(db_session):
+    """Drawings sit in per-owner directories (F2/F4): each owner's old files go, young stay;
+    a directory left empty for over a day is removed too."""
+    old_a = _depiction("a" * 64, 31, owner=uuid.UUID(int=1))
+    old_b = _depiction("a" * 64, 31, owner=uuid.UUID(int=2))
+    young_b = _depiction("b" * 64, 2, owner=uuid.UUID(int=2))
+    empty = storage.depictions_dir() / str(uuid.UUID(int=3)) / "cd"
+    empty.mkdir(parents=True)
+    fresh_empty = storage.depictions_dir() / str(uuid.UUID(int=4)) / "ef"
+    fresh_empty.mkdir(parents=True)
+    for path in (empty, empty.parent):
+        age(path, 2 * 86400)
+
+    report = purge(db_session)
+
+    assert report.depictions == 2
+    assert not old_a.exists() and not old_b.exists() and young_b.is_file()
+    assert not empty.exists()  # empty for over a day (its parent goes on a later run)
+    assert fresh_empty.is_dir()  # may be about to get its first drawing
+    assert young_b.parent.is_dir()
 
 
 def test_retention_depictions_size_cap_oldest_first(db_session, monkeypatch):

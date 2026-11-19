@@ -19,10 +19,10 @@
    (a uuid) whose paper / image job has no row, or a `deleted` one, and whose mtime is older
    than one day (younger ones may belong to an upload that is still committing). This also
    retries files that `cancel_paper` or step 1/2 could not remove;
-6. depictions (`data_root/depictions`, the API's stored structure drawings and `.nodraw`
-   markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the directory holds
-   more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing is drawn again
-   on its next request.
+6. depictions (`data_root/depictions/<owner id>/<xx>/`, the API's stored structure drawings
+   and `.nodraw` markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the
+   directory holds more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing
+   is drawn again on its next request. Directories empty for over a day are removed.
 
 Rows go in batches of `batch_size`, one transaction each, locked with SKIP LOCKED (a row a
 worker holds right now is left for the next run), so a run never holds a long transaction.
@@ -346,30 +346,41 @@ def _sweep_orphans(session: Session, now: datetime, report: PurgeReport) -> None
 # --- depictions -----------------------------------------------------------------------------
 
 
-def _depiction_files(root: Path) -> list[tuple[float, int, Path]]:
-    """(mtime, size, path) of the regular files in `root/<xx>/` (symlinks are never followed)."""
-    found = []
-    try:
-        subdirs = [d for d in root.iterdir() if d.is_dir() and not d.is_symlink()]
-    except FileNotFoundError:
-        return []
-    for subdir in subdirs:
-        try:
-            entries = list(subdir.iterdir())
-        except FileNotFoundError:
-            continue
-        for path in entries:
+def _depiction_files(root: Path) -> tuple[list[tuple[float, int, Path]], list[Path]]:
+    """(mtime, size, path) of the regular files anywhere under `root` (per owner:
+    `<owner id>/<xx>/`), and the directories below `root`, deepest first. Symlinks are never
+    followed."""
+    found, dirs = [], []
+    for top, subdirs, names in os.walk(root, followlinks=False):
+        top_path = Path(top)
+        dirs.extend(top_path / d for d in subdirs)
+        for name in names:
+            path = top_path / name
             try:
                 st = path.lstat()
             except FileNotFoundError:
                 continue
             if stat.S_ISREG(st.st_mode):
                 found.append((st.st_mtime, st.st_size, path))
-    return found
+    dirs.sort(key=lambda d: len(d.parts), reverse=True)
+    return found, dirs
+
+
+def _remove_empty_dirs(dirs: list[Path], cutoff_ts: float) -> None:
+    """Remove the directories (deepest first) that are empty and unchanged since `cutoff_ts`:
+    a younger one may be about to get its first drawing."""
+    for path in dirs:
+        try:
+            if path.is_symlink() or path.lstat().st_mtime >= cutoff_ts:
+                continue
+            path.rmdir()
+        except OSError:  # not empty, gone, or not removable: left for a later run
+            continue
 
 
 def _purge_depictions(now: datetime, report: PurgeReport) -> None:
-    files = sorted(_depiction_files(storage.depictions_dir()))  # oldest first
+    found, dirs = _depiction_files(storage.depictions_dir())
+    files = sorted(found)  # oldest first
     cutoff_ts = (now - timedelta(days=DEPICTION_MAX_DAYS)).timestamp()
     total = sum(size for _, size, _ in files)
     for mtime, size, path in files:
@@ -380,6 +391,7 @@ def _purge_depictions(now: datetime, report: PurgeReport) -> None:
             total -= size
         elif not os.path.lexists(path):
             total -= size  # gone meanwhile; one that could not be removed still counts
+    _remove_empty_dirs(dirs, (now - ORPHAN_MIN_AGE).timestamp())
 
 
 # --- entry points ----------------------------------------------------------------------------

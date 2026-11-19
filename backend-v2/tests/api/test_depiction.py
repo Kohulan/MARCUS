@@ -2,6 +2,7 @@
 
 import hashlib
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -15,6 +16,7 @@ from marcus.core.settings import get_settings
 from tests.api.conftest import make_client, new_owner, seed_paper
 
 FIXED_NOW = 1_800_000_030.0  # 30 s into a rate-limit window
+AN_OWNER = SimpleNamespace(id=uuid.UUID(int=99))  # draw_or_read reads only the owner's id
 
 
 def svg_for(smiles: str) -> str:
@@ -88,7 +90,7 @@ async def _owner_paper(db, **kw):
 
 
 async def test_depiction_miss_draws_once_then_reads_file(app, async_db_session, draws):
-    _, token, seeded = await _owner_paper(async_db_session)
+    owner, token, seeded = await _owner_paper(async_db_session)
     seg = seeded.segment_ids[0]
     async with make_client(app, token) as c:
         first = await c.get(url(seg))
@@ -100,7 +102,49 @@ async def test_depiction_miss_draws_once_then_reads_file(app, async_db_session, 
     assert name == "marcus.tools.depict"
     assert kwargs == {"smiles": "CCO", "fmt": "svg", "width": 512, "height": 512, "highlight": ""}
     assert timeout == 10
-    assert storage.depiction_path(sha("CCO")).read_bytes() == first.content
+    assert storage.depiction_path(owner.id, sha("CCO")).read_bytes() == first.content
+
+
+async def test_depiction_cache_is_per_owner(app, async_db_session, draws, monkeypatch):
+    """F2/F4: a drawing (or a `.nodraw` marker) one owner caused is never another owner's hit:
+    the second owner's curated SMILES is drawn (and charged) as a miss, so status and timing
+    say nothing about what other owners viewed."""
+    db = async_db_session
+    a, token_a, seeded_a = await _owner_paper(db)
+    b, token_b, seeded_b = await _owner_paper(db)
+    await _curate(db, seeded_a.segment_ids[0], smiles="c1ccccc1")
+    await _curate(db, seeded_b.segment_ids[0], smiles="c1ccccc1")
+    async with make_client(app, token_a) as c:
+        assert (await c.get(url(seeded_a.segment_ids[0]))).status_code == 200
+    charged = []
+    real_limit = depiction.tools_limit
+
+    async def counting_limit(request, owner):
+        charged.append(owner.id)
+        return await real_limit(request, owner)
+
+    monkeypatch.setattr(depiction, "tools_limit", counting_limit)
+    async with make_client(app, token_b) as c:
+        assert (await c.get(url(seeded_b.segment_ids[0]))).status_code == 200
+    assert [k["smiles"] for _, k, _ in draws.seen] == ["c1ccccc1", "c1ccccc1"]
+    assert charged == [b.id]  # a miss for b: charged, although a already drew it
+    assert storage.depiction_path(a.id, sha("c1ccccc1")).is_file()
+    assert storage.depiction_path(b.id, sha("c1ccccc1")).is_file()
+
+
+async def test_depiction_marker_is_per_owner(app, async_db_session, draws):
+    def bad(smiles):
+        raise HTTPException(status_code=422, detail="cannot parse SMILES")
+
+    draws.behaviour["CCO"] = bad
+    _, token_a, seeded_a = await _owner_paper(async_db_session)
+    b, token_b, seeded_b = await _owner_paper(async_db_session)
+    async with make_client(app, token_a) as c:
+        assert (await c.get(url(seeded_a.segment_ids[0]))).status_code == 404
+    async with make_client(app, token_b) as c:
+        assert (await c.get(url(seeded_b.segment_ids[0]))).status_code == 404
+    assert len(draws.seen) == 2  # b's request was tried, not answered from a's marker
+    assert storage.depiction_marker_path(b.id, sha("CCO")).is_file()
 
 
 async def test_depiction_two_segments_same_smiles_one_draw(app, async_db_session, draws):
@@ -245,16 +289,16 @@ async def test_depiction_bad_smiles_404_marker_then_no_redraw(app, async_db_sess
         raise HTTPException(status_code=422, detail="cannot parse SMILES: secret detail")
 
     draws.behaviour["CCO"] = bad
-    _, token, seeded = await _owner_paper(async_db_session)
+    owner, token, seeded = await _owner_paper(async_db_session)
     async with make_client(app, token) as c:
         first = await c.get(url(seeded.segment_ids[0]))
         second = await c.get(url(seeded.segment_ids[1]))
     assert first.status_code == second.status_code == 404
     assert first.json() == second.json() == {"detail": "not found"}
     assert len(draws.seen) == 1
-    marker = storage.depiction_marker_path(sha("CCO"))
+    marker = storage.depiction_marker_path(owner.id, sha("CCO"))
     assert marker.is_file() and marker.read_bytes() == b""
-    assert not storage.depiction_path(sha("CCO")).exists()
+    assert not storage.depiction_path(owner.id, sha("CCO")).exists()
 
 
 async def test_depiction_smiles_over_2000_404_no_draw(app, async_db_session, draws):
@@ -288,10 +332,10 @@ async def test_depiction_svg_at_cap_is_stored(app, async_db_session, draws):
     exact = "<svg>" + "x" * (512 * 1024 - 11) + "</svg>"
     assert len(exact.encode()) == 512 * 1024
     draws.behaviour["CCO"] = lambda s: exact
-    _, token, seeded = await _owner_paper(async_db_session)
+    owner, token, seeded = await _owner_paper(async_db_session)
     async with make_client(app, token) as c:
         await c.get(url(seeded.segment_ids[0]))
-    assert storage.depiction_path(sha("CCO")).read_bytes() == exact.encode()
+    assert storage.depiction_path(owner.id, sha("CCO")).read_bytes() == exact.encode()
 
 
 async def test_depiction_curated_miss_counts_tools_bucket(
@@ -353,7 +397,7 @@ async def _hold_depictions(monkeypatch, smiles_list):
 
     monkeypatch.setattr(depiction, "run_tool", blocking)
     held = [
-        asyncio.ensure_future(depiction.draw_or_read(None, None, s, "predicted"))
+        asyncio.ensure_future(depiction.draw_or_read(None, AN_OWNER, s, "predicted"))
         for s in smiles_list
     ]
     for _ in range(100):
@@ -374,7 +418,7 @@ async def test_depictions_hold_only_their_share_tools_keep_a_slot(
     release, started, held = await _hold_depictions(monkeypatch, ["C", "CC"])
     try:
         with pytest.raises(HTTPException) as info:
-            await depiction.draw_or_read(None, None, "CCC", "predicted")
+            await depiction.draw_or_read(None, AN_OWNER, "CCC", "predicted")
         assert info.value.status_code == 503 and info.value.headers == {"Retry-After": "5"}
         assert started == ["C", "CC"]  # refused before the tool call
 
@@ -387,7 +431,10 @@ async def test_depictions_hold_only_their_share_tools_keep_a_slot(
         release.set()
     assert [d.decode() for d in await asyncio.gather(*held)] == [svg_for("C"), svg_for("CC")]
     # the share is free again
-    assert await depiction.draw_or_read(None, None, "CCCC", "predicted") == svg_for("CCCC").encode()
+    assert (
+        await depiction.draw_or_read(None, AN_OWNER, "CCCC", "predicted")
+        == svg_for("CCCC").encode()
+    )
 
 
 async def test_depiction_at_cap_does_not_charge_the_tools_bucket(
@@ -405,7 +452,7 @@ async def test_depiction_at_cap_does_not_charge_the_tools_bucket(
     release, _, held = await _hold_depictions(monkeypatch, ["C", "CC"])
     try:
         with pytest.raises(HTTPException) as info:
-            await depiction.draw_or_read(None, "owner", "CCN", "curated")
+            await depiction.draw_or_read(None, AN_OWNER, "CCN", "curated")
         assert info.value.status_code == 503
     finally:
         release.set()

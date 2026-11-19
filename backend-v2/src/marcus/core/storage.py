@@ -53,16 +53,18 @@ def depictions_dir() -> Path:
     return get_settings().data_root / "depictions"
 
 
-def depiction_path(smiles_sha256: str) -> Path:
-    """The stored SVG drawing of one SMILES (keyed by sha256 of its UTF-8 text)."""
+def depiction_path(owner_id: uuid.UUID, smiles_sha256: str) -> Path:
+    """One owner's stored SVG drawing of one SMILES (keyed by sha256 of its UTF-8 text). Per
+    owner: whether a drawing exists never tells one owner what another one viewed."""
     sha = _sha256(smiles_sha256)
-    return depictions_dir() / sha[:2] / f"{sha}.svg"
+    return depictions_dir() / str(_uuid(owner_id)) / sha[:2] / f"{sha}.svg"
 
 
-def depiction_marker_path(smiles_sha256: str) -> Path:
-    """Empty marker: the tools worker could not read this SMILES, so it is never redrawn."""
+def depiction_marker_path(owner_id: uuid.UUID, smiles_sha256: str) -> Path:
+    """Empty marker: the tools worker could not read this SMILES, so it is never redrawn (for
+    this owner)."""
     sha = _sha256(smiles_sha256)
-    return depictions_dir() / sha[:2] / f"{sha}.nodraw"
+    return depictions_dir() / str(_uuid(owner_id)) / sha[:2] / f"{sha}.nodraw"
 
 
 def disk_is_full() -> bool:
