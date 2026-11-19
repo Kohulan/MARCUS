@@ -306,3 +306,17 @@ def test_mcs_smarts_highlights_each_of_its_molecules():
         plain = depict(smiles, "svg", 300, 300)
         lit = depict(smiles, "svg", 300, 300, highlight=smarts)
         assert lit != plain and "#add8e6" in lit.lower()
+
+
+@needs_cdk
+def test_depict_highlight_bounds_the_raw_mappings_walked():
+    """Many mappings, few distinct atom sets (13 disconnected atoms on a 13-atom ring: 13!
+    mappings, one set): at most MAX_HIGHLIGHT_MAPPINGS mappings are walked, not every one."""
+    import time
+
+    from marcus.workers.tools import MAX_HIGHLIGHT_MAPPINGS, depict
+
+    assert MAX_HIGHLIGHT_MAPPINGS == 1000
+    start = time.perf_counter()
+    svg = depict("C1CCCCCCCCCCCC1", "svg", 200, 200, highlight=".".join(["*"] * 13))
+    assert svg.startswith("<svg") and time.perf_counter() - start < 3

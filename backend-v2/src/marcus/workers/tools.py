@@ -30,9 +30,12 @@ CDK = "org.openscience.cdk"
 JARS = ("cdk-2.10.jar", "centres.jar")
 MCS_TIMEOUT_S = 3  # below the 5 s task soft limit
 AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
-# A highlight SMARTS (the MCS the compare view shows) is matched with every mapping walked lazily:
-# at most this many distinct atom sets are highlighted, and a pattern over this many atoms, or
-# with recursive SMARTS ($(...), a search per atom), is refused. The API applies the same caps.
+# A highlight SMARTS (the MCS the compare view shows; the API takes only one it signed for the
+# drawn molecule, marcus.api.highlight) is matched lazily: at most MAX_HIGHLIGHT_MAPPINGS
+# mappings are walked and at most MAX_HIGHLIGHT_MATCHES distinct atom sets highlighted. A
+# pattern over MAX_HIGHLIGHT_ATOMS atoms, or with recursive SMARTS ($(...), a search per atom),
+# is refused (the API applies the same caps).
+MAX_HIGHLIGHT_MAPPINGS = 1000
 MAX_HIGHLIGHT_MATCHES = 32
 MAX_HIGHLIGHT_ATOMS = 128
 
@@ -185,7 +188,12 @@ def depict(
                 _check_highlight(J, builder, highlight)
                 pattern = J(f"{CDK}.smarts.SmartsPattern").create(highlight, builder)
                 J(f"{CDK}.smarts.SmartsPattern").prepare(mol)
-                matches = pattern.matchAll(mol).uniqueAtoms().limit(MAX_HIGHLIGHT_MATCHES)
+                matches = (
+                    pattern.matchAll(mol)
+                    .limit(MAX_HIGHLIGHT_MAPPINGS)
+                    .uniqueAtoms()
+                    .limit(MAX_HIGHLIGHT_MATCHES)
+                )
                 subs = matches.toSubstructures()
             except jpype.JException as exc:
                 raise ToolInputError(f"invalid highlight SMARTS: {exc}") from exc
