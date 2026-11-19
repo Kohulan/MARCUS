@@ -1,10 +1,24 @@
-import { Link } from "react-router-dom";
+import { Fragment } from "react";
+import { Link, matchPath, useLocation } from "react-router-dom";
 import "./ui.css";
 
-/** One mono line: who makes it, where it is published, and the small links. */
-export default function Footer() {
+const LINKS: { label: string; to: string; internal?: boolean }[] = [
+  { label: "About", to: "/about", internal: true },
+  { label: "Disclaimer", to: "/disclaimer", internal: true },
+  { label: "GitHub", to: "https://github.com/Kohulan/MARCUS" },
+  { label: "MIT License", to: "https://opensource.org/license/MIT" },
+  { label: "Privacy", to: "/privacy", internal: true },
+];
+
+/** The review workspace (focus mode and the paper view included) keeps the thin line. */
+function isWorkspace(pathname: string): boolean {
+  return matchPath("/app/papers/:id", pathname) !== null;
+}
+
+/** The workspace's thin mono line: who makes it, where it is published, the small links. */
+function ThinFooter() {
   return (
-    <footer className="site-footer">
+    <footer className="site-footer site-footer--thin">
       <p className="site-footer__line">
         <span>MARCUS · Friedrich Schiller University Jena · NFDI4Chem</span>
         <a href="https://doi.org/10.1039/d5dd00313j">
@@ -21,4 +35,29 @@ export default function Footer() {
       </nav>
     </footer>
   );
+}
+
+/** One band of three ruled cells: copyright, credit, links. Stacks on a phone. */
+function BandFooter() {
+  return (
+    <footer className="site-footer site-footer--band">
+      <p className="site-footer__cell site-footer__copy">© 2025 MARCUS</p>
+      <p className="site-footer__cell site-footer__credit">
+        by <a href="https://kohulanr.com">Kohulan Rajan</a> @{" "}
+        <a href="https://github.com/Steinbeck-Lab">Steinbeck Lab</a>
+      </p>
+      <nav aria-label="Footer" className="site-footer__cell site-footer__nav">
+        {LINKS.map(({ label, to, internal }, i) => (
+          <Fragment key={label}>
+            {i > 0 && <span aria-hidden="true">·</span>}
+            {internal ? <Link to={to}>{label}</Link> : <a href={to}>{label}</a>}
+          </Fragment>
+        ))}
+      </nav>
+    </footer>
+  );
+}
+
+export default function Footer() {
+  return isWorkspace(useLocation().pathname) ? <ThinFooter /> : <BandFooter />;
 }

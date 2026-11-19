@@ -199,6 +199,62 @@
   }
 }
 
+/* The band (every page but the review workspace): three ruled cells, copyright left,
+   credit centre, links right, like the header's row. Below 960 px the cells stack. */
+.site-footer--band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+}
+
+.site-footer__cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  padding: 14px 24px;
+}
+
+.site-footer__cell + .site-footer__cell {
+  border-left: 1px solid var(--line);
+}
+
+.site-footer__credit {
+  justify-content: center;
+}
+
+.site-footer__nav {
+  justify-content: flex-end;
+  gap: 0 8px;
+}
+
+@media (max-width: 959.98px) {
+  .site-footer--band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-footer__cell + .site-footer__cell {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .site-footer__credit,
+  .site-footer__nav {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 559.98px) {
+  .site-footer--band {
+    padding: 0;
+  }
+
+  .site-footer__cell {
+    padding: 10px 16px;
+  }
+}
+
 /* Specimen label: charcoal header bar, ruled rows -------------------------- */
 
 .specimen {

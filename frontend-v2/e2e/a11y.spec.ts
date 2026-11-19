@@ -179,6 +179,12 @@ test.describe("accessibility at phone width", { tag: "@mocked" }, () => {
     test(`${url} at 390 px`, async ({ page }) => {
       await page.goto(url);
       await expect(page.getByRole("navigation", { name: "Footer" })).toBeVisible();
+      // the footer band stacks: every link in it is at least a 24 by 24 px target
+      for (const link of await page.getByRole("contentinfo").getByRole("link").all()) {
+        const box = await link.boundingBox();
+        expect(box?.width).toBeGreaterThanOrEqual(24);
+        expect(box?.height).toBeGreaterThanOrEqual(24);
+      }
       // WCAG 2.2 AA on: axe leaves target-size (2.5.8) off unless its tag is asked for.
       await expectNoA11yViolations(page, { tags: WCAG_TAGS });
     });

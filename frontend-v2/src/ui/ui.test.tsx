@@ -439,24 +439,59 @@ describe("Header and Footer", () => {
     expect(screen.getByRole("link", { name: "Open the tool" })).toHaveAttribute("href", "/app");
   });
 
-  it("footer has the line, the citation and the links", () => {
-    const { container } = render(
-      <MemoryRouter>
+  const footerAt = (path: string) =>
+    render(
+      <MemoryRouter initialEntries={[path]}>
         <Footer />
       </MemoryRouter>,
     );
-    expect(container.textContent).toContain(
-      "MARCUS · Friedrich Schiller University Jena · NFDI4Chem",
+  const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
+
+  it("the band: copyright left, credit centre, the links right", () => {
+    const { container } = footerAt("/");
+    const band = container.querySelector("footer.site-footer--band");
+    expect(band).not.toBeNull();
+    expect(band?.querySelector(".site-footer__copy")?.textContent).toBe("© 2025 MARCUS");
+    expect(band?.querySelector(".site-footer__credit")?.textContent).toBe(
+      "by Kohulan Rajan @ Steinbeck Lab",
     );
-    expect(container.textContent).toContain("Digital Discovery 2025 · DOI 10.1039/d5dd00313j");
-    const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
+    expect(href("Kohulan Rajan")).toBe("https://kohulanr.com");
+    expect(href("Steinbeck Lab")).toBe("https://github.com/Steinbeck-Lab");
     expect(href("About")).toBe("/about");
-    expect(href("Privacy")).toBe("/privacy");
     expect(href("Disclaimer")).toBe("/disclaimer");
-    expect(href("DECIMER")).toBe("https://decimer.ai");
-    expect(href("COCONUT")).toBe("https://coconut.naturalproducts.net");
     expect(href("GitHub")).toBe("https://github.com/Kohulan/MARCUS");
+    expect(href("MIT License")).toBe("https://opensource.org/license/MIT");
+    expect(href("Privacy")).toBe("/privacy");
+    expect(screen.getByRole("navigation", { name: "Footer" })).toBeInTheDocument();
+    // the citation lives on About and the landing, not here; links stay in this tab
+    expect(container.textContent).not.toContain("10.1039");
+    expect(container.textContent).not.toContain("rights reserved");
+    for (const a of container.querySelectorAll("a")) expect(a.hasAttribute("target")).toBe(false);
   });
+
+  it.each(["/", "/about", "/privacy", "/disclaimer", "/app", "/app/images/7", "/no-such-page"])(
+    "%s gets the band",
+    (path) => {
+      const { container } = footerAt(path);
+      expect(container.querySelector(".site-footer--band")).not.toBeNull();
+      expect(container.querySelector(".site-footer--thin")).toBeNull();
+    },
+  );
+
+  it.each(["/app/papers/abc", "/app/papers/abc?s=3&focus=1", "/app/papers/abc?view=paper"])(
+    "%s keeps the thin line, so the review grid keeps its space",
+    (path) => {
+      const { container } = footerAt(path);
+      expect(container.querySelector(".site-footer--thin")).not.toBeNull();
+      expect(container.querySelector(".site-footer--band")).toBeNull();
+      expect(container.textContent).toContain(
+        "MARCUS · Friedrich Schiller University Jena · NFDI4Chem",
+      );
+      expect(href("About")).toBe("/about");
+      expect(href("Privacy")).toBe("/privacy");
+      expect(screen.getByRole("navigation", { name: "Footer" })).toBeInTheDocument();
+    },
+  );
 });
 
 describe("server rendering of the pre-rendered parts", () => {
