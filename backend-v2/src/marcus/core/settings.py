@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Prometheus alert MarcusDiskUploadsRefused (ops/prometheus-alerts.yml) uses the same value.
     min_free_disk_bytes: int = Field(5 * 2**30, ge=0)
     retention_days: int = 30
+    # The IP recorded when a browser first gets its key (owners.created_ip) is deleted this
+    # many days after it was recorded (daily retention purge). The new-key limit needs 1 hour.
+    owner_ip_retention_days: int = Field(30, gt=0)
     browser_max_active_papers: int = 3
     # New browser owners per client address per hour that were used (came back with their
     # cookie, or have a paper or image job). Owners never used again (the dropped cookies of a

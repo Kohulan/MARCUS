@@ -379,6 +379,52 @@ def test_file_error_is_counted_not_raised(db_session, monkeypatch):
     assert s.get(Paper, paper.id) is None  # rows go; the orphan sweep retries the files
 
 
+# --- owner IPs -------------------------------------------------------------------------
+
+
+def _owner_with_ip(s, ip: str | None, days_old: float) -> Owner:
+    owner = make_owner(s)
+    owner.created_ip = ip
+    owner.created_at = NOW - timedelta(days=days_old)
+    s.flush()
+    return owner
+
+
+def test_owner_ips_deleted_after_30_days(db_session):
+    """The IP recorded when a browser first got its key goes 30 days after it was recorded;
+    the owner (and its papers) stay. The new-key limit only looks at the last hour."""
+    s = db_session
+    old = _owner_with_ip(s, "203.0.113.7", 31)
+    v6 = _owner_with_ip(s, "2001:db8::1", 30.5)
+    young = _owner_with_ip(s, "198.51.100.2", 29)
+    unknown = _owner_with_ip(s, None, 40)
+    paper = make_paper(s, old)
+    s.commit()
+
+    report = purge(s)
+
+    assert report.owner_ips == 2
+    s.expire_all()
+    ips = {o.id: o.created_ip for o in s.execute(select(Owner)).scalars()}
+    assert ips[old.id] is None and ips[v6.id] is None and ips[unknown.id] is None
+    assert str(ips[young.id]) == "198.51.100.2"
+    assert s.get(Paper, paper.id) is not None  # only the IP goes
+
+
+def test_owner_ip_retention_is_a_setting(db_session, monkeypatch):
+    monkeypatch.setenv("MARCUS_OWNER_IP_RETENTION_DAYS", "7")
+    get_settings.cache_clear()
+    s = db_session
+    week = _owner_with_ip(s, "203.0.113.8", 8)
+    day = _owner_with_ip(s, "203.0.113.9", 1)
+    s.commit()
+
+    assert purge(s, batch_size=1).owner_ips == 1
+    s.expire_all()
+    assert s.get(Owner, week.id).created_ip is None
+    assert str(s.get(Owner, day.id).created_ip) == "203.0.113.9"
+
+
 # --- depictions -----------------------------------------------------------------------
 
 

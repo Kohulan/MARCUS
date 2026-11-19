@@ -37,7 +37,8 @@ export default function Privacy() {
         </p>
         <p>
           When a browser first gets its key, the server records the IP address it came from,
-          to limit how many new keys one address can get per hour. The web server also keeps
+          to limit how many new keys one address can get per hour. This IP address is deleted
+          after 30 days. The web server also keeps
           standard access logs (IP address, time, address of the request) to run and protect
           the service.
         </p>

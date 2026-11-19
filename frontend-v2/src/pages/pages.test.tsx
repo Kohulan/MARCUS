@@ -182,6 +182,8 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain(
       "To show the paper's title, the server looks up its DOI at Crossref or DataCite; only the DOI is sent.",
     );
+    // the IP recorded with a new key is not kept for good
+    expect(container.textContent).toContain("This IP address is deleted after 30 days.");
     // R-F22: the one request the browser makes to COCONUT without a click
     expect(container.textContent).toContain(
       "Opening a paper with a DOI asks COCONUT how many structures it already has for that DOI.",

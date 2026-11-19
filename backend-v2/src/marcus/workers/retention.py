@@ -19,7 +19,10 @@
    (a uuid) whose paper / image job has no row, or a `deleted` one, and whose mtime is older
    than one day (younger ones may belong to an upload that is still committing). This also
    retries files that `cancel_paper` or step 1/2 could not remove;
-6. depictions (`data_root/depictions/<owner id>/<xx>/`, the API's stored structure drawings
+6. owner IPs: the address recorded when a browser first got its key (`owners.created_ip`) is
+   set to NULL `owner_ip_retention_days` (default 30) after it was recorded (`created_at`).
+   The owner row stays; the per-address new-key limit only counts owners of the last hour;
+7. depictions (`data_root/depictions/<owner id>/<xx>/`, the API's stored structure drawings
    and `.nodraw` markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the
    directory holds more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing
    is drawn again on its next request. Directories empty for over a day are removed.
@@ -51,7 +54,7 @@ from sqlalchemy.orm import Session
 from marcus.core import storage
 from marcus.core.celery_app import celery_app
 from marcus.core.enums import Engine, ImageJobStatus, PaperStatus, StepStatus
-from marcus.core.models import ImageJob, OcsrCache, Paper, SegCache, Step
+from marcus.core.models import ImageJob, OcsrCache, Owner, Paper, SegCache, Step
 from marcus.core.pipeline import ACTIVE, cancel_paper, seg_cache_key
 from marcus.core.settings import get_settings
 
@@ -84,6 +87,7 @@ class PurgeReport:
     ocsr_cache: int = 0
     orphan_paper_dirs: int = 0
     orphan_image_files: int = 0
+    owner_ips: int = 0  # owners whose recorded IP was deleted
     depictions: int = 0  # files removed under data_root/depictions (age, then size cap)
     file_errors: int = 0
     errors: list[str] = field(default_factory=list)  # phases that failed (logged with traceback)
@@ -271,6 +275,29 @@ def _purge_ocsr_cache(
     report.ocsr_cache += _delete_in_batches(session, OcsrCache, keys, or_(*conditions), batch)
 
 
+def _purge_owner_ips(session: Session, now: datetime, batch: int, report: PurgeReport) -> None:
+    cutoff = now - timedelta(days=get_settings().owner_ip_retention_days)
+    while True:
+        ids = list(
+            session.execute(
+                select(Owner.id)
+                .where(Owner.created_ip.is_not(None), Owner.created_at < cutoff)
+                .limit(batch)
+                .with_for_update(skip_locked=True)
+            ).scalars()
+        )
+        if not ids:
+            return
+        session.execute(
+            update(Owner)
+            .where(Owner.id.in_(ids))
+            .values(created_ip=None)
+            .execution_options(synchronize_session=False)
+        )
+        session.commit()
+        report.owner_ips += len(ids)
+
+
 # --- orphans ---------------------------------------------------------------------------------
 
 
@@ -409,7 +436,8 @@ def purge_expired(
     ocsr_versions: dict[str, str] | None = None,
     report: PurgeReport | None = None,
 ) -> PurgeReport:
-    """Purge expired papers and image jobs, stale cache rows and orphan files (module doc).
+    """Purge expired papers and image jobs, stale cache rows, orphan files, old owner IPs and
+    old depictions (module doc).
 
     Commits once per batch. Each phase runs on its own: a phase that raises is rolled back,
     logged and named in `report.errors`, and the next phase still runs (a soft time limit
@@ -432,6 +460,7 @@ def purge_expired(
             lambda: _purge_ocsr_cache(session, cache_cutoff, versions, batch_size, report),
         ),
         ("orphans", lambda: _sweep_orphans(session, now, report)),
+        ("owner_ips", lambda: _purge_owner_ips(session, now, batch_size, report)),
         ("depictions", lambda: _purge_depictions(now, report)),
     ]
     for name, run in phases:
