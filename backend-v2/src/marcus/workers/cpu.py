@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import time
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 import requests
@@ -38,12 +39,16 @@ DOI_TOTAL_S = 12
 DOI_OP = "doi"
 DOI_MAX_CHARS = 255
 TITLE_MAX_CHARS = 500
+AUTHOR_MAX_CHARS = 100
+YEAR_MIN = 1800
+NO_META = {"title": None, "first_author": None, "year": None}
 TITLE_MAX_BYTES = 256 * 1024
 TITLE_MIN_LEFT_S = 1
 CROSSREF_URL = "https://api.crossref.org/works/{}"
 DATACITE_URL = "https://api.datacite.org/dois/{}"
 _TAGS = re.compile(r"<[^>]+>")
 _SPACES = re.compile(r"\s+")
+_YEAR = re.compile(r"[0-9]{4}")
 _DOI_PREFIX = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.IGNORECASE)
 
 
@@ -92,20 +97,56 @@ def normalise_doi(value) -> str | None:
     return doi
 
 
-def _crossref_title(data) -> object:
-    return data["message"]["title"][0]
+def _first(items) -> dict:
+    """The first entry of a list of objects, else an empty one."""
+    if isinstance(items, list) and items and isinstance(items[0], dict):
+        return items[0]
+    return {}
 
 
-def _datacite_title(data) -> object:
-    return data["data"]["attributes"]["titles"][0]["title"]
+def _date_year(date) -> object:
+    parts = date.get("date-parts") if isinstance(date, dict) else None
+    first = parts[0] if isinstance(parts, list) and parts else None
+    return first[0] if isinstance(first, list) and first else None
 
 
-def _clean_title(raw) -> str | None:
+def _crossref_meta(data) -> dict:
+    message = data["message"]
+    years = (_clean_year(_date_year(message.get(k))) for k in ("issued", "published"))
+    return {
+        "title": _clean_text(message["title"][0], TITLE_MAX_CHARS),
+        "first_author": _clean_text(_first(message.get("author")).get("family"), AUTHOR_MAX_CHARS),
+        "year": next((y for y in years if y is not None), None),
+    }
+
+
+def _datacite_meta(data) -> dict:
+    attributes = data["data"]["attributes"]
+    creator = _first(attributes.get("creators"))
+    author = _clean_text(creator.get("familyName"), AUTHOR_MAX_CHARS)
+    return {
+        "title": _clean_text(attributes["titles"][0]["title"], TITLE_MAX_CHARS),
+        "first_author": author or _clean_text(creator.get("name"), AUTHOR_MAX_CHARS),
+        "year": _clean_year(attributes.get("publicationYear")),
+    }
+
+
+def _clean_text(raw, max_chars: int) -> str | None:
+    """Tags out, entities unescaped, spaces collapsed, cut to `max_chars`."""
     if not isinstance(raw, str):
         return None
     text = html.unescape(_TAGS.sub("", raw))
-    text = _SPACES.sub(" ", text).strip()[:TITLE_MAX_CHARS].strip()
+    text = _SPACES.sub(" ", text).strip()[:max_chars].strip()
     return text or None
+
+
+def _clean_year(raw) -> int | None:
+    """An int or a four-digit string, from YEAR_MIN to next year, else None."""
+    if isinstance(raw, str) and _YEAR.fullmatch(raw):
+        raw = int(raw)
+    if type(raw) is not int:  # not bool, not float
+        return None
+    return raw if YEAR_MIN <= raw <= datetime.now(UTC).year + 1 else None
 
 
 def _get_json(http, url: str, timeout_s: float):
@@ -124,34 +165,35 @@ def _get_json(http, url: str, timeout_s: float):
         resp.close()
 
 
-def fetch_title(doi: str, timeout_s: float) -> str | None:
-    """Paper title from Crossref, then DataCite. `timeout_s` is the whole budget; each call gets
+def fetch_meta(doi: str, timeout_s: float) -> dict:
+    """Paper title, first author's family name and year from Crossref, then DataCite: the
+    first reply with a title gives all three. `timeout_s` is the whole budget; each call gets
     min(DOI_CALL_TIMEOUT_S, time left). The DOI comes from an untrusted PDF, so it is quoted into
-    the path. Any error, redirect or non-200 means no title."""
+    the path. Any error, redirect or non-200 means nothing from that source."""
     deadline = time.monotonic() + timeout_s
     quoted = quote(doi, safe="")
     with requests.Session() as http:
         for url, pick in (
-            (CROSSREF_URL.format(quoted), _crossref_title),
-            (DATACITE_URL.format(quoted), _datacite_title),
+            (CROSSREF_URL.format(quoted), _crossref_meta),
+            (DATACITE_URL.format(quoted), _datacite_meta),
         ):
             left = deadline - time.monotonic()
             if left <= 0:
-                return None
+                break
             try:
                 data = _get_json(http, url, min(DOI_CALL_TIMEOUT_S, left))
-                title = _clean_title(pick(data)) if data is not None else None
+                meta = pick(data) if data is not None else None
             except Exception as exc:  # noqa: BLE001
                 log.info("title lookup gave nothing: %s", type(exc).__name__)
                 continue
-            if title:
-                return title
-    return None
+            if meta and meta["title"]:
+                return meta
+    return dict(NO_META)
 
 
 def doi(step, session) -> dict:
-    """Never fails the paper: any error or timeout means no DOI (and no title). The title call
-    runs only for a found DOI and shares the DOI_TOTAL_S budget."""
+    """Never fails the paper: any error or timeout means no DOI (and no title, first author or
+    year). The metadata call runs only for a found DOI and shares the DOI_TOTAL_S budget."""
     start = time.monotonic()
     try:
         raw = pdfsafe.run_op(
@@ -160,15 +202,15 @@ def doi(step, session) -> dict:
         found = normalise_doi(raw)
     except Exception as exc:  # noqa: BLE001
         log.info("doi lookup gave nothing: %s", type(exc).__name__)
-        return {"doi": None, "title": None}
-    title = None
+        return {"doi": None, **NO_META}
+    meta = NO_META
     left = DOI_TOTAL_S - (time.monotonic() - start)
     if found and left >= TITLE_MIN_LEFT_S:
         try:
-            title = fetch_title(found, left)
+            meta = fetch_meta(found, left)
         except Exception as exc:  # noqa: BLE001
             log.info("title lookup gave nothing: %s", type(exc).__name__)
-    return {"doi": found, "title": title}
+    return {"doi": found, **meta}
 
 
 register(StepKind.CHECK_PDF, check_pdf)
