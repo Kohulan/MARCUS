@@ -320,3 +320,93 @@ def test_depict_highlight_bounds_the_raw_mappings_walked():
     start = time.perf_counter()
     svg = depict("C1CCCCCCCCCCCC1", "svg", 200, 200, highlight=".".join(["*"] * 13))
     assert svg.startswith("<svg") and time.perf_counter() - start < 3
+
+
+# --- the highlight is matched in RDKit, never searched by CDK (re-review I-1) ------------------
+
+TELLUROPHENES = ("c1cc[te]c1", "Cc1cc[te]c1")  # RDKit: aromatic; CDK's Daylight model: not
+
+ORDER_CASES = [
+    "[H]C([H])([H])O",  # explicit hydrogens are atoms on both sides
+    "[2H]C([2H])O",
+    "C[N+](=O)[O-]",
+    "[NH4+].[Cl-]",
+    "c1cc[te]c1",
+    "OC(=O)c1ccc[nH]1",
+    "C1CC2CCC1C2",  # ring closures: bonds written out of atom order
+    "C[C@H](N)C(=O)O",
+    "[H]c1ccc2ccccc2c1",
+]
+
+
+@needs_cdk
+@pytest.mark.parametrize("smiles", ORDER_CASES)
+def test_rdkit_and_cdk_read_a_smiles_in_the_same_atom_order(smiles):
+    """The RDKit match is drawn by CDK by atom index: both must keep the SMILES's atom order
+    and see the same bonds between the same indices (on the laid-out molecule depict draws)."""
+    from marcus.workers.tools import _highlight_mol, _sdg, _smiles_to_cdk
+
+    rd = _highlight_mol(smiles)
+    cdk = _sdg(_smiles_to_cdk(smiles))
+    assert cdk.getAtomCount() == rd.GetNumAtoms()
+    for i, atom in enumerate(rd.GetAtoms()):
+        other = cdk.getAtom(i)
+        assert int(other.getAtomicNumber()) == atom.GetAtomicNum(), (smiles, i)
+        assert int(other.getFormalCharge() or 0) == atom.GetFormalCharge(), (smiles, i)
+    rd_bonds = {frozenset((b.GetBeginAtomIdx(), b.GetEndAtomIdx())) for b in rd.GetBonds()}
+    cdk_bonds = {
+        frozenset((int(b.getBegin().getIndex()), int(b.getEnd().getIndex()))) for b in cdk.bonds()
+    }
+    assert cdk_bonds == rd_bonds
+
+
+class _NoCdkSearch:
+    """jpype, refusing CDK's SMARTS and substructure classes: depict must not search in CDK."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def JClass(self, name):  # noqa: N802
+        assert ".smarts." not in name and ".isomorphism." not in name, name
+        return self._real.JClass(name)
+
+
+@needs_cdk
+def test_tellurophene_mcs_highlight_is_drawn_without_a_cdk_search(monkeypatch):
+    """A signed MCS SMARTS of tellurophenes uses aromatic bonds, which CDK does not perceive
+    there: CDK would find no match (and search unbounded). The match is RDKit's, under the
+    model that made the SMARTS, so it is found and drawn, and CDK runs no search."""
+    from rdkit import Chem
+
+    from marcus.workers import tools
+
+    molfiles = [Chem.MolToMolBlock(Chem.MolFromSmiles(s)) for s in TELLUROPHENES]
+    smarts = tools.mcs(molfiles)["mcs_smarts"]
+    assert ":" in smarts  # aromatic bonds in the pattern
+    real = tools._jvm()
+    monkeypatch.setattr(tools, "_jvm", lambda: _NoCdkSearch(real))
+    for smiles in TELLUROPHENES:
+        lit = tools.depict(smiles, "svg", 300, 300, highlight=smarts)
+        assert "#add8e6" in lit.lower(), smiles
+
+
+@needs_cdk
+def test_highlight_with_explicit_hydrogens_lands_on_the_right_atoms(monkeypatch):
+    """[H] atoms shift every later index if one side drops them: the highlighted atoms must
+    be the pattern's (the O and its C), not their neighbours."""
+    from marcus.workers import tools
+
+    seen = []
+    real = tools._highlight_objects
+
+    def spy(mol, matches):
+        objs = real(mol, matches)
+        seen.append(sorted(str(o.getSymbol()) for o in objs if hasattr(o, "getSymbol")))
+        return objs
+
+    monkeypatch.setattr(tools, "_highlight_objects", spy)
+    tools.depict("[H]C([H])([H])O", "svg", 200, 200, highlight="[#6]-[#8]")
+    assert seen == [["C", "O"]]

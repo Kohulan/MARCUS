@@ -1,11 +1,13 @@
 """Signed highlights (security F5): `/tools/depict` never searches with a pattern it did not make.
 
-A highlight SMARTS is matched by CDK's subgraph search, which is exponential for a pattern that
-does not occur in the molecule, and a running JNI call cannot be interrupted. So a highlight is
-accepted only with a token that `POST /tools/mcs` issued with its SMARTS: an HMAC over the
-SMARTS and the molecules the MCS was computed from, valid for TOKEN_TTL_S. `/tools/depict`
-draws the highlight only for one of those molecules, where the pattern is a known substructure
-(found at once, and the worker walks at most MAX_HIGHLIGHT_MATCHES of its matches).
+A subgraph search is exponential for a pattern that does not occur in the molecule, and a
+running JNI call cannot be interrupted. So a highlight is accepted only with a token that
+`POST /tools/mcs` issued with its SMARTS: an HMAC over the SMARTS and the molecules the MCS was
+computed from, valid for TOKEN_TTL_S. `/tools/depict` draws the highlight only for one of those
+molecules, where the pattern is a known substructure in RDKit's model, the one that made it.
+The tools worker therefore matches it in RDKit on the drawn SMILES (found at once, at most
+MAX_HIGHLIGHT_MAPPINGS mappings walked) and CDK only draws the matched atoms: CDK's aromaticity
+differs (a tellurophene is aromatic to RDKit, not to CDK), and its search could miss.
 
 Molecules are compared by `binding key`: RDKit's canonical SMILES without stereo, of the MCS's
 molfiles (read as the tools worker reads them) and of the SMILES to draw, both computed here.
