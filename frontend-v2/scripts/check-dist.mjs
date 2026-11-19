@@ -51,8 +51,15 @@ for (const file of ["index.html", "app/index.html"]) {
 if (has("index.html") && !read("index.html").includes("FORM: Survey Sheet")) {
   fail("dist/index.html: Survey Sheet contract (FORM: Survey Sheet) missing");
 }
-if (has("index.html") && !read("index.html").includes("Every molecule has a source.")) {
-  fail("dist/index.html: landing headline not pre-rendered");
+// The landing's h1 spells the name as an acrostic (bold initials M A R C U S) and is read
+// as the plain name (a visually hidden span).
+const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
+if (has("index.html")) {
+  const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(read("index.html"))?.[1] ?? "";
+  const initials = [...h1.matchAll(/<b>([^<]*)<\/b>/g)].map((m) => m[1]).join("");
+  if (!h1.includes(`<span class="visually-hidden">${HEADLINE}</span>`) || initials !== "MARCUS") {
+    fail("dist/index.html: landing headline not pre-rendered");
+  }
 }
 if (has("app/index.html") && !read("app/index.html").includes('<div id="root"></div>')) {
   fail("dist/app/index.html: #root is not empty");

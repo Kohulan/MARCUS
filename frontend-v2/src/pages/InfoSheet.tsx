@@ -32,9 +32,18 @@ export function InfoSheet({ title, docTitle, lede, updated, children }: InfoShee
   );
 }
 
-export function InfoSection({ title, children }: { title: string; children: ReactNode }) {
+type InfoSectionProps = {
+  title: string;
+  /** An anchor other pages link to ("/about#cite"). */
+  id?: string;
+  /** A drawing that takes the reading column's full width (the example review grid). */
+  figure?: boolean;
+  children: ReactNode;
+};
+
+export function InfoSection({ title, id, figure, children }: InfoSectionProps) {
   return (
-    <section className="info__section">
+    <section id={id} className={figure ? "info__section info__section--figure" : "info__section"}>
       <h2>{title}</h2>
       {children}
     </section>

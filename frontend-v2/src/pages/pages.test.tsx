@@ -1,13 +1,15 @@
-// Landing (Persuade mode, the Survey Sheet board) and the info pages: exact copy, honest
-// example labels, the CTA links, an illustration with nothing focusable, the citation with
-// its copy button, v2 privacy facts, and the route-template page views (never a real id).
+// Landing and the info pages: the acrostic h1, the ring drop zone and its hand-over to the
+// tool, the sample pill; About with what moved there (honest example labels, an illustration
+// with nothing focusable, the citation with its copy button); v2 privacy facts, and the
+// route-template page views (never a real id).
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { routeTemplate, trackPage } from "../analytics";
+import Landing from "./Landing";
 import { pageMeta } from "./meta";
 
 const CITATION =
@@ -30,15 +32,59 @@ afterEach(() => {
   delete window._paq;
 });
 
+const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
+const MB = 1024 * 1024;
+
+function pdf(name: string, size = 1024, type = "application/pdf"): File {
+  const file = new File(["%PDF"], name, { type });
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+}
+
+/** Where /app was opened, and with what router state. */
+function AppProbe() {
+  const location = useLocation();
+  const upload = (location.state as { upload?: File } | null)?.upload;
+  return <p>tool opened with {upload ? upload.name : "nothing"}</p>;
+}
+
+function renderLanding() {
+  return render(
+    <MemoryRouter initialEntries={["/"]}>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/app" element={<AppProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("Landing", () => {
-  it("has one h1 with the exact headline, in sentence case in the DOM", () => {
+  it("has one h1: the name spelled out, read as the plain name", () => {
     renderAt("/");
     const h1s = screen.getAllByRole("heading", { level: 1 });
     expect(h1s).toHaveLength(1);
-    expect(h1s[0]?.textContent).toBe("Every molecule has a source.");
+    const h1 = h1s[0]!;
+    expect(h1).toHaveAccessibleName(HEADLINE);
+    expect(h1.querySelector(".visually-hidden")?.textContent).toBe(HEADLINE);
+    // the drawn acrostic: bold initials, and/for set apart, one word a line
+    const drawn = h1.querySelector('[aria-hidden="true"]')!;
+    expect([...drawn.querySelectorAll("b")].map((b) => b.textContent).join("")).toBe("MARCUS");
+    expect([...drawn.querySelectorAll(".acro__line")].map((l) => text(l))).toEqual([
+      "Molecular",
+      "Annotation and",
+      "Recognition for",
+      "Curating",
+      "Unravelled",
+      "Structures",
+    ]);
+    expect([...drawn.querySelectorAll(".acro__link")].map((s) => s.textContent)).toEqual([
+      "and",
+      "for",
+    ]);
   });
 
-  it("says one sentence under the headline, then the mono facts line", () => {
+  it("says one sentence under the name, then the mono facts line", () => {
     renderAt("/");
     expect(
       screen.getByText(
@@ -52,42 +98,135 @@ describe("Landing", () => {
     ).toBeInTheDocument();
   });
 
-  it("Upload a PDF is orange glass to /app; Try a sample paper is clear glass to /app?sample=1", () => {
-    renderAt("/");
-    const upload = screen.getByRole("link", { name: /^Upload a PDF/ });
-    expect(upload.tagName).toBe("A");
-    expect(upload).toHaveClass("glass", "glass--orange");
-    expect(upload).toHaveAttribute("href", "/app");
-    const sample = screen.getByRole("link", { name: /^Try a sample paper/ });
-    expect(sample).toHaveClass("glass", "glass--clear");
-    expect(sample).toHaveAttribute("href", "/app?sample=1");
-  });
-
-  it("under the buttons, a note that the tool needs a desktop screen (shown below 1024 px)", () => {
+  it("everything else moved to About: no steps, review grid or citation here", () => {
     const { container } = renderAt("/");
-    const note = container.querySelector(".lead__cta + .lead__desk, .lead__cta .lead__desk");
-    expect(note).toHaveClass("mono-label");
-    expect(note?.textContent).toBe("Desktop screen needed");
+    const main = screen.getByRole("main");
+    expect(main.querySelector("#how, #cite, .preview, .hero")).toBeNull();
+    expect(main.querySelectorAll("h2")).toHaveLength(0);
+    expect(container.textContent).not.toContain("Every molecule has a source");
+    expect(container.querySelector('a[href^="/#"]')).toBeNull();
   });
 
-  it("the hero is labelled as an example page, with both tags and a bbox line for each", () => {
+  it("Try a sample paper is the orange glass pill to /app?sample=1", () => {
     renderAt("/");
-    const hero = screen.getByRole("region", { name: "Example: a page read by MARCUS" });
-    expect(hero.textContent).toContain("Sheet 01 · Example page · 300 DPI");
-    expect(within(hero).getByText("[01] Structure")).toBeInTheDocument();
-    expect(within(hero).getByText("[02] Reading…")).toBeInTheDocument();
-    expect(
-      within(hero).getByText((_, el) => text(el) === "BBox [01] X0 967 · Y0 671 · X1 1513 · Y1 1120 px" && el?.children.length === 0),
-    ).toBeInTheDocument();
-    expect(
-      within(hero).getByText((_, el) => text(el) === "BBox [02] X0 1410 · Y0 2010 · X1 2190 · Y1 2400 px" && el?.children.length === 0),
-    ).toBeInTheDocument();
+    const sample = screen.getByRole("link", { name: /^Try a sample paper/ });
+    expect(sample).toHaveClass("glass", "glass--orange");
+    expect(sample).toHaveAttribute("href", "/app?sample=1");
+    expect(screen.queryByRole("link", { name: /Upload a PDF/ })).toBeNull();
   });
 
-  it("the hero shows the steps of the sample paper with a word for each state", () => {
+  it("the drop zone is one button: the ring, the words, the limit; the beams are decoration", () => {
+    const { container } = renderAt("/");
+    const zone = screen.getByRole("button", { name: /Drop a PDF here or browse/ });
+    expect(zone).toHaveClass("dz");
+    expect(text(zone)).toBe(
+      "Drop a PDF here or browse Desktop screen needed PDF up to 20 MB",
+    );
+    expect(zone.querySelector("svg.dz__ring")).toHaveAttribute("aria-hidden", "true");
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).toHaveAttribute("accept", "application/pdf,.pdf");
+    expect(input).toHaveAttribute("tabindex", "-1");
+    expect(container.querySelector("canvas.beams")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("Enter, Space or a click on the zone opens the file picker", () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
     renderAt("/");
-    const hero = screen.getByRole("region", { name: "Example: a page read by MARCUS" });
-    const steps = within(hero).getAllByRole("listitem").map((li) => text(li));
+    fireEvent.click(screen.getByRole("button", { name: /Drop a PDF here/ }));
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it("a PDF picked there goes to the tool, which uploads it", async () => {
+    const { container } = renderLanding();
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [pdf("alkaloids.pdf")] } });
+    const zone = container.querySelector(".dz");
+    expect(zone).toHaveClass("is-done");
+    expect(zone).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Uploading alkaloids.pdf…");
+    expect(await screen.findByText("tool opened with alkaloids.pdf")).toBeInTheDocument();
+  });
+
+  it("a PDF dropped on the ring goes to the tool; drag-over turns it orange first", async () => {
+    const { container } = renderLanding();
+    const zone = container.querySelector(".dz")!;
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["Files"], files: [] } });
+    expect(zone).toHaveClass("is-drag");
+    fireEvent.dragLeave(zone, { relatedTarget: document.body });
+    expect(zone).not.toHaveClass("is-drag");
+    fireEvent.dragOver(zone, { dataTransfer: { types: ["Files"], files: [] } });
+    fireEvent.drop(zone, { dataTransfer: { types: ["Files"], files: [pdf("paper.pdf")] } });
+    expect(await screen.findByText("tool opened with paper.pdf")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["a picture", pdf("figure.png", 1024, "image/png"), "That file is not a PDF"],
+    ["a PDF over 20 MB", pdf("big.pdf", 21 * MB), "That PDF is larger than 20 MB"],
+  ])("refuses %s in the browser and strikes the ring through", async (_what, file, said) => {
+    const { container } = renderLanding();
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [file] } });
+    const zone = container.querySelector(".dz");
+    expect(zone).toHaveClass("is-error");
+    expect(screen.getByRole("alert")).toHaveTextContent(said);
+    expect(zone?.querySelector(".dz__title--said")).toHaveTextContent(said);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(/tool opened/)).toBeNull();
+  });
+});
+
+describe("About", () => {
+  it("What it does says it once, and the PI line names the university only once", () => {
+    const { container } = renderAt("/about");
+    expect(
+      screen.getByText(
+        "MARCUS turns a journal article into checked chemical structures for COCONUT, the " +
+          "open natural products database.",
+      ),
+    ).toBeInTheDocument();
+    const pi = screen.getByText(/^Principal investigator/);
+    expect(text(pi)).toBe(
+      "Principal investigator. Professor of Analytical Chemistry, Cheminformatics and Chemometrics",
+    );
+    expect(container.querySelector(".info__body")?.textContent?.match(/Friedrich Schiller/g)).toHaveLength(1);
+  });
+
+  it("the sections run in order, each with its anchor where other pages link", () => {
+    const { container } = renderAt("/about");
+    const h2s = [...container.querySelectorAll(".info__body h2")].map((h) => text(h));
+    expect(h2s).toEqual([
+      "What it does",
+      "How it works",
+      "Example: the review grid",
+      "Team",
+      "Open source",
+      "Cite",
+      "Publications",
+    ]);
+    for (const id of ["how", "review", "cite"]) expect(container.querySelector(`section#${id}`)).not.toBeNull();
+    expect(container.textContent).not.toContain("Mockup note");
+  });
+
+  it("How it works: the three steps with [nn] tags, the real crop, the sample paper's run", () => {
+    const { container } = renderAt("/about");
+    const how = container.querySelector("section#how") as HTMLElement;
+    const h3s = within(how).getAllByRole("heading", { level: 3 });
+    expect(h3s.map((h) => text(h))).toEqual([
+      "Every structure on every page",
+      "Four engines, side by side",
+      "Checked, then into COCONUT",
+    ]);
+    expect([...how.querySelectorAll(".steps3__tag")].map((t) => t.textContent)).toEqual([
+      "[01]",
+      "[02]",
+      "[03]",
+    ]);
+    expect(how.textContent).toContain("MolNexTR, MolScribe and DECIMER hand-drawn");
+    const crop = within(how).getByRole("img", {
+      name: "Example: a structure drawing that DECIMER Segmentation cut from page 1 of the sample paper",
+    });
+    expect(crop.getAttribute("src")).toMatch(/example-crop/);
+    const steps = [...how.querySelectorAll(".runlog li")].map((li) => text(li));
     expect(steps).toEqual([
       "Done: 001 Check PDF",
       "Done: 002 Render 5 pages",
@@ -97,70 +236,47 @@ describe("Landing", () => {
     ]);
   });
 
-  it("the three cards set [01], [02], [03] on the heading's first line, with no label above", () => {
-    const { container } = renderAt("/");
-    const how = container.querySelector("section#how") as HTMLElement;
-    expect(how).toHaveAttribute("aria-label", "What MARCUS does");
-    const h2s = within(how).getAllByRole("heading", { level: 2 });
-    expect(h2s.map((h) => text(h))).toEqual([
-      "[01] Every structure on every page",
-      "[02] Four engines, side by side",
-      "[03] Checked, then into COCONUT",
-    ]);
-    for (const [i, h2] of h2s.entries()) {
-      expect(h2.firstElementChild).toHaveClass("how__tag");
-      expect(h2.firstElementChild?.textContent).toBe(`[0${i + 1}]`);
-      // The tag is drawn, not read: the heading's name is its words.
-      expect(h2.firstElementChild).toHaveAttribute("aria-hidden", "true");
-      expect(h2).toHaveAccessibleName(text(h2).replace(/^\[0\d\] /, ""));
-      // Nothing sits above the heading in its card.
-      expect(h2.previousElementSibling).toBeNull();
-    }
-    expect(how.querySelector(".mono-label")).toBeNull();
-    for (const word of ["Find", "Read", "Curate"]) {
-      expect(within(how).queryByText(word)).toBeNull();
-    }
-  });
-
-  it("the review preview is an example with nothing focusable in it", () => {
-    renderAt("/");
-    const preview = screen.getByRole("region", { name: "Example: the review grid" });
+  it("the review grid is an example with nothing focusable in it, as the tool shows it", () => {
+    const { container } = renderAt("/about");
+    const preview = container.querySelector("section#review .preview") as HTMLElement;
     expect(preview.textContent).toContain("Example paper");
-    expect(preview.textContent).not.toContain("In the tool");
-    expect(preview.querySelector(".preview__name .mono-label")).toBeNull();
     expect(preview.textContent).toContain("Send 9 to COCONUT");
+    expect(within(preview).getByText("Engines differ")).toBeInTheDocument();
+    expect(preview.querySelectorAll(".pcard kbd")).toHaveLength(0);
+    expect(preview.querySelector(".preview__foot")?.textContent).toContain("Keys in focus mode");
     expect(preview.querySelectorAll("button, a, [tabindex], input, select, textarea")).toHaveLength(0);
   });
 
-  it("the preview matches the tool: Engines differ, no keys on grid pills, the keys in focus mode", () => {
-    renderAt("/");
-    const preview = screen.getByRole("region", { name: "Example: the review grid" });
-    expect(within(preview).getByText("Engines differ")).toBeInTheDocument();
-    expect(preview.textContent).not.toContain("DECIMER and MolNexTR differ");
-    expect(preview.querySelectorAll(".pcard kbd")).toHaveLength(0);
-    expect(preview.querySelector(".preview__foot")?.textContent).toContain("Keys in focus mode");
-  });
-
-  it("names the four engines, as the tool runs them", () => {
-    const { container } = renderAt("/");
-    const how = container.querySelector("section#how") as HTMLElement;
-    expect(how.textContent).toContain("MolNexTR, MolScribe and DECIMER hand-drawn");
-  });
-
-  it("the cite section shows the exact citation and copies it", async () => {
+  it("Cite shows the exact citation and copies it", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-    const { container } = renderAt("/");
+    const { container } = renderAt("/about");
     const cite = container.querySelector("section#cite") as HTMLElement;
-    expect(cite).not.toBeNull();
     expect(within(cite).getByText((_, el) => el?.tagName === "P" && text(el) === CITATION)).toBeInTheDocument();
-    const copy = within(cite).getByRole("button", { name: /Copy/ });
+    const copy = within(cite).getByRole("button", { name: "Copy citation" });
     expect(copy).toHaveClass("glass", "glass--clear", "glass--sm");
     await act(async () => {
       fireEvent.click(copy);
     });
     expect(writeText).toHaveBeenCalledWith(CITATION);
     expect(screen.getByText("Citation copied")).toBeInTheDocument();
+  });
+
+  it("Publications leave out the MARCUS paper: it is under Cite", () => {
+    const { container } = renderAt("/about");
+    const pubs = [...container.querySelectorAll(".refs li")].map((li) => text(li));
+    expect(pubs).toHaveLength(7);
+    expect(pubs.some((p) => p.includes("10.1039/d5dd00313j"))).toBe(false);
+  });
+
+  it("the Disclaimer's How to cite goes to About's Cite, and it credits the icons", () => {
+    const { container } = renderAt("/disclaimer");
+    expect(screen.getByRole("link", { name: "How to cite" })).toHaveAttribute("href", "/about#cite");
+    expect(container.textContent).toContain("Font Awesome Free 6.7.2");
+    expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute(
+      "href",
+      "https://fontawesome.com/license/free",
+    );
   });
 });
 
@@ -214,7 +330,7 @@ describe("pre-rendered pages", () => {
       (url) => pageMeta(url).title,
     );
     expect(new Set(titles).size).toBe(titles.length);
-    expect(pageMeta("/").title).toBe("MARCUS · Every molecule has a source");
+    expect(pageMeta("/").title).toBe(`MARCUS · ${HEADLINE}`);
     expect(pageMeta("/privacy").title).toBe("Privacy · MARCUS");
   });
 

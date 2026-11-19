@@ -6,7 +6,8 @@ import { keys, useImages, usePapers } from "../api/queries";
 import type { Engine } from "../api/types";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
-import DropZone, { type FileKind } from "./DropZone";
+import DropZone from "./DropZone";
+import type { FileKind } from "./files";
 import PapersList from "./PapersList";
 import "./tool.css";
 
@@ -58,8 +59,8 @@ function RetryIn({ at }: { at: number }) {
  * /app: upload a PDF or one image (engine, find structures on/off), try the sample paper,
  * and this browser's papers and image jobs. A PDF opens /app/papers/<id> after upload, an
  * image /app/images/<id>. `?sample=1` (the landing's "Try a sample paper") runs the sample
- * button once; router state `{openPicker: true}` (the landing's "Upload a PDF") opens the
- * file picker once.
+ * button once; router state `{upload: File}` (a PDF dropped on the landing, already checked
+ * there) is uploaded once, the same way as a file dropped here.
  */
 export default function ToolHome() {
   usePageTitle("Papers · MARCUS");
@@ -144,15 +145,20 @@ export default function ToolHome() {
     void runSample();
   }, [wantsSample, papers.isSuccess, navigate, location.pathname, runSample]);
 
-  // {openPicker: true}: DropZone opens the picker once, then the flag leaves the history
-  // entry, so Back from a paper does not open the picker again.
-  const wantsPicker = (location.state as { openPicker?: unknown } | null)?.openPicker === true;
-  const pickerOpened = useCallback(() => {
+  // {upload: File}: the landing's drop zone hands over a PDF it has checked. The file leaves
+  // the history entry first, so a reload or Back from the paper does not upload it again.
+  const handed = (location.state as { upload?: unknown } | null)?.upload;
+  const handedFile = handed instanceof File ? handed : null;
+  const handOffRan = useRef(false);
+  useEffect(() => {
+    if (!handedFile || handOffRan.current) return;
+    handOffRan.current = true; // StrictMode runs this effect twice; the file is sent once
     navigate(
       { pathname: location.pathname, search: location.search },
       { replace: true, state: null },
     );
-  }, [navigate, location.pathname, location.search]);
+    void upload(handedFile, "pdf", `Uploading ${handedFile.name}…`);
+  }, [handedFile, navigate, location.pathname, location.search, upload]);
 
   const sampleButton = (
     <GlassButton tint="clear" disabled={busy !== null} onClick={() => void runSample()}>
@@ -178,8 +184,6 @@ export default function ToolHome() {
           onFile={(file, kind) => void upload(file, kind, `Uploading ${file.name}…`)}
           onRefuse={(text) => setProblem({ text })}
           busy={busy}
-          openPicker={wantsPicker}
-          onPickerOpened={pickerOpened}
           message={
             problem ? (
               <p className="drop__problem">
