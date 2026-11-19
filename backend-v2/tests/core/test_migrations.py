@@ -132,7 +132,8 @@ def test_migration_0006_up_down(migrated_db):
     engine = get_sync_engine()
     try:
         command.upgrade(cfg, "head")
-        assert {"first_author", "year"} <= _columns(engine, "papers")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("papers")}
+        assert cols["first_author"]["nullable"] and cols["year"]["nullable"]
         command.downgrade(cfg, "0005")
         cols = _columns(engine, "papers")
         assert "first_author" not in cols and "year" not in cols and "title" in cols

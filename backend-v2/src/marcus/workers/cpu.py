@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from datetime import UTC, datetime
 from urllib.parse import quote
 
@@ -112,7 +113,8 @@ def _date_year(date) -> object:
 
 def _crossref_meta(data) -> dict:
     message = data["message"]
-    years = (_clean_year(_date_year(message.get(k))) for k in ("issued", "published"))
+    # `published` as in v1; `issued` only when it has no year
+    years = (_clean_year(_date_year(message.get(k))) for k in ("published", "issued"))
     return {
         "title": _clean_text(message["title"][0], TITLE_MAX_CHARS),
         "first_author": _clean_text(_first(message.get("author")).get("family"), AUTHOR_MAX_CHARS),
@@ -131,11 +133,16 @@ def _datacite_meta(data) -> dict:
     }
 
 
+_HIDDEN = {"Cc", "Cf", "Cs"}  # controls (NUL too), format (bidi, zero-width), lone surrogates
+
+
 def _clean_text(raw, max_chars: int) -> str | None:
-    """Tags out, entities unescaped, spaces collapsed, cut to `max_chars`."""
+    """Tags out, entities unescaped, control/format/surrogate chars out, spaces collapsed, cut
+    to `max_chars`. One such char would otherwise make the pipeline reject the whole result."""
     if not isinstance(raw, str):
         return None
     text = html.unescape(_TAGS.sub("", raw))
+    text = "".join(c for c in text if c.isspace() or unicodedata.category(c) not in _HIDDEN)
     text = _SPACES.sub(" ", text).strip()[:max_chars].strip()
     return text or None
 

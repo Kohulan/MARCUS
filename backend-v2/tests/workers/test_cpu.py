@@ -324,15 +324,16 @@ def test_fetch_meta_crossref_author_and_year(monkeypatch):
             )
         },
     )
-    assert cpu.fetch_meta("10.1/x", 5) == {"title": "Coffea", "first_author": "Rajan", "year": 2025}
+    # the year is `published` (as v1), not `issued`
+    assert cpu.fetch_meta("10.1/x", 5) == {"title": "Coffea", "first_author": "Rajan", "year": 2024}
     assert len(web.urls) == 1  # no extra call for the author or year
 
 
-def test_fetch_meta_crossref_year_falls_back_to_published(monkeypatch):
-    assert crossref_meta(monkeypatch, published={"date-parts": [[2019, 5]]})["year"] == 2019
-    assert crossref_meta(monkeypatch, issued={"date-parts": [["2017"]]})["year"] == 2017
-    assert crossref_meta(monkeypatch, issued={"date-parts": [[None]]},
-                         published={"date-parts": [[2018]]})["year"] == 2018  # fmt: skip
+def test_fetch_meta_crossref_year_falls_back_to_issued(monkeypatch):
+    assert crossref_meta(monkeypatch, issued={"date-parts": [[2019, 5]]})["year"] == 2019
+    assert crossref_meta(monkeypatch, published={"date-parts": [["2017"]]})["year"] == 2017
+    assert crossref_meta(monkeypatch, published={"date-parts": [[None]]},
+                         issued={"date-parts": [[2018]]})["year"] == 2018  # fmt: skip
 
 
 def test_fetch_meta_datacite_author_and_year(monkeypatch):
@@ -351,6 +352,26 @@ def test_fetch_meta_author_is_cleaned_and_cut(monkeypatch):
     assert odd["first_author"] == "Müller Smith"
     long = crossref_meta(monkeypatch, author=[{"family": "a" * 300}])["first_author"]
     assert long == "a" * cpu.AUTHOR_MAX_CHARS == "a" * 100
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["\x00", "\ud800", "\u202e", "\u200b", "\x07", "\ufeff"],
+    ids=["nul", "lone-surrogate", "bidi-override", "zero-width-space", "bell", "bom"],
+)
+def test_fetch_meta_drops_control_format_and_surrogate_chars(monkeypatch, bad):
+    """One such char from a crafted reply must not make the pipeline drop the whole result."""
+    fake_web(
+        monkeypatch,
+        {"https://api.crossref.org/": (
+            200, crossref(f"Cof{bad}fea {bad}", author=[{"family": f"Ra{bad}jan"}]), {})},
+    )  # fmt: skip
+    meta = cpu.fetch_meta("10.1/x", 5)
+    assert (meta["title"], meta["first_author"]) == ("Coffea", "Rajan")
+    meta = datacite_meta(monkeypatch, creators=[{"familyName": f"{bad}", "name": f"Ra{bad}jan"}])
+    assert meta["first_author"] == "Rajan"
+    for value in (meta["title"], meta["first_author"]):
+        value.encode("utf-8")  # no lone surrogate left
 
 
 @pytest.mark.parametrize(

@@ -237,7 +237,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         <SubmitForm
           paper={{ id: paper.id, title: paper.title, doi: paper.doi }}
           structures={toCoconut}
-          initial={{ title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }) }}
+          initial={{
+            title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
+          }}
           onClose={() => setSending(false)}
         />
       )}
