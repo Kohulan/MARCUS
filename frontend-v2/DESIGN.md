@@ -67,6 +67,12 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
+  display-acrostic:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "clamp(34px, min(5.3vw, 8.8vh), 84px)"
+    fontWeight: 400
+    lineHeight: 0.96
+    letterSpacing: "-0.035em"
   display-info:
     fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: "clamp(36px, 2.6vw + 18px, 60px)"
@@ -155,20 +161,24 @@ components:
     backgroundColor: "{colors.hair}"
     textColor: "{colors.muted}"
     rounded: "{rounded.pill}"
-  nav-cell:
-    backgroundColor: "{colors.paper}"
+  nav-waterline:
     textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    padding: "12px 14px 26px"
-    width: "150px"
-  nav-cell-hover:
-    backgroundColor: "{colors.sunken}"
-  nav-cell-tool:
-    backgroundColor: "{colors.green}"
-    textColor: "{colors.on-green}"
-    width: "170px"
-  nav-cell-tool-hover:
-    backgroundColor: "{colors.ink}"
+    typography: "{typography.label-control}"
+    rounded: "{rounded.pill}"
+    padding: "4px"
+  nav-waterline-item:
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    padding: "10px 18px"
+  footer-bubble:
+    textColor: "{colors.text-2}"
+    rounded: "{rounded.pill}"
+    padding: "3px 14px"
+    height: "30px"
+  drop-ring:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    size: "124px"
   segment:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
@@ -228,7 +238,7 @@ components:
 
 Every screen is a drawing sheet laid flat on a warm paper ground: a hairline frame, ruled cells, "+" corner marks, ruler ticks every 8px, and mono captions that read like a plate's title block. Structures sit in surface-white cells inside that grid, and the curation states are marked on the sheet the way a surveyor marks a field sheet: a round stamp for accepted, a cross-out for rejected, a hatched ground for failed, an orange fill or outline for what still needs a person's eyes.
 
-The density is a working document, not a brochure. Cells share 1px rules instead of floating as cards; type is either a heavy uppercase Geist heading in forest green or a small uppercase Geist Mono readout. The only objects that rise off the sheet are the liquid-glass pill buttons, which sit on light grounds and carry the actions. Light mode only.
+The density is a working document, not a brochure. Cells share 1px rules instead of floating as cards; type is either a heavy uppercase Geist heading in forest green or a small uppercase Geist Mono readout. The only objects that rise off the sheet are the liquid-glass pill buttons (the header's Waterline nav among them), which sit on light grounds and carry the actions, and the footer's porcelain bubbles. The header and the footer float free of the ruled sheet: the frame is the page's own. Light mode only.
 
 The world is evidence-first: page numbers, bounding boxes, engine names and counts are printed as readouts, never decorated. Copy is minimal; a state is its exact word.
 
@@ -237,18 +247,19 @@ The world is evidence-first: page numbers, bounding boxes, engine names and coun
 - Forest green leads; orange asks for attention; charcoal marks rejected and failed.
 - Geist 700 uppercase headings, Geist Mono uppercase labels and readouts; two weights per family.
 - Square cells and sheets; round only for things that act (pills) or mark (stamps, dots).
-- Flat sheet; glass pills, menus, toasts and dialogs are the only lifted objects.
+- Flat sheet; glass pills (the Waterline nav included), porcelain footer bubbles, menus, toasts and dialogs are the only lifted objects.
+- Icons are Font Awesome Free 6.7.2 (CC BY 4.0), inline SVG through one Icon component, always beside a word.
 
 ## Colors
 
 A muted field palette: warm paper and graphite rules, one deep forest green that leads, one signal orange that asks, charcoal for what was struck or failed.
 
 ### Primary
-- **Forest Green** (green): the h1, links, the "Open the tool" nav cell, pressed segments, selected-card rings, the focus outline, caret and accent colour, and the green glass pill for committing work (Accept, Send to COCONUT).
+- **Forest Green** (green): the h1 (the landing's acrostic initials), links, the nav's water drop and icons, the footer icons, pressed segments, selected-card rings, the focus outline, caret and accent colour, and the green glass pill for committing work (Accept, Send to COCONUT).
 - **Accepted Green** (accepted): the word "Accepted", the accepted stamp ring and the accepted count dot. Text in this colour sits on paper or surface only.
 
 ### Secondary
-- **Signal Orange** (orange): the colour of "needs your eyes". The To check badge fill, the 2px inside edge of a card to check, the dashed outline of a structure being read, bounding boxes on the example page, and the orange glass pill for the first action on a screen (Upload a PDF). Shapes and fills only, never small text.
+- **Signal Orange** (orange): the colour of "needs your eyes". The To check badge fill, the 2px inside edge of a card to check, the dashed outline of a structure being read, the landing's drop ring while a file is dragged over it (drag-over is a moment that needs the person), and the orange glass pill for the first action on a screen (Try a sample paper on the landing, Choose a file in the tool). Shapes and fills only, never small text.
 - **Orange Ink** (orange-ink): small orange text, such as the [01] index tags and "Engines differ" notes.
 
 ### Tertiary
@@ -256,11 +267,11 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 
 ### Neutral
 - **Survey Paper** (paper): the page ground and the ground of every sheet cell that is not a structure.
-- **Plate White** (surface): structure cells, specimen tables, inputs, toasts, the example page.
-- **Sunken Paper** (sunken): hover ground for nav cells and segments, the review preview band, the keys bar.
+- **Plate White** (surface): structure cells, specimen tables, inputs, toasts, the landing's drop ring, the example crop on About.
+- **Sunken Paper** (sunken): hover ground for segments, the review preview band (About), the keys bar.
 - **Field Ink** (ink): body text and headings below the h1; also the hover colour of links.
 - **Graphite Text** (text-2): secondary paragraphs and field labels.
-- **Pencil Muted** (muted): mono captions, counts, placeholders, struck SMILES, the footer.
+- **Pencil Muted** (muted): mono captions, counts, placeholders, struck SMILES, the workspace's thin footer, "and" and "for" in the landing's acrostic.
 - **Frame Line** (line): sheet frames, cell rules and the 1px gaps between cells. Never a control edge.
 - **Inner Hair** (hair): rules inside a specimen table, the glass-bed grid, the disabled pill.
 - **Ruler Tick** (tick): ruler ticks and the waiting mark in an empty structure cell.
@@ -270,7 +281,7 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 - **On-colours** (on-green, on-orange, on-charcoal): text set on the green, orange and charcoal fills.
 
 ### Named Rules
-**The Orange Asks Rule.** Orange means a person is needed: to check, being read, or the one first action. It never decorates, never marks success, and never sets small text (use orange-ink).
+**The Orange Asks Rule.** Orange means a person is needed: to check, being read, a file being dragged over the drop ring, or the one first action. It never decorates, never marks success, and never sets small text (use orange-ink).
 
 **The Word and Shape Rule.** A state is always its exact word plus a shape: Accepted with the round stamp, To check with the orange fill, Reading with the dashed orange outline, Rejected in charcoal with the cross-out, Failed with the charcoal tag on the hatched ground, Not read yet in muted. Colour alone never carries a state.
 
@@ -289,12 +300,13 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 
 ### Hierarchy
 - **Display** (Geist 700, clamp(36px, 4vw + 18px, 76px), line-height 0.92, -0.035em, uppercase, forest green): the one h1 per page, max about 14ch.
+- **Display acrostic** (the landing's h1 only; an owner-approved exception to Display = 700): the name spelled out, one word a line, uppercase, clamp(34px, min(5.3vw, 8.8vh), 84px), line-height 0.96. The initials M A R C U S are Geist 700 in forest green, the rest of each word Geist 400 in ink, "and" and "for" in muted. Screen readers get the plain name from a visually hidden copy; the drawn letters are aria-hidden.
 - **Headline** (Geist 700, 30px, line-height 1, -0.02em, uppercase): section and card headings; 26px under 900px.
 - **Title** (Geist 700, 22px, line-height 1.2): names of things, such as a paper's file name or "Example paper"; sentence case and file case kept.
 - **Body** (Geist 400, 16px, line-height 1.6): prose, lead text capped at about 40ch.
 - **Body small** (Geist 400, 14px, line-height 1.5, text-2): card lines and notes, capped at about 42ch.
 - **Label** (Geist Mono 400, 11px, 0.05 to 0.08em, uppercase, muted): captions, readouts, specimen row heads, state words, footer.
-- **Control label** (Geist Mono 500, 13px, 0.06em, uppercase; 12px in small pills, segments and nav cells): every button and nav cell.
+- **Control label** (Geist Mono 500, 13px, 0.06em, uppercase; 12px in small pills, segments and the nav's items): every button and nav item.
 - **Data** (Geist Mono 400, 12px, line-height 1.5): SMILES and other machine strings, wrapping anywhere, never uppercased.
 
 Secondary steps, each kept to one kind of thing:
@@ -316,15 +328,15 @@ Secondary steps, each kept to one kind of thing:
 
 ## Layout
 
-The app sits in one framed sheet: max width 1440px, 8px outer padding, a 1px line frame filling the window height. Inside, everything is rows of ruled cells. Cells share edges by sitting in a grid with a 1px gap over a line-coloured background, or by each cell ruling its own right and bottom edge, so the rules are always exactly 1px and never double.
+The app sits on one page: max width 1440px, 8px outer padding (12px at the bottom). The header (the mark and the Waterline pill) floats free above the ruled sheet, with no box or rule around it; the page below it carries the 1px line frame; the footer follows the page. Inside the frame, everything is rows of ruled cells. Cells share edges by sitting in a grid with a 1px gap over a line-coloured background, or by each cell ruling its own right and bottom edge, so the rules are always exactly 1px and never double.
 
-The header is a row of cells: the mark on the left, then fixed nav cells (150px; the green tool cell 170px) with their text set top-left and generous bottom padding. Section insets are 24px horizontally (16px on phones); cell padding sits between 14px and 24px. Small gaps step 6 / 8 / 12 / 16 / 24px; the ruler tick unit is 8px and the glass-bed grid 16px.
+The header row: the mark on the left (24px inset), the Waterline pill on the right (10px 24px around it); below 560px the pill takes its own full-width row. Section insets are 24px horizontally (16px on phones); cell padding sits between 14px and 24px. Small gaps step 6 / 8 / 12 / 16 / 24px; the ruler tick unit is 8px and the glass-bed grid 16px.
 
-The review grid is auto-fill columns of at least 300px structure cells. Breakpoints observed: 560px (phone; nav becomes 2 columns), 720px (lead stacks), 900px (three cards stack), 960px (nav drops to its own ruled row of 4), 1024px (the tool's minimum width; below it the tool shows a desktop-only note), 1200px and 1280px (lead and workspace column changes). Only the landing page is built for phones.
+The review grid is auto-fill columns of at least 300px structure cells. Breakpoints observed: 560px (phone; the nav pill takes its own row), 600px (the About review grid is one column), 720px (phone insets), 860px (info pages stack), 1024px (the tool's minimum width: below it the tool shows a desktop-only note, the landing is one column, its drop ring says "Desktop screen needed", and the footer bubbles stop sticking and stack, centred), 1200px and 1280px (landing and workspace column changes). The landing is one screen: at 1440 × 900 and 1280 × 720 it does not scroll. Only the landing and the info pages are built for phones.
 
 ## Elevation & Depth
 
-The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the hatched failed ground) and from hairlines, not shadows. The example page on the landing and the page in the paper view lie flat with only a 1px hair underline. Shadows belong to the few objects that float above the sheet, all in one green-black ambient family (rgba(15, 30, 22, 0.35)): glass pills, toasts and menus, and dialogs (the structure editor, the COCONUT submission, Compare engines and Keys). Every value is a token in `tokens.css`; no stylesheet writes a shadow or scrim colour of its own (pinned in `styles.test.ts`).
+The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the hatched failed ground) and from hairlines, not shadows. The page in the paper view lies flat with only a 1px hair underline. Shadows belong to the few objects that float above the sheet, all in one green-black ambient family (rgba(15, 30, 22, 0.35)): glass pills (the Waterline nav and its drop included), the footer's porcelain bubbles, toasts and menus, and dialogs (the structure editor, the COCONUT submission, Compare engines and Keys). Every value is a token in `tokens.css`; no stylesheet writes a shadow or scrim colour of its own (pinned in `styles.test.ts`).
 
 ### Shadow Vocabulary
 - **Glass lift** (`--lift-glass`, `0 10px 24px -8px rgba(15, 30, 22, 0.35)`): glass pills (after `--glass-shine`); also toasts and the card's floating menus.
@@ -332,10 +344,14 @@ The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the 
 - **Menu lift** (`--lift-menu`, `0 12px 28px -10px rgba(15, 30, 22, 0.35)`): workspace disclosures such as Export.
 - **Dialog lift** (`--lift-dialog`, `0 24px 64px -24px rgba(15, 30, 22, 0.45)`): every dialog: the editor, COCONUT, Compare and Keys.
 - **Scrim** (`--scrim`, `rgba(28, 33, 29, 0.42)`): the backdrop of every dialog. Dialogs are native `<dialog>` elements opened as modals, so the page behind is inert.
-- **Solid pill fallback** (`--lift-pill-solid`, `0 6px 16px -8px rgba(15, 30, 22, 0.35)`): glass pills under reduced transparency or without backdrop-filter.
+- **Solid pill fallback** (`--lift-pill-solid`, `0 6px 16px -8px rgba(15, 30, 22, 0.35)`): glass pills (and the Waterline nav) under reduced transparency or without backdrop-filter.
+- **Water drop** (`--water-drop`): the Waterline nav's drop of green water: a top meniscus highlight, a soft white rim, a green bottom shade and a small 5px lift.
+- **Porcelain** (`--porcelain`): the footer bubbles: a glazed white top edge, a faint ink rim and bottom shade, and a low lift (`0 8px 16px -10px rgba(15, 30, 22, 0.45)`). Opaque, unlike glass: page text scrolls underneath them.
 
 ### Named Rules
-**The Flat Sheet Rule.** Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, menus, toasts, dialogs) lift.
+**The Flat Sheet Rule.** Nothing printed on the sheet casts a shadow. Only objects that act or float (pills, the footer bubbles, menus, toasts, dialogs) lift. The landing's drop ring is printed on the sheet: no glass, no lift.
+
+**The Beams.** The landing alone carries a background: 14 soft sage beams (hue 132 to 158, 34% saturation, 7 to 14% alpha) rising slowly on a diagonal, drawn on a canvas at a third of its size and blurred 22px in CSS, fainter under the words (a mask). A fixed seed gives the same picture every visit; the loop stops off screen and in a hidden tab; one still frame under reduced motion; the pre-rendered page starts on plain paper. Text over it keeps AA (the muted facts line 5.0:1 on its darkest ground; the drop hint uses text-2).
 
 **The Light Ground Rule.** Glass pills sit on light grounds only: paper, surface, sunken, or the glass bed. Never on charcoal or on a picture (the clear tint drops to 2.3:1 there).
 
@@ -348,7 +364,7 @@ Rectangles with square corners for everything that holds content: the frame, cel
 ### Buttons
 Liquid glass on paper: tactile pills that are the only shiny thing on a matte sheet.
 - **Shape:** full pill (999px), Geist Mono 500 uppercase, 13px at 12px 20px; small variant 12px at 8px 14px.
-- **Orange glass:** gradient rgba(255,118,72,.95) to rgba(250,54,0,.9), on-orange text: the first action (Upload a PDF).
+- **Orange glass:** gradient rgba(255,118,72,.95) to rgba(250,54,0,.9), on-orange text: the first action (Try a sample paper on the landing, Choose a file in the tool).
 - **Green glass:** gradient rgba(46,110,74,.95) to rgba(30,77,51,.92), on-green text: commit actions (Accept, Send to COCONUT).
 - **Clear glass:** white 70% to 25% gradient, ink text: everything else (Reject, Compare, More, Export, Copy).
 - **Material:** backdrop-filter blur(3px) saturate(1.8) with the #marcus-glass SVG refraction where supported; inner top highlight and a soft bottom shade. Pills on a structure card and small pills in focus mode keep the blur only: on flat white or paper the refraction has nothing to bend.
@@ -374,10 +390,21 @@ Liquid glass on paper: tactile pills that are the only shiny thing on a matte sh
 - **Focus:** the global 2px forest-green outline at 2px offset.
 - **Disabled:** 55% opacity, not-allowed cursor.
 
-### Navigation
-- **Style:** header row of ruled cells; Geist Mono 12px uppercase, ink on paper, text set top-left.
-- **States:** hover sunken; the tool cell is solid forest green and turns ink on hover; focus outline drawn inside the cell (-4px offset).
-- **Mobile:** below 960px the nav is its own ruled row of four cells; below 560px two columns.
+### Navigation (the Waterline)
+- **Style:** one clear glass pill (white 70% to 25%, blur 3px, saturate 1.8, glass shine and glass lift; no refraction filter, no WebGL), 4px inside padding, three items in Geist Mono 500 12px uppercase ink, each with its Font Awesome icon in green: About (circle-info), GitHub (github; opens in a new tab and says so to screen readers), Open the tool (arrow-right after the label).
+- **The drop:** the current page's item (aria-current="page"; none on the other pages) holds a drop of green water (a 14% to 30% green gradient with the water-drop shadow). Pointer or focus on another item stretches it there: the leading edge runs ahead in 240ms, the trailing edge follows in 440ms, then it settles with a squash and a 620ms ripple; it goes back to rest when pointer and focus leave. The pointer lifts a highlight on the rim. Positions are custom properties set through the CSSOM (style-src 'self' allows it).
+- **Keys:** Arrow Left / Right, Home and End move focus along the items; focus is the 2px green outline at 1px offset, round.
+- **Fallbacks:** no stretch, ripple or rim light under reduced motion (the drop jumps); solid white with a control-border ring under reduced transparency; ButtonBorder edge and a Highlight-outlined drop in forced colours.
+- **Mobile:** below 560px the pill takes the full width under the mark.
+
+### Footer (porcelain bubbles)
+Every page but the review workspace: three opaque porcelain bubbles, Geist Mono 10px uppercase in text-2 with green icons. Far left "© 2026 MARCUS" (copyright icon, "Copyright" for screen readers); middle "Built with [mug, gently rocking] by Kohulan.R at the Steinbeck Lab, Friedrich Schiller University Jena" (three links, new tab, no icons); far right "Disclaimer · Privacy" (scale-balanced, shield-halved). Each bubble is a white radial glaze (#FFFFFF to #EFEFE8) with the porcelain shadow and a soft highlight under the text. From 1024px the row sticks 12px above the window's bottom and follows the page in the flow, so at a page's end it rests under the content; below 1024px it is static and the bubbles stack, centred. Links are 24px tall targets. The review workspace keeps its thin mono line inside the page frame.
+
+### Drop ring (landing)
+The landing's drop zone is an empty benzene ring, 124px, drawn in control-border dashes on a white fill, with an upload arrow, "Drop a PDF here or browse" and "PDF up to 20 MB". One button (Enter, Space, click open the file picker). Hover and focus turn it green and draw its three double bonds; drag-over turns it orange, grows it 6% and runs the dashes (the Reading mark); a checked PDF closes the ring in accepted green with alternating double bonds (resonance) and "Uploading <file name>…" while the tool opens and uploads it; a refused file ("That file is not a PDF", "That PDF is larger than 20 MB") is struck through in charcoal like a rejected structure. Below 1024px it shows a monitor glyph and "Desktop screen needed" and takes no file. All motion is off under reduced motion.
+
+### Icons
+Font Awesome Free 6.7.2 (CC BY 4.0, credited on the Disclaimer page), solid, regular and brands, imported by name and rendered by one Icon component as an inline `<svg viewBox><path>`: no icon font, no injected CSS. 1.05em, the text's colour (green in the nav and footer), always decorative beside a word.
 
 ### Specimen label
 A data table drawn like a herbarium label: a charcoal header bar with on-charcoal mono caption, then rows on surface ruled by hair, mono uppercase row heads in muted, values in ink. A failed specimen lies on the hatched ground.
@@ -398,7 +425,8 @@ Square surface slips with a line border and the glass-lift shadow, mono 12px upp
 - **Do** give every control a control-border (#7E8279) edge.
 - **Do** set headings, labels and buttons uppercase through CSS and keep source text in sentence case.
 - **Do** place glass pills on paper, surface, sunken or the glass bed, with their solid fallbacks intact.
-- **Do** keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP).
+- **Do** keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP). Positions that move at run time (the nav's drop) go through the CSSOM (style.setProperty).
+- **Do** draw icons with the Icon component (Font Awesome Free, named imports), next to their word.
 - **Do** use the one easing, cubic-bezier(0.16, 1, 0.3, 1), at 160 to 220ms, and drop motion under prefers-reduced-motion.
 
 ### Don't:
@@ -407,6 +435,7 @@ Square surface slips with a line border and the glass-lift shadow, mono 12px upp
 - **Don't** put accepted-green text on sunken.
 - **Don't** draw a control edge in line or hair.
 - **Don't** put glass pills on charcoal or over a picture.
-- **Don't** cast shadows from things printed on the sheet: cells, cards, tables, the example page.
+- **Don't** cast shadows from things printed on the sheet: cells, cards, tables, the drop ring.
 - **Don't** load a weight outside Geist 400/700 and Geist Mono 400/500, or use Gmarket Sans for anything but the wordmark.
-- **Don't** round content containers; radius is for pills, stamps, dots and small control corners.
+- **Don't** round content containers; radius is for pills (the nav, the footer bubbles), stamps, dots and small control corners.
+- **Don't** put a box or rule around the header row; the frame belongs to the page.
