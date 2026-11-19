@@ -420,7 +420,7 @@ async def test_depictions_hold_only_their_share_tools_keep_a_slot(
         with pytest.raises(HTTPException) as info:
             await depiction.draw_or_read(None, AN_OWNER, "CCC", "predicted")
         assert info.value.status_code == 503 and info.value.headers == {"Retry-After": "5"}
-        assert started == ["C", "CC"]  # refused before the tool call
+        assert sorted(started) == ["C", "CC"]  # refused before the tool call (any order)
 
         monkeypatch.setattr(small_budget, "run_tool", lambda n, k, t: "<svg/>")
         _, token = await new_owner(async_db_session)
