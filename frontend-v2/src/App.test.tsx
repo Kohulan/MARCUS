@@ -74,6 +74,8 @@ describe("App routes", () => {
       pages: 1,
       doi: null,
       title: null,
+      first_author: null,
+      year: null,
       engine: "decimer",
       ocsr_mode: "auto",
       created_at: "2026-11-18T10:00:00Z",

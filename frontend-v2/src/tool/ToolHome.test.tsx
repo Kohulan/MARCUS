@@ -23,6 +23,8 @@ function paper(over: Partial<PaperSummary> = {}): PaperSummary {
     pages: 8,
     doi: null,
     title: "Alkaloids from Coffea leaves",
+    first_author: null,
+    year: null,
     engine: "decimer",
     ocsr_mode: "auto",
     created_at: new Date().toISOString(),

@@ -25,6 +25,8 @@ function paper(curation: CurationOut | null): PaperDetail {
     pages: 1,
     doi: null,
     title: null,
+    first_author: null,
+    year: null,
     engine: "decimer",
     ocsr_mode: "auto",
     created_at: "2026-11-18T00:00:00Z",

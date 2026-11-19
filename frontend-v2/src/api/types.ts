@@ -29,6 +29,10 @@ export interface PaperSummary {
   pages: number | null;
   doi: string | null;
   title: string | null;
+  /** The first author's family name, found with the DOI. */
+  first_author: string | null;
+  /** The publication year, found with the DOI. */
+  year: number | null;
   engine: string;
   ocsr_mode: string;
   created_at: string;
