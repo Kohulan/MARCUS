@@ -102,14 +102,15 @@ def test_configure_is_idempotent(lines):
     "unit",
     ["token", "token.", "token-", "password", "secret_", "a.authorization-"],
 )
-@pytest.mark.parametrize("size", [8_000, 20_000])
+@pytest.mark.parametrize("size", [8_000, 20_000, 32_768])
 def test_masking_is_linear_on_adversarial_input(unit, size):
-    """A long keyword run with no separator (the access-log ReDoS) masks in well under 100 ms."""
+    """A long keyword run with no separator (the access-log ReDoS) masks in well under 100 ms,
+    at the full size (no cut: `limit` is the text's length; 32 KiB is the traceback cap)."""
     import time
 
     text = "GET /api/v2/health?" + unit * (size // len(unit)) + " HTTP/1.1"
     start = time.perf_counter()
-    mlog.mask_secrets(text)
+    mlog.mask_secrets(text, limit=len(text))
     assert time.perf_counter() - start < 0.1
 
 
@@ -130,7 +131,7 @@ def test_masking_handles_many_separators_quickly(text):
     import time
 
     start = time.perf_counter()
-    mlog.mask_secrets(text)
+    mlog.mask_secrets(text, limit=len(text))  # the whole text, not the 8 KiB cut
     assert time.perf_counter() - start < 0.1
 
 
@@ -160,3 +161,28 @@ def test_access_log_line_is_cut_short(lines):
     )
     (line,) = lines()
     assert len(line["msg"]) <= mlog.MAX_ACCESS_CHARS + 20
+
+
+SECRET = "Zq9Wv7Ky3Jp"
+SECRET_SHAPES = [
+    f"postgresql://marcus:{SECRET}@db:5432/marcus",
+    f"password={SECRET}",
+    f"Authorization: Bearer {SECRET}",
+    f"cookie: marcus_owner={SECRET}; b=2",
+    f'{{"client_secret": "{SECRET}"}}',
+]
+
+
+@pytest.mark.parametrize("shape", SECRET_SHAPES)
+def test_a_cut_never_leaves_part_of_a_secret(shape):
+    """Whatever character of the secret the cut lands on, no piece of it (2 chars or more)
+    is left: the token the cut goes through is dropped, then the rest is masked."""
+    at = shape.index(SECRET)
+    limit = 200
+    for k in range(len(shape) + 1):  # the cut lands k characters into the shape
+        text = "x " * ((limit - k) // 2) + "y" * ((limit - k) % 2) + shape + " tail"
+        assert text.index(shape) == limit - k
+        out = mlog.mask_secrets(text, limit=limit)
+        assert len(out) <= limit + len(mlog._CUT)
+        pieces = {SECRET[i : i + 2] for i in range(len(SECRET) - 1)}
+        assert not any(p in out for p in pieces), (k, at, out[-60:])

@@ -10,7 +10,8 @@ Secrets never reach the output: a filter on the handler masks the value after an
 parameter whose name contains password, token, secret or authorization, the `marcus_owner`
 cookie, and the password part of `scheme://user:password@host` URLs (message and traceback).
 Masking runs in linear time, on a message first cut to MAX_MESSAGE_CHARS (MAX_ACCESS_CHARS for
-an access-log line, whose path and query the client chooses; 4x for a traceback).
+an access-log line, whose path and query the client chooses; 4x for a traceback). A cut drops
+the token it goes through, so it never leaves part of a secret.
 """
 
 import contextlib
@@ -44,8 +45,17 @@ _SECRET_NAME = re.compile(r"password|token|secret|authorization|marcus_owner", r
 _URL_PASSWORD = re.compile(r"(?P<head>://[^:/\s@]*:)[^@\s/]+(?=@)")
 
 
+_SPACES = (" ", "\t", "\n", "\r", "\f", "\v")
+
+
 def _cut(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[:limit] + _CUT
+    """`text` cut to `limit` characters. A cut drops the whole token it goes through (back to
+    the last whitespace): no secret value holds whitespace, so no part of one (a URL password
+    whose `@` is past the cut, a value cut short) is left unmasked. str.rfind: linear."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    return head[: max(head.rfind(c) for c in _SPACES) + 1] + _CUT
 
 
 def _mask_keys(text: str) -> str:
