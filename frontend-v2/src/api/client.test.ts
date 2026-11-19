@@ -136,6 +136,19 @@ describe("api", () => {
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });
 
+  it("depict sends a highlight with its token, and neither without one", async () => {
+    reply = json(200, { format: "svg", data: "<svg/>" });
+    await api.depict("CCO", { highlight: "[#6]-[#6]", highlightToken: "tok" });
+    await api.depict("CCN");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
+      smiles: "CCO",
+      format: "svg",
+      highlight: "[#6]-[#6]",
+      highlight_token: "tok",
+    });
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ smiles: "CCN", format: "svg" });
+  });
+
   it("compare posts exactly smiles_a and smiles_b", async () => {
     reply = json(200, { tanimoto: 0.5, identical: false, same_structure: false, agree: false });
     await api.compare("CCO", "CCN");

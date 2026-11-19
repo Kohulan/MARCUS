@@ -5,6 +5,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { api, ApiError } from "../api/client";
+import type { Highlight } from "../api/depictions";
 import { ENGINES, engineName } from "../api/engines";
 import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
@@ -176,6 +177,9 @@ export function useSimilarity(rows: EngineRow[]): Pair[] {
   return pairs;
 }
 
+/** An MCS reply is reused this long: less than its highlight token's 30 min on the server. */
+export const MCS_STALE_MS = 20 * 60 * 1000;
+
 /** A SMILES as a molfile from /tools/smiles-to-molfile: key ["molfile", smiles]. */
 export function molfileQuery(smiles: string) {
   return {
@@ -188,13 +192,15 @@ export function molfileQuery(smiles: string) {
 /**
  * The common part of the valid predictions' distinct structures: each one's own molfile, or
  * `smilesToMolfile` for one sent without (molfileQuery), then `mcs` over the molfiles
- * (["mcs", ...sortedMolfiles]). `highlight` is the MCS SMARTS: null while asking, when off,
- * or when there is none (`none`).
+ * (["mcs", ...sortedMolfiles]). `highlight` is the MCS SMARTS with the token the server issued
+ * for it (the only way /tools/depict draws a highlight): null while asking, when off, or when
+ * there is none (`none`). The reply goes stale before its token expires (30 min on the
+ * server), so a Compare opened later asks again.
  */
 export function useCommonPart(
   predictions: Pick<PredictionOut, "smiles" | "molfile">[],
   enabled: boolean,
-): { highlight: string | null; none: boolean; errors: unknown[] } {
+): { highlight: Highlight | null; none: boolean; errors: unknown[] } {
   const own = new Map<string, string | null>();
   for (const p of predictions) if (!own.get(p.smiles)) own.set(p.smiles, p.molfile || null);
   const distinct = sorted([...own.keys()]);
@@ -209,12 +215,13 @@ export function useCommonPart(
   const mcs = useQuery({
     queryKey: ["mcs", ...key],
     queryFn: () => api.mcs(key),
-    staleTime: Infinity,
+    staleTime: MCS_STALE_MS,
     enabled: ready,
   });
   const smarts = mcs.data && mcs.data.atom_count > 0 ? mcs.data.mcs_smarts || null : null;
+  const token = mcs.data?.highlight_token ?? null;
   return {
-    highlight: on ? smarts : null,
+    highlight: on && smarts !== null && token !== null ? { smarts, token } : null,
     none: on && mcs.data !== undefined && smarts === null,
     errors: [...converted.map((q) => q.error), mcs.error].filter((e) => e !== null),
   };

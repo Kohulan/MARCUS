@@ -263,9 +263,14 @@ export const api = {
   },
 
   // tools
-  depict(smiles: string, opts: { highlight?: string } = {}): Promise<DepictReply> {
+  /** A highlight is drawn only with the token its MCS reply carried (`highlight_token`). */
+  depict(
+    smiles: string,
+    opts: { highlight?: string; highlightToken?: string } = {},
+  ): Promise<DepictReply> {
     const body: Record<string, string> = { smiles, format: "svg" };
     if (opts.highlight) body.highlight = opts.highlight;
+    if (opts.highlight && opts.highlightToken) body.highlight_token = opts.highlightToken;
     return sendJson<DepictReply>("POST", "/tools/depict", body);
   },
   compare: (smilesA: string, smilesB: string) =>

@@ -225,6 +225,7 @@ describe("Compare", () => {
       atom_count: 2,
       bond_count: 1,
       original_molecules: [],
+      highlight_token: "tok-1",
     });
     renderCompare({
       predictions: [
@@ -239,8 +240,10 @@ describe("Compare", () => {
     await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(2));
     expect(molfile.mock.calls.map((c) => c[0]).sort()).toEqual(["CCN", "CCO"]);
     expect(mcs).toHaveBeenCalledWith(["M:CCN", "M:CCO"]);
-    expect(api.depict).toHaveBeenCalledWith("CCO", { highlight: "[#6]-[#6]" });
-    expect(api.depict).toHaveBeenCalledWith("CCN", { highlight: "[#6]-[#6]" });
+    // the server's token from the MCS reply goes with every highlighted drawing (F5)
+    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1" };
+    expect(api.depict).toHaveBeenCalledWith("CCO", lit);
+    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
     expect(await screen.findByRole("img", { name: "Structure, MolNexTR" })).toHaveAttribute(
       "src",
       "blob:http://localhost/d",
@@ -260,6 +263,7 @@ describe("Compare", () => {
       atom_count: 2,
       bond_count: 1,
       original_molecules: [],
+      highlight_token: "tok-1",
     });
     const two = [
       prediction({ engine: "decimer", smiles: "CCO" }),

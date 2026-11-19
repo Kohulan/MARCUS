@@ -234,12 +234,20 @@ export function useDepiction(url: string | null): {
   return { src: state.src, failed: state.failed, retry: state.again ? retry : null };
 }
 
-/** A /tools/depict drawing: key ["depict", smiles, highlight] (null: a plain drawing). */
-export function depictQuery(smiles: string, highlight: string | null) {
+/** The MCS SMARTS to highlight and the token /tools/mcs issued with it. */
+export type Highlight = { smarts: string; token: string };
+
+/**
+ * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing). The token
+ * is not in the key: a new token for the same SMARTS draws the same picture.
+ */
+export function depictQuery(smiles: string, highlight: Highlight | null) {
   return {
-    queryKey: ["depict", smiles, highlight] as const,
+    queryKey: ["depict", smiles, highlight?.smarts ?? null] as const,
     queryFn: (): Promise<DepictReply> =>
-      highlight === null ? api.depict(smiles) : api.depict(smiles, { highlight }),
+      highlight === null
+        ? api.depict(smiles)
+        : api.depict(smiles, { highlight: highlight.smarts, highlightToken: highlight.token }),
     staleTime: Infinity,
   };
 }
