@@ -505,6 +505,12 @@ describe("Header and Footer", () => {
     expect(document.activeElement).toBe(about);
     fireEvent.keyDown(about, { key: "ArrowLeft" });
     expect(document.activeElement).toBe(about);
+    // with a modifier the key is the browser's (Alt+← goes Back): not taken, not prevented
+    for (const mod of [{ altKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+      const allowed = fireEvent.keyDown(about, { key: "ArrowRight", ...mod });
+      expect(allowed).toBe(true);
+      expect(document.activeElement).toBe(about);
+    }
   });
 
   const footerAt = (path: string) =>

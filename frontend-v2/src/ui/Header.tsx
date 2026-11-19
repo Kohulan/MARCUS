@@ -83,8 +83,10 @@ export default function Header() {
     if (nav.current) place(nav.current, drop.current, e.currentTarget);
   };
 
-  // Arrow keys, Home and End move focus along the three items.
+  // Arrow keys, Home and End move focus along the three items. With Alt, Ctrl or Meta the
+  // key is the browser's (Alt+← and Cmd+← go Back).
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const items = [...e.currentTarget.querySelectorAll<HTMLElement>(".wl__item")];
     const i = items.indexOf(document.activeElement as HTMLElement);
     if (i < 0) return;
