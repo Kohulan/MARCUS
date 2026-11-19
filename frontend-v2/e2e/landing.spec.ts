@@ -145,7 +145,7 @@ test.describe("landing and info pages @mocked", () => {
       mimeType: "text/plain",
       buffer: Buffer.from("not a pdf"),
     });
-    await expect(page.getByRole("alert")).toHaveText("That file is not a PDF");
+    await expect(page.locator(".act").getByRole("alert")).toHaveText("That file is not a PDF");
     await expect(page.locator(".dz")).toHaveClass(/is-error/);
     await expect(page).toHaveURL(/\/$/);
     expect(api).toEqual([]);
