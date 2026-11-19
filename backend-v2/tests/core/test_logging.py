@@ -96,3 +96,67 @@ def test_plain_text_is_untouched(lines):
 def test_configure_is_idempotent(lines):
     mlog.configure_logging("testsvc")
     assert len(logging.getLogger().handlers) == 1
+
+
+@pytest.mark.parametrize(
+    "unit",
+    ["token", "token.", "token-", "password", "secret_", "a.authorization-"],
+)
+@pytest.mark.parametrize("size", [8_000, 20_000])
+def test_masking_is_linear_on_adversarial_input(unit, size):
+    """A long keyword run with no separator (the access-log ReDoS) masks in well under 100 ms."""
+    import time
+
+    text = "GET /api/v2/health?" + unit * (size // len(unit)) + " HTTP/1.1"
+    start = time.perf_counter()
+    mlog.mask_secrets(text)
+    assert time.perf_counter() - start < 0.1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        ("token" * 20 + "=" + " " * 30) * 400,
+        "a=b" * 6000,
+        "a://b:" * 3000,
+        "token=a" * 2500,
+        "token: Bearer " * 1500,
+        ":" * 20_000,
+        ("x" * 200 + "_token=v ") * 100,
+    ],
+    ids=["spaces", "chain", "urls", "secrets", "bearer", "colons", "long-keys"],
+)
+def test_masking_handles_many_separators_quickly(text):
+    import time
+
+    start = time.perf_counter()
+    mlog.mask_secrets(text)
+    assert time.perf_counter() - start < 0.1
+
+
+@pytest.mark.parametrize(
+    "message,secret",
+    [
+        ("a=password=hunter2", "hunter2"),
+        ("headers: authorization=Bearer xyz987", "xyz987"),
+        ("x" * 100 + "_token=abcabc", "abcabc"),
+        ("q?id=1&access_token=t0k3n&z=2", "t0k3n"),
+        ("set my.secret.key = 'quoted1'", "quoted1"),
+    ],
+)
+def test_more_secret_shapes_are_masked(message, secret):
+    assert secret not in mlog.mask_secrets(message)
+
+
+def test_long_messages_are_cut_before_masking(lines):
+    logging.getLogger("marcus.x").info("x" * 50_000)
+    (line,) = lines()
+    assert len(line["msg"]) <= mlog.MAX_MESSAGE_CHARS + 20
+
+
+def test_access_log_line_is_cut_short(lines):
+    logging.getLogger("uvicorn.access").info(
+        '%s - "%s %s HTTP/%s" %d', "1.2.3.4:5", "GET", "/x?" + "a" * 9000, "1.1", 404
+    )
+    (line,) = lines()
+    assert len(line["msg"]) <= mlog.MAX_ACCESS_CHARS + 20
