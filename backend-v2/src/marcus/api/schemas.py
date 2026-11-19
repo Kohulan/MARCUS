@@ -26,6 +26,8 @@ class PaperSummary(_Orm):
     pages: int | None
     doi: str | None
     title: str | None
+    first_author: str | None
+    year: int | None
     engine: str
     ocsr_mode: str
     created_at: datetime

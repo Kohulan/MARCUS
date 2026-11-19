@@ -15,6 +15,8 @@ from marcus.workers.ocsr.base import OcsrResult
 from marcus.workers.runtime import HANDLERS
 from tests.workers.helpers import view
 
+OWNER = uuid.UUID(int=5)  # the owner the fake session's lookups answer with
+
 
 class StubEngine:
     name = Engine.DECIMER
@@ -31,8 +33,9 @@ class StubEngine:
 
 
 class FakeSession:
-    """Answers the segment lookup with `seg`; the ocsr_cache lookup misses and its write is
-    recorded (the cache itself is tested against the database in tests/core/test_caches.py)."""
+    """Answers the segment lookup (or an image job's owner lookup) with `seg`; the ocsr_cache
+    lookup misses and its write is recorded (the cache itself is tested against the database in
+    tests/core/test_caches.py)."""
 
     def __init__(self, seg):
         self.seg = seg
@@ -112,7 +115,7 @@ def test_ocsr_paper_step_reads_crop_by_sha(monkeypatch):
     crop = segment_crop_path(pid, sha)
     crop.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (8, 8)).save(crop)
-    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha, owner_id=OWNER))
     step = view(pid, segment_id=uuid.uuid4(), engine="decimer")
     assert ocsr(step, session)["valid"] is True
     assert session.rolled_back >= 1
@@ -127,6 +130,7 @@ def test_ocsr_paper_step_reads_crop_by_sha(monkeypatch):
         "stub-9",
         "CCO",
     )
+    assert written["owner_id"] == OWNER
     assert session.commits == 1
 
 
@@ -181,7 +185,7 @@ def test_ocsr_marks_cache_hits_and_misses(monkeypatch):
     crop = segment_crop_path(pid, sha)
     crop.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (8, 8)).save(crop)
-    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha, owner_id=uuid.uuid4()))
     miss = handler.ocsr(view(pid, segment_id=uuid.uuid4(), engine="decimer"), session)
     assert miss["cached"] is False
     monkeypatch.setattr(
@@ -232,7 +236,7 @@ def crop_step(monkeypatch, engine_name):
     crop = coloured_image(segment_crop_path(pid, sha))
     eng = PixelEngine(engine_name)
     monkeypatch.setitem(base.FACTORIES, engine_name, lambda: eng)
-    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha))
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha, owner_id=OWNER))
     return crop, eng, session, view(pid, segment_id=uuid.uuid4(), engine=engine_name)
 
 
@@ -261,12 +265,13 @@ def test_image_job_reaches_the_engine_unswapped(monkeypatch):
     path = coloured_image(image_job_path(job))
     eng = PixelEngine("molscribe")
     monkeypatch.setitem(base.FACTORIES, "molscribe", lambda: eng)
-    session = FakeSession(None)
+    session = FakeSession(OWNER)  # the image job's owner id
     ocsr(view(image_job_id=job, engine="molscribe"), session)
     assert eng.seen == [[RED, BLUE, BLACK, WHITE]]
     assert eng.paths == [path]
     (written,) = session.writes
     assert written["image_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert written["owner_id"] == OWNER  # F3: the cache row is the owner's own
 
 
 def test_crop_and_image_job_with_the_same_bytes_get_different_cache_keys(monkeypatch):
@@ -280,7 +285,7 @@ def test_crop_and_image_job_with_the_same_bytes_get_different_cache_keys(monkeyp
     p = image_job_path(job)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(crop.read_bytes())  # identical stored bytes
-    job_session = FakeSession(None)
+    job_session = FakeSession(OWNER)
     ocsr(view(image_job_id=job, engine="molnextr"), job_session)
     (crop_key,), (job_key,) = crop_session.writes, job_session.writes
     assert crop_key["image_sha256"] != job_key["image_sha256"]

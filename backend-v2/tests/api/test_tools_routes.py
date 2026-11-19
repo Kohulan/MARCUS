@@ -189,7 +189,9 @@ async def test_tool_waits_have_their_own_bounded_thread_budget(monkeypatch):
 
     monkeypatch.setattr(tools_route, "run_tool", blocking)
     default = anyio.to_thread.current_default_thread_limiter()
-    held = [asyncio.ensure_future(tools_route.call_tool("marcus.tools.depict", {})) for _ in range(2)]
+    held = [
+        asyncio.ensure_future(tools_route.call_tool("marcus.tools.depict", {})) for _ in range(2)
+    ]
     for _ in range(100):
         if len(started) == 2:
             break
@@ -202,3 +204,184 @@ async def test_tool_waits_have_their_own_bounded_thread_budget(monkeypatch):
     release.set()
     assert await asyncio.gather(*held) == ["<svg/>", "<svg/>"]
     assert await tools_route.call_tool("marcus.tools.depict", {}) == "<svg/>"
+
+
+@pytest.mark.parametrize(
+    "highlight",
+    ["~".join(["*"] * 129), "~".join(["[#6]"] * 129), "[$(*~*)]", "C[$(CO)]"],
+    ids=["any-atoms", "bracket-atoms", "recursive", "recursive-mixed"],
+)
+async def test_depict_highlight_over_cap_422(app, calls, highlight):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "C", "highlight": highlight})
+    assert r.status_code == 422
+    assert calls == []
+
+
+# --- signed highlight (F5): /tools/depict never searches with a pattern the server did not make
+
+
+def molfile(smiles: str) -> str:
+    from rdkit import Chem
+
+    return Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))
+
+
+MCS_SMARTS = "[#6]-[#6]"
+
+
+@pytest.fixture
+def tools(monkeypatch):
+    """Fake tools worker: an MCS reply with MCS_SMARTS, an SVG for a depiction."""
+    seen = []
+
+    def fake(name, kwargs, timeout):
+        seen.append((name, kwargs))
+        if name == "marcus.tools.mcs":
+            n = len(kwargs["molfiles"])
+            return {
+                "mcs_smarts": MCS_SMARTS,
+                "atom_count": 2,
+                "bond_count": 1,
+                "original_molecules": [{"atom_count": 3, "bond_count": 2}] * n,
+            }
+        return "<svg/>"
+
+    monkeypatch.setattr(tools_route, "run_tool", fake)
+    return seen
+
+
+async def _token(c, smiles=("CCO", "CCN")) -> str:
+    r = await c.post(f"{BASE}/mcs", json={"molfiles": [molfile(s) for s in smiles]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mcs_smarts"] == MCS_SMARTS and body["atom_count"] == 2
+    assert set(body) == {
+        "mcs_smarts", "atom_count", "bond_count", "original_molecules", "highlight_token",
+    }  # fmt: skip
+    return body["highlight_token"]
+
+
+def _depicts(seen):
+    return [k for name, k in seen if name == "marcus.tools.depict"]
+
+
+async def test_mcs_reply_carries_a_highlight_token_and_it_draws_a_bound_molecule(app, tools):
+    async with make_client(app) as c:
+        token = await _token(c)
+        for smiles in ("CCO", "OCC", "NCC"):  # any spelling of a bound molecule
+            r = await c.post(
+                f"{BASE}/depict",
+                json={"smiles": smiles, "highlight": MCS_SMARTS, "highlight_token": token},
+            )
+            assert r.status_code == 200, r.text
+    assert [k["highlight"] for k in _depicts(tools)] == [MCS_SMARTS] * 3
+
+
+async def test_mcs_without_a_common_part_has_no_token(app, monkeypatch):
+    def fake(name, kwargs, timeout):
+        return {"mcs_smarts": "", "atom_count": 0, "bond_count": 0, "original_molecules": []}
+
+    monkeypatch.setattr(tools_route, "run_tool", fake)
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/mcs", json={"molfiles": [molfile("C"), molfile("O")]})
+    assert r.status_code == 200 and r.json()["highlight_token"] is None
+
+
+NEVER_MATCHES = "~".join(["*"] * 19) + "~[#7]"  # 52 s of VF2 on C60 before this fix
+
+
+@pytest.mark.parametrize("token", [None, "", "x", "e30.AAAA", "a" * 100, "a.é", "é.a", "e30.ÿÿ"])
+async def test_highlight_without_a_valid_token_is_refused_before_any_search(app, tools, token):
+    body = {"smiles": "C1=CC=CC=C1", "highlight": NEVER_MATCHES}
+    if token is not None:
+        body["highlight_token"] = token
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json=body)
+    assert r.status_code == 422
+    assert r.json() == {"detail": "highlight not valid for this structure"}
+    assert tools == []  # no tool call: no CDK search ran
+
+
+async def test_token_for_another_pattern_is_refused(app, tools):
+    async with make_client(app) as c:
+        token = await _token(c)
+        r = await c.post(
+            f"{BASE}/depict",
+            json={"smiles": "CCO", "highlight": NEVER_MATCHES, "highlight_token": token},
+        )
+    assert r.status_code == 422 and _depicts(tools) == []
+
+
+async def test_token_for_other_molecules_is_refused(app, tools):
+    """Rebound: a valid token for CCO and CCN does not license drawing benzene with it."""
+    async with make_client(app) as c:
+        token = await _token(c)
+        r = await c.post(
+            f"{BASE}/depict",
+            json={"smiles": "c1ccccc1", "highlight": MCS_SMARTS, "highlight_token": token},
+        )
+    assert r.status_code == 422 and _depicts(tools) == []
+
+
+async def test_forged_and_tampered_tokens_are_refused(app, tools):
+    import base64
+    import json
+
+    from marcus.api import highlight
+
+    async with make_client(app) as c:
+        token = await _token(c)
+        payload, sig = token.split(".")
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        claims["m"].append(highlight.digest(highlight.binding_key_of_smiles("c1ccccc1")))
+        forged_payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+        other_key = highlight.sign(b"k" * 32, MCS_SMARTS, ["c1ccccc1"], now=0)
+        for bad in (
+            f"{forged_payload}.{sig}",  # claims changed, old signature
+            f"{payload}.{sig[:-2]}AA",  # signature changed
+            other_key,  # signed with another key
+        ):
+            r = await c.post(
+                f"{BASE}/depict",
+                json={"smiles": "c1ccccc1", "highlight": MCS_SMARTS, "highlight_token": bad},
+            )
+            assert r.status_code == 422, bad
+    assert _depicts(tools) == []
+
+
+async def test_expired_token_is_refused(app, tools, monkeypatch):
+    from marcus.api import highlight
+
+    async with make_client(app) as c:
+        token = await _token(c)
+        real = highlight._now()
+        monkeypatch.setattr(highlight, "_now", lambda: real + highlight.TOKEN_TTL_S + 1)
+        r = await c.post(
+            f"{BASE}/depict",
+            json={"smiles": "CCO", "highlight": MCS_SMARTS, "highlight_token": token},
+        )
+    assert r.status_code == 422 and _depicts(tools) == []
+    assert highlight.TOKEN_TTL_S == 30 * 60
+
+
+async def test_highlight_key_is_shared_through_redis_and_a_setting_wins(app, monkeypatch):
+    from marcus.api import highlight
+    from marcus.core.settings import get_settings
+
+    redis = app.state.rate_limiter.redis
+    await redis.delete(highlight.REDIS_KEY)
+    first = await highlight.signing_key(redis)
+    assert len(first) >= 32 and await highlight.signing_key(redis) == first  # every process
+    assert await redis.get(highlight.REDIS_KEY) == first
+    monkeypatch.setenv("MARCUS_HIGHLIGHT_KEY", "s" * 40)
+    get_settings.cache_clear()
+    assert await highlight.signing_key(redis) == b"s" * 40
+    assert "s" * 40 not in repr(get_settings())
+
+
+def test_highlight_atom_cap_matches_the_worker():
+    from marcus.api.routes import tools as route
+    from marcus.workers import tools as worker
+
+    assert route.MAX_HIGHLIGHT_ATOMS == worker.MAX_HIGHLIGHT_ATOMS

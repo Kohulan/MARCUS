@@ -237,9 +237,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         <SubmitForm
           paper={{ id: paper.id, title: paper.title, doi: paper.doi }}
           structures={toCoconut}
-          // The paper API gives no first author or year (v1 read them from the DOI's
-          // metadata): the title keeps what is known.
-          initial={{ title: submissionTitle({}) }}
+          initial={{
+            title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
+          }}
           onClose={() => setSending(false)}
         />
       )}

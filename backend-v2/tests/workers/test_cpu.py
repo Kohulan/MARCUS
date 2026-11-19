@@ -9,6 +9,7 @@ import resource
 import shutil
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,6 +24,7 @@ from marcus.workers import cpu, pdfsafe
 from marcus.workers.runtime import HANDLERS, BadInput, StepTimeout
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "pdfs"
+NO_META = {"title": None, "first_author": None, "year": None}
 
 
 def make_paper_with(name: str):
@@ -149,21 +151,22 @@ def test_doi_timeout_returns_none(monkeypatch):
     monkeypatch.setattr(cpu, "DOI_OP", "_sleep")
     monkeypatch.setattr(cpu, "DOI_TOTAL_S", 2)
     start = time.monotonic()
-    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
+    assert cpu.doi(view(pid), None) == {"doi": None, **NO_META}
     assert time.monotonic() - start < 8
 
 
 def test_doi_error_returns_none(monkeypatch):
     pid = make_paper_with("two_page.pdf")
     monkeypatch.setattr(cpu, "DOI_OP", "_fail")
-    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
+    assert cpu.doi(view(pid), None) == {"doi": None, **NO_META}
 
 
 def test_doi_is_normalised(monkeypatch):
     pid = make_paper_with("two_page.pdf")
     monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: " https://doi.org/10.1000/ABC.123 ")
-    monkeypatch.setattr(cpu, "fetch_title", lambda doi, timeout_s: "A title")
-    assert cpu.doi(view(pid), None) == {"doi": "10.1000/ABC.123", "title": "A title"}
+    meta = {"title": "A title", "first_author": "Rajan", "year": 2025}
+    monkeypatch.setattr(cpu, "fetch_meta", lambda doi, timeout_s: meta)
+    assert cpu.doi(view(pid), None) == {"doi": "10.1000/ABC.123", **meta}
 
 
 class FakeAdapter(BaseAdapter):
@@ -205,15 +208,17 @@ def fake_web(monkeypatch, routes):
     return adapter
 
 
-def crossref(title):
-    return json.dumps({"message": {"title": [title]}}).encode()
+def crossref(title, **message):
+    return json.dumps({"message": {"title": [title], **message}}).encode()
 
 
-def datacite(title):
-    return json.dumps({"data": {"attributes": {"titles": [{"title": title}]}}}).encode()
+def datacite(title, **attributes):
+    return json.dumps(
+        {"data": {"attributes": {"titles": [{"title": title}], **attributes}}}
+    ).encode()
 
 
-def test_fetch_title_crossref_then_datacite(monkeypatch):
+def test_fetch_meta_crossref_then_datacite(monkeypatch):
     web = fake_web(
         monkeypatch,
         {
@@ -221,24 +226,24 @@ def test_fetch_title_crossref_then_datacite(monkeypatch):
             "https://api.datacite.org/": (200, datacite("From DataCite"), {}),
         },
     )
-    assert cpu.fetch_title("10.1/x", 5) == "From DataCite"
+    assert cpu.fetch_meta("10.1/x", 5)["title"] == "From DataCite"
     assert len(web.urls) == 2
 
 
-def test_fetch_title_uses_crossref_first(monkeypatch):
+def test_fetch_meta_uses_crossref_first(monkeypatch):
     web = fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("Crossref one"), {})})
-    assert cpu.fetch_title("10.1/x", 5) == "Crossref one"
+    assert cpu.fetch_meta("10.1/x", 5)["title"] == "Crossref one"
     assert len(web.urls) == 1
 
 
-def test_fetch_title_strips_markup_and_cuts(monkeypatch):
+def test_fetch_meta_strips_markup_and_cuts(monkeypatch):
     fake_web(
         monkeypatch,
         {"https://api.crossref.org/": (200, crossref("<i>Coffea</i>  alkaloids &amp; more\n"), {})},
     )
-    assert cpu.fetch_title("10.1/x", 5) == "Coffea alkaloids & more"
+    assert cpu.fetch_meta("10.1/x", 5)["title"] == "Coffea alkaloids & more"
     fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("a" * 600), {})})
-    assert cpu.fetch_title("10.1/x", 5) == "a" * 500
+    assert cpu.fetch_meta("10.1/x", 5)["title"] == "a" * 500
     fake_web(
         monkeypatch,
         {
@@ -246,16 +251,16 @@ def test_fetch_title_strips_markup_and_cuts(monkeypatch):
             "https://api.datacite.org/": (404, b"", {}),
         },
     )
-    assert cpu.fetch_title("10.1/x", 5) is None
+    assert cpu.fetch_meta("10.1/x", 5)["title"] is None
 
 
-def test_fetch_title_quotes_doi_in_path(monkeypatch):
+def test_fetch_meta_quotes_doi_in_path(monkeypatch):
     web = fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("T"), {})})
-    cpu.fetch_title("10.1/../x?y", 5)
+    cpu.fetch_meta("10.1/../x?y", 5)
     assert web.urls[0] == "https://api.crossref.org/works/10.1%2F..%2Fx%3Fy"
 
 
-def test_fetch_title_redirect_is_none(monkeypatch):
+def test_fetch_meta_redirect_is_none(monkeypatch):
     web = fake_web(
         monkeypatch,
         {
@@ -263,11 +268,11 @@ def test_fetch_title_redirect_is_none(monkeypatch):
             "https://api.datacite.org/": (301, b"", {"Location": "https://evil.example/"}),
         },
     )
-    assert cpu.fetch_title("10.1/x", 5) is None
+    assert cpu.fetch_meta("10.1/x", 5) == NO_META
     assert len(web.urls) == 2
 
 
-def test_fetch_title_error_is_none(monkeypatch):
+def test_fetch_meta_error_is_none(monkeypatch):
     fake_web(
         monkeypatch,
         {
@@ -275,16 +280,191 @@ def test_fetch_title_error_is_none(monkeypatch):
             "https://api.datacite.org/": (200, b"not json", {}),
         },
     )
-    assert cpu.fetch_title("10.1/x", 5) is None
+    assert cpu.fetch_meta("10.1/x", 5) == NO_META
 
 
-def test_fetch_title_oversized_body_is_none(monkeypatch):
+def test_fetch_meta_oversized_body_is_none(monkeypatch):
     big = crossref("t") + b" " * cpu.TITLE_MAX_BYTES
     fake_web(
         monkeypatch,
         {"https://api.crossref.org/": (200, big, {}), "https://api.datacite.org/": (404, b"", {})},
     )
-    assert cpu.fetch_title("10.1/x", 5) is None
+    assert cpu.fetch_meta("10.1/x", 5) == NO_META
+
+
+def crossref_meta(monkeypatch, **message):
+    fake_web(monkeypatch, {"https://api.crossref.org/": (200, crossref("T", **message), {})})
+    return cpu.fetch_meta("10.1/x", 5)
+
+
+def datacite_meta(monkeypatch, **attributes):
+    fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (404, b"", {}),
+            "https://api.datacite.org/": (200, datacite("T", **attributes), {}),
+        },
+    )
+    return cpu.fetch_meta("10.1/x", 5)
+
+
+def test_fetch_meta_crossref_author_and_year(monkeypatch):
+    web = fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (
+                200,
+                crossref(
+                    "Coffea",
+                    author=[{"given": "Kohulan", "family": "Rajan"}, {"family": "Steinbeck"}],
+                    issued={"date-parts": [[2025, 3, 1]]},
+                    published={"date-parts": [[2024]]},
+                ),
+                {},
+            )
+        },
+    )
+    # the year is `published` (as v1), not `issued`
+    assert cpu.fetch_meta("10.1/x", 5) == {"title": "Coffea", "first_author": "Rajan", "year": 2024}
+    assert len(web.urls) == 1  # no extra call for the author or year
+
+
+def test_fetch_meta_crossref_year_falls_back_to_issued(monkeypatch):
+    assert crossref_meta(monkeypatch, issued={"date-parts": [[2019, 5]]})["year"] == 2019
+    assert crossref_meta(monkeypatch, published={"date-parts": [["2017"]]})["year"] == 2017
+    assert crossref_meta(monkeypatch, published={"date-parts": [[None]]},
+                         issued={"date-parts": [[2018]]})["year"] == 2018  # fmt: skip
+
+
+def test_fetch_meta_datacite_author_and_year(monkeypatch):
+    meta = datacite_meta(
+        monkeypatch,
+        creators=[{"name": "Rajan, Kohulan", "familyName": "Rajan"}],
+        publicationYear=2023,
+    )
+    assert meta == {"title": "T", "first_author": "Rajan", "year": 2023}
+    meta = datacite_meta(monkeypatch, creators=[{"name": "COCONUT team"}], publicationYear="2021")
+    assert meta == {"title": "T", "first_author": "COCONUT team", "year": 2021}
+
+
+def test_fetch_meta_author_is_cleaned_and_cut(monkeypatch):
+    odd = crossref_meta(monkeypatch, author=[{"family": " <i>M&uuml;ller</i>\n  Smith "}])
+    assert odd["first_author"] == "Müller Smith"
+    long = crossref_meta(monkeypatch, author=[{"family": "a" * 300}])["first_author"]
+    assert long == "a" * cpu.AUTHOR_MAX_CHARS == "a" * 100
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["\x00", "\ud800", "\u202e", "\u200b", "\x07", "\ufeff"],
+    ids=["nul", "lone-surrogate", "bidi-override", "zero-width-space", "bell", "bom"],
+)
+def test_fetch_meta_drops_control_format_and_surrogate_chars(monkeypatch, bad):
+    """One such char from a crafted reply must not make the pipeline drop the whole result."""
+    fake_web(
+        monkeypatch,
+        {"https://api.crossref.org/": (
+            200, crossref(f"Cof{bad}fea {bad}", author=[{"family": f"Ra{bad}jan"}]), {})},
+    )  # fmt: skip
+    meta = cpu.fetch_meta("10.1/x", 5)
+    assert (meta["title"], meta["first_author"]) == ("Coffea", "Rajan")
+    meta = datacite_meta(monkeypatch, creators=[{"familyName": f"{bad}", "name": f"Ra{bad}jan"}])
+    assert meta["first_author"] == "Rajan"
+    for value in (meta["title"], meta["first_author"]):
+        value.encode("utf-8")  # no lone surrogate left
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {},
+        {"author": []},
+        {"author": "Rajan"},
+        {"author": ["Rajan"]},
+        {"author": [{"given": "Kohulan"}]},
+        {"author": [{"family": 5}]},
+        {"author": [{"family": " <b></b> "}]},
+        {"author": [{"name": "A consortium"}]},  # Crossref: the family name only
+    ],
+)
+def test_fetch_meta_odd_crossref_author_is_none(monkeypatch, message):
+    meta = crossref_meta(monkeypatch, **message)
+    assert meta["title"] == "T" and meta["first_author"] is None
+
+
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {},
+        {"issued": {"date-parts": [[None]]}},
+        {"issued": {"date-parts": []}},
+        {"issued": {"date-parts": [[]]}},
+        {"issued": {"date-parts": "2020"}},
+        {"issued": "2020"},
+        {"issued": {"date-parts": [["20"]]}},
+        {"issued": {"date-parts": [[True]]}},
+        {"issued": {"date-parts": [[2020.5]]}},
+        {"issued": {"date-parts": [[1799]]}},
+        {"issued": {"date-parts": [[datetime.now(UTC).year + 2]]}},
+        {"issued": {"date-parts": [[10**30]]}},
+    ],
+)
+def test_fetch_meta_odd_crossref_year_is_none(monkeypatch, dates):
+    meta = crossref_meta(monkeypatch, **dates)
+    assert meta["title"] == "T" and meta["year"] is None
+
+
+def test_fetch_meta_year_bounds(monkeypatch):
+    assert crossref_meta(monkeypatch, issued={"date-parts": [[1800]]})["year"] == 1800
+    next_year = datetime.now(UTC).year + 1
+    assert crossref_meta(monkeypatch, issued={"date-parts": [[next_year]]})["year"] == next_year
+
+
+@pytest.mark.parametrize(
+    "attributes",
+    [
+        {},
+        {"creators": []},
+        {"creators": {"name": "Rajan"}},
+        {"creators": [None]},
+        {"creators": [{"givenName": "Kohulan"}], "publicationYear": "20x1"},
+        {"creators": [{"familyName": None, "name": 7}], "publicationYear": " 2021 "},
+        {"publicationYear": None},
+        {"publicationYear": "1600"},
+        {"publicationYear": ["2020"]},
+        {"publicationYear": "٢٠٢٠"},  # Arabic-Indic digits: not a year here
+    ],
+)
+def test_fetch_meta_odd_datacite_data_is_none(monkeypatch, attributes):
+    assert datacite_meta(monkeypatch, **attributes) == {**NO_META, "title": "T"}
+
+
+def test_fetch_meta_author_and_year_come_with_the_title(monkeypatch):
+    """No title in the Crossref reply: its author and year are not kept; DataCite's are."""
+    web = fake_web(
+        monkeypatch,
+        {
+            "https://api.crossref.org/": (
+                200,
+                json.dumps(
+                    {
+                        "message": {
+                            "author": [{"family": "Wrong"}],
+                            "issued": {"date-parts": [[2001]]},
+                        }
+                    }
+                ).encode(),
+                {},
+            ),  # fmt: skip
+            "https://api.datacite.org/": (
+                200,
+                datacite("D", creators=[{"familyName": "Right"}]),
+                {},
+            ),
+        },
+    )
+    assert cpu.fetch_meta("10.1/x", 5) == {"title": "D", "first_author": "Right", "year": None}
+    assert len(web.urls) == 2
 
 
 def test_doi_step_skips_title_when_budget_spent(monkeypatch):
@@ -292,16 +472,16 @@ def test_doi_step_skips_title_when_budget_spent(monkeypatch):
     monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: "10.1/x")
     monkeypatch.setattr(cpu, "DOI_TOTAL_S", 0.5)
     called = []
-    monkeypatch.setattr(cpu, "fetch_title", lambda *a: called.append(a) or "T")
-    assert cpu.doi(view(pid), None) == {"doi": "10.1/x", "title": None}
+    monkeypatch.setattr(cpu, "fetch_meta", lambda *a: called.append(a) or {"title": "T"})
+    assert cpu.doi(view(pid), None) == {"doi": "10.1/x", **NO_META}
     assert not called
 
 
 def test_doi_step_no_title_call_without_doi(monkeypatch):
     pid = make_paper_with("two_page.pdf")
     monkeypatch.setattr(cpu.pdfsafe, "run_op", lambda *a, **k: None)
-    monkeypatch.setattr(cpu, "fetch_title", lambda *a: pytest.fail("called"))
-    assert cpu.doi(view(pid), None) == {"doi": None, "title": None}
+    monkeypatch.setattr(cpu, "fetch_meta", lambda *a: pytest.fail("called"))
+    assert cpu.doi(view(pid), None) == {"doi": None, **NO_META}
 
 
 def test_child_timeouts_are_below_celery_soft_limits():

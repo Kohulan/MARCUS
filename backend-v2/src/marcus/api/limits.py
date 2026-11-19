@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.deps import active, advisory_xact_lock, owners_from_ip, rate_key_for_ip
+from marcus.api.deps import active, advisory_xact_lock, rate_key_for_ip
 from marcus.core.enums import OwnerKind
 from marcus.core.models import ImageJob, Owner, Paper
 from marcus.core.quota import pages_used_stmt
@@ -16,16 +16,18 @@ from marcus.core.settings import get_settings
 async def _count_active(
     db: AsyncSession, *, owner_id: uuid.UUID | None = None, ip: str | None = None
 ) -> int:
-    """Active papers plus image jobs of one owner, or of one address bucket (`ip`), in one
-    statement (two scalar subqueries)."""
+    """Active papers plus image jobs of one owner, or started from one address bucket (`ip`:
+    the work's own `started_ip`, not its owner's recorded IP, which retention deletes), in
+    one statement (two scalar subqueries)."""
     papers = select(func.count()).select_from(Paper).where(*active(Paper))
     images = select(func.count()).select_from(ImageJob).where(*active(ImageJob))
     if ip is None:
         papers = papers.where(Paper.owner_id == owner_id)
         images = images.where(ImageJob.owner_id == owner_id)
     else:
-        papers = papers.join(Owner, Owner.id == Paper.owner_id).where(owners_from_ip(ip))
-        images = images.join(Owner, Owner.id == ImageJob.owner_id).where(owners_from_ip(ip))
+        key = rate_key_for_ip(ip)
+        papers = papers.where(Paper.started_ip == key)
+        images = images.where(ImageJob.started_ip == key)
     total = select(papers.scalar_subquery() + images.scalar_subquery())
     return (await db.execute(total)).scalar_one()
 

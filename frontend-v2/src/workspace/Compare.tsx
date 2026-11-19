@@ -80,7 +80,7 @@ export default function Compare({
     (part.highlight !== null || target.kind === "image" || asEngine(r.engine) === null);
   const drawn = rows.filter(viaTools);
   const depicts = useQueries({
-    queries: drawn.map((r) => depictQuery(r.prediction!.smiles, part.highlight)),
+    queries: drawn.map((r) => depictQuery(r.prediction!.smiles, part.highlight, part.renew)),
   });
   const depictOf = (r: EngineRow) => {
     const i = drawn.indexOf(r);

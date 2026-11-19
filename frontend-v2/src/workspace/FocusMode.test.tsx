@@ -67,6 +67,8 @@ function paper(segments: SegmentOut[]): PaperDetail {
     pages: 3,
     doi: null,
     title: "Alkaloids",
+    first_author: null,
+    year: null,
     engine: "decimer",
     ocsr_mode: "auto",
     created_at: "2026-11-18T10:00:00Z",
@@ -215,6 +217,20 @@ describe("focus mode", () => {
       note: null,
     });
     expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
+  });
+
+  it("the stamp lands only on the A press: back on a decided structure it is just shown", async () => {
+    putSpy();
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    press("a");
+    const landed = await within(region).findByRole("img", { name: "Accepted" });
+    expect(landed).toHaveClass("stamp--landing");
+    await waitFor(() => expect(within(region).getByText("[02] · Page 1")).toBeInTheDocument());
+    press("ArrowLeft");
+    await waitFor(() => expect(within(region).getByText("[01] · Page 1")).toBeInTheDocument());
+    const shown = await within(region).findByRole("img", { name: "Accepted" });
+    expect(shown).not.toHaveClass("stamp--landing");
   });
 
   it("accept after an edit keeps the edited SMILES and molfile (and the note)", async () => {

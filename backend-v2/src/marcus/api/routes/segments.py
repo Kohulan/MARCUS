@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.chem import curation_error
 from marcus.api.chempool import CHEM
 from marcus.api.depiction import draw_or_read, shown_structure
-from marcus.api.deps import current_owner, get_owned_segment, not_found, require_engine_enabled
+from marcus.api.deps import (
+    current_owner,
+    get_owned_segment,
+    not_found,
+    require_engine_enabled,
+    work_ip,
+)
 from marcus.api.read import IMAGE_HEADERS, waiting_ocsr_step
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
@@ -75,6 +81,7 @@ async def segment_depiction(
 
 @router.post("/segments/{segment_id}/predictions", status_code=202, response_model=StepAccepted)
 async def run_prediction(
+    request: Request,
     segment_id: uuid.UUID,
     body: PredictionRequest,
     owner: Owner = Depends(current_owner),
@@ -87,7 +94,8 @@ async def run_prediction(
     if waiting is not None:
         return StepAccepted(step_id=waiting)
     try:
-        step = await db.run_sync(lambda s: request_ocsr(s, segment.id, body.engine))
+        ip = work_ip(request)
+        step = await db.run_sync(lambda s: request_ocsr(s, segment.id, body.engine, started_ip=ip))
     except ValueError:
         await db.rollback()
         raise not_found() from None  # the paper was deleted meanwhile

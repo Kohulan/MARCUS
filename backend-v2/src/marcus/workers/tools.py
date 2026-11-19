@@ -30,6 +30,18 @@ CDK = "org.openscience.cdk"
 JARS = ("cdk-2.10.jar", "centres.jar")
 MCS_TIMEOUT_S = 3  # below the 5 s task soft limit
 AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
+# A highlight SMARTS (the MCS the compare view shows; the API takes only one it signed for the
+# drawn molecule, marcus.api.highlight) is matched by RDKit, the toolkit that made it, on the
+# drawn SMILES: there the signed pattern is a known substructure. CDK perceives aromaticity
+# differently (a tellurophene is aromatic to RDKit, not to CDK), so it would miss the match and
+# search on unbounded; CDK only draws the matched atoms, by index (both read a SMILES in its
+# atom order). At most MAX_HIGHLIGHT_MAPPINGS mappings are walked and at most
+# MAX_HIGHLIGHT_MATCHES distinct atom sets highlighted. A pattern over MAX_HIGHLIGHT_ATOMS
+# atoms, or with recursive SMARTS ($(...), a search per atom), is refused (the API applies the
+# same caps).
+MAX_HIGHLIGHT_MAPPINGS = 1000
+MAX_HIGHLIGHT_MATCHES = 32
+MAX_HIGHLIGHT_ATOMS = 128
 
 
 class ToolInputError(ValueError):
@@ -175,15 +187,9 @@ def depict(
             .withBackgroundColor(J("java.awt.Color").WHITE)
         )
         if highlight.strip():
-            try:
-                builder = J(f"{CDK}.silent.SilentChemObjectBuilder").getInstance()
-                pattern = J(f"{CDK}.smarts.SmartsPattern").create(highlight, builder)
-                J(f"{CDK}.smarts.SmartsPattern").prepare(mol)
-                subs = pattern.matchAll(mol).toSubstructures()
-            except jpype.JException as exc:
-                raise ToolInputError(f"invalid highlight SMARTS: {exc}") from exc
+            matches = _highlight_matches(smiles, highlight)
             gen = gen.withHighlight(
-                subs, J("java.awt.Color")(173, 216, 230)
+                _highlight_objects(mol, matches), J("java.awt.Color")(173, 216, 230)
             ).withOuterGlowHighlight()
 
         depiction = gen.depict(mol)
@@ -197,6 +203,73 @@ def depict(
         raise
     except jpype.JException as exc:
         raise ToolInputError(f"cannot depict molecule: {exc}") from exc
+
+
+def _highlight_mol(smiles: str):
+    """RDKit's reading of the drawn SMILES with every written atom kept ([H] included), so its
+    atom indices are CDK's; ToolInputError when RDKit cannot read it."""
+    from rdkit import Chem
+    from rdkit.rdBase import BlockLogs
+
+    _block = BlockLogs()  # noqa: F841
+    params = Chem.SmilesParserParams()
+    params.removeHs = False
+    mol = Chem.MolFromSmiles(smiles, params)
+    if mol is None:
+        raise ToolInputError("cannot read the SMILES for the highlight")
+    return mol
+
+
+def _highlight_matches(
+    smiles: str, highlight: str
+) -> list[tuple[list[int], list[tuple[int, int]]]]:
+    """The highlight's matches in the drawn SMILES, matched by RDKit: per distinct atom set, its
+    atom indices and the index pairs of the pattern's bonds. ToolInputError for a pattern that
+    is unreadable, recursive or over MAX_HIGHLIGHT_ATOMS."""
+    from rdkit import Chem
+
+    if "$" in highlight:
+        raise ToolInputError("recursive SMARTS are not allowed in a highlight")
+    query = Chem.MolFromSmarts(highlight)
+    if query is None:
+        raise ToolInputError("invalid highlight SMARTS")
+    if query.GetNumAtoms() > MAX_HIGHLIGHT_ATOMS:
+        raise ToolInputError(f"highlight has more than {MAX_HIGHLIGHT_ATOMS} atoms")
+    mol = _highlight_mol(smiles)
+    found: list[tuple[list[int], list[tuple[int, int]]]] = []
+    seen: set[frozenset[int]] = set()
+    mappings = mol.GetSubstructMatches(
+        query, uniquify=False, maxMatches=MAX_HIGHLIGHT_MAPPINGS, useChirality=False
+    )
+    for mapping in mappings:
+        atoms = frozenset(mapping)
+        if atoms in seen:
+            continue
+        seen.add(atoms)
+        bonds = [
+            (mapping[b.GetBeginAtomIdx()], mapping[b.GetEndAtomIdx()]) for b in query.GetBonds()
+        ]
+        found.append((list(mapping), bonds))
+        if len(found) == MAX_HIGHLIGHT_MATCHES:
+            break
+    return found
+
+
+def _highlight_objects(mol, matches):
+    """The CDK atoms and bonds of `matches` (RDKit indices, the same in CDK's reading)."""
+    jpype = _jvm()
+    chosen = jpype.JClass("java.util.LinkedHashSet")()
+    count = mol.getAtomCount()
+    for atoms, bonds in matches:
+        if any(i >= count for i in atoms):
+            raise ToolInputError("highlight does not fit the drawn molecule")
+        for i in atoms:
+            chosen.add(mol.getAtom(i))
+        for i, j in bonds:
+            bond = mol.getBond(mol.getAtom(i), mol.getAtom(j))
+            if bond is not None:
+                chosen.add(bond)
+    return chosen
 
 
 def smiles_to_molfile(smiles: str) -> str:

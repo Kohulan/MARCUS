@@ -2,8 +2,13 @@
 
 The GPU OCSR images have no Java; CDK lives only in the tools image. So a depiction is drawn
 lazily, on its first request, by `marcus.tools.depict` on q.tools (the same drawing as
-`POST /tools/depict`) and stored under `data_root/depictions`, keyed by sha256 of the SMILES.
-Later requests, for any segment with that SMILES, read the file.
+`POST /tools/depict`) and stored under `data_root/depictions/<owner id>`, keyed by sha256 of the
+SMILES. Later requests of that owner, for any segment with that SMILES, read the file. The cache
+is per owner: a hit (or a `.nodraw` marker) never comes from another owner's request, so the
+status, timing and rate charge of a request say nothing about what other owners viewed. Only
+plain drawings are stored (DEPICT_OPTIONS: no highlight), so the SMILES alone is the key; a
+highlighted drawing comes only from `POST /tools/depict`, which checks its token before
+anything else and stores nothing.
 
 Bounds on the write path: the SMILES always comes from the owner's own stored rows, never from
 the request. A miss for a prediction is free (OCSR workers make predictions, and the upload
@@ -111,8 +116,8 @@ async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Sour
     if len(smiles) > MAX_SMILES:
         raise not_found()
     sha = hashlib.sha256(smiles.encode()).hexdigest()
-    path = storage.depiction_path(sha)
-    marker = storage.depiction_marker_path(sha)
+    path = storage.depiction_path(owner.id, sha)
+    marker = storage.depiction_marker_path(owner.id, sha)
     found = await anyio.to_thread.run_sync(_lookup, path, marker)
     if found is _UNDRAWABLE:
         raise not_found()

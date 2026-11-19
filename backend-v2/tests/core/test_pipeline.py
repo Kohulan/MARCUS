@@ -1,4 +1,5 @@
 import threading
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
@@ -169,6 +170,36 @@ def test_after_doi_stores_title(db_session):
     assert paper.title == "Coffea alkaloids"
 
 
+def test_after_doi_stores_first_author_and_year(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    finish(s, doi, {"doi": "10.1/x", "title": "T", "first_author": "Rajan", "year": 2025})
+    s.refresh(paper)
+    assert (paper.first_author, paper.year) == ("Rajan", 2025)
+
+
+def test_after_doi_without_author_or_year_stores_null(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (doi,) = steps(s, paper, "doi")
+    finish(s, doi, {"doi": "10.1/x", "title": "T"})
+    s.refresh(paper)
+    assert (paper.first_author, paper.year) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"first_author": 5}, {"first_author": ["Rajan"]}, {"year": "2025"}, {"year": True},
+     {"year": 2025.0}],
+)  # fmt: skip
+def test_check_doi_result_rejects_odd_author_or_year(extra):
+    with pytest.raises(BadResult):
+        pipeline_module._check_doi_result({"doi": None, **extra})
+
+
 def test_check_doi_result_rejects_non_string_title():
     with pytest.raises(BadResult):
         pipeline_module._check_doi_result({"doi": None, "title": 5})
@@ -177,6 +208,10 @@ def test_check_doi_result_rejects_non_string_title():
 def test_check_doi_result_accepts_missing_title():
     pipeline_module._check_doi_result({"doi": "10.1/x"})
     pipeline_module._check_doi_result({"doi": None, "title": None})
+    pipeline_module._check_doi_result(
+        {"doi": "10.1/x", "title": "T", "first_author": None, "year": None}
+    )
+    pipeline_module._check_doi_result({"doi": "10.1/x", "first_author": "Rajan", "year": 2025})
 
 
 def test_paper_done_when_last_step_finishes(db_session):
@@ -737,3 +772,75 @@ def test_retry_page_missing_deleted_or_out_of_range(db_session):
     s.flush()
     with pytest.raises(ValueError):
         retry_page(s, paper.id, 0)
+
+
+# --- the address kept on active work (review I-1) ------------------------------------------
+
+
+def _just_now(when) -> bool:
+    return when is not None and abs(datetime.now(UTC) - when) < timedelta(minutes=1)
+
+
+def _paper_from(s, ip="198.51.100.7") -> Paper:
+    paper = make_paper(s)
+    paper.started_ip = ip
+    s.flush()
+    return paper
+
+
+def test_new_paper_and_image_job_keep_the_starting_address(db_session):
+    from marcus.core.pipeline import new_image_job, new_paper
+    from tests.factories import make_owner
+
+    s = db_session
+    owner = make_owner(s)
+    paper = new_paper(s, owner, "a" * 64, 9, "p.pdf", Engine.DECIMER, "auto",
+                      started_ip="203.0.113.9")  # fmt: skip
+    job = new_image_job(s, owner, "b" * 64, "i.png", Engine.DECIMER,
+                        started_ip="2001:db8::/64")  # fmt: skip
+    assert (paper.started_ip, job.started_ip) == ("203.0.113.9", "2001:db8::/64")
+    assert _just_now(paper.started_ip_at) and _just_now(job.started_ip_at)
+    plain = new_paper(s, owner, "c" * 64, 9, "q.pdf", Engine.DECIMER, "auto")
+    assert plain.started_ip is None and plain.started_ip_at is None
+
+
+def test_a_paper_that_ends_keeps_no_address(db_session):
+    s = db_session
+    failed = _paper_from(s)
+    (check,) = steps(s, failed, "check_pdf")
+    run(s, check)
+    fail_step(s, check.id, ErrorClass.BAD_INPUT, "not a pdf", retryable=False)
+    s.refresh(failed)
+    assert failed.status == "failed" and failed.started_ip is None
+    assert failed.started_ip_at is None
+
+    deleted = _paper_from(s)
+    cancel_paper(s, deleted.id, remove_files=False)
+    assert deleted.started_ip is None and deleted.started_ip_at is None
+
+
+def test_a_settled_image_job_keeps_no_address(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    job.started_ip = "198.51.100.8"
+    s.flush()
+    finish(s, step, OCSR)
+    s.refresh(job)
+    assert job.status == "done" and job.started_ip is None and job.started_ip_at is None
+    request_image_ocsr(s, job.id, Engine.MOLNEXTR, started_ip="198.51.100.9")
+    assert job.status == "queued" and job.started_ip == "198.51.100.9"  # active again
+    assert _just_now(job.started_ip_at)
+
+
+def test_reopened_paper_gets_the_requesting_address(db_session):
+    s = db_session
+    paper = _paper_from(s)
+    paper.status = "done"
+    paper.started_ip = None
+    s.add(Segment(paper_id=paper.id, page=0, idx=0, bbox=[0, 0, 1, 1], image_sha256="0" * 64))
+    s.flush()
+    seg = s.execute(select(Segment).where(Segment.paper_id == paper.id)).scalar_one()
+    paper.created_at = datetime.now(UTC) - timedelta(days=40)  # an old paper, reopened now
+    request_ocsr(s, seg.id, Engine.DECIMER, started_ip="203.0.113.77")
+    assert paper.status == "processing" and paper.started_ip == "203.0.113.77"
+    assert _just_now(paper.started_ip_at)  # the purge goes by this, not by created_at

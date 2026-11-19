@@ -271,8 +271,9 @@ function withCuration(
  * (the paper is fetched first when it is not cached; a segment not in it rejects unsaved).
  * Optimistic for status and note, as bulk() is: the body goes into the ["paper", paperId]
  * cache at once, the reply replaces it, and a failed PUT rolls it back and rejects. A change
- * of structure is written only with the reply. Refreshes wait while a save is on the wire. The only way the UI writes
- * a single curation (PUT replaces the whole record).
+ * of structure is written only with the reply. Refreshes wait while a save is on the wire (a
+ * PUT not answered in SAVE_TIMEOUT_MS fails, and the paper is then fetched again, as after a
+ * 5xx). The only way the UI writes a single curation (PUT replaces the whole record).
  */
 export function useSaveCuration(paperId: string): {
   save: (segmentId: string, change: CurationChange) => Promise<CurationOut>;
@@ -311,6 +312,10 @@ export function useSaveCuration(paperId: string): {
             if ((optimistic && (await write(before))) || cancelled) {
               void client.invalidateQueries({ queryKey: key });
             }
+            // No answer, a network error or a 5xx (a timed-out PUT is a 504): the server may
+            // have saved it. Fetch the paper once more (after the saves on the wire), so the
+            // screen shows what is stored rather than the rollback.
+            if (!(err instanceof ApiError) || err.status >= 500) refreshPaper(client, paperId);
             throw err;
           }
           if ((await write(out)) || cancelled) void client.invalidateQueries({ queryKey: key });

@@ -9,6 +9,9 @@ around each step, via `log_context`.
 Secrets never reach the output: a filter on the handler masks the value after any key or
 parameter whose name contains password, token, secret or authorization, the `marcus_owner`
 cookie, and the password part of `scheme://user:password@host` URLs (message and traceback).
+Masking runs in linear time, on a message first cut to MAX_MESSAGE_CHARS (MAX_ACCESS_CHARS for
+an access-log line, whose path and query the client chooses; 4x for a traceback). A cut drops
+the token it goes through, so it never leaves part of a secret.
 """
 
 import contextlib
@@ -26,17 +29,59 @@ _context: dict[str, contextvars.ContextVar[str | None]] = {
 }
 
 MASK = "***"
+MAX_MESSAGE_CHARS = 8 * 1024  # a log message (and a traceback, x4) is cut to this before masking
+MAX_ACCESS_CHARS = 2 * 1024  # an access-log line: the client chooses its path and query
+_ACCESS_LOGGERS = frozenset({"uvicorn.access", "gunicorn.access"})
+_CUT = " …[cut]"
 _VALUE = r"""(?:(?:Bearer|Basic|Token)\s+)?[^\s,;&"'}\]]+"""
-_SECRET_KEY = re.compile(
-    rf"""(?P<key>[\w.-]*(?:password|token|secret|authorization)[\w.-]*|marcus_owner)"""
-    rf"""(?P<sep>["']?\s*[:=]\s*["']?)(?P<val>{_VALUE})""",
-    re.IGNORECASE,
+# Linear time: a key starts only where a run of key characters starts (the lookbehind), so each
+# run is walked once; the separator's spaces are bounded; the secret word is tested on the key
+# afterwards (_SECRET_NAME), never inside the pattern.
+_KEY_SEP = re.compile(
+    r"""(?<![\w.-])(?P<key>[\w.-]+)["']?\s{0,16}[:=]\s{0,16}["']?(?=[^\s,;&"'}\]])"""
 )
+_SECRET_VALUE = re.compile(_VALUE, re.IGNORECASE)
+_SECRET_NAME = re.compile(r"password|token|secret|authorization|marcus_owner", re.IGNORECASE)
 _URL_PASSWORD = re.compile(r"(?P<head>://[^:/\s@]*:)[^@\s/]+(?=@)")
 
 
-def mask_secrets(text: str) -> str:
-    text = _SECRET_KEY.sub(lambda m: f"{m['key']}{m['sep']}{MASK}", text)
+_SPACES = (" ", "\t", "\n", "\r", "\f", "\v")
+
+
+def _cut(text: str, limit: int) -> str:
+    """`text` cut to `limit` characters. A cut drops the whole token it goes through (back to
+    the last whitespace): no secret value holds whitespace, so no part of one (a URL password
+    whose `@` is past the cut, a value cut short) is left unmasked. str.rfind: linear."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    return head[: max(head.rfind(c) for c in _SPACES) + 1] + _CUT
+
+
+def _mask_keys(text: str) -> str:
+    """The value after every key whose name holds a secret word, masked. A key without one is
+    skipped only up to its separator, so its value is scanned again as a key itself (as in
+    `a=password=x`); a value is read only after a secret key. Each search starts past the last
+    one: linear overall."""
+    out: list[str] = []
+    pos = 0
+    while (m := _KEY_SEP.search(text, pos)) is not None:
+        out.append(text[pos : m.end()])
+        pos = m.end()
+        if _SECRET_NAME.search(m["key"]):
+            value = _SECRET_VALUE.match(text, pos)
+            if value is not None:
+                out.append(MASK)
+                pos = value.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def mask_secrets(text: str, limit: int = MAX_MESSAGE_CHARS) -> str:
+    """`text` cut to `limit` characters, then every secret in it masked."""
+    text = _cut(text, limit)
+    if ":" in text or "=" in text:
+        text = _mask_keys(text)
     return _URL_PASSWORD.sub(lambda m: f"{m['head']}{MASK}", text)
 
 
@@ -48,13 +93,14 @@ class MaskSecrets(logging.Filter):
             message = record.getMessage()
         except Exception:  # noqa: BLE001  a bad format string must not lose the line
             message = f"{record.msg!r} {record.args!r}"
-        record.msg, record.args = mask_secrets(message), None
+        limit = MAX_ACCESS_CHARS if record.name in _ACCESS_LOGGERS else MAX_MESSAGE_CHARS
+        record.msg, record.args = mask_secrets(message, limit), None
         if record.exc_info:
             if not record.exc_text:
                 record.exc_text = logging.Formatter().formatException(record.exc_info)
             record.exc_info = None
         if record.exc_text:
-            record.exc_text = mask_secrets(record.exc_text)
+            record.exc_text = mask_secrets(record.exc_text, 4 * MAX_MESSAGE_CHARS)
         return True
 
 
@@ -70,7 +116,8 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": self.service,
             "logger": record.name,
-            "msg": mask_secrets(record.getMessage()),  # no-op after MaskSecrets; belt and braces
+            # no-op after MaskSecrets (already cut and masked); belt and braces
+            "msg": mask_secrets(record.getMessage(), MAX_MESSAGE_CHARS + len(_CUT)),
         }
         for name, var in _context.items():
             value = var.get()
@@ -78,7 +125,7 @@ class JsonFormatter(logging.Formatter):
                 line[name] = value
         exc = record.exc_text
         if record.exc_info and not exc:
-            exc = mask_secrets(self.formatException(record.exc_info))
+            exc = mask_secrets(self.formatException(record.exc_info), 4 * MAX_MESSAGE_CHARS)
         if exc:
             line["exc"] = exc
         return json.dumps(line, ensure_ascii=False, default=str)

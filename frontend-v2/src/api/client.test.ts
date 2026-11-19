@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, ownerReady, resetOwnerGate, svgBlobUrl } from "./client";
+import {
+  api,
+  ApiError,
+  ownerReady,
+  resetOwnerGate,
+  SAVE_TIMEOUT_MS,
+  svgBlobUrl,
+} from "./client";
 
 type Call = { url: string; init: RequestInit };
 
@@ -129,6 +136,19 @@ describe("api", () => {
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });
 
+  it("depict sends a highlight with its token, and neither without one", async () => {
+    reply = json(200, { format: "svg", data: "<svg/>" });
+    await api.depict("CCO", { highlight: "[#6]-[#6]", highlightToken: "tok" });
+    await api.depict("CCN");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
+      smiles: "CCO",
+      format: "svg",
+      highlight: "[#6]-[#6]",
+      highlight_token: "tok",
+    });
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ smiles: "CCN", format: "svg" });
+  });
+
   it("compare posts exactly smiles_a and smiles_b", async () => {
     reply = json(200, { tanimoto: 0.5, identical: false, same_structure: false, agree: false });
     await api.compare("CCO", "CCN");
@@ -143,6 +163,52 @@ describe("api", () => {
     expect(calls[0]?.url).toBe("/api/v2/segments/s1/curation");
     expect(calls[0]?.init.method).toBe("PUT");
     expect(JSON.parse(calls[0]?.init.body as string)).toEqual(body);
+  });
+
+  it("putCuration gives up after 30 s: the request is aborted and the save rejects", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (url: string, init: RequestInit) =>
+            new Promise<Response>((_, reject) => {
+              calls.push({ url, init });
+              init.signal?.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+            }),
+        ),
+      );
+      const body = { status: "accepted", smiles: null, molfile: null, note: null } as const;
+      const settled = api.putCuration("s1", body).then(
+        () => "saved",
+        (err: unknown) => err,
+      );
+      await vi.advanceTimersByTimeAsync(SAVE_TIMEOUT_MS - 1);
+      expect(SAVE_TIMEOUT_MS).toBe(30_000);
+      expect(calls[0]?.init.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls[0]?.init.signal?.aborted).toBe(true);
+      // a timeout is a 504 ApiError: the outcome is unknown, as for a gateway timeout
+      const err = await settled;
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(504);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("putCuration that answers in time leaves no timer behind", async () => {
+    vi.useFakeTimers();
+    try {
+      const body = { status: "rejected", smiles: null, molfile: null, note: null } as const;
+      reply = json(200, body);
+      expect(await api.putCuration("s1", body)).toEqual(body);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("putBulkCuration keeps an absent note key absent", async () => {
