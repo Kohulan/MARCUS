@@ -219,6 +219,20 @@ describe("focus mode", () => {
     expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
   });
 
+  it("the stamp lands only on the A press: back on a decided structure it is just shown", async () => {
+    putSpy();
+    renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    press("a");
+    const landed = await within(region).findByRole("img", { name: "Accepted" });
+    expect(landed).toHaveClass("stamp--landing");
+    await waitFor(() => expect(within(region).getByText("[02] · Page 1")).toBeInTheDocument());
+    press("ArrowLeft");
+    await waitFor(() => expect(within(region).getByText("[01] · Page 1")).toBeInTheDocument());
+    const shown = await within(region).findByRole("img", { name: "Accepted" });
+    expect(shown).not.toHaveClass("stamp--landing");
+  });
+
   it("accept after an edit keeps the edited SMILES and molfile (and the note)", async () => {
     const put = putSpy();
     renderAt(

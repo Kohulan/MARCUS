@@ -81,10 +81,15 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   // The save is optimistic (useSaveCuration): a decision is in the row at once.
   const state: CardState = row?.state ?? "to-check";
   // Each A or R pressed here lands its stamp, also on a structure already decided (a fresh
-  // key per decision); a failed save takes it back.
+  // key per decision); a failed save takes it back. Leaving the structure ends it, so back on
+  // a decided one the stamp is shown, not landed again. (Not cleared when the save answers:
+  // that would cut the landing short while it still plays.)
   const [landing, setLanding] = useState<{ id: string; n: number } | null>(null);
   const seq = useRef(0);
   const mine = landing !== null && landing.id === id ? landing : null;
+  useEffect(() => {
+    setLanding((l) => (l !== null && l.id !== id ? null : l));
+  }, [id]);
   const stored = segment.curation?.note ?? null;
   // A structure to accept: a curated one or a valid prediction.
   const drawable = hasDrawing(segment);
