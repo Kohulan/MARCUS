@@ -76,6 +76,7 @@ class Paper(Base):
         CheckConstraint(_in("engine", ENGINES), name="ck_papers_engine"),
         Index("ix_papers_owner_id_status", "owner_id", "status"),
         Index("ix_papers_expires_at", "expires_at"),
+        Index("ix_papers_started_ip", "started_ip"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -86,12 +87,20 @@ class Paper(Base):
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     doi: Mapped[str | None] = mapped_column(Text, nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     engine: Mapped[str] = mapped_column(Text)
     ocsr_mode: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     expires_at: Mapped[datetime] = mapped_column(TZ)
+    # The address bucket (marcus.api.deps.rate_key_for_ip) that started the work, kept only
+    # while it is active: the per-address active-work cap counts it. Cleared when the work
+    # finishes, fails or is deleted (and by the retention purge as a backstop).
+    started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When started_ip was last set (creation or reopen): the retention backstop ages it by this.
+    started_ip_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
 
 
 class ImageJob(Base):
@@ -101,6 +110,7 @@ class ImageJob(Base):
         CheckConstraint(_in("engine", ENGINES), name="ck_image_jobs_engine"),
         Index("ix_image_jobs_owner_id", "owner_id"),
         Index("ix_image_jobs_expires_at", "expires_at"),
+        Index("ix_image_jobs_started_ip", "started_ip"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -112,6 +122,12 @@ class ImageJob(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     expires_at: Mapped[datetime] = mapped_column(TZ)
+    # The address bucket (marcus.api.deps.rate_key_for_ip) that started the work, kept only
+    # while it is active: the per-address active-work cap counts it. Cleared when the work
+    # finishes, fails or is deleted (and by the retention purge as a backstop).
+    started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When started_ip was last set (creation or reopen): the retention backstop ages it by this.
+    started_ip_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
 
 
 class Segment(Base):
@@ -213,20 +229,38 @@ class Curation(Base):
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
-class SegCache(Base):
-    __tablename__ = "seg_cache"
-    __table_args__ = (Index("ix_seg_cache_created_at", "created_at"),)
+def _owner_pk() -> Mapped[uuid.UUID]:
+    return mapped_column(
+        UUID(as_uuid=True), ForeignKey("owners.id", ondelete="CASCADE"), primary_key=True
+    )
 
+
+class SegCache(Base):
+    """Per owner (security F6): one owner's row is never another owner's hit. `paper_id`: the
+    paper whose segmentation the row holds; deleting that paper drops the row."""
+
+    __tablename__ = "seg_cache"
+    __table_args__ = (
+        Index("ix_seg_cache_created_at", "created_at"),
+        Index("ix_seg_cache_paper_id", "paper_id"),
+    )
+
+    owner_id: Mapped[uuid.UUID] = _owner_pk()
     pdf_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     seg_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    paper_id: Mapped[uuid.UUID] = _fk("papers.id")
     payload: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
 class OcsrCache(Base):
+    """Per owner (security F3): a hit, `cached: true` and `ms` 0, only ever follows the same
+    owner's own earlier prediction of the same bytes."""
+
     __tablename__ = "ocsr_cache"
     __table_args__ = (Index("ix_ocsr_cache_created_at", "created_at"),)
 
+    owner_id: Mapped[uuid.UUID] = _owner_pk()
     image_sha256: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
     engine: Mapped[str] = mapped_column(Text, primary_key=True)
     engine_version: Mapped[str] = mapped_column(Text, primary_key=True)

@@ -62,6 +62,8 @@ function paper(over: Partial<PaperDetail> = {}): PaperDetail {
     pages: 8,
     doi: "10.1039/d5dd00313j",
     title: "Alkaloids from Coffea leaves",
+    first_author: "Rajan",
+    year: 2025,
     engine: "decimer",
     ocsr_mode: "auto",
     created_at: "2026-11-18T10:00:00Z",
@@ -296,11 +298,31 @@ describe("header", () => {
         "[03]",
       ]);
       expect(within(form).getByText("CCBr")).toBeInTheDocument();
-      // The paper API has no first author or year: the title keeps only what is known.
-      expect(within(form).getByLabelText("Title")).toHaveValue("MARCUS_Submission");
+      expect(within(form).getByLabelText("Title")).toHaveValue("MARCUS_Submission Rajan 2025");
       expect(within(form).getByLabelText("DOI")).toHaveValue("10.1039/d5dd00313j");
       fireEvent.click(within(form).getByRole("button", { name: "Close" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
+  it.each([
+    ["Rajan", 2025, "MARCUS_Submission Rajan 2025"],
+    ["Rajan", null, "MARCUS_Submission Rajan"],
+    [null, 2025, "MARCUS_Submission 2025"],
+    [null, null, "MARCUS_Submission"],
+  ])("the form's title starts as v1's from the first author %s and year %s", async (first_author, year, want) => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      renderWorkspace({
+        paper: paper({ first_author, year, segments: [seg("s1", { status: "accepted" })] }),
+      });
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const field = within(await screen.findByRole("dialog")).getByLabelText("Title");
+      expect(field).toHaveValue(want);
+      fireEvent.change(field, { target: { value: "My own title" } });
+      expect(field).toHaveValue("My own title");
     } finally {
       sessionStorage.removeItem("marcus-coconut-token");
     }

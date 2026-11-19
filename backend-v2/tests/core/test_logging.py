@@ -96,3 +96,93 @@ def test_plain_text_is_untouched(lines):
 def test_configure_is_idempotent(lines):
     mlog.configure_logging("testsvc")
     assert len(logging.getLogger().handlers) == 1
+
+
+@pytest.mark.parametrize(
+    "unit",
+    ["token", "token.", "token-", "password", "secret_", "a.authorization-"],
+)
+@pytest.mark.parametrize("size", [8_000, 20_000, 32_768])
+def test_masking_is_linear_on_adversarial_input(unit, size):
+    """A long keyword run with no separator (the access-log ReDoS) masks in well under 100 ms,
+    at the full size (no cut: `limit` is the text's length; 32 KiB is the traceback cap)."""
+    import time
+
+    text = "GET /api/v2/health?" + unit * (size // len(unit)) + " HTTP/1.1"
+    start = time.perf_counter()
+    mlog.mask_secrets(text, limit=len(text))
+    assert time.perf_counter() - start < 0.1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        ("token" * 20 + "=" + " " * 30) * 400,
+        "a=b" * 6000,
+        "a://b:" * 3000,
+        "token=a" * 2500,
+        "token: Bearer " * 1500,
+        ":" * 20_000,
+        ("x" * 200 + "_token=v ") * 100,
+    ],
+    ids=["spaces", "chain", "urls", "secrets", "bearer", "colons", "long-keys"],
+)
+def test_masking_handles_many_separators_quickly(text):
+    import time
+
+    start = time.perf_counter()
+    mlog.mask_secrets(text, limit=len(text))  # the whole text, not the 8 KiB cut
+    assert time.perf_counter() - start < 0.1
+
+
+@pytest.mark.parametrize(
+    "message,secret",
+    [
+        ("a=password=hunter2", "hunter2"),
+        ("headers: authorization=Bearer xyz987", "xyz987"),
+        ("x" * 100 + "_token=abcabc", "abcabc"),
+        ("q?id=1&access_token=t0k3n&z=2", "t0k3n"),
+        ("set my.secret.key = 'quoted1'", "quoted1"),
+    ],
+)
+def test_more_secret_shapes_are_masked(message, secret):
+    assert secret not in mlog.mask_secrets(message)
+
+
+def test_long_messages_are_cut_before_masking(lines):
+    logging.getLogger("marcus.x").info("x" * 50_000)
+    (line,) = lines()
+    assert len(line["msg"]) <= mlog.MAX_MESSAGE_CHARS + 20
+
+
+def test_access_log_line_is_cut_short(lines):
+    logging.getLogger("uvicorn.access").info(
+        '%s - "%s %s HTTP/%s" %d', "1.2.3.4:5", "GET", "/x?" + "a" * 9000, "1.1", 404
+    )
+    (line,) = lines()
+    assert len(line["msg"]) <= mlog.MAX_ACCESS_CHARS + 20
+
+
+SECRET = "Zq9Wv7Ky3Jp"
+SECRET_SHAPES = [
+    f"postgresql://marcus:{SECRET}@db:5432/marcus",
+    f"password={SECRET}",
+    f"Authorization: Bearer {SECRET}",
+    f"cookie: marcus_owner={SECRET}; b=2",
+    f'{{"client_secret": "{SECRET}"}}',
+]
+
+
+@pytest.mark.parametrize("shape", SECRET_SHAPES)
+def test_a_cut_never_leaves_part_of_a_secret(shape):
+    """Whatever character of the secret the cut lands on, no piece of it (2 chars or more)
+    is left: the token the cut goes through is dropped, then the rest is masked."""
+    at = shape.index(SECRET)
+    limit = 200
+    for k in range(len(shape) + 1):  # the cut lands k characters into the shape
+        text = "x " * ((limit - k) // 2) + "y" * ((limit - k) % 2) + shape + " tail"
+        assert text.index(shape) == limit - k
+        out = mlog.mask_secrets(text, limit=limit)
+        assert len(out) <= limit + len(mlog._CUT)
+        pieces = {SECRET[i : i + 2] for i in range(len(SECRET) - 1)}
+        assert not any(p in out for p in pieces), (k, at, out[-60:])

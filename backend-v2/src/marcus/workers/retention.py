@@ -19,10 +19,17 @@
    (a uuid) whose paper / image job has no row, or a `deleted` one, and whose mtime is older
    than one day (younger ones may belong to an upload that is still committing). This also
    retries files that `cancel_paper` or step 1/2 could not remove;
-6. depictions (`data_root/depictions`, the API's stored structure drawings and `.nodraw`
-   markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the directory holds
-   more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing is drawn again
-   on its next request.
+6. owner IPs: the address recorded when a browser first got its key (`owners.created_ip`) is
+   set to NULL `owner_ip_retention_days` (default 30) after it was recorded (`created_at`).
+   The owner row stays; the per-address new-key limit only counts owners of the last hour.
+   Backstop for the address kept on active work (`papers.started_ip`,
+   `image_jobs.started_ip`, cleared by the planner when the work ends): set to NULL on work
+   that is no longer active, or whose address was set (`started_ip_at`: creation or reopen)
+   more than that many days ago;
+7. depictions (`data_root/depictions/<owner id>/<xx>/`, the API's stored structure drawings
+   and `.nodraw` markers): files older than DEPICTION_MAX_DAYS (mtime), then, while the
+   directory holds more than DEPICTIONS_MAX_BYTES, the oldest files first. A removed drawing
+   is drawn again on its next request. Directories empty for over a day are removed.
 
 Rows go in batches of `batch_size`, one transaction each, locked with SKIP LOCKED (a row a
 worker holds right now is left for the next run), so a run never holds a long transaction.
@@ -45,13 +52,20 @@ from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
 
 from celery.exceptions import SoftTimeLimitExceeded
-from sqlalchemy import and_, delete, or_, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from marcus.core import storage
 from marcus.core.celery_app import celery_app
-from marcus.core.enums import Engine, ImageJobStatus, PaperStatus, StepStatus
-from marcus.core.models import ImageJob, OcsrCache, Paper, SegCache, Step
+from marcus.core.enums import (
+    ACTIVE_IMAGE_STATUSES,
+    ACTIVE_PAPER_STATUSES,
+    Engine,
+    ImageJobStatus,
+    PaperStatus,
+    StepStatus,
+)
+from marcus.core.models import ImageJob, OcsrCache, Owner, Paper, SegCache, Step
 from marcus.core.pipeline import ACTIVE, cancel_paper, seg_cache_key
 from marcus.core.settings import get_settings
 
@@ -84,6 +98,8 @@ class PurgeReport:
     ocsr_cache: int = 0
     orphan_paper_dirs: int = 0
     orphan_image_files: int = 0
+    owner_ips: int = 0  # owners whose recorded IP was deleted
+    work_ips: int = 0  # papers and image jobs whose address was deleted (backstop)
     depictions: int = 0  # files removed under data_root/depictions (age, then size cap)
     file_errors: int = 0
     errors: list[str] = field(default_factory=list)  # phases that failed (logged with traceback)
@@ -247,7 +263,11 @@ def _purge_seg_cache(session: Session, cutoff: datetime, batch: int, report: Pur
     else:
         log.info("retention: MARCUS_SEG_VERSION unset; seg_cache purged by age only")
     report.seg_cache += _delete_in_batches(
-        session, SegCache, [SegCache.pdf_sha256, SegCache.seg_version], or_(*conditions), batch
+        session,
+        SegCache,
+        [SegCache.owner_id, SegCache.pdf_sha256, SegCache.seg_version],
+        or_(*conditions),
+        batch,
     )
 
 
@@ -263,8 +283,61 @@ def _purge_ocsr_cache(
         and_(OcsrCache.engine == engine, OcsrCache.engine_version != version)
         for engine, version in sorted(versions.items())
     ]
-    keys = [OcsrCache.image_sha256, OcsrCache.engine, OcsrCache.engine_version]
+    keys = [OcsrCache.owner_id, OcsrCache.image_sha256, OcsrCache.engine, OcsrCache.engine_version]
     report.ocsr_cache += _delete_in_batches(session, OcsrCache, keys, or_(*conditions), batch)
+
+
+def _purge_owner_ips(session: Session, now: datetime, batch: int, report: PurgeReport) -> None:
+    cutoff = now - timedelta(days=get_settings().owner_ip_retention_days)
+    while True:
+        ids = list(
+            session.execute(
+                select(Owner.id)
+                .where(Owner.created_ip.is_not(None), Owner.created_at < cutoff)
+                .limit(batch)
+                .with_for_update(skip_locked=True)
+            ).scalars()
+        )
+        if not ids:
+            return
+        session.execute(
+            update(Owner)
+            .where(Owner.id.in_(ids))
+            .values(created_ip=None)
+            .execution_options(synchronize_session=False)
+        )
+        session.commit()
+        report.owner_ips += len(ids)
+
+
+def _purge_work_ips(session: Session, now: datetime, batch: int, report: PurgeReport) -> None:
+    cutoff = now - timedelta(days=get_settings().owner_ip_retention_days)
+    for model, active in ((Paper, ACTIVE_PAPER_STATUSES), (ImageJob, ACTIVE_IMAGE_STATUSES)):
+        while True:
+            ids = list(
+                session.execute(
+                    select(model.id)
+                    .where(
+                        model.started_ip.is_not(None),
+                        or_(
+                            model.status.not_in(active),
+                            func.coalesce(model.started_ip_at, model.created_at) < cutoff,
+                        ),
+                    )
+                    .limit(batch)
+                    .with_for_update(skip_locked=True)
+                ).scalars()
+            )
+            if not ids:
+                break
+            session.execute(
+                update(model)
+                .where(model.id.in_(ids))
+                .values(started_ip=None, started_ip_at=None)
+                .execution_options(synchronize_session=False)
+            )
+            session.commit()
+            report.work_ips += len(ids)
 
 
 # --- orphans ---------------------------------------------------------------------------------
@@ -346,30 +419,41 @@ def _sweep_orphans(session: Session, now: datetime, report: PurgeReport) -> None
 # --- depictions -----------------------------------------------------------------------------
 
 
-def _depiction_files(root: Path) -> list[tuple[float, int, Path]]:
-    """(mtime, size, path) of the regular files in `root/<xx>/` (symlinks are never followed)."""
-    found = []
-    try:
-        subdirs = [d for d in root.iterdir() if d.is_dir() and not d.is_symlink()]
-    except FileNotFoundError:
-        return []
-    for subdir in subdirs:
-        try:
-            entries = list(subdir.iterdir())
-        except FileNotFoundError:
-            continue
-        for path in entries:
+def _depiction_files(root: Path) -> tuple[list[tuple[float, int, Path]], list[Path]]:
+    """(mtime, size, path) of the regular files anywhere under `root` (per owner:
+    `<owner id>/<xx>/`), and the directories below `root`, deepest first. Symlinks are never
+    followed."""
+    found, dirs = [], []
+    for top, subdirs, names in os.walk(root, followlinks=False):
+        top_path = Path(top)
+        dirs.extend(top_path / d for d in subdirs)
+        for name in names:
+            path = top_path / name
             try:
                 st = path.lstat()
             except FileNotFoundError:
                 continue
             if stat.S_ISREG(st.st_mode):
                 found.append((st.st_mtime, st.st_size, path))
-    return found
+    dirs.sort(key=lambda d: len(d.parts), reverse=True)
+    return found, dirs
+
+
+def _remove_empty_dirs(dirs: list[Path], cutoff_ts: float) -> None:
+    """Remove the directories (deepest first) that are empty and unchanged since `cutoff_ts`:
+    a younger one may be about to get its first drawing."""
+    for path in dirs:
+        try:
+            if path.is_symlink() or path.lstat().st_mtime >= cutoff_ts:
+                continue
+            path.rmdir()
+        except OSError:  # not empty, gone, or not removable: left for a later run
+            continue
 
 
 def _purge_depictions(now: datetime, report: PurgeReport) -> None:
-    files = sorted(_depiction_files(storage.depictions_dir()))  # oldest first
+    found, dirs = _depiction_files(storage.depictions_dir())
+    files = sorted(found)  # oldest first
     cutoff_ts = (now - timedelta(days=DEPICTION_MAX_DAYS)).timestamp()
     total = sum(size for _, size, _ in files)
     for mtime, size, path in files:
@@ -380,6 +464,7 @@ def _purge_depictions(now: datetime, report: PurgeReport) -> None:
             total -= size
         elif not os.path.lexists(path):
             total -= size  # gone meanwhile; one that could not be removed still counts
+    _remove_empty_dirs(dirs, (now - ORPHAN_MIN_AGE).timestamp())
 
 
 # --- entry points ----------------------------------------------------------------------------
@@ -393,7 +478,8 @@ def purge_expired(
     ocsr_versions: dict[str, str] | None = None,
     report: PurgeReport | None = None,
 ) -> PurgeReport:
-    """Purge expired papers and image jobs, stale cache rows and orphan files (module doc).
+    """Purge expired papers and image jobs, stale cache rows, orphan files, old owner IPs and
+    old depictions (module doc).
 
     Commits once per batch. Each phase runs on its own: a phase that raises is rolled back,
     logged and named in `report.errors`, and the next phase still runs (a soft time limit
@@ -416,6 +502,8 @@ def purge_expired(
             lambda: _purge_ocsr_cache(session, cache_cutoff, versions, batch_size, report),
         ),
         ("orphans", lambda: _sweep_orphans(session, now, report)),
+        ("owner_ips", lambda: _purge_owner_ips(session, now, batch_size, report)),
+        ("work_ips", lambda: _purge_work_ips(session, now, batch_size, report)),
         ("depictions", lambda: _purge_depictions(now, report)),
     ]
     for name, run in phases:

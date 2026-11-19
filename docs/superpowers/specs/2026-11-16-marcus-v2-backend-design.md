@@ -177,10 +177,14 @@ Code location **(call)**: new folder `backend-v2/` in the MARCUS repo, on branch
   (RDKit parse), ms, created_at.
 - `curation`: segment_id, status (`unchecked` | `accepted` | `rejected`), smiles,
   molfile, note, updated_at.
-- `cache_segmentation` (pdf_sha256 + seg model version -> segments) and
-  `cache_ocsr` (image_sha256 + engine + version -> smiles/molfile). Results are copied
-  into the new owner's paper, so the cache never shows one owner's data to another
-  (the other owner had the same bytes).
+- `seg_cache` (owner + pdf_sha256 + seg model version -> segments, and the paper that made
+  it) and `ocsr_cache` (owner + image_sha256 + engine + version -> smiles/molfile). Both are
+  per owner: a hit only ever follows the same owner's own earlier work, so a skipped step,
+  `cached` or `ms` 0 says nothing about other owners (security review F3/F6). Results are
+  copied into the owner's new paper. Deleting the paper drops its seg_cache row; deleting
+  an owner drops both (foreign keys, ON DELETE CASCADE); retention ages them out.
+- Stored structure drawings (`data_root/depictions/<owner id>/`) are per owner too: a
+  stored drawing or `.nodraw` marker never answers another owner's request (F2/F4).
 
 Files on disk under one data root, `/data/{paper_id}/...`. The server makes every
 file name. A client name never reaches a path. This removes the whole path-trick
@@ -242,7 +246,13 @@ missing one (no existence oracle).
 - `GET /queue` (my papers' positions and an estimate)
 - Tools, no paper needed, rate limited: `POST /tools/depict`,
   `POST /tools/smiles-to-molfile`, `POST /tools/mcs`, `POST /tools/compare`
-  (cover v1 depiction and similarity routes)
+  (cover v1 depiction and similarity routes). A depict `highlight` is drawn only with
+  the `highlight_token` that `/tools/mcs` returned with that SMARTS: an HMAC over the
+  SMARTS and the molecules (RDKit canonical SMILES without stereo) the MCS was computed
+  from, valid 30 minutes, and only for one of those molecules. So CDK never searches with a
+  client-chosen pattern (a pattern absent from the molecule can search for minutes); at
+  most 32 matches are highlighted (F5). Key: `MARCUS_HIGHLIGHT_KEY`, else one random key
+  per deployment kept in Redis.
 - `GET /health` (process alive, no DB call), `GET /ready` (DB, Redis, each queue has a
   live worker), `GET /metrics` (internal network only)
 - Admin by CLI only, never HTTP: create or revoke API keys, purge, reset.

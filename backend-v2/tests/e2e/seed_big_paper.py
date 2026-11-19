@@ -7,8 +7,8 @@ tests/; Postgres is not published), read from stdin:
 
 Creates a browser owner, a `done` paper with 10 pages (white 1240 x 1754 PNGs), 200 segments
 (20 per page on a 4 x 5 grid) with their crop PNGs, an `unchecked` curation each and one valid
-`decimer` prediction each with 200 distinct SMILES. Their stored depictions (from an earlier
-run) are removed, so the tools worker has 200 depictions to draw on every run. Prints one JSON line: {"paper_id": ..., "token": ...}. The token is the owner cookie
+`decimer` prediction each with 200 distinct SMILES. Stored depictions are per owner and the
+owner is new, so the tools worker has 200 depictions to draw on every run. Prints one JSON line: {"paper_id": ..., "token": ...}. The token is the owner cookie
 value (`marcus_owner`). Only for the local `marcus-v2` project, never production: it refuses
 (exit 2, nothing written) unless the fake engines are on (MARCUS_ENABLE_FAKE_ENGINES, set only
 by docker-compose.fake.yml).
@@ -56,13 +56,6 @@ def crop_png(k: int) -> bytes:
     return png(image)
 
 
-def forget_depiction(smiles: str) -> None:
-    """A stored drawing of this SMILES (or its no-draw marker) from an earlier run: gone."""
-    sha = hashlib.sha256(smiles.encode()).hexdigest()
-    storage.depiction_path(sha).unlink(missing_ok=True)
-    storage.depiction_marker_path(sha).unlink(missing_ok=True)
-
-
 def bbox(slot: int) -> list[int]:
     """[x0, y0, x1, y1] in page pixels: slot 0..19 on a 4 x 5 grid."""
     col, row = slot % COLS, slot // COLS
@@ -107,7 +100,6 @@ def main() -> None:
             storage.write_atomic(storage.page_image_path(paper.id, page), blank)
             for idx in range(PER_PAGE):
                 k += 1
-                forget_depiction(smiles_for(k))
                 data = crop_png(k)
                 sha = hashlib.sha256(data).hexdigest()
                 storage.write_atomic(storage.segment_crop_path(paper.id, sha), data)

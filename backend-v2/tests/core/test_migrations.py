@@ -122,3 +122,107 @@ def test_migration_0005_up_down(migrated_db):
         assert "title" not in _columns(engine, "papers")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0006_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("papers")}
+        assert cols["first_author"]["nullable"] and cols["year"]["nullable"]
+        command.downgrade(cfg, "0005")
+        cols = _columns(engine, "papers")
+        assert "first_author" not in cols and "year" not in cols and "title" in cols
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0007_caches_per_owner_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        insp = inspect(engine)
+        seg_pk = insp.get_pk_constraint("seg_cache")["constrained_columns"]
+        ocsr_pk = insp.get_pk_constraint("ocsr_cache")["constrained_columns"]
+        assert seg_pk == ["owner_id", "pdf_sha256", "seg_version"]
+        assert ocsr_pk == ["owner_id", "image_sha256", "engine", "engine_version"]
+        fks = {
+            (t, fk["referred_table"]): fk["options"].get("ondelete")
+            for t in ("seg_cache", "ocsr_cache")
+            for fk in insp.get_foreign_keys(t)
+        }
+        assert fks == {
+            ("seg_cache", "owners"): "CASCADE",
+            ("seg_cache", "papers"): "CASCADE",
+            ("ocsr_cache", "owners"): "CASCADE",
+        }
+        assert ("seg_cache", "ix_seg_cache_paper_id") in _indexes(engine)
+        assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
+        assert ("ocsr_cache", "ix_ocsr_cache_created_at") in _indexes(engine)
+        command.downgrade(cfg, "0006")
+        insp = inspect(engine)
+        assert "owner_id" not in _columns(engine, "seg_cache")
+        assert "paper_id" not in _columns(engine, "seg_cache")
+        assert "owner_id" not in _columns(engine, "ocsr_cache")
+        assert insp.get_pk_constraint("seg_cache")["constrained_columns"] == [
+            "pdf_sha256", "seg_version",
+        ]  # fmt: skip
+        assert insp.get_pk_constraint("ocsr_cache")["constrained_columns"] == [
+            "image_sha256", "engine", "engine_version",
+        ]  # fmt: skip
+        assert insp.get_foreign_keys("seg_cache") == insp.get_foreign_keys("ocsr_cache") == []
+        assert ("seg_cache", "ix_seg_cache_paper_id") not in _indexes(engine)
+        assert ("seg_cache", "ix_seg_cache_created_at") in _indexes(engine)
+        assert ("ocsr_cache", "ix_ocsr_cache_created_at") in _indexes(engine)
+        assert {c["name"] for c in insp.get_columns("ocsr_cache")} == {
+            "image_sha256", "engine", "engine_version", "smiles", "molfile", "created_at",
+        }  # fmt: skip
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0008_work_started_ip_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        for table in ("papers", "image_jobs"):
+            cols = {c["name"]: c for c in inspect(engine).get_columns(table)}
+            assert cols["started_ip"]["nullable"]
+            assert (table, f"ix_{table}_started_ip") in _indexes(engine)
+        command.downgrade(cfg, "0007")
+        for table in ("papers", "image_jobs"):
+            assert "started_ip" not in _columns(engine, table)
+            assert (table, f"ix_{table}_started_ip") not in _indexes(engine)
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0009_work_started_ip_at_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        for table in ("papers", "image_jobs"):
+            cols = {c["name"]: c for c in inspect(engine).get_columns(table)}
+            assert cols["started_ip_at"]["nullable"]
+        command.downgrade(cfg, "0008")
+        for table in ("papers", "image_jobs"):
+            assert "started_ip_at" not in _columns(engine, table)
+            assert "started_ip" in _columns(engine, table)
+    finally:
+        command.upgrade(cfg, "head")

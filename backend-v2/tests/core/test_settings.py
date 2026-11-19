@@ -22,3 +22,15 @@ def test_seg_version_setting(monkeypatch, clear_settings_cache):
     monkeypatch.setenv("MARCUS_SEG_VERSION", "d0045d9")
     clear_settings_cache()
     assert get_settings().seg_version == "d0045d9"
+
+
+def test_owner_ip_retention_days_setting(monkeypatch, clear_settings_cache):
+    import pytest
+    from pydantic import ValidationError
+
+    assert Settings().owner_ip_retention_days == 30
+    monkeypatch.setenv("MARCUS_OWNER_IP_RETENTION_DAYS", "7")
+    clear_settings_cache()
+    assert get_settings().owner_ip_retention_days == 7
+    with pytest.raises(ValidationError):
+        Settings(owner_ip_retention_days=0)

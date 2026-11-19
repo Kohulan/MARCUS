@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Prometheus alert MarcusDiskUploadsRefused (ops/prometheus-alerts.yml) uses the same value.
     min_free_disk_bytes: int = Field(5 * 2**30, ge=0)
     retention_days: int = 30
+    # The IP recorded when a browser first gets its key (owners.created_ip) is deleted this
+    # many days after it was recorded (daily retention purge). The new-key limit needs 1 hour.
+    # The privacy page (frontend-v2/src/pages/Privacy.tsx, pre-rendered) says "30 days":
+    # change it with this value.
+    owner_ip_retention_days: int = Field(30, gt=0)
     browser_max_active_papers: int = 3
     # New browser owners per client address per hour that were used (came back with their
     # cookie, or have a paper or image job). Owners never used again (the dropped cookies of a
@@ -54,6 +59,9 @@ class Settings(BaseSettings):
     # and 3 failures in 5 s open its breaker (marcus.api.security)
     rate_limit_redis_timeout_s: float = Field(1.0, gt=0)
     cors_origins: list[str] = []
+    # HMAC key of the /tools/mcs highlight tokens (marcus.api.highlight). Unset: one random key
+    # per deployment, kept in Redis. Never logged (SecretStr).
+    highlight_key: SecretStr | None = Field(None, min_length=32)
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
     log_level: str = "INFO"  # JSON logs (marcus.core.logging)

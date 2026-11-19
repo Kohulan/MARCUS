@@ -39,11 +39,19 @@ def test_storage_rejects_non_uuid():
         storage.paper_dir("x")
 
 
-def test_depiction_paths():
+def test_depiction_paths_are_per_owner():
     root = get_settings().data_root
     sha = "ab" + "0" * 62
-    assert storage.depiction_path(sha) == root / "depictions" / "ab" / f"{sha}.svg"
-    assert storage.depiction_marker_path(sha) == root / "depictions" / "ab" / f"{sha}.nodraw"
+    owner = uuid.UUID(int=7)
+    base = root / "depictions" / str(owner) / "ab"
+    assert storage.depiction_path(owner, sha) == base / f"{sha}.svg"
+    assert storage.depiction_marker_path(owner, sha) == base / f"{sha}.nodraw"
+    other = uuid.UUID(int=8)
+    assert storage.depiction_path(other, sha) != storage.depiction_path(owner, sha)
+    with pytest.raises(TypeError):
+        storage.depiction_path(str(owner), sha)
+    with pytest.raises(TypeError):
+        storage.depiction_marker_path("../x", sha)
 
 
 @pytest.mark.parametrize(
@@ -52,6 +60,6 @@ def test_depiction_paths():
 )
 def test_depiction_path_rejects_bad_sha(bad):
     with pytest.raises(ValueError):
-        storage.depiction_path(bad)
+        storage.depiction_path(uuid.UUID(int=7), bad)
     with pytest.raises(ValueError):
-        storage.depiction_marker_path(bad)
+        storage.depiction_marker_path(uuid.UUID(int=7), bad)

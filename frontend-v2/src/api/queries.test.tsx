@@ -25,6 +25,8 @@ function paper(curation: CurationOut | null): PaperDetail {
     pages: 1,
     doi: null,
     title: null,
+    first_author: null,
+    year: null,
     engine: "decimer",
     ocsr_mode: "auto",
     created_at: "2026-11-18T00:00:00Z",
@@ -199,6 +201,86 @@ describe("useSaveCuration optimistic write", () => {
     });
     expect(depictionKey(cached())).toBe(saved);
     expect(saved).not.toBe(key);
+  });
+
+  it("a save that times out rolls back, then the held refresh runs", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue(paper(null));
+    const stop = new QueryObserver(client, {
+      queryKey: keys.paper("p1"),
+      queryFn: () => api.getPaper("p1"),
+      staleTime: Infinity,
+    }).subscribe(() => undefined);
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let saving!: Promise<unknown>;
+    await act(async () => {
+      saving = result.current.save("s1", { status: "accepted" }).catch((e: unknown) => e);
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    getPaper.mockClear();
+    refreshPaper(client, "p1");
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(getPaper).not.toHaveBeenCalled(); // held while the PUT is on the wire
+    await act(async () => {
+      held[0]!.reject(new ApiError(504, "The server is busy, try again in a moment."));
+      await saving;
+    });
+    expect(cached().curation).toBeNull(); // rolled back
+    await vi.waitFor(() => expect(getPaper).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    stop();
+  });
+
+  it("a timed-out save fetches the paper again on its own: the PUT may have been saved", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue(
+      paper({ status: "accepted", smiles: null, molfile: null, note: null } as CurationOut),
+    );
+    const stop = new QueryObserver(client, {
+      queryKey: keys.paper("p1"),
+      queryFn: () => api.getPaper("p1"),
+      staleTime: Infinity,
+    }).subscribe(() => undefined);
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let saving!: Promise<unknown>;
+    await act(async () => {
+      saving = result.current.save("s1", { status: "accepted" }).catch((e: unknown) => e);
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    getPaper.mockClear();
+    await act(async () => {
+      held[0]!.reject(new ApiError(504, "The server is busy, try again in a moment."));
+      await saving;
+    });
+    await vi.waitFor(() => expect(getPaper).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(cached().curation?.status).toBe("accepted")); // the server's
+    stop();
+  });
+
+  it("a save the server refused (4xx) is not fetched again", async () => {
+    client.setQueryData(keys.paper("p1"), paper(null));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue(paper(null));
+    const stop = new QueryObserver(client, {
+      queryKey: keys.paper("p1"),
+      queryFn: () => api.getPaper("p1"),
+      staleTime: Infinity,
+    }).subscribe(() => undefined);
+    const held = holdPuts();
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let saving!: Promise<unknown>;
+    await act(async () => {
+      saving = result.current.save("s1", { status: "accepted" }).catch((e: unknown) => e);
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+    });
+    getPaper.mockClear();
+    await act(async () => {
+      held[0]!.reject(new ApiError(422, "bad"));
+      await saving;
+    });
+    await act(() => new Promise((r) => setTimeout(r, 1500)));
+    expect(getPaper).not.toHaveBeenCalled();
+    stop();
   });
 
   it("a refresh asked for while a save is on the wire waits for it", async () => {

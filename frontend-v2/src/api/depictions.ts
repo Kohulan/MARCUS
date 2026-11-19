@@ -20,7 +20,7 @@
 // and asks nothing. Behind that, the browser HTTP cache still applies (Cache-Control:
 // private, max-age=86400 and the `v=<depictionKey>` in the URL).
 import { useCallback, useEffect, useState } from "react";
-import { api, isGone, ownerReady, svgBlobUrl, toApiError } from "./client";
+import { api, ApiError, isGone, ownerReady, svgBlobUrl, toApiError } from "./client";
 import type { DepictReply } from "./types";
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
@@ -234,12 +234,37 @@ export function useDepiction(url: string | null): {
   return { src: state.src, failed: state.failed, retry: state.again ? retry : null };
 }
 
-/** A /tools/depict drawing: key ["depict", smiles, highlight] (null: a plain drawing). */
-export function depictQuery(smiles: string, highlight: string | null) {
+/** The MCS SMARTS to highlight and the token /tools/mcs issued with it. */
+export type Highlight = { smarts: string; token: string };
+
+/**
+ * A fresh highlight for one whose token was refused: `stale` is the refused token. Null when
+ * there is no other token to try.
+ */
+export type RenewHighlight = (stale: string) => Promise<Highlight | null>;
+
+/**
+ * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing). The token
+ * is not in the key: a new token for the same SMARTS draws the same picture. A highlighted
+ * drawing refused with a 422 (the token expired, or the key rotated) asks `renew` for a new
+ * token once and draws once more with it; a second refusal is the answer (no loop).
+ */
+export function depictQuery(smiles: string, highlight: Highlight | null, renew?: RenewHighlight) {
+  const draw = (h: Highlight) =>
+    api.depict(smiles, { highlight: h.smarts, highlightToken: h.token });
   return {
-    queryKey: ["depict", smiles, highlight] as const,
-    queryFn: (): Promise<DepictReply> =>
-      highlight === null ? api.depict(smiles) : api.depict(smiles, { highlight }),
+    queryKey: ["depict", smiles, highlight?.smarts ?? null] as const,
+    queryFn: async (): Promise<DepictReply> => {
+      if (highlight === null) return api.depict(smiles);
+      try {
+        return await draw(highlight);
+      } catch (err) {
+        if (!renew || !(err instanceof ApiError) || err.status !== 422) throw err;
+        const fresh = await renew(highlight.token);
+        if (fresh === null) throw err;
+        return draw(fresh);
+      }
+    },
     staleTime: Infinity,
   };
 }

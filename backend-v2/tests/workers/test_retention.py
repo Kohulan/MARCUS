@@ -211,12 +211,14 @@ def test_expired_image_job_cancelled_and_purged(db_session):
 
 
 def _seg(s, sha: str, version_key: str, created: datetime) -> None:
-    s.add(SegCache(pdf_sha256=sha * 64, seg_version=version_key, payload={}, created_at=created))
+    paper = make_paper(s)
+    s.add(SegCache(owner_id=paper.owner_id, paper_id=paper.id, pdf_sha256=sha * 64,
+                   seg_version=version_key, payload={}, created_at=created))  # fmt: skip
 
 
 def _ocsr(s, sha: str, engine: str, version: str, created: datetime) -> None:
-    s.add(OcsrCache(image_sha256=sha * 64, engine=engine, engine_version=version, smiles="C",
-                    created_at=created))  # fmt: skip
+    s.add(OcsrCache(owner_id=make_owner(s).id, image_sha256=sha * 64, engine=engine,
+                    engine_version=version, smiles="C", created_at=created))  # fmt: skip
 
 
 def test_seg_cache_purged_by_age_and_version(db_session, monkeypatch):
@@ -377,11 +379,105 @@ def test_file_error_is_counted_not_raised(db_session, monkeypatch):
     assert s.get(Paper, paper.id) is None  # rows go; the orphan sweep retries the files
 
 
+# --- owner IPs -------------------------------------------------------------------------
+
+
+def _owner_with_ip(s, ip: str | None, days_old: float) -> Owner:
+    owner = make_owner(s)
+    owner.created_ip = ip
+    owner.created_at = NOW - timedelta(days=days_old)
+    s.flush()
+    return owner
+
+
+def test_owner_ips_deleted_after_30_days(db_session):
+    """The IP recorded when a browser first got its key goes 30 days after it was recorded;
+    the owner (and its papers) stay. The new-key limit only looks at the last hour."""
+    s = db_session
+    old = _owner_with_ip(s, "203.0.113.7", 31)
+    v6 = _owner_with_ip(s, "2001:db8::1", 30.5)
+    young = _owner_with_ip(s, "198.51.100.2", 29)
+    unknown = _owner_with_ip(s, None, 40)
+    paper = make_paper(s, old)
+    s.commit()
+
+    report = purge(s)
+
+    assert report.owner_ips == 2
+    s.expire_all()
+    ips = {o.id: o.created_ip for o in s.execute(select(Owner)).scalars()}
+    assert ips[old.id] is None and ips[v6.id] is None and ips[unknown.id] is None
+    assert str(ips[young.id]) == "198.51.100.2"
+    assert s.get(Paper, paper.id) is not None  # only the IP goes
+
+
+def test_owner_ip_retention_is_a_setting(db_session, monkeypatch):
+    monkeypatch.setenv("MARCUS_OWNER_IP_RETENTION_DAYS", "7")
+    get_settings.cache_clear()
+    s = db_session
+    week = _owner_with_ip(s, "203.0.113.8", 8)
+    day = _owner_with_ip(s, "203.0.113.9", 1)
+    s.commit()
+
+    assert purge(s, batch_size=1).owner_ips == 1
+    s.expire_all()
+    assert s.get(Owner, week.id).created_ip is None
+    assert str(s.get(Owner, day.id).created_ip) == "203.0.113.9"
+
+
+def test_work_addresses_are_a_backstop_purge(db_session):
+    """The planner clears a paper's or job's address when the work ends; retention clears any
+    left on work that is no longer active, and on work older than the IP retention."""
+    s = db_session
+    active = make_paper(s)
+    ended = make_paper(s)
+    old = make_paper(s)
+    job, _ = make_image_job(s)
+    for row, ip in ((active, "198.51.100.1"), (ended, "198.51.100.2"), (old, "198.51.100.3"),
+                    (job, "198.51.100.4")):  # fmt: skip
+        row.started_ip = ip
+    ended.status = "done"
+    job.status = "failed"
+    old.created_at = NOW - timedelta(days=31)
+    s.commit()
+
+    report = purge(s)
+
+    assert report.work_ips == 3
+    s.expire_all()
+    assert s.get(Paper, active.id).started_ip == "198.51.100.1"
+    assert s.get(Paper, ended.id).started_ip is None
+    assert s.get(Paper, old.id).started_ip is None
+    assert s.get(ImageJob, job.id).started_ip is None
+
+
+def test_work_address_age_is_when_it_was_set(db_session):
+    """A paper reopened today keeps its address however old the paper; an address set longer
+    ago than the IP retention goes (rows without a set time fall back to created_at)."""
+    s = db_session
+    reopened = make_paper(s)
+    stale = make_paper(s)
+    for row, ip, days in ((reopened, "198.51.100.5", 1), (stale, "198.51.100.6", 31)):
+        row.started_ip = ip
+        row.created_at = NOW - timedelta(days=40)
+        row.started_ip_at = NOW - timedelta(days=days)
+    s.commit()
+
+    assert purge(s).work_ips == 1
+    s.expire_all()
+    assert s.get(Paper, reopened.id).started_ip == "198.51.100.5"
+    assert s.get(Paper, stale.id).started_ip is None
+    assert s.get(Paper, stale.id).started_ip_at is None
+
+
 # --- depictions -----------------------------------------------------------------------
 
 
-def _depiction(sha: str, days_old: float, size: int = 10, suffix: str = ".svg"):
-    path = storage.depiction_path(sha)
+DEPICTION_OWNER = uuid.UUID(int=42)
+
+
+def _depiction(sha: str, days_old: float, size: int = 10, suffix: str = ".svg", owner=None):
+    path = storage.depiction_path(owner or DEPICTION_OWNER, sha)
     path = path.with_suffix(suffix)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)
@@ -401,6 +497,28 @@ def test_retention_purges_old_depictions(db_session):
     assert report.depictions == 3
     assert not old.exists() and not old_marker.exists() and not old_tmp.exists()
     assert young.is_file() and young_marker.is_file()
+
+
+def test_retention_purges_depictions_of_every_owner(db_session):
+    """Drawings sit in per-owner directories (F2/F4): each owner's old files go, young stay;
+    a directory left empty for over a day is removed too."""
+    old_a = _depiction("a" * 64, 31, owner=uuid.UUID(int=1))
+    old_b = _depiction("a" * 64, 31, owner=uuid.UUID(int=2))
+    young_b = _depiction("b" * 64, 2, owner=uuid.UUID(int=2))
+    empty = storage.depictions_dir() / str(uuid.UUID(int=3)) / "cd"
+    empty.mkdir(parents=True)
+    fresh_empty = storage.depictions_dir() / str(uuid.UUID(int=4)) / "ef"
+    fresh_empty.mkdir(parents=True)
+    for path in (empty, empty.parent):
+        age(path, 2 * 86400)
+
+    report = purge(db_session)
+
+    assert report.depictions == 2
+    assert not old_a.exists() and not old_b.exists() and young_b.is_file()
+    assert not empty.exists()  # empty for over a day (its parent goes on a later run)
+    assert fresh_empty.is_dir()  # may be about to get its first drawing
+    assert young_b.parent.is_dir()
 
 
 def test_retention_depictions_size_cap_oldest_first(db_session, monkeypatch):
@@ -498,7 +616,8 @@ def test_a_failing_phase_does_not_skip_the_others(db_session, monkeypatch, caplo
     assert report.errors == ["image_jobs"]
     assert report.papers == 1 and report.seg_cache == 1  # before and after the broken phase
     assert "image_jobs" in caplog.text and "disk on fire" in caplog.text
-    assert count(s, Paper) == 0 and count(s, SegCache) == 0
+    # the paper left is the live one whose segmentation the purged cache row held
+    assert count(s, Paper) == 1 and count(s, SegCache) == 0
 
 
 @pytest.mark.parametrize("bad", [0, -1])
