@@ -390,9 +390,11 @@
   pointer-events: auto;
   background: radial-gradient(120% 90% at 30% 0%, var(--surface) 0%, #fbfbf7 45%, #efefe8 100%);
   box-shadow: var(--porcelain);
+  isolation: isolate;
 }
 
-/* The glaze: a soft white highlight on the upper left of each bubble. */
+/* The glaze: a soft white highlight on the upper left of each bubble, under the text (over
+   it, it would wash the letters out). */
 .site-footer__copy::after,
 .site-footer__credit::after,
 .site-footer__nav::after {
@@ -403,6 +405,7 @@
   width: 38%;
   height: 38%;
   border-radius: 999px;
+  z-index: -1;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
   pointer-events: none;
 }

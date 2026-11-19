@@ -56,8 +56,7 @@ function BubbleFooter() {
       </p>
       <p className="site-footer__credit">
         Built with <Icon icon={faMugHot} className="fa-mug" />
-        <span className="visually-hidden">coffee </span>
-        by <Away href="https://kohulanr.com">Kohulan.R</Away> at the{" "}
+        <span className="visually-hidden">coffee</span> by <Away href="https://kohulanr.com">Kohulan.R</Away> at the{" "}
         <Away href="https://github.com/Steinbeck-Lab">Steinbeck Lab</Away>,{" "}
         <Away href="https://www.uni-jena.de">Friedrich Schiller University Jena</Away>
       </p>
