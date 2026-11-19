@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from marcus.core.queues import SLOTS, TOOLS_QUEUE
@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # and 3 failures in 5 s open its breaker (marcus.api.security)
     rate_limit_redis_timeout_s: float = Field(1.0, gt=0)
     cors_origins: list[str] = []
+    # HMAC key of the /tools/mcs highlight tokens (marcus.api.highlight). Unset: one random key
+    # per deployment, kept in Redis. Never logged (SecretStr).
+    highlight_key: SecretStr | None = Field(None, min_length=32)
     image_decode_concurrency: int = Field(2, gt=0)  # Pillow decodes at once, per API process
     expose_docs: bool = False
     log_level: str = "INFO"  # JSON logs (marcus.core.logging)

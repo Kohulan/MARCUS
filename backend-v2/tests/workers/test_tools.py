@@ -256,3 +256,53 @@ def test_depict_highlight_at_the_atom_cap_is_drawn():
     assert MAX_HIGHLIGHT_ATOMS == 128
     assert depict("CCO", "svg", 200, 200, highlight="~".join(["*"] * 128)).startswith("<svg")
     assert depict("CCO", "svg", 200, 200, highlight="[#6]-[#8]").startswith("<svg")
+
+
+BINDING_CASES = [
+    "CCO",
+    "c1ccccc1O",
+    "C[C@H](N)C(=O)O",  # stereo: dropped from the key on both sides
+    "F/C=C/F",
+    "C[N+](=O)[O-]",
+    "CN(=O)=O",  # nitro written pentavalent
+    "[Na+].[Cl-]",
+    "c1ccc2[nH]ccc2c1",
+    "O=C1c2ccccc2C(=O)c2ccccc21",
+    "CC(C)(C)[Si](C)(C)OC",
+]
+
+
+@needs_cdk
+@pytest.mark.parametrize("smiles", BINDING_CASES)
+def test_highlight_binding_agrees_for_a_smiles_and_its_molfiles(smiles):
+    """F5: Compare's MCS takes each prediction's molfile (the engine's, made by RDKit, or CDK's
+    /tools/smiles-to-molfile) and draws the prediction's SMILES; the server's binding key of
+    both must be the same, or the highlight would be refused."""
+    from rdkit import Chem
+
+    from marcus.api.highlight import binding_key_of_smiles, binding_keys_of_molfiles
+    from marcus.workers.tools import smiles_to_molfile
+
+    drawn = binding_key_of_smiles(smiles)
+    assert drawn is not None
+    cdk = smiles_to_molfile(smiles)
+    rdkit = Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))
+    assert binding_keys_of_molfiles([cdk]) == [drawn]
+    assert binding_keys_of_molfiles([rdkit]) == [drawn]
+
+
+@needs_cdk
+def test_mcs_smarts_highlights_each_of_its_molecules():
+    """The happy path of a signed highlight: the MCS SMARTS of two molecules, drawn on each,
+    gives a highlighted drawing (CDK's outer glow), unlike the plain one."""
+    from rdkit import Chem
+
+    from marcus.workers.tools import depict, mcs
+
+    molfiles = [Chem.MolToMolBlock(Chem.MolFromSmiles(s)) for s in ("c1ccccc1CO", "c1ccccc1CN")]
+    smarts = mcs(molfiles)["mcs_smarts"]
+    assert smarts
+    for smiles in ("c1ccccc1CO", "c1ccccc1CN"):
+        plain = depict(smiles, "svg", 300, 300)
+        lit = depict(smiles, "svg", 300, 300, highlight=smarts)
+        assert lit != plain and "#add8e6" in lit.lower()
