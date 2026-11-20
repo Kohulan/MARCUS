@@ -17,11 +17,18 @@
   border-top: 1px solid var(--line);
 }
 
+/* A control the keyboard reaches is scrolled clear of the sticky caption (44 px), and on
+   the pages a marker's tag too (WCAG 2.4.11). */
 .pv-col {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+  scroll-padding: 52px 0 8px;
+}
+
+.pv-col--pages {
+  scroll-padding-top: 72px;
 }
 
 .pv-col + .pv-col {
@@ -726,8 +733,9 @@ button.pv-ann__value--shown:hover {
   flex-direction: column;
 }
 
-/* An open engine menu opens downwards in the list (upwards it would slide under the sticky
-   caption or past the column's top), above the cards below and the caption. */
+/* Without the Popover API (ui/anchor's fallback) an open engine menu opens downwards in the
+   list, above the cards below and the caption. With it, the menu lives in the top layer and
+   is placed by the client, so the column never clips it. */
 .pv-list .card:has(.engine-menu__panel) {
   z-index: 4;
 }

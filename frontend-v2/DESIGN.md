@@ -480,7 +480,8 @@ Square surface slips with a line border and the glass-lift shadow, mono 12px upp
 - **Do** give every control a control-border (#7E8279) edge.
 - **Do** set headings, labels and buttons uppercase through CSS and keep source text in sentence case.
 - **Do** place glass pills on paper, surface, sunken or the glass bed, with their solid fallbacks intact.
-- **Do** keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP). Positions that move at run time (the nav's drop) go through the CSSOM (style.setProperty).
+- **Do** keep every size, tint and rotation in a stylesheet class: no inline style attributes in pre-rendered components and no innerHTML (strict CSP). Positions that move at run time (the nav's drop, an open menu) go through the CSSOM (style.setProperty).
+- **Do** open menus (a card's More and engine menus, Export) in the top layer next to their button (a manual popover placed by `ui/anchor`): on the preferred side when it fits, else flipped, shifted to stay 8px inside the window, capped in height with its own scroll, following its button on scroll and closing once the button scrolls out of its column. No scrolling column or sticky caption may cut a menu off. In the Paper view, whatever a click scrolls into a column (a card, a marker with its tag) lands below the column's sticky caption.
 - **Do** draw icons with the Icon component (Font Awesome Free, named imports), next to their word.
 - **Do** use the one easing, cubic-bezier(0.16, 1, 0.3, 1), at 160 to 220ms, and drop motion under prefers-reduced-motion.
 
