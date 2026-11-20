@@ -721,9 +721,6 @@
 }
 
 .rp__stage {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   white-space: nowrap;
   color: var(--muted);
 }
@@ -739,6 +736,8 @@
 }
 
 .rp__tick {
+  margin-right: 6px;
+  vertical-align: -0.125em;
   color: var(--green);
 }
 
@@ -746,10 +745,6 @@
 .rp__line--current {
   font-weight: 500;
   color: var(--ink);
-}
-
-.rp__count {
-  white-space: pre;
 }
 
 .rp__line {
