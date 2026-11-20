@@ -46,6 +46,22 @@ export default function AnnotationPanel(props: Props) {
     [],
   );
   const section = useRef<HTMLElement>(null);
+  // The last action in the panel came from a pointer: a focus the panel then moves itself shows
+  // no keyboard ring (browsers draw one when the clicked control is gone), until a key or blur.
+  const pointer = useRef(false);
+  const focusAfter = useCallback((el: HTMLElement | null | undefined) => {
+    if (!el) return;
+    el.focus();
+    if (!pointer.current) return;
+    el.setAttribute("data-quiet-focus", "");
+    const clear = () => {
+      el.removeAttribute("data-quiet-focus");
+      el.removeEventListener("blur", clear);
+      el.removeEventListener("keydown", clear);
+    };
+    el.addEventListener("blur", clear);
+    el.addEventListener("keydown", clear);
+  }, []);
 
   async function start() {
     setError(null);
@@ -73,7 +89,8 @@ export default function AnnotationPanel(props: Props) {
 
   // A run that starts or ends is said; the control that was clicked is gone, so the focus
   // (when it was in the panel, or dropped to the page with that control) goes to the panel
-  // while it runs, then to Edit or Try again. A focus elsewhere on the page stays there.
+  // while it runs, then to Edit or Try again (a refused start: back to Annotate). A run that
+  // fails over values already shown is said as failed. A focus elsewhere on the page stays.
   const before = useRef(phase);
   useEffect(() => {
     const was = before.current;
@@ -83,19 +100,23 @@ export default function AnnotationPanel(props: Props) {
     const active = document.activeElement;
     const ours = !active || active === document.body || (box !== null && box.contains(active));
     const take = (el: HTMLElement | null | undefined) => {
-      if (ours && el) el.focus();
+      if (ours) focusAfter(el);
     };
+    const failed = () => say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
     if (phase === "running") {
       say("Annotating…");
       take(box);
     } else if (was === "running" && phase === "values") {
-      say("Annotation ready");
+      if (failedStep) failed();
+      else say("Annotation ready");
       take(box?.querySelector<HTMLElement>(".pv-ann__actions button"));
     } else if (was === "running" && phase === "failed") {
-      say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
+      failed();
+      take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
+    } else if (was === "running" && phase === "start") {
       take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
     }
-  }, [phase, failedStep, say]);
+  }, [phase, failedStep, say, focusAfter]);
 
   let body;
   if (phase === "running") {
@@ -105,7 +126,7 @@ export default function AnnotationPanel(props: Props) {
       </p>
     );
   } else if (phase === "values") {
-    body = <Fields {...props} failedStep={failedStep} say={say} />;
+    body = <Fields {...props} failedStep={failedStep} say={say} focusAfter={focusAfter} />;
   } else {
     body = (
       <div className="pv-ann__start">
@@ -129,7 +150,18 @@ export default function AnnotationPanel(props: Props) {
   }
 
   return (
-    <section ref={section} className="pv-ann" aria-label="Annotation" tabIndex={-1}>
+    <section
+      ref={section}
+      className="pv-ann"
+      aria-label="Annotation"
+      tabIndex={-1}
+      onPointerDown={() => {
+        pointer.current = true;
+      }}
+      onKeyDown={() => {
+        pointer.current = false;
+      }}
+    >
       {body}
       {error !== null && (
         <p className="pv-ann__problem" role="alert">
@@ -151,7 +183,12 @@ function Fields({
   onReset,
   failedStep,
   say,
-}: Props & { failedStep: StepOut | null; say: (text: string) => void }) {
+  focusAfter,
+}: Props & {
+  failedStep: StepOut | null;
+  say: (text: string) => void;
+  focusAfter: (el: HTMLElement | null | undefined) => void;
+}) {
   const values = annotation.values!;
   const positions = shownPositions(annotation);
   const curated = annotation.curated !== null;
@@ -167,8 +204,8 @@ function Fields({
   useEffect(() => {
     if (busy || !refocus.current) return;
     refocus.current = false;
-    editButton.current?.focus();
-  }, [busy]);
+    focusAfter(editButton.current);
+  }, [busy, focusAfter]);
   const wasEditing = useRef(false);
 
   useEffect(() => {
@@ -178,9 +215,9 @@ function Fields({
       if (panel) panel.scrollTop = 0;
       form.current?.querySelector("textarea")?.focus({ preventScroll: true });
     }
-    else if (wasEditing.current) editButton.current?.focus();
+    else if (wasEditing.current) focusAfter(editButton.current);
     wasEditing.current = editing;
-  }, [editing]);
+  }, [editing, focusAfter]);
 
   /** Shows the next occurrence and says where the walk stands ("Taxus brevifolia: 2 of 5"). */
   function show(field: string, value: string, count: number) {

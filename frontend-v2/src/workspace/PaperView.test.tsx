@@ -780,6 +780,66 @@ describe("Paper view: annotation", () => {
     expect(document.activeElement).toBe(again);
   });
 
+  it("a run that fails while earlier values are shown is said as failed (B-rr1)", async () => {
+    // a re-run (e.g. asked from another tab) over values the panel already shows
+    renderAt(paper([segment("s1")], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep()],
+      ann: annotated({ status: "running", step: annStep() }),
+    });
+    const p = await panel();
+    await within(p).findByText("Annotating…", { selector: "span" });
+    const failed = annStep({ status: "failed", error_class: "timeout" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotated({ status: "failed", step: failed }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), failed] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    expect(await within(p).findByText("The last run failed: it took too long")).toBeInTheDocument();
+    const live = p.querySelector('[aria-live="polite"]')!;
+    await waitFor(() => expect(live).toHaveTextContent("Annotation failed: it took too long"));
+    expect(live).not.toHaveTextContent("Annotation ready");
+  });
+
+  it("a start the server refuses gives the focus back to Annotate (B-rr2)", async () => {
+    vi.spyOn(api, "startAnnotation").mockRejectedValue(new ApiError(503, "The annotation model is not running"));
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    const button = within(p).getByRole("button", { name: "Annotate" });
+    button.focus();
+    fireEvent.click(button);
+    await within(p).findByRole("alert");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(p).getByRole("button", { name: "Annotate" })),
+    );
+  });
+
+  it("a focus the panel moves after a mouse click shows no keyboard ring; a key brings it back (B-rr4)", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    const button = within(p).getByRole("button", { name: "Annotate" });
+    fireEvent.pointerDown(button);
+    button.focus();
+    fireEvent.click(button);
+    await within(p).findByText("Annotating…", { selector: "span" });
+    expect(document.activeElement).toBe(p);
+    expect(p).toHaveAttribute("data-quiet-focus");
+    fireEvent.keyDown(p, { key: "Tab" });
+    expect(p).not.toHaveAttribute("data-quiet-focus");
+  });
+
+  it("a focus the panel moves after a key keeps the keyboard ring (B-rr4)", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    const button = within(p).getByRole("button", { name: "Annotate" });
+    button.focus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button);
+    await within(p).findByText("Annotating…", { selector: "span" });
+    expect(document.activeElement).toBe(p);
+    expect(p).not.toHaveAttribute("data-quiet-focus");
+  });
+
   it("a focus elsewhere on the page is left where it is when the run ends", async () => {
     vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
     renderAt(paper([segment("s1")]), { doc: ANN_DOC });

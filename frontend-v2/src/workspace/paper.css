@@ -410,6 +410,13 @@
   outline-offset: -3px;
 }
 
+/* A focus the panel moved itself after a mouse click (AnnotationPanel focusAfter): no keyboard
+   ring until a key is pressed or the focus leaves. */
+.pv-ann[data-quiet-focus]:focus-visible,
+.pv-ann [data-quiet-focus]:focus-visible {
+  outline: none;
+}
+
 .pv-ann:has(.pv-ann__form) {
   max-height: 70%;
 }
