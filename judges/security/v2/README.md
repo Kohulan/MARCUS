@@ -7,7 +7,7 @@ that replaced the v1 one. Every test asserts the SAFE behaviour.
 
 **No vacuous passes.** Each test first calls its v2 route with a valid request and asserts a 2xx
 (`helpers.expect_ok`, "EXISTENCE CHECK FAILED ..."), inside the test body, so a missing route
-fails the test. Run against v1 (which has no `/api/v2`), all 20 runnable tests fail at that check.
+fails the test. Run against v1 (which has no `/api/v2`), all 21 runnable tests fail at that check.
 
 ## Running
 
@@ -23,7 +23,7 @@ The stack's nginx serves the v2 web UI too (the `marcus-v2-nginx:local` image bu
 `frontend-v2/`), so `MARCUS_FRONTEND_URL` is the same edge. The browser half of #14 needs
 Playwright's Chromium (`uv run playwright install chromium`).
 
-Expected: 20 passed, 0 skipped. About 7 minutes, most of it the fake pipeline
+Expected: 21 passed, 0 skipped. About 7 minutes, most of it the fake pipeline
 (one paper is about 35 s, mostly docling) and the XFF test, which waits for the start of a
 rate-limit window and, after its burst, for the next one.
 
@@ -68,8 +68,8 @@ rate-limit window and, after its burst, for the next one.
 | 8 | `test_rate_limit_and_session_bypass::test_burst_requests_eventually_get_rate_limited` | `GET /latest/decimer/health` burst | same | `POST /api/v2/tools/smiles-to-molfile` burst (tools 60/min per owner) | 429 `{"detail": "rate limited"}` with `Retry-After` within 2×60+1 calls; another owner is not limited by it |
 | 9 | `test_rate_limit_and_session_bypass::test_api_calls_without_any_session_are_rejected` | `GET /latest/docling_conversion/list_pdfs` with no session | same | `GET /api/v2/papers` with no credential, with a forged cookie, with a forged `mk_` key | v2 does not 401 a credential-less call by design: it becomes a NEW empty owner (cookie HttpOnly, SameSite=Strict, Path=/api/v2, Secure), sees nothing of anyone, never shares an owner with another credential-less call; a forged cookie is a new owner; a forged API key is 401 |
 | 10 | `test_no_auth_session_and_listings::test_session_cannot_be_removed_by_an_unrelated_caller` | `DELETE /session/remove/{id}` | same | `DELETE /api/v2/papers/{id}` | another owner and a credential-less caller get the byte-identical 404 as a random id; the paper is untouched; a deleted paper gets the same 404 as a missing one |
-| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | the API's real route table (`create_app()` inside the api container) + `DELETE /api/v2/papers/{id}` for the existence check | the route table equals the reviewed allowlist (29 routes, the same set as `backend-v2/tests/api/test_security_layer.py` ALLOWED_ROUTES; a new route fails until reviewed and listed); every route but `GET /health` and `GET /ready` depends on `current_owner`; 11 global/admin shapes are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
-| 12 | `test_no_auth_session_and_listings::test_uploaded_pdf_is_not_listed_to_an_unrelated_caller` | `GET /latest/docling_conversion/list_pdfs` | same | `GET /api/v2/papers`, `GET /api/v2/queue`, and 12 per-resource routes incl. the new `GET /api/v2/papers/{id}/steps` (R18), `/events`, `/text`, `/export`, `/segments/{id}/image`, `POST .../predictions`, `PUT .../curation`, `GET /api/v2/images/{id}` | another owner and a credential-less caller: not listed, not in `/queue`, and every route gives the byte-identical 404 as a random id |
+| 11 | `test_no_auth_session_and_listings::test_global_session_reset_requires_a_credential` | `POST /session/reset` | same | the API's real route table (`create_app()` inside the api container) + `DELETE /api/v2/papers/{id}` for the existence check | the route table equals the reviewed allowlist (33 routes, the same set as `backend-v2/tests/api/test_security_layer.py` ALLOWED_ROUTES; a new route fails until reviewed and listed); every route but `GET /health` and `GET /ready` depends on `current_owner`; 11 global/admin shapes are never 2xx without a credential; a forged API key is 401 on read, delete and tools |
+| 12 | `test_no_auth_session_and_listings::test_uploaded_pdf_is_not_listed_to_an_unrelated_caller` | `GET /latest/docling_conversion/list_pdfs` | same | `GET /api/v2/papers`, `GET /api/v2/queue`, and 22 per-resource routes incl. the new `GET /api/v2/papers/{id}/steps` (R18), `/events`, `/text`, `/export`, the four annotation routes (`GET`/`POST /annotation`, `PUT`/`DELETE /annotation/curation`, after the owner ran them: 2xx), `/segments/{id}/image`, `POST .../predictions`, `PUT .../curation`, `GET /api/v2/images/{id}` | another owner and a credential-less caller: not listed, not in `/queue`, and every route gives the byte-identical 404 as a random id |
 | 13 | `test_upload_size_limit::test_oversized_image_upload_is_rejected_by_the_backend_directly` | `POST /latest/ocsr/generate_smiles` 20 MB + 1 | same | `POST /api/v2/images` and `POST /api/v2/papers`, 20 MiB + 1 byte | the API itself answers 413 `{"detail": "File too large"}` (JSON, so not nginx's HTML 413; nginx's cap is 21 MiB) |
 | 14 | `test_stored_xss_frontend::test_extracted_text_html_does_not_execute_in_browser` | the Vue UI (`v-html`) | same | the React UI behind the stack's nginx (`/app`, upload with "Find structures automatically" off, `?view=paper`) | browser flow: the payload is on screen as text (Text column, header) and never ran |
 | 14b | (API half of #14, new) | | `test_stored_xss_frontend::test_display_name_is_returned_only_as_json` | `GET /api/v2/papers`, `/papers/{id}`, `/papers/{id}/text`, `/papers/{id}/export`, `/images/{id}` | an `<img onerror>` filename (kept as `display_name`) and PDF text come back only in JSON as `application/json` (export: a JSON attachment), with nosniff and `default-src 'none'` |
@@ -77,6 +77,7 @@ rate-limit window and, after its burst, for the next one.
 | 16 | `test_security_headers::test_frontend_sends_nosniff` | same | same | same | `X-Content-Type-Options: nosniff` on all |
 | 17 | `test_security_headers::test_frontend_restricts_framing` | same | same | same | `frame-ancestors` or `X-Frame-Options` DENY/SAMEORIGIN on all |
 | new | (v1 README: "worth a judge test once claim 5 is fixed") | | `test_rate_limit_and_session_bypass::test_xff_spoof_cannot_escape_rate_limit[via-nginx]` and `[direct-to-api]` | every counted route (burst to an unknown `/api/v2` path) | a burst with a different spoofed `X-Forwarded-For`/`X-Real-IP`/`CF-Connecting-IP`/`True-Client-IP`/`Forwarded` per request, and no cookie, still hits the per-IP limit in one window: through nginx within limit + 9, and straight to the API from an untrusted peer on the Docker network at exactly limit + 1 (the API's own trusted-proxy check, which nginx's X-Forwarded-For rewrite would otherwise hide) |
+| new | (annotation, 2026-11-20) | | `test_rate_limit_and_session_bypass::test_annotation_starts_are_rate_limited_per_owner` | `POST /api/v2/papers/{id}/annotation` burst (annotate 5/min per owner; the fake annotator in the fake stack) | 429 `{"detail": "rate limited"}` with `Retry-After` within 2×5+1 starts; the burst queues at most 2 model runs (starts are idempotent); another owner gets the plain 404 for the paper, not a 429 |
 
 ## Which limits the tests meet
 
@@ -88,6 +89,7 @@ owners per hour, 100 active papers). Per-owner limits are not raised.
 | tools 60/min per owner | 60 | `test_burst_requests_eventually_get_rate_limited` (real value) |
 | ip 300/min per IP (IPv6 /64) | 6000 | `test_xff_spoof_cannot_escape_rate_limit` reads the effective limit from the API container and goes past it (6000 on the fake stack, 300 on a real one); the real 300 is unit-tested in `backend-v2/tests/api/test_security_layer.py::test_rate_limit_hits_429`, the /64 in `test_ipv6_rate_bucket_is_the_64_prefix` |
 | upload 20 MiB | 20 MiB | `test_oversized_image_upload_is_rejected_by_the_backend_directly` (real value) |
+| annotate 5/min per owner | 5 | `test_annotation_starts_are_rate_limited_per_owner` (real value) |
 | upload 10/min per owner | 10 | not met by the judge (unit: `test_rate_limit_hits_429`, `test_other_owner_has_own_upload_bucket`) |
 | 3 active papers per owner, 6 per IP, 10 new owners per IP per hour | 3 / 100 / 1000 | not met by the judge: exhausting them from the single e2e IP would lock the stack (an hour for new owners). Unit: `test_owner_auth.py::test_eleventh_new_owner_from_one_ip_in_an_hour_is_429`, `test_concurrent_new_owners_respect_the_ip_limit`, `test_security_layer.py::test_ipv6_*_limit_is_per_64`, `test_unknown_peers_share_*` |
 

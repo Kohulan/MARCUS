@@ -267,3 +267,25 @@ class OcsrCache(Base):
     smiles: Mapped[str] = mapped_column(Text)
     molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class Annotation(Base):
+    """The MARCUS model's annotation of one paper (marcus.core.annotation). `output`:
+    {field: [values]} of the model run; `positions`: {field: {value: [[block, start, end]]}} of
+    those values in the paper's text. `curated` / `curated_positions`: the curator's values
+    (every field) and theirs; NULL until corrected, and again after "reset to model"."""
+
+    __tablename__ = "annotations"
+
+    paper_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("papers.id", ondelete="CASCADE"), primary_key=True
+    )
+    model: Mapped[str] = mapped_column(Text)
+    model_version: Mapped[str] = mapped_column(Text)
+    output: Mapped[dict] = mapped_column(JSONB)
+    positions: Mapped[dict] = mapped_column(JSONB)
+    curated: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    curated_positions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    curated_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)

@@ -233,6 +233,24 @@ describe("api", () => {
     expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ engine: "molscribe" });
   });
 
+  it("annotation calls: read, start, save the curator's values, reset", async () => {
+    reply = json(200, {});
+    await api.getAnnotation("p1");
+    await api.startAnnotation("p1");
+    await api.saveAnnotation("p1", { organism_or_species: ["Taxus brevifolia"] });
+    await api.resetAnnotation("p1");
+    expect(calls.map((c) => [c.init.method ?? "GET", c.url])).toEqual([
+      ["GET", "/api/v2/papers/p1/annotation"],
+      ["POST", "/api/v2/papers/p1/annotation"],
+      ["PUT", "/api/v2/papers/p1/annotation/curation"],
+      ["DELETE", "/api/v2/papers/p1/annotation/curation"],
+    ]);
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ rerun: false });
+    expect(JSON.parse(calls[2]?.init.body as string)).toEqual({
+      values: { organism_or_species: ["Taxus brevifolia"] },
+    });
+  });
+
   it("deletePaper accepts an empty 204", async () => {
     reply = () => new Response(null, { status: 204 });
     await expect(api.deletePaper("p1")).resolves.toBeUndefined();

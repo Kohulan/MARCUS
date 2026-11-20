@@ -9,6 +9,7 @@ import type { useLiveEvents } from "../api/useLiveEvents";
 import { GlassButton } from "../ui/GlassButton";
 import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
+import { onlyAnnotating } from "./annotation";
 import { checkFailure as checkFailureOf, pageFailures, progress } from "./pageFailures";
 import "./workspace.css";
 
@@ -94,7 +95,11 @@ export default function StatusBar({ paper, steps, live }: Props) {
     <section className="ws-status" aria-label="Status">
       <div className="ws-status__line">
         <span className="ws-status__cell">
-          <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
+          <ItemState
+            status={paper.status}
+            notRead={paper.ocsr_mode === "off"}
+            annotating={waiting && onlyAnnotating(steps)}
+          />
         </span>
         {mine && <span className="ws-status__cell ws-status__readout">{queueText(mine.estimate_s)}</span>}
         {checkFailure !== null && (

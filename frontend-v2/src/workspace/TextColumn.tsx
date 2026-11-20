@@ -1,16 +1,80 @@
-import { useId, useMemo } from "react";
+import { Fragment, memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { useSteps, useText } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isPaperBusy, isStepActive } from "../api/status";
-import type { StepOut } from "../api/types";
+import type { AnnotationHit, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import { usePrefersReducedMotion } from "../ui/motion";
 import { saveBlob } from "../ui/saveBlob";
+import AnnotationPanel from "./AnnotationPanel";
+import {
+  blockRanges,
+  hitsOf,
+  newestAnnotate,
+  nextHit,
+  shownPositions,
+  splitMarks,
+  type HitAt,
+  type Span,
+} from "./annotation";
 import { doclingBlocks, type TextBlock } from "./doclingText";
 import { newestFirst } from "./pageFailures";
+import { useAnnotation, useAnnotationActions } from "./useAnnotation";
 
 const NO_BLOCKS: TextBlock[] = [];
 const NO_STEPS: StepOut[] = [];
+const NO_RANGES = new Map<number, Span[]>();
+
+/** Scrolls `container` so `el` sits in its middle (an occurrence keeps text around it). */
+function scrollToMiddle(container: HTMLElement | null, el: Element | null, smooth: boolean) {
+  if (!container || !el) return;
+  const c = container.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const top = container.scrollTop + (r.top - c.top) - (c.height - r.height) / 2;
+  if (typeof container.scrollTo === "function") {
+    container.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+  } else {
+    container.scrollTop = top;
+  }
+}
+
+/**
+ * One block of the text: plain, or cut into pieces with the annotation's values marked
+ * (`<mark>` elements around React text nodes; never HTML from the text). The current
+ * occurrence carries data-current, so it can be scrolled to.
+ */
+const Block = memo(function Block({
+  block,
+  spans,
+  current,
+}: {
+  block: TextBlock;
+  spans: Span[] | undefined;
+  current: Span | null;
+}) {
+  const content =
+    spans || current
+      ? splitMarks(block.text, spans ?? [], current).map((p, i) =>
+          p.mark ? (
+            <mark
+              key={i}
+              className={p.current ? "pv-mark pv-mark--current" : "pv-mark"}
+              data-current={p.current || undefined}
+            >
+              {p.text}
+            </mark>
+          ) : (
+            <Fragment key={i}>{p.text}</Fragment>
+          ),
+        )
+      : block.text;
+  return block.kind === "heading" ? (
+    <h3 className="pv-text__heading">{content}</h3>
+  ) : (
+    <p className="pv-text__para">{content}</p>
+  );
+});
 
 /** The paper's newest docling step. */
 const newestDocling = (steps: StepOut[]): StepOut | undefined =>
@@ -26,32 +90,88 @@ function download(blocks: TextBlock[], name: string) {
 }
 
 /**
- * The middle column of the Paper view: the paper's text from Docling, its download, and the
- * place the annotations take later. The text file can be large: it is asked for only here
- * (the Paper view is open) and only once the docling step is done, or when the paper has
- * no docling step and is not being worked on (the server answers 404 if it has none).
+ * The middle column of the Paper view: the paper's text from Docling, its download, and its
+ * annotation (Annotate, then the values, marked in the text). The text file can be large: it
+ * is asked for only here (the Paper view is open) and only once the docling step is done, or
+ * when the paper has no docling step and is not being worked on (the server answers 404 if it
+ * has none). The annotation sits above the text, which scrolls on its own, so a value can be
+ * clicked again (its next occurrence) while the text shows the last one.
  */
 export default function TextColumn({
   paperId,
   displayName,
   paperStatus,
+  onStarted,
 }: {
   paperId: string;
   displayName: string;
   paperStatus: string;
+  /** After an annotation started: the live stream opens again, the steps are read. */
+  onStarted: () => void;
 }) {
   const headId = useId();
+  const reduce = usePrefersReducedMotion();
+  const scroller = useRef<HTMLDivElement>(null);
   // The workspace's steps query (cached, no second request): until it has answered, a
   // failed or running docling step cannot be told from none.
   const stepsQuery = useSteps(paperId);
   const known = stepsQuery.data !== undefined || stepsQuery.isError;
-  const docling = newestDocling(stepsQuery.data?.steps ?? NO_STEPS);
+  const steps = stepsQuery.data?.steps ?? NO_STEPS;
+  const docling = newestDocling(steps);
   const failed = docling?.status === "failed";
   const waiting =
     !known ||
     (docling === undefined ? isPaperBusy(paperStatus) : isStepActive(docling.status));
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
+
+  const annotationQuery = useAnnotation(paperId, steps);
+  const annotation = annotationQuery.data;
+  const actions = useAnnotationActions(paperId, onStarted);
+  const annStep = newestAnnotate(steps);
+  // The step a start made, until the steps show it (then its own status says).
+  const [startedId, setStartedId] = useState<string | null>(null);
+  // Running: the step is active, a start is not in the steps yet, or the step has ended but
+  // the annotation has not been read since (no flash of the old state in between).
+  const running =
+    (annStep !== undefined && isStepActive(annStep.status)) ||
+    (startedId !== null && !steps.some((s) => s.id === startedId)) ||
+    (annStep !== undefined &&
+      annotation !== undefined &&
+      !annotationQuery.isError && // a failed re-read must not hold "Annotating…" for good
+      (annotation.step?.id !== annStep.id || annotation.step.status !== annStep.status));
+  const values = annotation?.values ?? null;
+  const positions = useMemo(() => (annotation ? shownPositions(annotation) : {}), [annotation]);
+  const ranges = useMemo(
+    () => (values ? blockRanges(values, positions) : NO_RANGES),
+    [values, positions],
+  );
+  const [at, setAt] = useState<HitAt | null>(null);
+  const hit: AnnotationHit | undefined = at
+    ? hitsOf(positions, at.field, at.value)[at.index]
+    : undefined;
+  // the occurrence's place, not its array: a save or reset re-reads the positions
+  const hitBlock = hit?.[0];
+  const hitStart = hit?.[1];
+
+  const show = useCallback(
+    (field: string, value: string): number => {
+      const index = nextHit(at, field, value, hitsOf(positions, field, value).length);
+      setAt({ field, value, index });
+      return index;
+    },
+    [at, positions],
+  );
+  const start = useCallback(async () => {
+    const out = await actions.start();
+    if (out.step_id !== null) setStartedId(out.step_id);
+  }, [actions]);
+
+  // A click (or the annotation changing under it) brings the shown occurrence into view.
+  useLayoutEffect(() => {
+    if (!at) return;
+    scrollToMiddle(scroller.current, scroller.current?.querySelector("[data-current]") ?? null, !reduce);
+  }, [at, hitBlock, hitStart, reduce]);
 
   const notReady = waiting || (text.error instanceof ApiError && text.error.status === 404);
   let body;
@@ -81,17 +201,14 @@ export default function TextColumn({
   } else {
     body = (
       <div className="pv-text__body">
-        {blocks.map((b, i) =>
-          b.kind === "heading" ? (
-            <h3 key={i} className="pv-text__heading">
-              {b.text}
-            </h3>
-          ) : (
-            <p key={i} className="pv-text__para">
-              {b.text}
-            </p>
-          ),
-        )}
+        {blocks.map((b, i) => (
+          <Block
+            key={i}
+            block={b}
+            spans={ranges.get(i)}
+            current={hit && hit[0] === i ? [hit[1], hit[2]] : null}
+          />
+        ))}
       </div>
     );
   }
@@ -108,10 +225,20 @@ export default function TextColumn({
           </GlassButton>
         )}
       </div>
-      <div className="pv-text">
-        <p className="pv-text__later">
-          Annotations (compounds, organisms, methods) come in a later version.
-        </p>
+      {blocks.length > 0 && annotation?.available && (
+        <AnnotationPanel
+          annotation={annotation}
+          running={running}
+          step={annStep}
+          at={at}
+          onShow={show}
+          onStart={start}
+          onSave={actions.save}
+          onReset={actions.reset}
+        />
+      )}
+      {/* Scrolls on its own; focusable, so the keys scroll it too. */}
+      <div className="pv-text" ref={scroller} tabIndex={0} role="group" aria-label="Paper text">
         {body}
       </div>
     </section>

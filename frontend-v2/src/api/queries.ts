@@ -13,6 +13,7 @@ export const keys = {
   steps: (id: string) => ["steps", id] as const,
   queue: () => ["queue"] as const,
   text: (id: string) => ["text", id] as const,
+  annotation: (id: string) => ["annotation", id] as const,
   images: () => ["images"] as const,
   image: (id: string) => ["image", id] as const,
 };

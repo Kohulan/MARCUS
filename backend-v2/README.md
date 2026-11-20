@@ -137,6 +137,26 @@ switch that did not take fails the unit. It is not installed by anything here. O
 - The segment worker replaces its process every 200 pages (`--max-tasks-per-child 200`): the segmentation library
   leaks about 3 MiB of GPU memory per page.
 
+### Paper annotation (the local MARCUS model)
+
+On demand per paper (`POST /api/v2/papers/{id}/annotation`, routes in
+`marcus.api.routes.annotation`): an `annotate` step on q.llm builds the model input from the
+paper's Docling text (title, abstract, introduction, as trained), asks the MARCUS model and
+locates every value in the whole text. The GPU override runs the model in llama.cpp's
+`llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter commit 7fce543 for the
+V100) on the internal network only, with the GGUF mounted read-only:
+
+```bash
+MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf MARCUS_LLM_USER="$(stat -c %u:%g "$MARCUS_LLM_GGUF")" \
+  docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+`worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
+picked from the text by fixed rules). Without either, the API answers 503 (`annotate_enabled`).
+Real-model smoke test, outside any stack (the sample PDF through docling, then the step's own
+handler against llama-server): `MARCUS_LLM_GGUF=... ops/annotate_smoke.sh` (`--cpu` without a
+GPU; about 70 s per paper on 16 CPU threads).
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,

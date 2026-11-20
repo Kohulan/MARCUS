@@ -1,4 +1,5 @@
-# Override: the four model workers on the GPU (production host: one 32 GB card).
+# Override: the four model workers and the MARCUS model (llama-server) on the GPU (production
+# host: one 32 GB card).
 #
 #   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 #   (add -f docker-compose.monitoring.yml last for Prometheus/Grafana; Prometheus then also
@@ -22,8 +23,18 @@
 #                     V100, 2026-11-17) gave the same SMILES on 205 of 205 fixture crops as cpu,
 #                     the same exact matches, and 0.66 s instead of 1.08 s per structure
 #                     (judges/results/2026-11-17-gpu-session.md).
+#   llama-server      the MARCUS model (Q8_0 GGUF, 9.5 GB) fully on the GPU, 8192-token context,
+#                     one request at a time: about 11 GB (llama.cpp has no cap; the size is the
+#                     model plus its context). tests/deploy counts it on top of the 20 GB above.
 # The budgets cap the frameworks' allocators; every process's CUDA context (a few hundred MB)
 # comes on top. Each value can be changed from the environment without editing this file.
+#
+# Paper annotation (owner decision 2026-11-20): llama-server runs in its own container on the
+# internal network only (no port published, no internet), the GGUF mounted read-only from the
+# host (MARCUS_LLM_GGUF; never copied into an image). It must be readable by the container user
+# (MARCUS_LLM_USER, default 10001:10001; e.g. the file owner's "$(id -u):$(id -g)"). worker-llm
+# (the api image) consumes q.llm and calls it; the API offers annotation (MARCUS_ANNOTATE_ENABLED)
+# and /ready expects q.llm. A different model file means new MARCUS_ANNOTATE_MODEL(_VERSION).
 #
 # Host: NVIDIA driver with CUDA 12.8 support and the NVIDIA Container Toolkit; the card in compute
 # mode DEFAULT (several processes share it: ops/systemd/nvidia-compute-default.service).
@@ -88,3 +99,87 @@ services:
       - no-new-privileges:true
     networks:
       - internal
+
+  api:
+    environment:
+      MARCUS_ANNOTATE_ENABLED: "1"
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm}
+
+  # The MARCUS model: llama.cpp llama-server (docker/Dockerfile.llama, built at the commit the GGUF
+  # was converted with). Greedy decoding and the 11-key grammar come with each request
+  # (marcus.workers.annotate.llama); here: thinking off, one slot, the whole model on the GPU.
+  llama-server:
+    <<: *gpu
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.llama
+      args:
+        VARIANT: cuda
+        CUDA_ARCH: "70"
+    image: marcus-v2-llama:cuda-b12554
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: ${MARCUS_LLM_USER:-10001:10001}
+    networks:
+      - internal
+    volumes:
+      - type: bind
+        source: ${MARCUS_LLM_GGUF:-/srv/marcus/models/qwen3.5-9b-marcus-v1-Q8_0.gguf}
+        target: /models/marcus.gguf
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["--model", "/models/marcus.gguf", "--alias", "qwen3.5-9b-marcus-v1",
+              "--host", "0.0.0.0", "--port", "8080", "--parallel", "1", "--ctx-size", "8192",
+              "--n-gpu-layers", "999", "--jinja", "--reasoning", "off", "--no-webui"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 300s
+      retries: 3
+    mem_limit: 16g
+
+  # annotate steps (q.llm): ONE prefork process (= q.llm slots); it only reads the paper's text
+  # and calls llama-server, so it runs the api image with the data volume read-only.
+  worker-llm:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    volumes:
+      - data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+      llama-server:
+        condition: service_healthy
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
+              "-n", "llm@%h", "--loglevel", "INFO"]
+    environment:
+      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MARCUS_DATA_ROOT: /data
+      MARCUS_ANNOTATOR: llama
+      MARCUS_ANNOTATOR_URL: http://llama-server:8080
+      MARCUS_ANNOTATE_MODEL: ${MARCUS_ANNOTATE_MODEL:-qwen3.5-9b-marcus-v1}
+      MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_ANNOTATE_MODEL_VERSION:-Q8_0 llama.cpp b12554}
+    mem_limit: 1g

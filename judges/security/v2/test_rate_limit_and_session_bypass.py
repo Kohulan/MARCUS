@@ -6,6 +6,7 @@ requests to /latest/decimer/health were never limited and /latest/... needed no 
 v2 (marcus.api.security, Redis fixed one-minute windows):
     tools   60/min per owner          every POST /api/v2/tools/*
     upload  10/min per owner          POST /api/v2/papers + POST /api/v2/images
+    annotate 5/min per owner          POST /api/v2/papers/{id}/annotation (the GPU model)
     ip      300/min per client IP     every route but GET /api/v2/health (IPv6: per /64)
 The client IP is the socket peer, or X-Forwarded-For only when the peer is a trusted proxy
 (nginx, which overwrites X-Forwarded-For with its own peer).
@@ -42,9 +43,11 @@ from v2.helpers import (
     effective_settings,
     expect_ok,
     upload_paper,
+    wait_paper,
 )
 
 TOOLS_LIMIT_PER_MIN = 60  # global constraints / spec; NOT raised by docker-compose.fake.yml
+ANNOTATE_LIMIT_PER_MIN = 5  # backend-v2 settings rate_limit_annotate_per_min; NOT raised either
 WINDOW_S = 60
 
 
@@ -76,6 +79,39 @@ def test_burst_requests_eventually_get_rate_limited(new_owner):
     # The limit is per owner: another owner from the same address is not limited by it.
     other = new_owner()
     expect_ok(_tool(other), "POST /api/v2/tools/smiles-to-molfile (another owner)")
+
+
+def test_annotation_starts_are_rate_limited_per_owner(new_owner):
+    """The local model serves one paper at a time: an owner cannot flood it. A burst of starts
+    (each idempotent: one annotate step at most) is limited per owner, and other owners are not
+    limited by it."""
+    owner = new_owner()
+    pid = upload_paper(owner, ocsr="off")
+    wait_paper(owner, pid)
+    url = f"{API}/papers/{pid}/annotation"
+    expect_ok(owner.post(url), "POST /api/v2/papers/{id}/annotation")
+
+    statuses, limited = [], None
+    for _ in range(2 * ANNOTATE_LIMIT_PER_MIN + 2):
+        resp = owner.post(url, json={"rerun": True})
+        statuses.append(resp.status_code)
+        if resp.status_code == 429:
+            limited = resp
+            break
+    assert limited is not None, (
+        f"{len(statuses) + 1} annotation starts from one owner were never rate limited "
+        f"(statuses: {sorted(set(statuses))})")
+    assert len(statuses) + 1 <= 2 * ANNOTATE_LIMIT_PER_MIN + 1
+    assert int(limited.headers.get("retry-after", "0")) >= 1, limited.headers
+    assert limited.json() == {"detail": "rate limited"}
+    steps = expect_ok(owner.get(f"{API}/papers/{pid}/steps"), "GET /api/v2/papers/{id}/steps")
+    runs = [s for s in steps.json()["steps"] if s["kind"] == "annotate"]
+    assert len(runs) <= 2, f"a burst of starts queued {len(runs)} model runs"
+
+    other = new_owner()
+    theirs = other.post(f"{API}/papers/{pid}/annotation")
+    assert theirs.status_code == 404, describe(theirs)  # not 429: its own bucket, not my paper
+
 
 
 def test_api_calls_without_any_session_are_rejected(new_owner):

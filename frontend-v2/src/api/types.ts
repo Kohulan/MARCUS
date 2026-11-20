@@ -211,3 +211,49 @@ export type DoclingDoc = {
   texts: { self_ref: string; text: string; label: string; children?: { $ref: string }[] }[];
   groups?: { self_ref: string; children: { $ref: string }[] }[];
 };
+
+// Paper annotation (GET /papers/{id}/annotation, backend-v2 api/schemas.py AnnotationOut).
+
+/** [block, start, end]: block = index into doclingBlocks(text); offsets in UTF-16 units, end exclusive. */
+export type AnnotationHit = [number, number, number];
+/** field → value → its occurrences in the text, in text order ([] = not in the text). */
+export type AnnotationPositions = Record<string, Record<string, AnnotationHit[]>>;
+/** field → values ([] = none); all 11 fields. */
+export type AnnotationValues = Record<string, string[]>;
+
+export interface AnnotationField {
+  key: string;
+  label: string;
+}
+
+/** The COCONUT form's organisms (coconut OrganismDraft); COCONUT has no kingdom field. */
+export interface AnnotationCoconut {
+  organisms: { name: string; parts: string; location: string; ecosystems: string }[];
+  kingdom: string[];
+}
+
+export interface AnnotationOut {
+  /** False: this deployment cannot annotate (POST answers 503). */
+  available: boolean;
+  /** The newest annotate step's status, or "none" (never asked for). */
+  status: string;
+  step: StepOut | null;
+  fields: AnnotationField[];
+  model: string | null;
+  model_version: string | null;
+  output: AnnotationValues | null;
+  positions: AnnotationPositions | null;
+  curated: AnnotationValues | null;
+  curated_positions: AnnotationPositions | null;
+  /** What is shown and exported: curated if not null, else output; null before the first run. */
+  values: AnnotationValues | null;
+  coconut: AnnotationCoconut | null;
+  created_at: string | null;
+  updated_at: string | null;
+  curated_at: string | null;
+}
+
+/** step_id null: the paper already has an annotation and no re-run was asked for. */
+export interface AnnotationStarted {
+  step_id: string | null;
+}

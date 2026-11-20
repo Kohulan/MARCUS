@@ -11,7 +11,10 @@ from marcus.core.enums import Engine
 from marcus.core.models import Prediction
 from tests.api.conftest import make_client, new_owner, seed_paper
 
-HEADER = ["segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source"]
+HEADER = [
+    "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
+    "organism", "organism_part", "geo_location", "kingdom",
+]  # fmt: skip
 
 
 async def _curate(app, token, seg, body):
@@ -105,8 +108,9 @@ async def test_export_prefers_paper_engine_and_accepted_filter_skips_rejected(
     rows = list(csv.reader(io.StringIO(r.text)))
     assert rows == [
         HEADER,
-        [str(s0), "0", "0", "CCO", "accepted", "decimer", "", "false", "predicted"],
-    ]
+        [str(s0), "0", "0", "CCO", "accepted", "decimer", "", "false", "predicted",
+         "", "", "", ""],
+    ]  # fmt: skip
 
 
 async def test_export_falls_back_to_any_engine_and_uses_curated_molfile(app, async_db_session):
@@ -296,3 +300,81 @@ async def test_edited_flag(app, async_db_session):
     mols = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
     assert mols[str(s0)].GetProp("MARCUS_EDITED") == "true"
     assert not mols[str(s0)].HasProp("MARCUS_ENGINE")
+
+
+# --- the paper's annotation in every format ------------------------------------------------------
+
+
+async def _annotated(db, curated: bool):
+    from marcus.core import annotation as ann
+    from marcus.core.models import Annotation
+
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    output = {f: [] for f in ann.FIELDS}
+    output |= {"organism_or_species": ["Taxus brevifolia", "T. baccata"],
+               "organism_part": ["bark"], "Kingdom": ["Plant"], "trivial_name": ["taxol"]}  # fmt: skip
+    row = Annotation(
+        paper_id=seeded.paper_id,
+        model="qwen3.5-9b-marcus-v1",
+        model_version="Q8_0 llama.cpp b12554",
+        output=output,
+        positions={f: {v: [] for v in output[f]} for f in ann.FIELDS},
+    )
+    if curated:
+        row.curated = output | {"geo_location": ["=Oregon"], "organism_part": []}
+        row.curated_positions = {f: {v: [] for v in row.curated[f]} for f in ann.FIELDS}
+        row.curated_at = datetime.now(UTC)
+    db.add(row)
+    await db.commit()
+    return token, seeded
+
+
+async def test_json_export_has_the_paper_level_annotation(app, async_db_session):
+    token, seeded = await _annotated(async_db_session, curated=True)
+    doc = (await _export(app, token, seeded.paper_id, "json")).json()
+    a = doc["annotation"]
+    assert a["source"] == "curated" and a["model"] == "qwen3.5-9b-marcus-v1"
+    assert a["values"]["geo_location"] == ["=Oregon"] and a["values"]["organism_part"] == []
+    assert a["model_values"]["organism_part"] == ["bark"]
+    assert a["values"]["trivial_name"] == ["taxol"] and a["curated_at"]
+    assert list(a["values"]) == list(a["model_values"])  # all 11 fields, in order
+
+
+async def test_json_export_without_annotation_has_null(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    assert (await _export(app, token, seeded.paper_id, "json")).json()["annotation"] is None
+
+
+async def test_csv_export_has_the_source_columns_guarded(app, async_db_session):
+    token, seeded = await _annotated(async_db_session, curated=True)
+    rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
+    assert rows[0] == HEADER and len(rows) == 3
+    for row in rows[1:]:
+        assert row[9:] == ["Taxus brevifolia; T. baccata", "", "'=Oregon", "Plant"]
+
+
+async def test_csv_export_without_annotation_has_empty_source_columns(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
+    assert all(row[9:] == ["", "", "", ""] for row in rows[1:])
+
+
+async def test_sdf_export_has_the_source_properties(app, async_db_session):
+    token, seeded = await _annotated(async_db_session, curated=False)
+    for seg in seeded.segment_ids:
+        await _curate(app, token, seg, {"status": "accepted"})
+    r = await _export(app, token, seeded.paper_id, "sdf")
+    supplier = Chem.SDMolSupplier()
+    supplier.SetData(r.text)
+    mols = [m for m in supplier if m is not None]
+    assert len(mols) == 2
+    for mol in mols:
+        assert mol.GetProp("MARCUS_ORGANISM") == "Taxus brevifolia; T. baccata"
+        assert mol.GetProp("MARCUS_ORGANISM_PART") == "bark"
+        assert mol.GetProp("MARCUS_KINGDOM") == "Plant"
+        assert not mol.HasProp("MARCUS_GEO_LOCATION")  # empty: left out

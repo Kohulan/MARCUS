@@ -5,7 +5,7 @@
 1. papers with `expires_at < now`: a paper with an active step is first cancelled through
    `pipeline.cancel_paper` (its queued/running steps become `cancelled`, so no step of a gone
    paper keeps holding a queue slot, and the status change NOTIFYs the dispatcher), then the
-   rows are deleted (segments, steps, predictions and curation cascade) and the paper
+   rows are deleted (segments, steps, predictions, curation and the annotation cascade) and the paper
    directory is removed;
 2. image jobs with `expires_at < now`: active steps cancelled, row deleted (steps and the
    prediction cascade), image file removed;

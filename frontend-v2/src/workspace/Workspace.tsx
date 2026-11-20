@@ -20,6 +20,7 @@ import { SegmentEditor } from "./SegmentEditor";
 import { coconutStructures, submissionTitle } from "./coconutList";
 import { CARD_OPEN_HINT, filterCounts, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
+import { useAnnotation } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
@@ -130,6 +131,16 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   );
   const [sending, setSending] = useState(false);
   const sendCount = toCoconut.length;
+  // The annotation's organisms start the COCONUT form (the curator can change them), labelled
+  // as the model's suggestion unless they come from the curator's corrections; COCONUT has no
+  // kingdom field, so the kingdom is not carried over.
+  const annotation = useAnnotation(paper.id, ws.steps).data;
+  const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
+    name: o.name,
+    parts: o.parts,
+    location: o.location,
+    ecosystems: o.ecosystems,
+  }));
   return (
     <main className="ws">
       <header className="ws-head">
@@ -159,7 +170,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           </p>
         </div>
         <div className="ws-head__actions glassbed">
-          <ExportMenu paperId={paper.id} />
+          <ExportMenu paperId={paper.id} annotated={Boolean(annotation?.values)} />
           <div className="ws-send">
             <GlassButton
               tint="green"
@@ -239,7 +250,13 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           structures={toCoconut}
           initial={{
             title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
+            ...(organisms.length > 0 ? { organisms } : {}),
           }}
+          organismsNote={
+            organisms.length > 0 && annotation?.curated === null
+              ? "Organisms: model suggestion"
+              : undefined
+          }
           onClose={() => setSending(false)}
         />
       )}
