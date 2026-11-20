@@ -279,3 +279,17 @@ describe("elevation", () => {
     }
   });
 });
+
+// The landing, its header and footer move by transform and opacity only (skill B7).
+describe("motion on the landing, the header and the footer", () => {
+  const src = (file: string) =>
+    stripComments(readFileSync(resolve(process.cwd(), "src", file), "utf8"));
+  const transitions = (css: string) =>
+    [...css.matchAll(/transition\s*:\s*([^;]+);/g)].map((m) => (m[1] as string).trim());
+
+  it.each(["ui/ui.css", "pages/landing.css"])("%s never transitions a layout property", (file) => {
+    for (const t of transitions(src(file))) {
+      expect(t).not.toMatch(/\b(left|right|top|bottom|width|height|all)\b/);
+    }
+  });
+});

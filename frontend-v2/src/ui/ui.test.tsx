@@ -482,7 +482,10 @@ describe("Header and Footer", () => {
     const tool = screen.getByRole("link", { name: "Open the tool" });
     fireEvent.focus(tool);
     expect(nav).toHaveClass("has-drop");
-    expect(nav.style.getPropertyValue("--wl-l")).not.toBe("");
+    // the drop moves by transform only (skill B7): an offset and a width, never left/right
+    expect(nav.style.getPropertyValue("--wl-x")).toMatch(/^-?\d+(\.\d+)?px$/);
+    expect(nav.style.getPropertyValue("--wl-w")).toMatch(/^\d+(\.\d+)?px$/);
+    expect(nav.style.getPropertyValue("--wl-l")).toBe("");
     fireEvent.blur(tool, { relatedTarget: null });
     expect(nav).toHaveClass("has-drop"); // resting on About again
   });
