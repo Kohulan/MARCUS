@@ -2,7 +2,13 @@
 // Paper view shows it: which spans of the text to mark, which occurrence a click goes to, and
 // the editing of a field as lines. Model text is data: it is only ever a React text node.
 import { isStepActive } from "../api/status";
-import type { AnnotationOut, AnnotationPositions, AnnotationValues, StepOut } from "../api/types";
+import type {
+  AnnotationHit,
+  AnnotationOut,
+  AnnotationPositions,
+  AnnotationValues,
+  StepOut,
+} from "../api/types";
 import { newestFirst } from "./pageFailures";
 
 /**
@@ -31,6 +37,29 @@ export function shownPositions(a: AnnotationOut): AnnotationPositions {
   return (a.curated !== null ? a.curated_positions : a.positions) ?? {};
 }
 
+/**
+ * A value's occurrences ([] when none). Positions are keyed by model or curator text, which
+ * can be "__proto__" or "constructor": only own keys count, never an inherited property.
+ */
+export function hitsOf(
+  positions: AnnotationPositions,
+  field: string,
+  value: string,
+): AnnotationHit[] {
+  if (!Object.hasOwn(positions, field)) return [];
+  const byValue = positions[field]!;
+  if (!Object.hasOwn(byValue, value)) return [];
+  const hits = byValue[value];
+  return Array.isArray(hits) ? hits : [];
+}
+
+/** A field's shown values ([] when none; only own keys count). */
+export function valuesIn(values: AnnotationValues | null, field: string): string[] {
+  if (!values || !Object.hasOwn(values, field)) return [];
+  const list = values[field];
+  return Array.isArray(list) ? list : [];
+}
+
 export type Span = [start: number, end: number];
 
 /** Every occurrence of every shown value, per block (blocks and spans in first-seen order). */
@@ -40,10 +69,8 @@ export function blockRanges(
 ): Map<number, Span[]> {
   const out = new Map<number, Span[]>();
   for (const [field, list] of Object.entries(values)) {
-    const byValue = positions[field] ?? {};
     for (const value of list) {
-      const hits = Object.hasOwn(byValue, value) ? byValue[value]! : [];
-      for (const [block, start, end] of hits) {
+      for (const [block, start, end] of hitsOf(positions, field, value)) {
         const spans = out.get(block);
         if (spans) spans.push([start, end]);
         else out.set(block, [[start, end]]);
@@ -143,7 +170,7 @@ export function valuesProblem(
     if (list.length > FIELD_MAX_VALUES) {
       return `${label(field)} has more than ${FIELD_MAX_VALUES} values.`;
     }
-    const max = FIELD_MAX[field];
+    const max = Object.hasOwn(FIELD_MAX, field) ? FIELD_MAX[field] : undefined;
     if (max !== undefined && list.some((v) => v.length > max)) {
       return `A value in ${label(field)} is longer than ${max.toLocaleString("en")} characters.`;
     }

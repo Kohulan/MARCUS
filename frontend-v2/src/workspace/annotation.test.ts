@@ -4,6 +4,7 @@ import {
   annotateReason,
   blockRanges,
   FIELD_MAX,
+  hitsOf,
   linesOf,
   newestAnnotate,
   nextHit,
@@ -12,6 +13,7 @@ import {
   shownPositions,
   splitMarks,
   valuesOf,
+  valuesIn,
   valuesProblem,
 } from "./annotation";
 
@@ -182,5 +184,27 @@ describe("annotation helpers", () => {
     expect(sameValues({ a: ["x"], b: [] }, { a: ["x"] })).toBe(true);
     expect(sameValues({ a: ["x", "y"] }, { a: ["y", "x"] })).toBe(false);
     expect(sameValues({ a: ["x"] }, { a: ["x"], b: ["z"] })).toBe(false);
+  });
+
+  it("looks values up as own keys only: __proto__ and constructor are values like any other", () => {
+    // as the API sends them: JSON keys are own properties, never the prototype
+    const positions = JSON.parse(
+      '{"trivial_name": {"__proto__": [[0, 0, 9]], "constructor": [[1, 2, 13]]}, "abbreviation": {}}',
+    ) as Record<string, Record<string, [number, number, number][]>>;
+    expect(hitsOf(positions, "trivial_name", "__proto__")).toEqual([[0, 0, 9]]);
+    expect(hitsOf(positions, "trivial_name", "constructor")).toEqual([[1, 2, 13]]);
+    expect(hitsOf(positions, "abbreviation", "constructor")).toEqual([]);
+    expect(hitsOf(positions, "abbreviation", "toString")).toEqual([]);
+    expect(hitsOf(positions, "__proto__", "x")).toEqual([]);
+    expect(hitsOf(positions, "constructor", "name")).toEqual([]);
+    const values = { trivial_name: ["__proto__", "constructor", "hasOwnProperty"] };
+    expect([...blockRanges(values, positions).entries()]).toEqual([
+      [0, [[0, 9]]],
+      [1, [[2, 13]]],
+    ]);
+    expect(valuesIn(values, "trivial_name")).toEqual(values.trivial_name);
+    expect(valuesIn(values, "constructor")).toEqual([]);
+    expect(valuesIn(null, "trivial_name")).toEqual([]);
+    expect(valuesProblem({ constructor: ["x"] } as unknown as Record<string, string[]>, String)).toBeNull();
   });
 });
