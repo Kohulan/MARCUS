@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, FastAPI
 
 from marcus.api import security
-from marcus.api.routes import events, health, images, papers, queue, segments, tools
+from marcus.api.routes import annotation, events, health, images, papers, queue, segments, tools
 from marcus.core.logging import configure_logging
 from marcus.core.settings import get_settings
 
@@ -17,6 +17,7 @@ def create_app(json_logs: bool = False) -> FastAPI:
     api = APIRouter(prefix="/api/v2")
     api.include_router(health.router)
     api.include_router(papers.router)
+    api.include_router(annotation.router)
     api.include_router(images.router)
     api.include_router(segments.router)
     api.include_router(queue.router)

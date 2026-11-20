@@ -59,6 +59,10 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/papers/{paper_id}/text"),
     ("GET", "/api/v2/papers/{paper_id}/export"),
     ("GET", "/api/v2/papers/{paper_id}/events"),
+    ("GET", "/api/v2/papers/{paper_id}/annotation"),
+    ("POST", "/api/v2/papers/{paper_id}/annotation"),
+    ("PUT", "/api/v2/papers/{paper_id}/annotation/curation"),
+    ("DELETE", "/api/v2/papers/{paper_id}/annotation/curation"),
     ("POST", "/api/v2/images"),
     ("GET", "/api/v2/images"),
     ("GET", "/api/v2/images/{job_id}"),
@@ -148,7 +152,8 @@ def fill(path: str) -> str:
 # --- headers --------------------------------------------------------------------------------
 
 
-async def test_headers_on_every_route(app):
+async def test_headers_on_every_route(app, monkeypatch):
+    env(monkeypatch, annotate_enabled="1")  # else POST .../annotation is a deliberate 503
     async with client(app) as c:
         assert (await c.get("/api/v2/papers")).status_code == 200  # owner cookie first
         for method, path in sorted(ALLOWED_ROUTES):
