@@ -1,6 +1,9 @@
 // The one HTTP client of the tool: every call is same-origin under /api/v2 (the owner
 // cookie rides along), and every non-2xx becomes an ApiError with a text fit to show.
 import type {
+  AnnotationOut,
+  AnnotationStarted,
+  AnnotationValues,
   BulkCurationItem,
   BulkCurationOut,
   CompareReply,
@@ -257,6 +260,19 @@ export const api = {
   },
   /** `page0` is the 0-based API page. */
   pageImageUrl: (id: string, page0: number) => `${BASE}/papers/${enc(id)}/pages/${page0}/image`,
+
+  // annotation (the local model's suggestion, and the curator's corrections)
+  getAnnotation: (id: string, opts?: ReadOpts) =>
+    get<AnnotationOut>(`/papers/${enc(id)}/annotation`, opts),
+  /** 202 {step_id}: started or still running; 200 {step_id: null}: already annotated. */
+  startAnnotation: (id: string) =>
+    sendJson<AnnotationStarted>("POST", `/papers/${enc(id)}/annotation`, { rerun: false }),
+  /** The curator's whole set: all 11 fields ([] = none). */
+  saveAnnotation: (id: string, values: AnnotationValues) =>
+    sendJson<AnnotationOut>("PUT", `/papers/${enc(id)}/annotation/curation`, { values }),
+  /** Back to the model's values. */
+  resetAnnotation: (id: string) =>
+    request<AnnotationOut>(`/papers/${enc(id)}/annotation/curation`, { method: "DELETE" }),
 
   // segments
   /** Only through useSaveCuration (curationBody builds the full record). */
