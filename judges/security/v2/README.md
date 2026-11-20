@@ -23,7 +23,7 @@ The stack's nginx serves the v2 web UI too (the `marcus-v2-nginx:local` image bu
 `frontend-v2/`), so `MARCUS_FRONTEND_URL` is the same edge. The browser half of #14 needs
 Playwright's Chromium (`uv run playwright install chromium`).
 
-Expected: 21 passed, 0 skipped. About 7 minutes, most of it the fake pipeline
+Expected: 26 passed, 0 skipped (21 ported + 5 for the COCONUT relay). About 7 minutes, most of it the fake pipeline
 (one paper is about 35 s, mostly docling) and the XFF test, which waits for the start of a
 rate-limit window and, after its burst, for the next one.
 
@@ -78,6 +78,11 @@ rate-limit window and, after its burst, for the next one.
 | 17 | `test_security_headers::test_frontend_restricts_framing` | same | same | same | `frame-ancestors` or `X-Frame-Options` DENY/SAMEORIGIN on all |
 | new | (v1 README: "worth a judge test once claim 5 is fixed") | | `test_rate_limit_and_session_bypass::test_xff_spoof_cannot_escape_rate_limit[via-nginx]` and `[direct-to-api]` | every counted route (burst to an unknown `/api/v2` path) | a burst with a different spoofed `X-Forwarded-For`/`X-Real-IP`/`CF-Connecting-IP`/`True-Client-IP`/`Forwarded` per request, and no cookie, still hits the per-IP limit in one window: through nginx within limit + 9, and straight to the API from an untrusted peer on the Docker network at exactly limit + 1 (the API's own trusted-proxy check, which nginx's X-Forwarded-For rewrite would otherwise hide) |
 | new | (annotation, 2026-11-20) | | `test_rate_limit_and_session_bypass::test_annotation_starts_are_rate_limited_per_owner` | `POST /api/v2/papers/{id}/annotation` burst (annotate 5/min per owner; the fake annotator in the fake stack) | 429 `{"detail": "rate limited"}` with `Retry-After` within 2×5+1 starts; the burst queues at most 2 model runs (starts are idempotent); another owner gets the plain 404 for the paper, not a 429 |
+| new | (COCONUT relay, 2026-11-20) | | `test_coconut_relay::test_relay_reaches_only_the_three_fixed_coconut_calls` | `POST /api/v2/coconut/{auth/login,reports/mutate,search}` (nginx relay; the fake stack's fake COCONUT upstream) | 14 other paths under the prefix 404, 6 other methods 405, a query 400, a form body 415; a client Host header or absolute-form request line changes nothing: the fake upstream saw only the 3 valid searches, each `POST /api/search` with Host and SNI `coconut.naturalproducts.net` |
+| new | (COCONUT relay) | | `test_coconut_relay::test_relay_sends_no_client_headers_and_returns_only_status_and_body` | same | Cookie, X-Forwarded-For, X-Real-IP, Forwarded, Referer, Origin never reach upstream (exactly Host, Content-Type, Accept, User-Agent + nginx's Connection/Content-Length); Authorization only on mutate; COCONUT's Set-Cookie, CORS, Location, CSP, caching headers never come back, only Content-Type/Length and nginx's fixed security headers |
+| new | (COCONUT relay) | | `test_coconut_relay::test_relay_keeps_coconut_status_and_body` | `POST /api/v2/coconut/reports/mutate` | COCONUT's 401/403/413/422/429/500/503 and JSON body come back unchanged (the client's messages depend on them) |
+| new | (COCONUT relay) | | `test_coconut_relay::test_no_password_or_token_in_any_log` | login, mutate, a query | unique password, token and query canaries appear in neither nginx's nor the API's logs; the relay's log lines have no query |
+| new | (COCONUT relay) | | `test_coconut_relay::test_coconut_login_is_rate_limited` | `POST /api/v2/coconut/auth/login` burst | 429 by the 5th login (3/min per address, burst 3), every later one 429, and only the allowed ones reached the upstream |
 
 ## Which limits the tests meet
 

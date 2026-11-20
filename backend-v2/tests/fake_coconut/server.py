@@ -10,7 +10,8 @@ The three relayed calls, as COCONUT answers them:
 - POST /api/auth/login {email, password}: LOGIN_EMAIL / LOGIN_PASSWORD get {access_token};
   "status-NNN@example.org" gets status NNN (any password); anything else 401.
 - POST /api/reports/mutate with "Authorization: Bearer TOKEN": {created: [ids]}; more than
-  MAX_ITEMS items: 422 about the list; a wrong or missing token: 401.
+  MAX_ITEMS items: 422 about the list; "Bearer status-NNN": status NNN; any other or no
+  token: 401.
 - POST /api/search: SEARCH_DOI has SEARCH_ROWS rows (data.data); every other query none.
 
 Anything else: 404. Every answer carries headers the relay must drop (EXTRA_HEADERS).
@@ -113,6 +114,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._answer(200, {"access_token": TOKEN, "token_type": "Bearer"})
             return self._answer(401, {"message": "Invalid credentials"})
         if url.path == "/api/reports/mutate":
+            if auth and auth.startswith("Bearer status-") and auth[14:].isdigit():
+                code = int(auth[14:])
+                return self._answer(code, {"message": f"fake coconut {code}"})
             if auth != f"Bearer {TOKEN}":
                 return self._answer(401, {"message": "Unauthenticated."})
             items = body.get("mutate")
