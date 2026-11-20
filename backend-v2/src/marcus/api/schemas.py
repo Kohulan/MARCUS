@@ -39,6 +39,7 @@ class PaperSummary(_Orm):
     to_review: int
     failed_pages: int
     failed: int
+    annotating: bool  # busy only with its annotation (its only step in flight is annotate)
 
 
 class PaperList(BaseModel):

@@ -155,6 +155,45 @@ async def test_start_progress_and_result(app, async_db_session, ready):
     }  # fmt: skip
 
 
+async def test_papers_say_when_the_annotation_is_their_only_work(app, async_db_session, ready):
+    """GET /papers and GET /papers/{id}: `annotating` while the paper is busy only with its
+    annotate step, so the tool home says Annotating…, not Reading… (B-M2)."""
+    db = async_db_session
+    token, paper_id, _ = ready
+    async with make_client(app, token) as c:
+
+        async def flags() -> tuple[bool, bool]:
+            listed = (await c.get("/api/v2/papers")).json()["papers"]
+            detail = (await c.get(f"/api/v2/papers/{paper_id}")).json()
+            return listed[0]["annotating"], detail["annotating"]
+
+        assert await flags() == (False, False)
+        assert (await c.post(f"/api/v2/papers/{paper_id}/annotation")).status_code == 202
+        assert (await paper_row(db, paper_id)).status == "processing"
+        assert await flags() == (True, True)
+        # another step running too (a manual OCSR run): the paper is reading again
+        (other,) = await db.run_sync(lambda s: steps_of(s, paper_id, "doi"))
+        await db.execute(update(Step).where(Step.id == other.id).values(status="running"))
+        await db.commit()
+        assert await flags() == (False, False)
+        await db.execute(update(Step).where(Step.id == other.id).values(status="done"))
+        await db.commit()
+        await run_annotate(db, paper_id, model_result())
+        assert (await paper_row(db, paper_id)).status == "done"
+        assert await flags() == (False, False)
+
+
+async def test_a_paper_still_being_read_is_not_annotating(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    await seed_paper(db, alice)  # docling still pending
+    await db.execute(update(Paper).values(status="processing"))
+    await db.commit()
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert listed[0]["annotating"] is False
+
+
 async def test_annotated_paper_is_kept_unless_a_rerun_is_asked(app, async_db_session, ready):
     db = async_db_session
     token, paper_id, _ = ready

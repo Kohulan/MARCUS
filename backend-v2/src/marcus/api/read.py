@@ -9,11 +9,12 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
-from marcus.core.enums import Engine, StepKind, StepStatus
+from marcus.core.enums import Engine, PaperStatus, StepKind, StepStatus
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
+BUSY_PAPER = (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value)
 
 
 class PaperCounts(NamedTuple):
@@ -23,6 +24,8 @@ class PaperCounts(NamedTuple):
     to_review: int
     failed_pages: int
     failed: int
+    # its only step in flight is an annotate step (the paper is busy only with its annotation)
+    annotating: bool = False
 
 
 async def waiting_ocsr_step(db: AsyncSession, where, engine: Engine) -> uuid.UUID | None:
@@ -102,16 +105,29 @@ async def paper_counts(
         .group_by(newest.c.paper_id)
     )
     failed = dict(failed_rows.all())
-    out = {pid: PaperCounts(0, 0, 0, 0, failed.get(pid, 0), 0) for pid in paper_ids}
+    is_annotate = Step.kind == StepKind.ANNOTATE.value
+    active_rows = await db.execute(
+        select(Step.paper_id, func.count().filter(is_annotate), func.count().filter(~is_annotate))
+        .where(Step.paper_id.in_(paper_ids), Step.status.in_(ACTIVE))
+        .group_by(Step.paper_id)
+    )
+    annotating = {pid for pid, ann, other in active_rows.all() if ann and not other}
+    out = {
+        pid: PaperCounts(0, 0, 0, 0, failed.get(pid, 0), 0, pid in annotating) for pid in paper_ids
+    }
     for pid, total, accepted, rejected, broken in seg_rows.all():
         rest = total - accepted - rejected - broken
-        out[pid] = PaperCounts(total, accepted, rejected, rest, failed.get(pid, 0), broken)
+        out[pid] = PaperCounts(
+            total, accepted, rejected, rest, failed.get(pid, 0), broken, pid in annotating
+        )
     return out
 
 
 def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
     fields = PaperSummary.model_fields.keys() - PaperCounts._fields
-    return PaperSummary(**{f: getattr(paper, f) for f in fields}, **counts._asdict())
+    values = counts._asdict()
+    values["annotating"] = counts.annotating and paper.status in BUSY_PAPER
+    return PaperSummary(**{f: getattr(paper, f) for f in fields}, **values)
 
 
 async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, int]:
