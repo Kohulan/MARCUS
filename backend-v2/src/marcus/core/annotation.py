@@ -428,19 +428,28 @@ def positions(locator: Locator, values: dict[str, list[str]]) -> dict[str, dict[
 # --- COCONUT -----------------------------------------------------------------------------------
 
 
+def _form_item(value: str) -> str:
+    """One item of the COCONUT form's comma-separated lists: a value holding a comma or a double
+    quote goes in double quotes, a quote inside doubled (frontend-v2 coconutApi `list`)."""
+    if "," not in value and '"' not in value:
+        return value
+    return '"' + value.replace('"', '""') + '"'
+
+
 def coconut_prefill(shown: dict[str, list[str]]) -> dict:
     """Starting values for the COCONUT submit form's organisms (frontend-v2 OrganismDraft): one
-    per organism value, each with the paper's parts (comma-separated), its first place and its
-    habitats as ecosystems. COCONUT has no kingdom field; `kingdom` is passed on as is."""
-    parts = ", ".join(shown.get("organism_part", []))
+    per organism value, each with the paper's parts (the form's comma-separated list) and its
+    first place. Ecosystems stay empty: "Habitat or host" holds a host organism as often as a
+    habitat, and the model cannot tell them apart. COCONUT has no kingdom field; `kingdom` is
+    passed on as is."""
+    parts = ", ".join(map(_form_item, shown.get("organism_part", [])))
     places = shown.get("geo_location", [])
-    ecosystems = ", ".join(shown.get("location", []))
     organisms = [
         {
             "name": name,
             "parts": parts,
             "location": places[0] if places else "",
-            "ecosystems": ecosystems,
+            "ecosystems": "",
         }
         for name in shown.get("organism_or_species", [])
     ]

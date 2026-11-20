@@ -258,7 +258,8 @@ class AnnotationField(BaseModel):
 
 
 class CoconutOrganism(BaseModel):
-    """frontend-v2 coconut OrganismDraft: parts and ecosystems are comma-separated."""
+    """frontend-v2 coconut OrganismDraft: parts and ecosystems are comma-separated (an item
+    with a comma in double quotes). The prefill leaves ecosystems empty."""
 
     name: str
     parts: str

@@ -104,11 +104,41 @@ export async function coconutLogin(email: string, password: string): Promise<str
 
 // --- Report body ---------------------------------------------------------------------------
 
-function list(text: string): string[] {
-  return text
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/**
+ * A comma-separated list as typed: items trimmed, blanks out. An item that starts with a double
+ * quote is read to its closing quote (a doubled quote is one quote inside), so it may hold
+ * commas (the annotation's parts come so, backend-v2 core/annotation.py `_form_item`); an
+ * opening quote that is never closed, or a quote later in an item, is plain text.
+ */
+export function splitList(text: string): string[] {
+  const out: string[] = [];
+  let at = 0;
+  for (;;) {
+    let from = at;
+    while (from < text.length && /\s/.test(text[from]!)) from++;
+    let item = "";
+    if (text[from] === '"') {
+      let value = "";
+      let p = from + 1;
+      while (p < text.length) {
+        if (text[p] === '"' && text[p + 1] === '"') {
+          value += '"';
+          p += 2;
+        } else if (text[p] === '"') {
+          item = value;
+          from = p + 1;
+          break;
+        } else {
+          value += text[p++];
+        }
+      }
+    }
+    const comma = text.indexOf(",", from);
+    item = (item + text.slice(from, comma === -1 ? text.length : comma)).trim();
+    if (item) out.push(item);
+    if (comma === -1) return out;
+    at = comma + 1;
+  }
 }
 
 /** v1 formatSubmissionData: unnamed organisms are dropped; a location only when named. */
@@ -118,8 +148,8 @@ function organism(d: OrganismDraft): Organism | null {
   const location = d.location.trim();
   return {
     name,
-    parts: list(d.parts),
-    locations: location ? [{ name: location, ecosystems: list(d.ecosystems) }] : [],
+    parts: splitList(d.parts),
+    locations: location ? [{ name: location, ecosystems: splitList(d.ecosystems) }] : [],
   };
 }
 
