@@ -7,7 +7,14 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../api/client";
 import { createQueryClient } from "../api/queries";
-import type { DoclingDoc, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import type {
+  AnnotationOut,
+  DoclingDoc,
+  PaperDetail,
+  PredictionOut,
+  SegmentOut,
+  StepOut,
+} from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import Workspace from "./Workspace";
 
@@ -108,14 +115,53 @@ function Where() {
   return <output data-testid="where">{`${loc.pathname}${loc.search}`}</output>;
 }
 
+const FIELDS: [string, string][] = [
+  ["compound_group", "Compound series"],
+  ["compound_class", "Compound class"],
+  ["organism_part", "Organism part"],
+  ["organism_or_species", "Organism"],
+  ["geo_location", "Place"],
+  ["Kingdom", "Kingdom"],
+  ["trivial_name", "Compound names"],
+  ["location", "Habitat or host"],
+  ["iupac_name", "IUPAC names"],
+  ["abbreviation", "Abbreviations"],
+  ["iupac_like_name", "Semi-systematic names"],
+];
+const noValues = () => Object.fromEntries(FIELDS.map(([k]) => [k, [] as string[]]));
+
+/** GET /papers/{id}/annotation: never asked for by default. */
+function annotation(over: Partial<AnnotationOut> = {}): AnnotationOut {
+  return {
+    available: true,
+    status: "none",
+    step: null,
+    fields: FIELDS.map(([key, label]) => ({ key, label })),
+    model: null,
+    model_version: null,
+    output: null,
+    positions: null,
+    curated: null,
+    curated_positions: null,
+    values: null,
+    coconut: null,
+    created_at: null,
+    updated_at: null,
+    curated_at: null,
+    ...over,
+  };
+}
+
 function renderAt(
   p: PaperDetail,
-  { search = "?view=paper", steps = [step({})], doc = DOC }: {
+  { search = "?view=paper", steps = [step({})], doc = DOC, ann = annotation() }: {
     search?: string;
     steps?: StepOut[];
     doc?: DoclingDoc;
+    ann?: AnnotationOut;
   } = {},
 ) {
+  vi.spyOn(api, "getAnnotation").mockResolvedValue(ann);
   vi.spyOn(api, "getPaper").mockResolvedValue(p);
   vi.spyOn(api, "getSteps").mockResolvedValue({ steps });
   vi.spyOn(api, "getQueue").mockResolvedValue({ papers: [], estimate_s: 0 });
@@ -246,14 +292,15 @@ describe("Paper view", () => {
     expect(getText).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the paper's text as headings and paragraphs, and reserves the annotation area", async () => {
+  it("shows the paper's text as headings and paragraphs, with Annotate above it", async () => {
     renderAt(paper([segment("s1")]));
     const text = await screen.findByRole("region", { name: "Text" });
     expect(await within(text).findByRole("heading", { name: "Results" })).toBeInTheDocument();
     expect(within(text).getByText("Compound 1 was isolated.")).toBeInTheDocument();
-    expect(
-      within(text).getByText("Annotations (compounds, organisms, methods) come in a later version."),
-    ).toBeInTheDocument();
+    const panel = await within(text).findByRole("region", { name: "Annotation" });
+    expect(within(panel).getByRole("button", { name: "Annotate" })).toHaveAccessibleDescription(
+      "A model on this server suggests organism, place and compound names.",
+    );
   });
 
   it("renders hostile text from the PDF as text", async () => {
@@ -345,5 +392,276 @@ describe("Paper view fixes (F9 review)", () => {
     const again = await within(pages).findByRole("img", { name: "Page 2" });
     expect(again.getAttribute("src")).not.toBe(first);
     expect(again.getAttribute("src")).toContain(`/papers/${ID}/pages/1/image`);
+  });
+});
+
+// The annotation: on demand (Annotate), its progress, the fields with their values, each
+// found value a button that walks its occurrences in the text, corrections and the reset.
+const TEXT = "Two diterpenoids from the bark of Taxus brevifolia. Taxus brevifolia grows in Oregon.";
+const ANN_DOC: DoclingDoc = {
+  body: { children: [{ $ref: "#/texts/0" }, { $ref: "#/texts/1" }] },
+  texts: [
+    { self_ref: "#/texts/0", label: "section_header", text: "Abstract" },
+    { self_ref: "#/texts/1", label: "text", text: TEXT },
+  ],
+};
+const at = (s: string, n = 0) => {
+  let i = -1;
+  for (let k = 0; k <= n; k++) i = TEXT.indexOf(s, i + 1);
+  return [1, i, i + s.length] as [number, number, number];
+};
+
+function annotated(over: Partial<AnnotationOut> = {}): AnnotationOut {
+  const values = {
+    ...noValues(),
+    organism_or_species: ["Taxus brevifolia"],
+    organism_part: ["bark"],
+    Kingdom: ["Plantae"],
+  };
+  return annotation({
+    status: "done",
+    model: "fake-annotator",
+    model_version: "fake-1",
+    output: values,
+    values,
+    positions: {
+      organism_or_species: { "Taxus brevifolia": [at("Taxus brevifolia"), at("Taxus brevifolia", 1)] },
+      organism_part: { bark: [at("bark")] },
+      Kingdom: { Plantae: [] },
+    },
+    ...over,
+  });
+}
+
+const annStep = (over: Partial<StepOut> = {}) =>
+  step({ id: "st-ann", kind: "annotate", status: "running", created_at: "2026-11-18T11:00:00Z", ...over });
+
+async function panel() {
+  const text = await screen.findByRole("region", { name: "Text" });
+  return within(text).findByRole("region", { name: "Annotation" });
+}
+
+describe("Paper view: annotation", () => {
+  it("Annotate starts it: the paper's stream opens again and the panel says Annotating…", async () => {
+    const start = vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
+    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    expect(start).toHaveBeenCalledWith(ID);
+  });
+
+  it("says Annotating… while the annotate step runs, in the panel and in the status bar", async () => {
+    renderAt(paper([segment("s1")], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep()],
+    });
+    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    const status = screen.getByRole("region", { name: "Status" });
+    expect(within(status).getByText("Annotating…")).toBeInTheDocument();
+    expect(within(status).queryByText("Reading…")).toBeNull();
+  });
+
+  it("a start the server refuses says so in a short line (503: not available)", async () => {
+    vi.spyOn(api, "startAnnotation").mockRejectedValue(
+      new ApiError(503, "Annotation is not available"),
+    );
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
+    expect(await within(await panel()).findByRole("alert")).toHaveTextContent(
+      "Not started: Annotation is not available",
+    );
+    expect(within(await panel()).getByRole("button", { name: "Annotate" })).toBeEnabled();
+  });
+
+  it("a run that ended failed says why and offers Try again", async () => {
+    const start = vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-2" });
+    const failed = annStep({ status: "failed", error_class: "bad_input" });
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      steps: [step({}), failed],
+      ann: annotation({ status: "failed", step: failed }),
+    });
+    const p = await panel();
+    expect(
+      await within(p).findByText("Annotation failed: no title, abstract or introduction was found"),
+    ).toBeInTheDocument();
+    fireEvent.click(within(p).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(start).toHaveBeenCalled());
+  });
+
+  it("is not offered where the server cannot annotate", async () => {
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotation({ available: false }) });
+    const text = await screen.findByRole("region", { name: "Text" });
+    await within(text).findByText(TEXT);
+    expect(within(text).queryByRole("region", { name: "Annotation" })).toBeNull();
+  });
+
+  it("lists the fields that have values, labelled as a model suggestion, with their counts", async () => {
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    expect(await within(p).findByText("Model suggestion")).toBeInTheDocument();
+    expect(within(p).getByText("fake-annotator")).toBeInTheDocument();
+    expect(within(p).getAllByRole("term").map((t) => t.textContent)).toEqual([
+      "Organism part",
+      "Organism",
+      "Kingdom",
+    ]);
+    expect(within(p).getByRole("button", { name: "Taxus brevifolia (2 in the text)" })).toBeInTheDocument();
+    expect(within(p).getByRole("button", { name: "bark (1 in the text)" })).toBeInTheDocument();
+    // inferred, not in the text: no button
+    expect(within(p).queryByRole("button", { name: /Plantae/ })).toBeNull();
+    expect(within(p).getByText(/not in the text/)).toBeInTheDocument();
+  });
+
+  it("marks every occurrence in the text; a click shows the first, the next click the next", async () => {
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    const text = screen.getByRole("group", { name: "Paper text" });
+    await waitFor(() => expect(text.querySelectorAll("mark")).toHaveLength(3));
+    expect([...text.querySelectorAll("mark")].map((m) => m.textContent)).toEqual([
+      "bark",
+      "Taxus brevifolia",
+      "Taxus brevifolia",
+    ]);
+    const taxus = within(p).getByRole("button", { name: /^Taxus brevifolia/ });
+    fireEvent.click(taxus);
+    const current = () => [...text.querySelectorAll("mark[data-current]")];
+    expect(current()).toHaveLength(1);
+    expect(current()[0]).toBe(text.querySelectorAll("mark")[1]);
+    expect(taxus).toHaveAttribute("aria-current", "true");
+    expect(within(p).getByRole("status")).toHaveTextContent("Taxus brevifolia: 1 of 2");
+    fireEvent.click(taxus);
+    expect(current()[0]).toBe(text.querySelectorAll("mark")[2]);
+    expect(within(p).getByRole("status")).toHaveTextContent("Taxus brevifolia: 2 of 2");
+    fireEvent.click(taxus); // around to the first
+    expect(current()[0]).toBe(text.querySelectorAll("mark")[1]);
+    fireEvent.click(within(p).getByRole("button", { name: /^bark/ }));
+    expect(current()[0]?.textContent).toBe("bark");
+    expect(taxus).not.toHaveAttribute("aria-current");
+  });
+
+  it("shows hostile model text as text, and values named __proto__ or constructor like any other", async () => {
+    const hostile = "<img src=x onerror=window.__xss=1>";
+    const doc: DoclingDoc = {
+      texts: [{ self_ref: "#/texts/0", label: "text", text: `__proto__ and constructor ${hostile}` }],
+    };
+    const values = { ...noValues(), trivial_name: ["__proto__", "constructor", hostile] };
+    const positions = JSON.parse(
+      JSON.stringify({
+        trivial_name: { __proto__: [[0, 0, 9]], constructor: [[0, 14, 25]], [hostile]: [[0, 26, 26 + hostile.length]] },
+      }),
+    ) as AnnotationOut["positions"];
+    // JSON.stringify drops a literal __proto__ key: build it as the API sends it
+    positions!.trivial_name = JSON.parse(
+      `{"__proto__": [[0, 0, 9]], "constructor": [[0, 14, 25]], ${JSON.stringify(hostile)}: [[0, 26, ${26 + hostile.length}]]}`,
+    ) as Record<string, [number, number, number][]>;
+    renderAt(paper([segment("s1")]), {
+      doc,
+      ann: annotated({ output: values, values, positions }),
+    });
+    const p = await panel();
+    expect(await within(p).findByRole("button", { name: "__proto__ (1 in the text)" })).toBeInTheDocument();
+    expect(within(p).getByRole("button", { name: "constructor (1 in the text)" })).toBeInTheDocument();
+    expect(within(p).getByRole("button", { name: `${hostile} (1 in the text)` })).toBeInTheDocument();
+    const text = screen.getByRole("group", { name: "Paper text" });
+    expect([...text.querySelectorAll("mark")].map((m) => m.textContent)).toEqual([
+      "__proto__",
+      "constructor",
+      hostile,
+    ]);
+    expect(document.querySelector('img[src="x"]')).toBeNull();
+    expect((window as { __xss?: unknown }).__xss).toBeUndefined();
+  });
+
+  it("Edit: one box per field, one value a line; Save sends all 11 fields and shows Curated", async () => {
+    const values = { ...annotated().values!, geo_location: ["Oregon"], organism_part: [] };
+    const saved = annotated({
+      curated: values,
+      values,
+      curated_positions: { organism_or_species: annotated().positions!.organism_or_species!, geo_location: { Oregon: [at("Oregon")] } },
+    });
+    const save = vi.spyOn(api, "saveAnnotation").mockResolvedValue(saved);
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    const boxes = within(p).getAllByRole("textbox");
+    expect(boxes).toHaveLength(11);
+    expect(within(p).getByLabelText("Compound series")).toHaveFocus();
+    expect(within(p).getByLabelText("Organism")).toHaveValue("Taxus brevifolia");
+    fireEvent.change(within(p).getByLabelText("Organism part"), { target: { value: "" } });
+    fireEvent.change(within(p).getByLabelText("Place"), { target: { value: " Oregon \n\nOregon" } });
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const sent = save.mock.calls[0]![1];
+    expect(Object.keys(sent)).toEqual(FIELDS.map(([k]) => k));
+    expect(sent.geo_location).toEqual(["Oregon"]);
+    expect(sent.organism_part).toEqual([]);
+    expect(await within(p).findByText("Curated")).toBeInTheDocument();
+    expect(within(p).getByRole("button", { name: "Oregon (1 in the text)" })).toBeInTheDocument();
+    expect(within(p).getByRole("button", { name: "Edit" })).toHaveFocus();
+  });
+
+  it("Save refuses a value longer than the field takes, and sends nothing", async () => {
+    const save = vi.spyOn(api, "saveAnnotation");
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    fireEvent.change(within(p).getByLabelText("Kingdom"), { target: { value: "x".repeat(61) } });
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    expect(await within(p).findByRole("alert")).toHaveTextContent(
+      "A value in Kingdom is longer than 60 characters.",
+    );
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("Cancel and Escape leave the values as they were; unchanged values are not saved", async () => {
+    const save = vi.spyOn(api, "saveAnnotation");
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    fireEvent.change(within(p).getByLabelText("Place"), { target: { value: "Mars" } });
+    fireEvent.click(within(p).getByRole("button", { name: "Cancel" }));
+    expect(within(p).queryByText("Mars")).toBeNull();
+    fireEvent.click(within(p).getByRole("button", { name: "Edit" }));
+    fireEvent.keyDown(within(p).getByLabelText("Place"), { key: "Escape" });
+    expect(within(p).queryByRole("textbox")).toBeNull();
+    fireEvent.click(within(p).getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(within(p).queryByRole("textbox")).toBeNull());
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("Reset to model asks first, then shows the model's values", async () => {
+    const curated = { ...annotated().values!, organism_part: [] };
+    const reset = vi.spyOn(api, "resetAnnotation").mockResolvedValue(annotated());
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      ann: annotated({ curated, values: curated, curated_positions: {} }),
+    });
+    const p = await panel();
+    expect(await within(p).findByText("Curated")).toBeInTheDocument();
+    fireEvent.click(within(p).getByRole("button", { name: "Reset to model" }));
+    expect(reset).not.toHaveBeenCalled();
+    fireEvent.click(within(p).getByRole("button", { name: "Reset to model" }));
+    expect(await within(p).findByText("Model suggestion")).toBeInTheDocument();
+    expect(reset).toHaveBeenCalledWith(ID);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(within(p).queryByRole("button", { name: "Reset to model" })).toBeNull();
+  });
+
+  it("reads the annotation again when its step ends", async () => {
+    renderAt(paper([segment("s1")], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep()],
+    });
+    await within(await panel()).findByText("Annotating…");
+    const get = vi.mocked(api.getAnnotation);
+    const before = get.mock.calls.length;
+    get.mockResolvedValue(annotated());
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), annStep({ status: "done" })] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    expect(await within(await panel()).findByText("Model suggestion")).toBeInTheDocument();
+    expect(get.mock.calls.length).toBeGreaterThan(before);
   });
 });

@@ -118,7 +118,7 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide: onDecide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -242,6 +242,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
         paperId={paper.id}
         displayName={paper.display_name}
         paperStatus={paper.status}
+        onStarted={started}
       />
 
       <section className="pv-col pv-col--list" aria-labelledby={listHead} ref={listCol}>
