@@ -254,3 +254,67 @@ def test_blocks_refs_are_matched_like_javascript():
         "texts": [_t(0, "text", "Once."), _t(1, "text", "Never.")],
     }
     assert ann.docling_blocks(doc) == ["Once."]
+
+
+# --- quoted fields cut by the length limit or not exactly wrapped (review I1) -------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "cut", "expected"),
+    [
+        # the repetition loop cut by maxLength: the last, unterminated value is a fragment
+        ("'taxane A', 'taxane B', 'taxane B', 'tax", True, ["taxane A", "taxane B"]),
+        ("'taxane A', 'taxane B', 'taxane B', 'tax", False, ["taxane A", "taxane B", "tax"]),
+        ("'taxane A', 'taxane B',", False, ["taxane A", "taxane B"]),
+        ("'a', 'b'.", False, ["a", "b"]),
+        ("'taxane A', 'taxane B", False, ["taxane A", "taxane B"]),  # not cut: kept, unquoted
+        ("'taxane A'", False, ["taxane A"]),
+        ("'taxane A", False, ["taxane A"]),
+        ("'mono-, bi-, and tricyclic oxepanes'", False, ["mono-, bi-, and tricyclic oxepanes"]),
+        ("\u2018taxane A\u2019, \u2018taxane B\u2019", False, ["taxane A", "taxane B"]),
+        # plain form: a trailing quote is a prime and stays
+        ("luteolin 3', quercetin", False, ["luteolin 3'", "quercetin"]),
+        ("3',4'-dihydroxyflavone, quercetin", False, ["3',4'-dihydroxyflavone", "quercetin"]),
+    ],
+)
+def test_split_field_never_keeps_stray_quotes(text, cut, expected):
+    assert ann.split_field(text, len(text) if cut else None) == expected
+    assert not any(v[:1] in "'\u2018" for v in ann.split_field(text))
+
+
+def test_a_plain_field_cut_by_the_length_limit_drops_its_last_fragment():
+    loop = ", ".join(["sesquiterpene"] * 50)[: ann.MAX_LENGTH["compound_class"]]
+    assert ann.split_field(loop, ann.MAX_LENGTH["compound_class"]) == ["sesquiterpene"]
+    assert ann.split_field("alpha, bet", 10) == ["alpha"]  # cut at the limit
+    assert ann.split_field("alpha, bet", 60) == ["alpha", "bet"]  # not cut
+
+
+def test_parse_output_unquotes_a_cut_quoted_field():
+    cut = ("'taxane A', " * 40)[: ann.MAX_LENGTH["compound_group"]]
+    raw = json.dumps({f: "nan" for f in ann.FIELDS} | {"compound_group": cut})
+    assert ann.parse_output(raw)["compound_group"] == ["taxane A"]
+
+
+def test_locate_counts_a_lone_surrogate_as_one_code_unit():
+    assert ann.Locator(["a\ud800 Taxus"]).find("Taxus") == [[0, 3, 8]]
+
+
+def test_the_fast_normalisation_equals_the_per_character_rules():
+    def slow(text, fold):
+        chars, origin = [], []
+        for i, ch in enumerate(text):
+            for c in ann._piece(ch, fold):
+                if c == " " and chars and chars[-1] == " ":
+                    continue
+                chars.append(c)
+                origin.append(i)
+        return "".join(chars), origin
+
+    samples = [
+        "Taxus  brevi­folia leaves", "a­ b", "x  y", "\x00\x7f́",
+        "A–B  C", "ﬁne İx", "  lead", "trail  ", "café café", "",
+    ]  # fmt: skip
+    for text in samples:
+        for fold in (False, True):
+            form, origin = ann._normalise(text, fold)
+            assert (form, list(origin)) == slow(text, fold), (text, fold)

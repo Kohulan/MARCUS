@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     annotate_model: str = Field("qwen3.5-9b-marcus-v1", min_length=1, max_length=200)
     annotate_model_version: str = Field("Q8_0 llama.cpp b12554", min_length=1, max_length=200)
     rate_limit_annotate_per_min: int = 5  # per owner: POST /papers/{id}/annotation
+    # An annotate step older than this while no worker consumes q.llm (the model service is
+    # down) fails as engine_error, so its paper is done again (dispatcher watchdog).
+    annotate_max_wait_s: int = Field(600, gt=0)
+    # per owner: PUT and DELETE /papers/{id}/annotation/curation (each save locates values)
+    rate_limit_curation_per_min: int = 30
 
     @model_validator(mode="after")
     def _sessions_default(self):

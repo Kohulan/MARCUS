@@ -9,7 +9,7 @@ Order of the ASGI stack (outermost first):
                            GET /api/v2/health; GETs of page, crop and depiction images
                            have their own 3000/min bucket
     FastAPI app          per-owner limits are dependencies (`upload_limit`, `tools_limit`,
-                         `annotate_limit`)
+                         `annotate_limit`, `curation_limit`)
 
 Both middlewares are pure ASGI (not BaseHTTPMiddleware), so SSE streams pass through
 unbuffered. The catch-all lives in SecurityMiddleware rather than in Starlette's
@@ -240,6 +240,7 @@ class RateLimiter:
             "ip": settings.rate_limit_ip_per_min,
             "ip_assets": settings.rate_limit_ip_assets_per_min,
             "annotate": settings.rate_limit_annotate_per_min,
+            "curation": settings.rate_limit_curation_per_min,
         }[scope]
 
     async def hit(self, scope: str, key: str, *, fail_open: bool) -> int | None:
@@ -330,6 +331,12 @@ async def annotate_limit(request: Request, owner: Owner = Depends(current_owner)
     """5 annotation starts per owner per minute (the GPU model serves one paper at a time);
     fails closed while the breaker is open, like uploads."""
     await _owner_limit(request, owner, "annotate", fail_open=False)
+
+
+async def curation_limit(request: Request, owner: Owner = Depends(current_owner)) -> None:
+    """30 annotation curation saves/resets per owner per minute (each save locates values in
+    the paper's text); fails open without Redis, like tools."""
+    await _owner_limit(request, owner, "curation", fail_open=True)
 
 
 async def tools_limit(request: Request, owner: Owner = Depends(current_owner)) -> None:

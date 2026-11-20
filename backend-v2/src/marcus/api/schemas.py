@@ -322,6 +322,8 @@ class AnnotationCurationIn(BaseModel):
     def _fields(cls, values: dict[str, list[str]]) -> dict[str, list[str]]:
         if set(values) != set(ann.FIELDS):
             raise ValueError("values must have exactly the 11 fields")
+        if sum(len(items) for items in values.values()) > ann.MAX_CURATED_VALUES:
+            raise ValueError(f"at most {ann.MAX_CURATED_VALUES} values in all")
         out: dict[str, list[str]] = {}
         for field in ann.FIELDS:
             items = values[field]

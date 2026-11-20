@@ -60,8 +60,13 @@ async def run_annotate(db, paper_id, result) -> None:
 
 @pytest.fixture
 def enabled(monkeypatch, clear_settings_cache):
+    """Annotation offered, and a live q.llm consumer (the /ready consumer check, faked)."""
+    from marcus.api.routes import health
+
     monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "1")
     clear_settings_cache()
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
 
 
 @pytest.fixture
@@ -295,3 +300,80 @@ async def test_expired_paper_is_404(app, async_db_session, ready):
     await db.commit()
     async with make_client(app, token) as c:
         assert (await c.get(f"/api/v2/papers/{paper_id}/annotation")).status_code == 404
+
+
+# --- the cost of a curation save is bounded (review I2) -----------------------------------------
+
+
+async def test_a_curation_with_too_many_values_is_422(app, async_db_session, ready):
+    db = async_db_session
+    token, paper_id, _ = ready
+    values = {f: [f"v{f}{i}" for i in range(28)] for f in ann.FIELDS}  # 308 in all, 28 per field
+    async with make_client(app, token) as c:
+        await c.post(f"/api/v2/papers/{paper_id}/annotation")
+        await run_annotate(db, paper_id, model_result())
+        r = await c.put(f"/api/v2/papers/{paper_id}/annotation/curation", json={"values": values})
+    assert r.status_code == 422
+    assert "at most 300 values" in r.text
+
+
+async def test_curation_saves_are_rate_limited_per_owner(
+    app, async_db_session, ready, monkeypatch, clear_settings_cache
+):
+    db = async_db_session
+    token, paper_id, bob = ready
+    monkeypatch.setenv("MARCUS_RATE_LIMIT_CURATION_PER_MIN", "3")
+    clear_settings_cache()
+    url = f"/api/v2/papers/{paper_id}/annotation/curation"
+    body = {"values": {f: [] for f in ann.FIELDS}}
+    async with make_client(app, token) as c:
+        await c.post(f"/api/v2/papers/{paper_id}/annotation")
+        await run_annotate(db, paper_id, model_result())
+        codes = [(await c.put(url, json=body)).status_code for _ in range(2)]
+        codes.append((await c.delete(url)).status_code)  # resets count too
+        assert codes == [200, 200, 200]
+        r = await c.put(url, json=body)
+        assert r.status_code == 429 and int(r.headers["retry-after"]) >= 1
+    async with make_client(app, bob) as c:  # another owner: own bucket (and not my paper)
+        assert (await c.put(url, json=body)).status_code == 404
+
+
+def test_locate_reuses_known_positions_and_reads_no_text_when_all_are_known(monkeypatch):
+    from marcus.api import annotation as reads
+
+    paper_id = uuid.uuid4()
+    storage.paper_dir(paper_id).mkdir(parents=True)
+    (storage.paper_dir(paper_id) / "text.json").write_text(json.dumps(TEXT))
+    searched = []
+    real_find = ann.Locator.find
+    monkeypatch.setattr(
+        ann.Locator, "find", lambda self, v: searched.append(v) or real_find(self, v)
+    )
+    values = {f: [] for f in ann.FIELDS} | {"geo_location": ["Oregon", "USA"]}
+    known = {"Oregon": [[9, 9, 9]]}
+    found = reads.locate(reads.text_path(paper_id), values, known)
+    assert searched == ["USA"]  # only the new value is searched
+    assert found["geo_location"] == {"Oregon": [[9, 9, 9]], "USA": [[2, 34, 37]]}
+    monkeypatch.setattr(reads, "text_blocks", lambda pid: pytest.fail("text read"))
+    assert reads.locate(
+        reads.text_path(paper_id), {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known
+    )["Kingdom"] == {"Oregon": [[9, 9, 9]]}
+
+
+async def test_start_is_503_while_no_annotation_worker_is_running(
+    app, async_db_session, ready, monkeypatch
+):
+    from marcus.api.routes import health
+
+    token, paper_id, bob = ready
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.tools"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    async with make_client(app, token) as c:
+        own = await c.post(f"/api/v2/papers/{paper_id}/annotation")
+        state = await c.get(f"/api/v2/papers/{paper_id}/annotation")
+    async with make_client(app, bob) as c:
+        theirs = await c.post(f"/api/v2/papers/{paper_id}/annotation")
+    assert own.status_code == theirs.status_code == 503
+    assert own.json() == theirs.json() == {"detail": "The annotation model is not running"}
+    assert state.json()["status"] == "none"
+    assert (await paper_row(async_db_session, paper_id)).status == "done"  # not reopened
