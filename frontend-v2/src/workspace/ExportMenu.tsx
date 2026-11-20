@@ -17,14 +17,16 @@ const SCOPES: { status: ExportStatus; label: string }[] = [
 
 /**
  * Export: a disclosure with six plain download links (format × accepted only / all), laid
- * out as a small label table; a paper with an annotation says that every file carries it. Escape, a click outside or the focus leaving closes it.
+ * out as a small label table; a paper with an annotation says what of it each format carries
+ * (JSON the whole of it; CSV and SDF four fields on each structure row, so nothing without
+ * structures). Escape, a click outside or the focus leaving closes it.
  */
 export default function ExportMenu({
   paperId,
   annotated = false,
 }: {
   paperId: string;
-  /** The paper has an annotation: every file carries it (JSON object, CSV columns, SDF properties). */
+  /** The paper has an annotation (JSON object; CSV columns and SDF properties per structure). */
   annotated?: boolean;
 }) {
   const { open, setOpen, root, button, panelId, onKeyDown } = useDisclosure();
@@ -62,7 +64,11 @@ export default function ExportMenu({
               ))}
             </tbody>
           </table>
-          {annotated && <p className="ws-export__note">With the annotation</p>}
+          {annotated && (
+            <p className="ws-export__note">
+              JSON: the whole annotation. CSV, SDF: organism, part, place and kingdom per structure.
+            </p>
+          )}
         </div>
       )}
     </div>

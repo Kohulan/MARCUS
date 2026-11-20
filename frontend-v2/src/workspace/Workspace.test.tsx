@@ -54,6 +54,7 @@ vi.mock("../lookup/coconutDoi", async (actual) => ({
 
 const XSS = "<img src=x onerror=window.__xss=1>";
 const ID = "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f"; // paper ids are UUIDs
+const NOTE = "JSON: the whole annotation. CSV, SDF: organism, part, place and kingdom per structure.";
 
 function paper(over: Partial<PaperDetail> = {}): PaperDetail {
   return {
@@ -465,18 +466,18 @@ describe("export menu", () => {
     expect(within(menu).getAllByRole("link")).toHaveLength(6);
   });
 
-  it("says that every file carries the annotation once the paper has one", async () => {
+  it("says what of the annotation each file carries once the paper has one", async () => {
     const { unmount } = renderWorkspace();
     fireEvent.click(await screen.findByRole("button", { name: "Export" }));
     await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
-    expect(screen.queryByText("With the annotation")).toBeNull();
+    expect(within(screen.getByRole("group", { name: "Export" })).queryByText(/annotation/)).toBeNull();
     unmount();
     renderWorkspace({ annotation: annotationOut({ status: "done", values: { Kingdom: ["Plantae"] } }) });
-    const button = await screen.findByRole("button", { name: "Export" });
-    await waitFor(() => {
-      fireEvent.click(button);
-      expect(within(screen.getByRole("group", { name: "Export" })).getByText("With the annotation")).toBeInTheDocument();
-    });
+    fireEvent.click(await screen.findByRole("button", { name: "Export" }));
+    const menu = screen.getByRole("group", { name: "Export" });
+    expect(await within(menu).findByText(NOTE)).toBeInTheDocument();
+    // CSV and SDF carry it per structure row: no claim that every file carries it
+    expect(within(menu).queryByText("With the annotation")).toBeNull();
   });
 
   it("Escape closes the menu and gives the focus back", async () => {
