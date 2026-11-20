@@ -40,6 +40,22 @@ async def load(db: AsyncSession, paper_id: uuid.UUID) -> Annotation | None:
     ).scalar_one_or_none()
 
 
+def for_export(row: Annotation | None) -> dict | None:
+    """The paper-level annotation object of an export (plain data: it travels pickled to the
+    chem process). `values`: what is shown (the curator's, else the model's)."""
+    if row is None:
+        return None
+    return {
+        "source": "curated" if row.curated is not None else "model",
+        "model": row.model,
+        "model_version": row.model_version,
+        "values": shown(row),
+        "model_values": {f: list(row.output.get(f, [])) for f in ann.FIELDS},
+        "annotated_at": row.updated_at.isoformat(),
+        "curated_at": row.curated_at.isoformat() if row.curated_at else None,
+    }
+
+
 async def load_for_update(db: AsyncSession, paper_id: uuid.UUID) -> Annotation | None:
     """The row locked until the commit (a model run finishing meanwhile waits for it)."""
     return (

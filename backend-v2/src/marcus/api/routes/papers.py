@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.api import annotation as annotations
 from marcus.api import export
 from marcus.api.chempool import CHEM
 from marcus.api.deps import (
@@ -276,8 +277,11 @@ async def export_paper(
 ) -> Response:
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
+    annotation = annotations.for_export(await annotations.load(db, paper.id))
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
-    content = await CHEM.run(export.build, format, paper, segments, curations, predictions, status)
+    content = await CHEM.run(
+        export.build, format, paper, segments, curations, predictions, status, annotation
+    )
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],
