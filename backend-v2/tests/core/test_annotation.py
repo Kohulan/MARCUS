@@ -338,3 +338,17 @@ def test_the_fast_normalisation_equals_the_per_character_rules():
         for fold in (False, True):
             form, origin = ann._normalise(text, fold)
             assert (form, list(origin)) == slow(text, fold), (text, fold)
+
+
+def test_blocks_and_model_input_match_the_shared_parity_fixture():
+    """tests/fixtures/docling_parity.json is read by this test and by frontend-v2
+    src/workspace/doclingText.test.ts: the backend's walk and the Paper view's give the same
+    blocks, and the model input stays as recorded (review A-M4)."""
+    import pathlib
+
+    from marcus.workers.annotate.inputs import model_input
+
+    path = pathlib.Path(__file__).parents[1] / "fixtures" / "docling_parity.json"
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    assert ann.docling_blocks(fixture["doc"]) == [b["text"] for b in fixture["blocks"]]
+    assert model_input(fixture["doc"]) == fixture["input_text"]
