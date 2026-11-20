@@ -1,0 +1,91 @@
+name: backend-v2
+
+# ruff + the pytest suite without the model stacks (-m "not ml and not e2e", as in the README),
+# against Postgres and Redis service containers on the ports conftest.py defaults to
+# (:55432 / :56379). ML tests run inside the model images; e2e needs the fake stack.
+
+on:
+  pull_request:
+    paths:
+      - "backend-v2/**"
+      - "frontend-v2/deploy/**" # tests/deploy reads the nginx header / location files
+      - ".github/workflows/backend-v2.yml"
+  push:
+    branches: [main, v2-backend]
+    paths:
+      - "backend-v2/**"
+      - "frontend-v2/deploy/**"
+      - ".github/workflows/backend-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.10.0" # same as the Dockerfiles' ghcr.io/astral-sh/uv tag
+  PYTHON_VERSION: "3.11" # pyproject requires-python >=3.11,<3.12
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend-v2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend-v2/uv.lock
+      - run: uv sync --frozen --extra dev
+      - run: uv run --frozen --no-sync ruff check --output-format=github src tests alembic
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend-v2
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: marcus
+          POSTGRES_PASSWORD: marcus # throwaway test database, not a secret
+          POSTGRES_DB: marcus_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U marcus -d marcus_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MARCUS_TEST_DATABASE_URL: postgresql+asyncpg://marcus:marcus@127.0.0.1:55432/marcus_test
+      MARCUS_TEST_REDIS_URL: redis://127.0.0.1:56379/0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend-v2/uv.lock
+      - run: uv sync --frozen --extra api --extra tools --extra dev
+      - run: uv run --frozen --no-sync pytest tests -q -m "not ml and not e2e" --durations=15
