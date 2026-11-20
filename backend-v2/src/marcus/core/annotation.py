@@ -69,7 +69,6 @@ SYSTEM_PROMPT = "Extract the compound information from the Paragraph."
 MAX_OUTPUT_TOKENS = 4096
 EMPTY = {"", "nan", "none", "null", "n/a", "na", "[]"}
 MAX_VALUES_PER_FIELD = 200  # values kept per field (model or curator)
-MAX_VALUE_CHARS = 1000  # one curated value
 MAX_OCCURRENCES = 200  # positions kept per value
 
 _QUOTED_SEP = re.compile(r"['\u2018\u2019]\s*,\s*['\u2018\u2019]")
@@ -112,21 +111,48 @@ def clean_value(value: str) -> str:
     return text.rstrip(",;").strip()
 
 
-def split_field(text: str) -> list[str]:
+_CLOSE_TAIL = re.compile(r"['\u2018\u2019][.,;]*$")  # a closing quote, maybe with junk after it
+
+
+def _unquote(part: str, last: bool, cut: bool) -> str | None:
+    """One value of the quoted form without its wrapping quotes. A last value with no closing
+    quote in a field cut by the length limit is a fragment: None."""
+    p = part.strip()
+    if p[:1] in _QUOTES:
+        p = p[1:]
+    tail = _CLOSE_TAIL.search(p)
+    if tail:
+        p = p[: tail.start()]
+    elif last and cut:
+        return None
+    return p
+
+
+def split_field(text: str, max_length: int | None = None) -> list[str]:
     """One field's string -> its distinct values in order (exact duplicates dropped: the case
-    of a form is part of it, GUIDELINE F4). `nan` and other empty markers -> []."""
+    of a form is part of it, GUIDELINE F4). `nan` and other empty markers -> [].
+
+    Quoted form (`'a', 'b'`, F7; any field that starts with a quote): every value loses its
+    wrapping quotes, also when they are unbalanced. Plain form: a leading quote goes, a
+    trailing one stays (a prime, `luteolin 3'`). A field as long as `max_length` was cut by the
+    decoding limit (the greedy repeat loop the model README describes): its last value is a
+    fragment and is dropped."""
     t = text.strip()
     if t.lower() in EMPTY:
         return []
-    quoted = bool(_QUOTED_SEP.search(t)) or (len(t) >= 2 and t[0] in _QUOTES and t[-1] in _QUOTES)
-    if quoted:
-        t = t[1:-1] if t[0] in _QUOTES and t[-1] in _QUOTES else t
-        parts = _QUOTED_SEP.split(t)
-    else:
-        parts = _PLAIN_SEP.split(t)
+    cut = max_length is not None and len(text) >= max_length
+    quoted = bool(_QUOTED_SEP.search(t)) or t[0] in _QUOTES
+    parts = _QUOTED_SEP.split(t) if quoted else _PLAIN_SEP.split(t)
     out: list[str] = []
-    for part in parts:
-        value = clean_value(part)
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        if quoted:
+            raw = _unquote(part, last, cut)
+        else:
+            raw = None if last and cut and len(parts) > 1 else part.strip().lstrip(_QUOTES)
+        if raw is None:
+            continue
+        value = clean_value(raw)
         if not value or value.lower() in EMPTY or value in out:
             continue
         out.append(value)
@@ -148,7 +174,7 @@ def parse_output(raw: str) -> dict[str, list[str]]:
         value = obj[field]
         if not isinstance(value, str) or len(value) > MAX_LENGTH[field]:
             raise BadOutput(f"model output: {field} is not a string within its length")
-    return {field: split_field(obj[field]) for field in FIELDS}
+    return {field: split_field(obj[field], MAX_LENGTH[field]) for field in FIELDS}
 
 
 def empty_values() -> dict[str, list[str]]:
