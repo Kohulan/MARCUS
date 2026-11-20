@@ -1,7 +1,6 @@
 """Read side of a paper's annotation: the response shape, the values exports use, and the
 positions of curated values (located in the paper's text like the model's)."""
 
-import json
 import logging
 import uuid
 from pathlib import Path
@@ -11,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import AnnotationField, AnnotationOut, StepOut
 from marcus.core import annotation as ann
-from marcus.core import storage
 from marcus.core.enums import StepKind
 from marcus.core.models import Annotation, Step
 from marcus.core.settings import get_settings
@@ -99,18 +97,14 @@ async def annotation_out(db: AsyncSession, paper_id: uuid.UUID) -> AnnotationOut
     )
 
 
-def text_path(paper_id: uuid.UUID) -> Path:
-    return storage.paper_dir(paper_id) / "text.json"
-
-
 def text_blocks(path: Path) -> list[str]:
     """The text blocks of a paper's Docling document at `path` (blocking file read). [] when
     the text is missing, too large or unreadable."""
     try:
-        if path.stat().st_size > ann.MAX_TEXT_BYTES:
-            log.warning("%s: text too large to locate curated values", path.parent.name)
-            return []
-        return ann.docling_blocks(json.loads(path.read_text(encoding="utf-8")))
+        return ann.docling_blocks(ann.read_document(path))
+    except ann.TextTooLarge:
+        log.warning("%s: text too large to locate curated values", path.parent.name)
+        return []
     except (OSError, ValueError):
         return []
 
@@ -127,7 +121,7 @@ def known_positions(row: Annotation) -> dict[str, list]:
 
 def locate(path: Path, values: dict[str, list[str]], known: dict[str, list]) -> dict:
     """Positions of `values` in the paper's text (its Docling document at `path`, from
-    text_path: the path is resolved in the API process, whose settings are current),
+    storage.text_path: the path is resolved in the API process, whose settings are current),
     {field: {value: positions}}. Values in `known` keep theirs; only new ones are searched,
     and the text is read only for them. Blocking and CPU-bound: the route runs it in the chem
     process (marcus.api.chempool)."""

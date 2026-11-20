@@ -23,6 +23,7 @@ import json
 import re
 import unicodedata
 from functools import lru_cache
+from pathlib import Path
 
 FIELDS = (
     "compound_group",
@@ -86,6 +87,19 @@ _SPACES = re.compile(r"\s+")
 
 class BadOutput(ValueError):
     """The model text is not the 11-key object the schema allows."""
+
+
+class TextTooLarge(ValueError):
+    """The paper's text file is larger than MAX_TEXT_BYTES (it is not read)."""
+
+
+def read_document(path: Path) -> object:
+    """The parsed JSON of a paper's text file (its Docling document; blocking read). A file over
+    MAX_TEXT_BYTES is refused before it is read (TextTooLarge); otherwise OSError or ValueError
+    as reading and parsing raise them."""
+    if path.stat().st_size > MAX_TEXT_BYTES:
+        raise TextTooLarge(path.parent.name)
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # --- decoding grammar --------------------------------------------------------------------------

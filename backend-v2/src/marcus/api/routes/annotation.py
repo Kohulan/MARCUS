@@ -31,6 +31,7 @@ from marcus.api.schemas import (
     AnnotationStarted,
 )
 from marcus.api.security import annotate_limit, curation_limit
+from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import StepKind
 from marcus.core.models import Owner
@@ -116,7 +117,7 @@ async def put_annotation_curation(
     known = reads.known_positions(row)
     await db.commit()  # end the read transaction: locating reads the text file
     # CPU-bound (text normalisation, search): in the chem process, not on the event loop's GIL
-    found = await CHEM.run(reads.locate, reads.text_path(paper.id), body.values, known)
+    found = await CHEM.run(reads.locate, storage.text_path(paper.id), body.values, known)
     row = await reads.load_for_update(db, paper.id)
     if row is None:  # deleted meanwhile
         await db.rollback()
