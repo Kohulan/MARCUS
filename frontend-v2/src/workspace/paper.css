@@ -536,9 +536,9 @@ button.pv-ann__value {
   cursor: pointer;
 }
 
-/* Hover: the family's edge doubles. */
+/* Hover: the family's edge thickens to 3px. */
 button.pv-ann__value:hover {
-  box-shadow: inset 0 0 0 1px var(--fam-deep);
+  box-shadow: inset 0 0 0 2px var(--fam-deep);
 }
 
 /* The value whose occurrence the text shows: filled with its family's deep colour, as the
@@ -677,20 +677,33 @@ button.pv-ann__value--shown:hover {
   text-decoration: none;
 }
 
-/* The legend: a short run of the field's mark (tint and underline) before its name. */
+/* The legend: a small block of the family's tint over its line (a bottom border in the line
+   style; borders have no wavy, so the systematic family draws its wave as an underline). */
 .pv-swatch {
   flex: none;
   display: inline-block;
+  width: 22px;
+  height: 11px;
+  border-bottom: 2px var(--fam-line) var(--fam-deep);
   background-color: var(--fam-tint);
-  font-family: var(--font-text);
-  font-size: 13px;
-  line-height: 1;
 }
 
-.pv-swatch::before {
-  content: "\00a0\00a0\00a0\00a0";
-  text-decoration: underline var(--fam-line) var(--fam-deep) 1.5px;
-  text-underline-offset: 3px;
+.pv-swatch.pv-fam--organism {
+  border-bottom-width: 3px;
+}
+
+.pv-swatch.pv-fam--systematic {
+  border-bottom: 0;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 11px;
+  vertical-align: top;
+}
+
+.pv-swatch.pv-fam--systematic::before {
+  content: "\00a0\00a0\00a0\00a0\00a0";
+  text-decoration: underline wavy var(--fam-deep) 1.5px;
+  text-underline-offset: 1px;
 }
 
 @media (forced-colors: active) {
