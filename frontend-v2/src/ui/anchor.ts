@@ -57,13 +57,27 @@ export function placePanel(
 
 const clips = (overflow: string) => overflow !== "" && overflow !== "visible";
 
-/** The part of the viewport `el` can be seen in: the viewport cut by every clipping ancestor. */
-export function visibleArea(el: Element): Box {
+/** The viewport as a box. */
+function viewport(): Box {
   const root = document.documentElement;
-  const box: Box = { top: 0, left: 0, right: root.clientWidth, bottom: root.clientHeight };
+  return { top: 0, left: 0, right: root.clientWidth, bottom: root.clientHeight };
+}
+
+/** The ancestors that clip `el` (an overflow other than visible), nearest first. */
+export function clippingAncestors(el: Element): Element[] {
+  const root = document.documentElement;
+  const out: Element[] = [];
   for (let p = el.parentElement; p && p !== document.body && p !== root; p = p.parentElement) {
     const s = getComputedStyle(p);
-    if (!clips(s.overflowX) && !clips(s.overflowY)) continue;
+    if (clips(s.overflowX) || clips(s.overflowY)) out.push(p);
+  }
+  return out;
+}
+
+/** The part of the viewport an element can be seen in: the viewport cut by its clipping ancestors. */
+export function visibleArea(clippers: readonly Element[]): Box {
+  const box = viewport();
+  for (const p of clippers) {
     const r = p.getBoundingClientRect();
     box.top = Math.max(box.top, r.top);
     box.left = Math.max(box.left, r.left);
@@ -114,28 +128,35 @@ export function useAnchoredPanel(
     st.setProperty("right", "auto");
     st.setProperty("bottom", "auto");
 
+    // The anchor's clipping columns, found once; the panel's own size, measured when it opens
+    // and when it changes size (ResizeObserver), so a scroll only reads and then writes.
+    const clippers = clippingAncestors(a);
+    let size = { width: 0, height: 0 };
+    let measure = true;
     let frame = 0;
     const place = () => {
       frame = 0;
       if (!el.isConnected || !a.isConnected) return;
       const ar = a.getBoundingClientRect();
-      const seen = visibleArea(a);
+      const seen = visibleArea(clippers);
       if (ar.bottom <= seen.top || ar.top >= seen.bottom || ar.right <= seen.left || ar.left >= seen.right) {
         away.current?.();
         return;
       }
-      // Measured at its own size: no cap from the last placement (its scroll kept).
+      const remeasured = measure;
       const scrolled = el.scrollTop;
-      st.removeProperty("max-height");
-      const size = { width: el.offsetWidth, height: el.offsetHeight };
-      const root = document.documentElement;
-      const view: Box = { top: 0, left: 0, right: root.clientWidth, bottom: root.clientHeight };
-      const p = placePanel(ar, size, view, { prefer, align, gap, margin: VIEW_MARGIN });
+      if (measure) {
+        // At its own size: no cap from the last placement (its scroll is kept below).
+        st.removeProperty("max-height");
+        size = { width: el.offsetWidth, height: el.offsetHeight };
+        measure = false;
+      }
+      const p = placePanel(ar, size, viewport(), { prefer, align, gap, margin: VIEW_MARGIN });
       st.setProperty("top", `${p.top}px`);
       st.setProperty("left", `${p.left}px`);
       st.setProperty("max-height", `${p.maxHeight}px`);
       el.dataset.side = p.side;
-      el.scrollTop = scrolled;
+      if (remeasured) el.scrollTop = scrolled;
     };
     const later = (e?: Event) => {
       // The panel's own scroll (a capped panel) moves nothing.
@@ -147,7 +168,10 @@ export function useAnchoredPanel(
     window.addEventListener("resize", later);
     let ro: ResizeObserver | undefined;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(() => later());
+      ro = new ResizeObserver((entries) => {
+        if (entries.some((entry) => entry.target === el)) measure = true;
+        later();
+      });
       ro.observe(el);
       ro.observe(a);
     }
