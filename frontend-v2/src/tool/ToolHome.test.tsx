@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient } from "../api/queries";
-import type { ImageJobSummary, PaperSummary } from "../api/types";
+import type { ImageJobSummary, PaperSummary, StepOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { handOff } from "./files";
 import ToolHome from "./ToolHome";
@@ -104,6 +104,7 @@ function pick(container: HTMLElement, file: File) {
 }
 
 beforeEach(() => {
+  vi.spyOn(api, "getSteps").mockResolvedValue({ steps: [] });
   vi.spyOn(api, "uploadPaper").mockResolvedValue({ paper_id: "new-paper", status: "checking" });
   vi.spyOn(api, "uploadImage").mockResolvedValue({ image_job_id: "new-image", status: "queued" });
 });
@@ -418,6 +419,56 @@ describe("Papers list", () => {
     const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
     expect(within(row).getByText("Annotating…")).toBeInTheDocument();
     expect(within(row).queryByText("Reading…")).toBeNull();
+  });
+
+  it("a busy paper's row has a thin progress bar and its stage in a few words", async () => {
+    const step = (over: Partial<StepOut>): StepOut => ({
+      id: Math.random().toString(36),
+      kind: "segment_page",
+      page: 0,
+      segment_id: null,
+      status: "done",
+      attempts: 1,
+      error_class: null,
+      engine: null,
+      created_at: "2026-11-18T10:00:00.000000Z",
+      started_at: null,
+      finished_at: null,
+      ...over,
+    });
+    vi.mocked(api.getSteps).mockResolvedValue({
+      steps: [
+        step({ kind: "check_pdf", page: null }),
+        step({ page: 0 }),
+        step({ page: 1 }),
+        step({ page: 2, status: "running" }),
+      ],
+    });
+    renderHome({ papers: [paper({ status: "processing", pages: 4 })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    const bar = await within(row).findByRole("progressbar", {
+      name: "Progress of Alkaloids from Coffea leaves",
+    });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 2 of 4"));
+    expect(within(row).getByText("Reading pages 2/4")).toBeInTheDocument();
+    expect(api.getSteps).toHaveBeenCalledWith("p1", expect.anything());
+    // no announcements from the list: a row's figure changes with every poll
+    expect(within(row).queryByRole("status")).toBeNull();
+  });
+
+  it("a finished paper's row has no bar and asks for no steps", async () => {
+    renderHome({ papers: [paper()] });
+    await screen.findByText("Alkaloids from Coffea leaves");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(api.getSteps).not.toHaveBeenCalled();
+  });
+
+  it("an annotating paper's row has an indeterminate bar and no second word", async () => {
+    renderHome({ papers: [paper({ status: "processing", annotating: true })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    const bar = await within(row).findByRole("progressbar");
+    expect(bar).not.toHaveAttribute("value");
+    expect(within(row).getAllByText(/Annotating/)).toHaveLength(1);
   });
 
   it("says Not read yet for a finished paper uploaded with ocsr off", async () => {
