@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api import annotation as reads
 from marcus.api.chempool import CHEM
 from marcus.api.deps import current_owner, get_owned_paper, not_found, work_ip
-from marcus.api.routes import health  # the /ready consumer check (one shared cache)
 from marcus.api.schemas import (
     AnnotationCurationIn,
     AnnotationOut,
@@ -75,7 +74,8 @@ async def start_annotation(
     # step nobody runs.
     if not get_settings().annotate_enabled:
         raise HTTPException(status_code=503, detail=NOT_AVAILABLE)
-    if LLM_QUEUE not in await health.live_queues():
+    # the /ready consumer check and its cache (routes.health.live_queues, via create_app)
+    if LLM_QUEUE not in await request.app.state.live_queues():
         raise HTTPException(status_code=503, detail=NOT_RUNNING)
     paper = await get_owned_paper(db, owner, paper_id)
     rerun = body.rerun if body is not None else False
@@ -115,7 +115,7 @@ async def put_annotation_curation(
     known = reads.known_positions(row)
     await db.commit()  # end the read transaction: locating reads the text file
     # CPU-bound (text normalisation, search): in the chem process, not on the event loop's GIL
-    found = await CHEM.run(reads.locate, paper.id, body.values, known)
+    found = await CHEM.run(reads.locate, reads.text_path(paper.id), body.values, known)
     row = await reads.load_for_update(db, paper.id)
     if row is None:  # deleted meanwhile
         await db.rollback()

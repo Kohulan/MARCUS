@@ -98,13 +98,16 @@ async def annotation_out(db: AsyncSession, paper_id: uuid.UUID) -> AnnotationOut
     )
 
 
-def text_blocks(paper_id: uuid.UUID) -> list[str]:
-    """The paper's text blocks (blocking file read: run it in a thread). [] when the text is
-    missing, too large or unreadable."""
-    path: Path = storage.paper_dir(paper_id) / "text.json"
+def text_path(paper_id: uuid.UUID) -> Path:
+    return storage.paper_dir(paper_id) / "text.json"
+
+
+def text_blocks(path: Path) -> list[str]:
+    """The text blocks of a paper's Docling document at `path` (blocking file read). [] when
+    the text is missing, too large or unreadable."""
     try:
         if path.stat().st_size > MAX_TEXT_BYTES:
-            log.warning("paper %s: text too large to locate curated values", paper_id)
+            log.warning("%s: text too large to locate curated values", path.parent.name)
             return []
         return ann.docling_blocks(json.loads(path.read_text(encoding="utf-8")))
     except (OSError, ValueError):
@@ -121,13 +124,15 @@ def known_positions(row: Annotation) -> dict[str, list]:
     return known
 
 
-def locate(paper_id: uuid.UUID, values: dict[str, list[str]], known: dict[str, list]) -> dict:
-    """Positions of `values` in the paper's text, {field: {value: positions}}. Values in
-    `known` keep theirs; only new ones are searched, and the text is read only for them.
-    Blocking and CPU-bound: the route runs it in the chem process (marcus.api.chempool)."""
+def locate(path: Path, values: dict[str, list[str]], known: dict[str, list]) -> dict:
+    """Positions of `values` in the paper's text (its Docling document at `path`, from
+    text_path: the path is resolved in the API process, whose settings are current),
+    {field: {value: positions}}. Values in `known` keep theirs; only new ones are searched,
+    and the text is read only for them. Blocking and CPU-bound: the route runs it in the chem
+    process (marcus.api.chempool)."""
     new = {v for items in values.values() for v in items if v not in known}
     found = dict(known)
     if new:
-        locator = ann.Locator(text_blocks(paper_id))
+        locator = ann.Locator(text_blocks(path))
         found.update((v, locator.find(v)) for v in new)
     return {field: {v: found[v] for v in values.get(field, [])} for field in ann.FIELDS}

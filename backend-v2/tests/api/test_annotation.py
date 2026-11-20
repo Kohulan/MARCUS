@@ -351,13 +351,13 @@ def test_locate_reuses_known_positions_and_reads_no_text_when_all_are_known(monk
     )
     values = {f: [] for f in ann.FIELDS} | {"geo_location": ["Oregon", "USA"]}
     known = {"Oregon": [[9, 9, 9]]}
-    found = reads.locate(paper_id, values, known)
+    found = reads.locate(reads.text_path(paper_id), values, known)
     assert searched == ["USA"]  # only the new value is searched
     assert found["geo_location"] == {"Oregon": [[9, 9, 9]], "USA": [[2, 34, 37]]}
     monkeypatch.setattr(reads, "text_blocks", lambda pid: pytest.fail("text read"))
-    assert reads.locate(paper_id, {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known)[
-        "Kingdom"
-    ] == {"Oregon": [[9, 9, 9]]}
+    assert reads.locate(
+        reads.text_path(paper_id), {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known
+    )["Kingdom"] == {"Oregon": [[9, 9, 9]]}
 
 
 async def test_start_is_503_while_no_annotation_worker_is_running(
