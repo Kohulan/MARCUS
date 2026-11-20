@@ -17,3 +17,12 @@ export function engineName(engine: string): string {
 export function asEngine(engine: string | null | undefined): Engine | null {
   return ENGINES.find((e) => e.value === engine)?.value ?? null;
 }
+
+/**
+ * The line beside a run's "Reading…" for an engine much slower on its first run, else null.
+ * DECIMER hand-drawn loads its model on its first request (backend workers/ocsr/decimer.py:
+ * ~25 s on the GPU before the prediction), while the others answer in a few seconds.
+ */
+export function firstRunNote(engine: string | null | undefined): string | null {
+  return engine === "decimer-hand" ? "First run loads the model, about 30 s" : null;
+}
