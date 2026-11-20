@@ -12,6 +12,7 @@ import {
   annotateReason,
   annotationError,
   familyClass,
+  fieldLabel,
   hitsOf,
   linesOf,
   sameValues,
@@ -212,7 +213,7 @@ function Fields({
   const values = annotation.values!;
   const positions = shownPositions(annotation);
   const curated = annotation.curated !== null;
-  const labelOf = (key: string) => annotation.fields.find((f) => f.key === key)?.label ?? key;
+  const labelOf = (key: string) => fieldLabel(annotation.fields, key);
   const filled = annotation.fields.filter((f) => valuesIn(values, f.key).length > 0);
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [busy, setBusy] = useState(false);

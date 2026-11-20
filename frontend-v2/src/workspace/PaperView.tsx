@@ -12,6 +12,7 @@ import { reasonText } from "../api/reasons";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { isPaperReading } from "./annotation";
+import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
@@ -44,36 +45,6 @@ function pageImages(steps: StepOut[], pages: number, busy: boolean): PageImage[]
     if (newest.status === "failed") return { kind: "failed", reason: reasonText(newest.error_class) };
     return { kind: "waiting" };
   });
-}
-
-/**
- * Scrolls `container` so `el` is in view: only as far as needed, or to its top. The view is
- * the column under its sticky caption, which would otherwise cover what it scrolled to.
- */
-function scrollWithin(
-  container: HTMLElement | null,
-  el: Element | null | undefined,
-  block: "nearest" | "start",
-  smooth: boolean,
-) {
-  if (!container || !el) return;
-  const margin = 28; // room for a marker's tag above its box
-  const c = container.getBoundingClientRect();
-  const cap = container.querySelector(":scope > .pv-cap")?.getBoundingClientRect().height ?? 0;
-  const edge = c.top + cap + margin;
-  const r = el.getBoundingClientRect();
-  let delta = 0;
-  if (block === "start" || r.top < edge) delta = r.top - edge;
-  else if (r.bottom > c.bottom - margin) {
-    delta = Math.min(r.bottom - c.bottom + margin, r.top - edge);
-  }
-  if (Math.abs(delta) < 1) return;
-  const top = container.scrollTop + delta;
-  if (typeof container.scrollTo === "function") {
-    container.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
-  } else {
-    container.scrollTop = top;
-  }
 }
 
 /** The child of `root` whose `data-<key>` is `value` (compared as data, never as a selector). */
