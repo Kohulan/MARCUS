@@ -32,15 +32,16 @@ from marcus.api.schemas import (
 )
 from marcus.api.security import annotate_limit, curation_limit
 from marcus.core.db import get_db
+from marcus.core.enums import StepKind
 from marcus.core.models import Owner
 from marcus.core.pipeline import AnnotateNotAllowed, request_annotation
+from marcus.core.queues import queue_for
 from marcus.core.settings import get_settings
 
 router = APIRouter()
 
 NOT_AVAILABLE = "Annotation is not available"
 NOT_RUNNING = "The annotation model is not running"
-LLM_QUEUE = "q.llm"
 NO_TEXT = "The text of this paper is not ready"
 NOTHING_TO_CORRECT = "This paper has no annotation yet"
 
@@ -75,7 +76,7 @@ async def start_annotation(
     if not get_settings().annotate_enabled:
         raise HTTPException(status_code=503, detail=NOT_AVAILABLE)
     # the /ready consumer check and its cache (routes.health.live_queues, via create_app)
-    if LLM_QUEUE not in await request.app.state.live_queues():
+    if queue_for(StepKind.ANNOTATE, None) not in await request.app.state.live_queues():
         raise HTTPException(status_code=503, detail=NOT_RUNNING)
     paper = await get_owned_paper(db, owner, paper_id)
     rerun = body.rerun if body is not None else False

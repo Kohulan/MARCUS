@@ -9,12 +9,11 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
-from marcus.core.enums import Engine, PaperStatus, StepKind, StepStatus
+from marcus.core.enums import ACTIVE_PAPER_STATUSES, Engine, StepKind, StepStatus
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
-BUSY_PAPER = (PaperStatus.CHECKING.value, PaperStatus.PROCESSING.value)
 
 
 class PaperCounts(NamedTuple):
@@ -126,7 +125,7 @@ async def paper_counts(
 def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
     fields = PaperSummary.model_fields.keys() - PaperCounts._fields
     values = counts._asdict()
-    values["annotating"] = counts.annotating and paper.status in BUSY_PAPER
+    values["annotating"] = counts.annotating and paper.status in ACTIVE_PAPER_STATUSES
     return PaperSummary(**{f: getattr(paper, f) for f in fields}, **values)
 
 
