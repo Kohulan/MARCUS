@@ -19,7 +19,6 @@ from marcus.core.settings import get_settings
 log = logging.getLogger(__name__)
 
 FIELD_LIST = [AnnotationField(key=f, label=ann.LABELS[f]) for f in ann.FIELDS]
-MAX_TEXT_BYTES = 64 * 2**20  # a Docling document larger than this is not read by the API
 
 
 def shown(row: Annotation | None) -> dict[str, list[str]] | None:
@@ -106,7 +105,7 @@ def text_blocks(path: Path) -> list[str]:
     """The text blocks of a paper's Docling document at `path` (blocking file read). [] when
     the text is missing, too large or unreadable."""
     try:
-        if path.stat().st_size > MAX_TEXT_BYTES:
+        if path.stat().st_size > ann.MAX_TEXT_BYTES:
             log.warning("%s: text too large to locate curated values", path.parent.name)
             return []
         return ann.docling_blocks(json.loads(path.read_text(encoding="utf-8")))

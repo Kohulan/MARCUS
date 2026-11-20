@@ -73,6 +73,9 @@ EMPTY = {"", "nan", "none", "null", "n/a", "na", "[]"}
 MAX_VALUES_PER_FIELD = 200  # values kept per field (model or curator)
 MAX_CURATED_VALUES = 300  # values in one curation save, all fields together
 MAX_OCCURRENCES = 200  # positions kept per value
+# A paper's Docling document (text.json) larger than this is not read (API and worker-llm, whose
+# mem_limit is 1g: parsing a 64 MB document peaks at about 365 MB).
+MAX_TEXT_BYTES = 64 * 2**20
 
 _QUOTED_SEP = re.compile(r"['\u2018\u2019]\s*,\s*['\u2018\u2019]")
 _PLAIN_SEP = re.compile(r",\s+")
