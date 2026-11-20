@@ -497,6 +497,9 @@ describe("SubmitForm", () => {
     fillPaper();
     fireEvent.click(screen.getByRole("button", { name: "Send 60 to COCONUT" }));
     expect(await screen.findByText("Sent 50 of 60")).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar", { name: "Sending to COCONUT" });
+    expect(bar).toHaveAttribute("aria-valuenow", "83");
+    expect(bar).toHaveAttribute("aria-valuetext", "Sent 50 of 60, 83%");
     await act(async () => release());
     expect(await screen.findByText("Report 60")).toBeInTheDocument();
   });

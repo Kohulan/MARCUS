@@ -6,6 +6,7 @@
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
 import { structureTag } from "../ui/tag";
 import {
@@ -424,9 +425,19 @@ export default function SubmitForm({
         </div>
 
         <footer className="coconut__foot glassbed">
-          <p id="coconut-status" className="coconut__status" role="status" aria-live="polite">
-            {sending ? `Sent ${phase.done} of ${phase.total}` : (token && problem) || ""}
-          </p>
+          <div className="coconut__progress">
+            <p id="coconut-status" className="coconut__status" role="status" aria-live="polite">
+              {sending ? `Sent ${phase.done} of ${phase.total}` : (token && problem) || ""}
+            </p>
+            {sending ? (
+              <ProgressBar
+                value={phase.total > 0 ? phase.done / phase.total : 0}
+                label="Sending to COCONUT"
+                valueText={`Sent ${phase.done} of ${phase.total}`}
+                size="sm"
+              />
+            ) : null}
+          </div>
           <GlassButton
             tint="green"
             disabled={!canSend}

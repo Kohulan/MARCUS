@@ -436,6 +436,16 @@
   background-color: var(--paper);
 }
 
+/* The status line, and while sending the progress bar under it. */
+.coconut__progress {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  max-width: 360px;
+}
+
 .coconut__status {
   min-height: 1.4em;
   font-family: var(--font-mono);
