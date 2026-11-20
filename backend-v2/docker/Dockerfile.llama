@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1.7
+# llama.cpp's llama-server for the MARCUS model (paper annotation; docker-compose.gpu.yml service
+# llama-server). Build context: backend-v2/ (nothing of it is copied in).
+#
+# Built from source at a pinned commit: the GGUF was converted with llama.cpp 7fce543 (tag
+# b12554), and on 2026-11-20 the newest published server image (ghcr.io/ggml-org/llama.cpp
+# server-cuda*) was b12464, older than that. The source is fetched by its full commit hash and
+# checked after the checkout.
+#
+# VARIANT=cuda (CUDA 12.8, the jarvis driver's version; the V100 is compute capability 7.0):
+# device code is compiled for CUDA_ARCH (default 70, real SASS: no PTX JIT at start). CUDA 13
+# dropped Volta, so the CUDA major version must stay 12 for the V100. VARIANT=cpu builds the
+# same server without CUDA (a CPU check run, e.g. ops/annotate_smoke.sh --cpu).
+#
+# The model file is never part of the image: compose mounts it read-only at /models/marcus.gguf.
+
+ARG VARIANT=cuda
+ARG CUDA_VERSION=12.8.1
+ARG UBUNTU_VERSION=24.04
+
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build-cuda
+FROM ubuntu:${UBUNTU_VERSION} AS build-cpu
+
+FROM build-${VARIANT} AS build
+ARG VARIANT
+ARG CUDA_ARCH=70
+ARG LLAMA_COMMIT=7fce5439fe451cd48340b112ec37d2befe02c776
+ARG LLAMA_BUILD_NUMBER=12554
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git init -q \
+    && git remote add origin https://github.com/ggml-org/llama.cpp \
+    && git fetch -q --depth 1 origin "${LLAMA_COMMIT}" \
+    && git checkout -q FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${LLAMA_COMMIT}"
+# No web UI (it would be downloaded at build time; the server is never browsed), no OpenSSL
+# (plain HTTP on the internal network), no tests or examples. CPU backends for every x86 level
+# are built and the best one is loaded at start (GGML_BACKEND_DL), as in upstream's images.
+RUN if [ "${VARIANT}" = cuda ]; then \
+        GPU="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}"; \
+    else \
+        GPU=""; \
+    fi \
+    && cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
+        -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
+        -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+        -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_OPENSSL=OFF \
+        -DLLAMA_BUILD_NUMBER="${LLAMA_BUILD_NUMBER}" ${GPU} \
+        -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined \
+    && cmake --build build --config Release -j"$(nproc)" \
+    && mkdir -p /out \
+    && cp build/bin/llama-server /out/ \
+    && find build -name "*.so*" -exec cp -P {} /out/ \;
+
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS run-cuda
+FROM ubuntu:${UBUNTU_VERSION} AS run-cpu
+
+FROM run-${VARIANT}
+ARG LLAMA_COMMIT=7fce5439fe451cd48340b112ec37d2befe02c776
+LABEL org.opencontainers.image.revision="${LLAMA_COMMIT}" \
+      org.opencontainers.image.source="https://github.com/ggml-org/llama.cpp"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 marcus \
+    && useradd --system --uid 10001 --gid marcus --home-dir /nonexistent --shell /usr/sbin/nologin marcus
+COPY --from=build /out/ /app/
+WORKDIR /app
+ENV LD_LIBRARY_PATH=/app:/usr/local/nvidia/lib64:/usr/local/nvidia/lib \
+    LLAMA_ARG_HOST=0.0.0.0 LLAMA_ARG_PORT=8080 HOME=/tmp
+USER marcus
+EXPOSE 8080
+HEALTHCHECK CMD ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+ENTRYPOINT ["/app/llama-server"]

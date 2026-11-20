@@ -516,6 +516,11 @@ GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molnextr", "worker-m
 GPU_TOTAL_MIB = 32 * 1024
 CUDA_CONTEXT_MIB = 512
 BUDGET_LIMIT_MIB = 20 * 1024
+# llama-server (the MARCUS model): the Q8_0 GGUF (9.5 GB) plus an 8192-token context and compute
+# buffers, about 11 GB; llama.cpp cannot be capped, so it is counted on top of the model workers'
+# budgets and the card must still keep CARD_HEADROOM_MIB free.
+LLAMA_GPU_MIB = 11 * 1024
+CARD_HEADROOM_MIB = 2 * 1024
 
 
 def _gpu_reservation(svc: dict) -> list[dict]:
@@ -538,6 +543,10 @@ def test_gpu_override_budget_under_20gb():
         budget += float(env[name]["MARCUS_TORCH_MEM_FRACTION"]) * GPU_TOTAL_MIB
     budget += CUDA_CONTEXT_MIB * len(GPU_SERVICES)
     assert budget <= BUDGET_LIMIT_MIB, budget
+    card = budget + LLAMA_GPU_MIB + CUDA_CONTEXT_MIB
+    assert card <= GPU_TOTAL_MIB - CARD_HEADROOM_MIB, card
+    ctx = services["llama-server"]["command"]
+    assert ctx[ctx.index("--ctx-size") + 1] == "8192"  # what LLAMA_GPU_MIB was sized for
 
     published = {name for name, svc in services.items() if svc.get("ports")}
     assert published == {"nginx"}
@@ -547,7 +556,7 @@ def test_gpu_override_budget_under_20gb():
 def test_gpu_override_reserves_the_gpu_for_exactly_the_model_workers():
     services = _compose_config("docker-compose.yml", GPU)["services"]
     reserved = {name for name, svc in services.items() if _gpu_reservation(svc)}
-    assert reserved == {*GPU_SERVICES, "dcgm-exporter"}
+    assert reserved == {*GPU_SERVICES, "llama-server", "dcgm-exporter"}
     for name in reserved:
         (device,) = _gpu_reservation(services[name])
         assert device["driver"] == "nvidia" and device["capabilities"] == ["gpu"], name
@@ -927,3 +936,93 @@ def test_upload_locations_are_exact(compose):
     assert re.search(r"location = /api/v2/papers \{[^}]*client_max_body_size 21m;", conf)
     assert re.search(r"location = /api/v2/images \{[^}]*client_max_body_size 21m;", conf)
     assert re.search(r"location /api/v2/ \{[^}]*client_max_body_size 1m;", conf)
+
+
+# --- paper annotation: llama-server + worker-llm (GPU), the fake annotator (fake stack) --------
+
+LLAMA_COMMIT = "7fce5439fe451cd48340b112ec37d2befe02c776"  # the GGUF's converter commit (b12554)
+LLAMA_DOCKERFILE = ROOT / "docker" / "Dockerfile.llama"
+
+
+def _arg(command: list[str], flag: str) -> str:
+    return command[command.index(flag) + 1]
+
+
+def test_llama_server_is_internal_read_only_and_mounts_the_model_read_only():
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    llama = services["llama-server"]
+    assert set(llama["networks"]) == {"internal"} and not llama.get("ports")
+    assert llama["read_only"] is True and llama["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in llama["security_opt"]
+    (vol,) = llama["volumes"]
+    assert vol["type"] == "bind" and vol["read_only"] is True
+    assert vol["target"] == "/models/marcus.gguf"
+    assert vol["bind"]["create_host_path"] is False  # a wrong path fails, never a new dir
+    assert llama["user"] == "10001:10001"
+    cmd = llama["command"]
+    assert _arg(cmd, "--model") == "/models/marcus.gguf"
+    assert _arg(cmd, "--parallel") == "1"  # one request at a time
+    assert _arg(cmd, "--reasoning") == "off" and "--jinja" in cmd and "--no-webui" in cmd
+    assert _arg(cmd, "--n-gpu-layers") == "999"
+    assert llama["healthcheck"]["test"] == ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+    assert llama["build"]["dockerfile"] == "docker/Dockerfile.llama"
+    assert llama["build"]["args"] == {"VARIANT": "cuda", "CUDA_ARCH": "70"}
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    assert "llama-server" not in base and "worker-llm" not in base
+
+
+def test_llama_image_is_built_at_the_pinned_commit_for_the_v100():
+    text = LLAMA_DOCKERFILE.read_text()
+    assert f"ARG LLAMA_COMMIT={LLAMA_COMMIT}" in text
+    assert 'test "$(git rev-parse HEAD)" = "${LLAMA_COMMIT}"' in text
+    assert "ARG CUDA_ARCH=70" in text and "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}" in text
+    assert "ARG CUDA_VERSION=12." in text  # CUDA 13 has no Volta (sm_70) support
+    assert "-DLLAMA_USE_PREBUILT_UI=OFF" in text  # nothing downloaded but the pinned source
+    assert ".gguf" not in text.replace("/models/marcus.gguf", "")  # no model in the image
+
+
+def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    worker = services["worker-llm"]
+    cmd = worker["command"]
+    assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate"
+    assert set(worker["networks"]) == {"internal"} and worker["read_only"] is True
+    (vol,) = worker["volumes"]
+    assert vol["target"] == "/data" and vol["read_only"] is True
+    assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"
+    env = worker["environment"]
+    assert env["MARCUS_ANNOTATOR"] == "llama"
+    assert env["MARCUS_ANNOTATOR_URL"] == "http://llama-server:8080"
+    assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
+    from marcus.core.queues import SLOTS
+
+    assert SLOTS["q.llm"] == 1
+
+
+def test_annotation_is_offered_only_where_q_llm_is_served():
+    base = _compose_config("docker-compose.yml")["services"]["api"]["environment"]
+    assert base.get("MARCUS_ANNOTATE_ENABLED", "0") in ("0", "false", "")
+    assert "q.llm" not in base["MARCUS_EXPECTED_QUEUES"].split(",")
+    for files, worker in (
+        ((GPU,), "worker-llm"),
+        (("docker-compose.fake.yml",), "worker-fake-annotate"),
+    ):
+        services = _compose_config("docker-compose.yml", *files)["services"]
+        api = services["api"]["environment"]
+        assert api["MARCUS_ANNOTATE_ENABLED"] == "1", files
+        assert "q.llm" in api["MARCUS_EXPECTED_QUEUES"].split(","), files
+        assert worker in services, files
+
+
+def test_fake_stack_runs_the_fake_annotator():
+    services = _compose_config("docker-compose.yml", "docker-compose.fake.yml")["services"]
+    worker = services["worker-fake-annotate"]
+    cmd = worker["command"]
+    assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate"
+    env = worker["environment"]
+    assert env["MARCUS_ANNOTATOR"] == "fake" and env["MARCUS_ENABLE_FAKE_ENGINES"] == "1"
+    assert "llama-server" not in services
+    (vol,) = worker["volumes"]
+    assert vol["read_only"] is True
