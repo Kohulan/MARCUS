@@ -205,6 +205,17 @@ describe("useAnnotateEstimate", () => {
     expect(value()).toBeNull();
   });
 
+  it("a run started inside the last one's hold starts from zero too", () => {
+    const { rerender } = render(<Probe running />);
+    advance(5000);
+    rerender(<Probe running={false} />);
+    advance(END_HOLD_MS / 2);
+    rerender(<Probe running />);
+    expect(value()).toBe(0);
+    advance(500);
+    expect(value()).toBeLessThan(0.3);
+  });
+
   it("a new run starts again from zero", () => {
     const { rerender } = render(<Probe running />);
     advance(5000);

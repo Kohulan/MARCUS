@@ -86,9 +86,13 @@ const ESTIMATE_TICK_MS = 250;
 export function useAnnotateEstimate(running: boolean): number | null {
   const [start, setStart] = useState<number | null>(null);
   const [now, setNow] = useState(0);
+  const [was, setWas] = useState(running);
   const held = useHeldAfter(running, END_HOLD_MS);
-  if (running && start === null) setStart(Date.now());
-  if (!held && start !== null) setStart(null);
+  if (running !== was) {
+    setWas(running);
+    if (running) setStart(Date.now()); // a new run, even one inside the last one's hold
+  } else if (running && start === null) setStart(Date.now());
+  else if (!held && start !== null) setStart(null);
 
   useEffect(() => {
     if (!running) return;
