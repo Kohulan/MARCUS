@@ -3,14 +3,14 @@
 // the text. The curator can correct the values (one a line per field) and go back to the
 // model's. Every value is model or curator text: rendered as React text only.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { errorText } from "../api/client";
+import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar, { useAnnotateEstimate } from "../ui/ProgressBar";
 import { focusLost } from "../ui/focus";
 import {
-  annotateReason,
-  annotationError,
   familyClass,
   fieldLabel,
   hitsOf,
@@ -74,7 +74,7 @@ export default function AnnotationPanel(props: Props) {
     try {
       await props.onStart();
     } catch (err) {
-      setError(`Not started: ${annotationError(err, "start")}`);
+      setError(`Not started: ${errorText(err, "starts")}`);
     } finally {
       setStarting(false);
     }
@@ -115,7 +115,7 @@ export default function AnnotationPanel(props: Props) {
     const take = (el: HTMLElement | null | undefined) => {
       if (ours) focusAfter(el);
     };
-    const failed = () => say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
+    const failed = () => say(`Annotation failed: ${reasonText(failedStep?.error_class ?? null, "annotate")}`);
     if (phase === "running") {
       say("Annotating…");
       take(box);
@@ -160,7 +160,7 @@ export default function AnnotationPanel(props: Props) {
           {failedStep ? "Try again" : "Annotate"}
         </GlassButton>
         {failedStep ? (
-          <p className="pv-ann__problem">{`Annotation failed: ${annotateReason(failedStep.error_class)}`}</p>
+          <p className="pv-ann__problem">{`Annotation failed: ${reasonText(failedStep.error_class, "annotate")}`}</p>
         ) : (
           <p id={hintId} className="pv-ann__hint">
             A model on this server suggests organism, place and compound names.
@@ -261,7 +261,7 @@ function Fields({
     const next: AnnotationValues = Object.fromEntries(
       annotation.fields.map((f) => [f.key, valuesOf(Object.hasOwn(draft, f.key) ? draft[f.key]! : "")]),
     );
-    const why = valuesProblem(next, labelOf, annotation.fields);
+    const why = valuesProblem(next, annotation.fields, annotation.limits);
     if (why) {
       setProblem(why);
       return;
@@ -277,7 +277,7 @@ function Fields({
       setDraft(null);
       say("Saved");
     } catch (err) {
-      setProblem(`Not saved: ${annotationError(err)}`);
+      setProblem(`Not saved: ${errorText(err, "changes")}`);
     } finally {
       setBusy(false);
     }
@@ -293,7 +293,7 @@ function Fields({
       // Reset to model is gone with the curation: the focus goes to Edit (once enabled again)
       refocus.current = true;
     } catch (err) {
-      setProblem(`Not reset: ${annotationError(err)}`);
+      setProblem(`Not reset: ${errorText(err, "changes")}`);
     } finally {
       setBusy(false);
     }
@@ -422,7 +422,7 @@ function Fields({
       )}
       {failedStep && (
         <p className="pv-ann__problem">
-          {`The last run failed: ${annotateReason(failedStep.error_class)}`}
+          {`The last run failed: ${reasonText(failedStep.error_class, "annotate")}`}
         </p>
       )}
       <div className="pv-ann__actions">

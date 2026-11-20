@@ -1,42 +1,17 @@
 // The paper's annotation (the local model's suggestion, or the curator's corrections) as the
 // Paper view shows it: which spans of the text to mark, which occurrence a click goes to, and
 // the editing of a field as lines. Model text is data: it is only ever a React text node.
-import { ApiError, errorText } from "../api/client";
 import { isPaperBusy, isStepActive } from "../api/status";
 import type {
   AnnotationHit,
   AnnotationField,
+  AnnotationLimits,
   AnnotationOut,
   AnnotationPositions,
   AnnotationValues,
   StepOut,
 } from "../api/types";
 import { newestFirst } from "./pageFailures";
-
-/**
- * The longest value the server takes per field (backend-v2 core/annotation.py MAX_LENGTH: the
- * model's own maxLength); longer values get a 422. The API sends each field's limit
- * (`fields[].max_length`, which fieldMax prefers); this copy is only the fallback.
- */
-export const FIELD_MAX: Readonly<Record<string, number>> = {
-  compound_group: 435,
-  compound_class: 576,
-  organism_part: 183,
-  organism_or_species: 676,
-  geo_location: 348,
-  Kingdom: 60,
-  trivial_name: 397,
-  location: 234,
-  iupac_name: 7179,
-  abbreviation: 586,
-  iupac_like_name: 990,
-};
-
-/** The most values a field keeps (MAX_VALUES_PER_FIELD). */
-export const FIELD_MAX_VALUES = 200;
-
-/** The most values a correction holds in all fields together (more: 422). */
-export const TOTAL_MAX_VALUES = 300;
 
 /** The positions of the values shown: the curator's once saved, else the model's. */
 export function shownPositions(a: AnnotationOut): AnnotationPositions {
@@ -266,19 +241,6 @@ export function isPaperReading(paper: PaperState, steps?: StepOut[]): boolean {
   return isPaperBusy(paper.status) && !isAnnotating(paper, steps);
 }
 
-const REASONS: Record<string, string> = {
-  timeout: "it took too long",
-  worker_lost: "the worker stopped",
-  bad_input: "no title, abstract or introduction was found",
-  engine_error: "the model failed",
-};
-
-/** Why an annotate step failed, from its coarse error_class. */
-export function annotateReason(errorClass: string | null): string {
-  if (errorClass !== null && Object.hasOwn(REASONS, errorClass)) return REASONS[errorClass]!;
-  return "an unknown error";
-}
-
 /** A field's values as the editor's lines. */
 export const linesOf = (values: string[]): string => values.join("\n");
 
@@ -292,28 +254,25 @@ export function valuesOf(lines: string): string[] {
   return out;
 }
 
-/** The longest value a field takes: the API's `max_length`, else the client's FIELD_MAX. */
-export function fieldMax(fields: readonly AnnotationField[], key: string): number | undefined {
-  const served = fields.find((f) => f.key === key)?.max_length;
-  if (typeof served === "number" && Number.isInteger(served) && served > 0) return served;
-  return Object.hasOwn(FIELD_MAX, key) ? FIELD_MAX[key] : undefined;
-}
-
-/** Why the server would refuse these values (422), in words; null when it takes them. */
+/**
+ * Why the server would refuse these values (422), in words, from the limits it serves (each
+ * field's `max_length`, the save's `limits`); null when it takes them. A pre-check only: the
+ * server's 422 detail is shown too.
+ */
 export function valuesProblem(
   values: AnnotationValues,
-  label: (field: string) => string,
-  fields: readonly AnnotationField[] = [],
+  fields: readonly AnnotationField[],
+  limits: AnnotationLimits,
 ): string | null {
-  const total = Object.values(values).reduce((n, list) => n + list.length, 0);
-  if (total > TOTAL_MAX_VALUES) return `At most ${TOTAL_MAX_VALUES} values in all (${total} now).`;
+  const { max_total_values: total, max_values_per_field: perField } = limits;
+  const count = Object.values(values).reduce((n, list) => n + list.length, 0);
+  if (count > total) return `At most ${total} values in all (${count} now).`;
   for (const [field, list] of Object.entries(values)) {
-    if (list.length > FIELD_MAX_VALUES) {
-      return `${label(field)} has more than ${FIELD_MAX_VALUES} values.`;
-    }
-    const max = fieldMax(fields, field);
+    const label = fieldLabel(fields, field);
+    if (list.length > perField) return `${label} has more than ${perField} values.`;
+    const max = fields.find((f) => f.key === field)?.max_length;
     if (max !== undefined && list.some((v) => v.length > max)) {
-      return `A value in ${label(field)} is longer than ${max.toLocaleString("en")} characters.`;
+      return `A value in ${label} is longer than ${max.toLocaleString("en")} characters.`;
     }
   }
   return null;
@@ -328,18 +287,4 @@ export function sameValues(a: AnnotationValues, b: AnnotationValues): boolean {
     if (x.length !== y.length || x.some((v, i) => v !== y[i])) return false;
   }
   return true;
-}
-
-/**
- * A refused start, save or reset in a few words: the API's own detail (503 "The annotation
- * model is not running" or "Annotation is not available", 503 busy, 422), except a 429: the
- * per-owner limit on starts (5 a minute) or on corrections.
- */
-export function annotationError(err: unknown, action: "start" | "change" = "change"): string {
-  if (err instanceof ApiError && err.status === 429) {
-    return action === "start"
-      ? "Too many starts, try again in a minute"
-      : "Too many changes, try again in a minute";
-  }
-  return errorText(err);
 }

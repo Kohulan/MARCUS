@@ -122,18 +122,19 @@ function Where() {
   return <output data-testid="where">{`${loc.pathname}${loc.search}`}</output>;
 }
 
-const FIELDS: [string, string][] = [
-  ["compound_group", "Compound series"],
-  ["compound_class", "Compound class"],
-  ["organism_part", "Organism part"],
-  ["organism_or_species", "Organism"],
-  ["geo_location", "Place"],
-  ["Kingdom", "Kingdom"],
-  ["trivial_name", "Compound names"],
-  ["location", "Habitat or host"],
-  ["iupac_name", "IUPAC names"],
-  ["abbreviation", "Abbreviations"],
-  ["iupac_like_name", "Semi-systematic names"],
+/** The served fields: key, label and max_length (backend core/annotation.py MAX_LENGTH). */
+const FIELDS: [string, string, number][] = [
+  ["compound_group", "Compound series", 435],
+  ["compound_class", "Compound class", 576],
+  ["organism_part", "Organism part", 183],
+  ["organism_or_species", "Organism", 676],
+  ["geo_location", "Place", 348],
+  ["Kingdom", "Kingdom", 60],
+  ["trivial_name", "Compound names", 397],
+  ["location", "Habitat or host", 234],
+  ["iupac_name", "IUPAC names", 7179],
+  ["abbreviation", "Abbreviations", 586],
+  ["iupac_like_name", "Semi-systematic names", 990],
 ];
 const noValues = () => Object.fromEntries(FIELDS.map(([k]) => [k, [] as string[]]));
 
@@ -143,7 +144,7 @@ function annotation(over: Partial<AnnotationOut> = {}): AnnotationOut {
     available: true,
     status: "none",
     step: null,
-    fields: FIELDS.map(([key, label]) => ({ key, label })),
+    fields: FIELDS.map(([key, label, max_length]) => ({ key, label, max_length })),
     limits: { max_values_per_field: 200, max_total_values: 300 },
     model: null,
     model_version: null,
@@ -518,7 +519,7 @@ describe("Paper view: annotation", () => {
     renderAt(paper([segment("s1")]), { doc: ANN_DOC });
     fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
     expect(await within(await panel()).findByRole("alert")).toHaveTextContent(
-      "Not started: Too many starts, try again in a minute",
+      "Not started: Too many starts, try again in 30 s",
     );
   });
 
@@ -749,7 +750,7 @@ describe("Paper view: annotation", () => {
   });
 
   it.each([
-    [new ApiError(429, "rate limited", 30), "Not saved: Too many changes, try again in a minute"],
+    [new ApiError(429, "rate limited", 30), "Not saved: Too many changes, try again in 30 s"],
     [new ApiError(503, "The server is busy, try again in a moment."), "Not saved: The server is busy, try again in a moment."],
     [new ApiError(422, "Value error, at most 300 values in all"), "Not saved: Value error, at most 300 values in all"],
   ])("a refused save (%s) says why and keeps what was typed", async (err, said) => {
@@ -790,7 +791,7 @@ describe("Paper view: annotation", () => {
     const p = await panel();
     fireEvent.click(await within(p).findByRole("button", { name: "Reset to model" }));
     expect(await within(p).findByRole("alert")).toHaveTextContent(
-      "Not reset: Too many changes, try again in a minute",
+      "Not reset: Too many changes, try again in 30 s",
     );
     expect(within(p).getByText("Curated")).toBeInTheDocument();
   });

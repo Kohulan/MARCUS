@@ -238,7 +238,7 @@ export interface AnnotationField {
   key: string;
   label: string;
   /** The longest value a curation may hold in this field (the model's maxLength). */
-  max_length?: number;
+  max_length: number;
 }
 
 /** What one curation save may hold (PUT answers 422 beyond it). */
