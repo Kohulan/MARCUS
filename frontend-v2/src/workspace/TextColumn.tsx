@@ -125,7 +125,8 @@ export default function TextColumn({
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
 
-  const annotation = useAnnotation(paperId, steps).data;
+  const annotationQuery = useAnnotation(paperId, steps);
+  const annotation = annotationQuery.data;
   const actions = useAnnotationActions(paperId, onStarted);
   const annStep = newestAnnotate(steps);
   // The step a start made, until the steps show it (then its own status says).
@@ -137,6 +138,7 @@ export default function TextColumn({
     (startedId !== null && !steps.some((s) => s.id === startedId)) ||
     (annStep !== undefined &&
       annotation !== undefined &&
+      !annotationQuery.isError && // a failed re-read must not hold "Annotating…" for good
       (annotation.step?.id !== annStep.id || annotation.step.status !== annStep.status));
   const values = annotation?.values ?? null;
   const positions = useMemo(() => (annotation ? shownPositions(annotation) : {}), [annotation]);
@@ -148,6 +150,9 @@ export default function TextColumn({
   const hit: AnnotationHit | undefined = at
     ? hitsOf(positions, at.field, at.value)[at.index]
     : undefined;
+  // the occurrence's place, not its array: a save or reset re-reads the positions
+  const hitBlock = hit?.[0];
+  const hitStart = hit?.[1];
 
   const show = useCallback(
     (field: string, value: string): number => {
@@ -166,7 +171,7 @@ export default function TextColumn({
   useLayoutEffect(() => {
     if (!at) return;
     scrollToMiddle(scroller.current, scroller.current?.querySelector("[data-current]") ?? null, !reduce);
-  }, [at, hit, reduce]);
+  }, [at, hitBlock, hitStart, reduce]);
 
   const notReady = waiting || (text.error instanceof ApiError && text.error.status === 404);
   let body;

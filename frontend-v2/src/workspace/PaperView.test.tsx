@@ -446,7 +446,7 @@ describe("Paper view: annotation", () => {
     const start = vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
     renderAt(paper([segment("s1")]), { doc: ANN_DOC });
     fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
-    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    expect(await within(await panel()).findByText("Annotating…", { selector: "span" })).toBeInTheDocument();
     expect(start).toHaveBeenCalledWith(ID);
   });
 
@@ -455,7 +455,7 @@ describe("Paper view: annotation", () => {
       doc: ANN_DOC,
       steps: [step({}), annStep()],
     });
-    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    expect(await within(await panel()).findByText("Annotating…", { selector: "span" })).toBeInTheDocument();
     const status = screen.getByRole("region", { name: "Status" });
     expect(within(status).getByText("Annotating…")).toBeInTheDocument();
     expect(within(status).queryByText("Reading…")).toBeNull();
@@ -482,7 +482,7 @@ describe("Paper view: annotation", () => {
     expect(await within(await panel()).findByRole("alert")).toHaveTextContent(
       "Not started: The annotation model is not running",
     );
-    expect(within(await panel()).queryByText("Annotating…")).toBeNull();
+    expect(within(await panel()).queryByText("Annotating…", { selector: "span" })).toBeNull();
   });
 
   it("a run that ended failed says why and offers Try again", async () => {
@@ -705,6 +705,8 @@ describe("Paper view: annotation", () => {
     fireEvent.click(within(p).getByRole("button", { name: "Reset to model" }));
     expect(await within(p).findByText("Model suggestion")).toBeInTheDocument();
     expect(reset).toHaveBeenCalledWith(ID);
+    // the Reset button is gone: the focus is on Edit, not dropped to the page
+    await waitFor(() => expect(document.activeElement).toBe(within(p).getByRole("button", { name: "Edit" })));
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(within(p).queryByRole("button", { name: "Reset to model" })).toBeNull();
   });
@@ -715,8 +717,92 @@ describe("Paper view: annotation", () => {
       steps: [step({}), annStep({ status: "done" })],
       ann: annotation({ status: "running", step: annStep() }),
     });
-    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    expect(await within(await panel()).findByText("Annotating…", { selector: "span" })).toBeInTheDocument();
     expect(within(await panel()).queryByRole("button", { name: "Annotate" })).toBeNull();
+  });
+
+  it("after Annotate the focus stays in the panel; the end of the run is said and Edit takes the focus", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    const button = within(p).getByRole("button", { name: "Annotate" });
+    button.focus();
+    fireEvent.click(button);
+    await within(p).findByText("Annotating…", { selector: "span" });
+    expect(document.activeElement).toBe(p);
+    const live = p.querySelector('[aria-live="polite"]')!;
+    expect(live).toHaveTextContent("Annotating…");
+    const done = annStep({ status: "done" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotated({ step: done }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), done] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    expect(await within(p).findByText("Model suggestion")).toBeInTheDocument();
+    await waitFor(() => expect(live).toHaveTextContent("Annotation ready"));
+    expect(document.activeElement).toBe(within(p).getByRole("button", { name: "Edit" }));
+  });
+
+  it("a run that ends failed is said, and Try again takes the focus", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    fireEvent.click(within(p).getByRole("button", { name: "Annotate" }));
+    await within(p).findByText("Annotating…", { selector: "span" });
+    const failed = annStep({ status: "failed", error_class: "timeout" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotation({ status: "failed", step: failed }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), failed] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    const again = await within(p).findByRole("button", { name: "Try again" });
+    const live = p.querySelector('[aria-live="polite"]')!;
+    await waitFor(() => expect(live).toHaveTextContent("Annotation failed: it took too long"));
+    expect(document.activeElement).toBe(again);
+  });
+
+  it("a focus elsewhere on the page is left where it is when the run ends", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    fireEvent.click(within(p).getByRole("button", { name: "Annotate" }));
+    await within(p).findByText("Annotating…", { selector: "span" });
+    const download = screen.getByRole("button", { name: "Download text" });
+    download.focus();
+    const done = annStep({ status: "done" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotated({ step: done }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), done] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    await within(p).findByText("Model suggestion");
+    await waitFor(() => expect(p.querySelector('[aria-live="polite"]')).toHaveTextContent("Annotation ready"));
+    expect(document.activeElement).toBe(download);
+  });
+
+  it("a re-read that fails after the run does not leave Annotating… for good", async () => {
+    renderAt(paper([segment("s1")], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep()],
+      ann: annotation({ status: "running", step: annStep() }),
+    });
+    const p = await panel();
+    await within(p).findByText("Annotating…", { selector: "span" });
+    vi.mocked(api.getAnnotation).mockRejectedValue(new ApiError(429, "rate limited"));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), annStep({ status: "done" })] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    expect(await within(p).findByRole("button", { name: "Annotate" })).toBeInTheDocument();
+    expect(within(p).queryByText("Annotating…", { selector: "span" })).toBeNull();
+  });
+
+  it("the same place said twice is said again (the live text changes)", async () => {
+    const values = { ...noValues(), organism_part: ["bark"] };
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      ann: annotated({ output: values, values }),
+    });
+    const p = await panel();
+    const bark = await within(p).findByRole("button", { name: /^bark/ });
+    const live = p.querySelector('[aria-live="polite"]')!;
+    fireEvent.click(bark);
+    const first = live.textContent;
+    fireEvent.click(bark);
+    expect(live.textContent).not.toBe(first);
+    expect(live).toHaveTextContent("bark: 1 of 1");
   });
 
   it("reads the annotation again when its step ends", async () => {
@@ -724,7 +810,7 @@ describe("Paper view: annotation", () => {
       doc: ANN_DOC,
       steps: [step({}), annStep()],
     });
-    await within(await panel()).findByText("Annotating…");
+    await within(await panel()).findByText("Annotating…", { selector: "span" });
     const get = vi.mocked(api.getAnnotation);
     const before = get.mock.calls.length;
     get.mockResolvedValue(annotated({ step: annStep({ status: "done" }) }));

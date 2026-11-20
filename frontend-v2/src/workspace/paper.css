@@ -405,6 +405,11 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* Focused by the panel itself while a run goes (its button is gone): an inset outline. */
+.pv-ann:focus-visible {
+  outline-offset: -3px;
+}
+
 .pv-ann:has(.pv-ann__form) {
   max-height: 70%;
 }

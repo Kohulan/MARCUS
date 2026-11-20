@@ -2,7 +2,7 @@
 // the fields as a specimen label, each found value a button that shows its next occurrence in
 // the text. The curator can correct the values (one a line per field) and go back to the
 // model's. Every value is model or curator text: rendered as React text only.
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import {
@@ -38,8 +38,14 @@ export default function AnnotationPanel(props: Props) {
   const hintId = useId();
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  // What a screen reader is told after an action (kept mounted, so each change is said).
+  // What a screen reader is told after an action (kept mounted, so each change is said). The
+  // same words twice get a no-break space, so the region changes and says them again.
   const [said, setSaid] = useState("");
+  const say = useCallback(
+    (text: string) => setSaid((prev) => (prev === text ? `${text}\u00a0` : text)),
+    [],
+  );
+  const section = useRef<HTMLElement>(null);
 
   async function start() {
     setError(null);
@@ -56,15 +62,50 @@ export default function AnnotationPanel(props: Props) {
   const newest = step ?? annotation.step ?? undefined;
   const failedStep = newest?.status === "failed" ? newest : null;
 
+  const phase: "running" | "values" | "failed" | "start" =
+    running || starting
+      ? "running"
+      : annotation.values !== null
+        ? "values"
+        : failedStep
+          ? "failed"
+          : "start";
+
+  // A run that starts or ends is said; the control that was clicked is gone, so the focus
+  // (when it was in the panel, or dropped to the page with that control) goes to the panel
+  // while it runs, then to Edit or Try again. A focus elsewhere on the page stays there.
+  const before = useRef(phase);
+  useEffect(() => {
+    const was = before.current;
+    before.current = phase;
+    if (was === phase) return;
+    const box = section.current;
+    const active = document.activeElement;
+    const ours = !active || active === document.body || (box !== null && box.contains(active));
+    const take = (el: HTMLElement | null | undefined) => {
+      if (ours && el) el.focus();
+    };
+    if (phase === "running") {
+      say("Annotating…");
+      take(box);
+    } else if (was === "running" && phase === "values") {
+      say("Annotation ready");
+      take(box?.querySelector<HTMLElement>(".pv-ann__actions button"));
+    } else if (was === "running" && phase === "failed") {
+      say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
+      take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
+    }
+  }, [phase, failedStep, say]);
+
   let body;
-  if (running || starting) {
+  if (phase === "running") {
     body = (
-      <p className="pv-ann__state" role="status">
+      <p className="pv-ann__state">
         <span className="state badge badge--dashed">Annotating…</span>
       </p>
     );
-  } else if (annotation.values !== null) {
-    body = <Fields {...props} failedStep={failedStep} say={setSaid} />;
+  } else if (phase === "values") {
+    body = <Fields {...props} failedStep={failedStep} say={say} />;
   } else {
     body = (
       <div className="pv-ann__start">
@@ -88,7 +129,7 @@ export default function AnnotationPanel(props: Props) {
   }
 
   return (
-    <section className="pv-ann" aria-label="Annotation">
+    <section ref={section} className="pv-ann" aria-label="Annotation" tabIndex={-1}>
       {body}
       {error !== null && (
         <p className="pv-ann__problem" role="alert">
@@ -122,6 +163,12 @@ function Fields({
   const editButton = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const editing = draft !== null;
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (busy || !refocus.current) return;
+    refocus.current = false;
+    editButton.current?.focus();
+  }, [busy]);
   const wasEditing = useRef(false);
 
   useEffect(() => {
@@ -185,6 +232,8 @@ function Fields({
       await onReset();
       setProblem(null);
       say("Model values shown");
+      // Reset to model is gone with the curation: the focus goes to Edit (once enabled again)
+      refocus.current = true;
     } catch (err) {
       setProblem(`Not reset: ${annotationError(err)}`);
     } finally {
