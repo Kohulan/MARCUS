@@ -2,7 +2,7 @@
 // the newest render_page or segment_page step decides.
 import { describe, expect, it } from "vitest";
 import type { StepOut } from "../api/types";
-import { checkFailure, pageFailures, progress } from "./pageFailures";
+import { checkFailure, pageFailures } from "./pageFailures";
 
 let seq = 0;
 function step(over: Partial<StepOut>): StepOut {
@@ -107,35 +107,5 @@ describe("checkFailure", () => {
     expect(checkFailure(steps)).toBe("it took too long");
     const unknown = [step({ kind: "check_pdf", page: null, status: "failed", error_class: "x" })];
     expect(checkFailure(unknown)).toBe("an unknown error");
-  });
-});
-
-describe("progress", () => {
-  it("counts pages whose newest page step is done, and read structures", () => {
-    const steps = [
-      step({ kind: "render_page", page: 0 }),
-      step({ kind: "segment_page", page: 0 }),
-      step({ kind: "render_page", page: 1 }),
-      step({ kind: "segment_page", page: 1, status: "running" }),
-      step({ kind: "render_page", page: 2, status: "running" }),
-      step({ kind: "ocsr", page: 0, segment_id: "g1", status: "done" }),
-      step({ kind: "ocsr", page: 0, segment_id: "g2", status: "running" }),
-      step({ kind: "ocsr", page: 0, segment_id: "g1", status: "running" }), // another engine
-    ];
-    expect(progress(steps, 3)).toEqual({ pagesRead: 1, pages: 3, structuresRead: 1, structures: 2 });
-  });
-
-  it("a page served from the segmentation cache (render_page done, no segment_page) is read", () => {
-    const steps = [step({ kind: "render_page", page: 0 }), step({ kind: "render_page", page: 1 })];
-    expect(progress(steps, 2).pagesRead).toBe(2);
-  });
-
-  it("has no structure part without ocsr steps", () => {
-    expect(progress([step({ kind: "segment_page", page: 0 })], 1)).toEqual({
-      pagesRead: 1,
-      pages: 1,
-      structuresRead: 0,
-      structures: 0,
-    });
   });
 });

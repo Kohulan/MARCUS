@@ -494,6 +494,9 @@
 }
 
 .pv-ann__key {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   padding-top: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -518,9 +521,9 @@
   max-width: 100%;
   min-height: 26px;
   padding: 2px 8px;
-  border: 1px solid var(--control-border);
+  border: 1px solid var(--fam-deep);
   border-radius: 2px;
-  background-color: var(--surface);
+  background-color: var(--fam-tint);
   font-family: var(--font-text);
   font-size: 14px;
   line-height: 1.4;
@@ -533,15 +536,16 @@ button.pv-ann__value {
   cursor: pointer;
 }
 
+/* Hover: the family's edge thickens to 3px. */
 button.pv-ann__value:hover {
-  background-color: var(--sunken);
+  box-shadow: inset 0 0 0 2px var(--fam-deep);
 }
 
-/* The value whose occurrence the text shows: the pressed-segment green. */
+/* The value whose occurrence the text shows: filled with its family's deep colour, as the
+   occurrence itself is in the text. */
 .pv-ann__value--shown,
 button.pv-ann__value--shown:hover {
-  border-color: var(--green);
-  background-color: var(--green);
+  background-color: var(--fam-deep);
   color: var(--on-green);
 }
 
@@ -556,7 +560,7 @@ button.pv-ann__value--shown:hover {
   font-size: 11px;
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .pv-ann__value--shown .pv-ann__count {
@@ -586,6 +590,12 @@ button.pv-ann__value--shown:hover {
   gap: 4px;
 }
 
+.pv-ann__field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .pv-ann__input {
   width: 100%;
   min-height: 34px;
@@ -605,19 +615,95 @@ button.pv-ann__value--shown:hover {
   cursor: not-allowed;
 }
 
-/* Marks in the text: every occurrence of a shown value; the one a click went to is filled. */
+/* Annotation families (DESIGN.md Annotation): the 11 fields in six colour families, each a
+   tint, a deep colour (tokens.css --ann-*) and its own underline style, so a family is told
+   apart without its hue too. Marks, value chips and legend swatches all read these three. */
+.pv-fam--organism {
+  --fam-tint: var(--ann-organism-tint);
+  --fam-deep: var(--ann-organism);
+  --fam-line: double;
+}
+
+.pv-fam--part {
+  --fam-tint: var(--ann-part-tint);
+  --fam-deep: var(--ann-part);
+  --fam-line: solid;
+}
+
+.pv-fam--place {
+  --fam-tint: var(--ann-place-tint);
+  --fam-deep: var(--ann-place);
+  --fam-line: solid;
+}
+
+.pv-fam--name {
+  --fam-tint: var(--ann-name-tint);
+  --fam-deep: var(--ann-name);
+  --fam-line: dotted;
+}
+
+.pv-fam--class {
+  --fam-tint: var(--ann-class-tint);
+  --fam-deep: var(--ann-class);
+  --fam-line: dashed;
+}
+
+.pv-fam--systematic {
+  --fam-tint: var(--ann-systematic-tint);
+  --fam-deep: var(--ann-systematic);
+  --fam-line: wavy;
+}
+
+/* A field the client does not know: the sunken ground, a text-2 line. */
+.pv-fam--other {
+  --fam-tint: var(--sunken);
+  --fam-deep: var(--text-2);
+  --fam-line: solid;
+}
+
+/* Marks in the text: every occurrence of a shown value on its family's tint, underlined in
+   its family's style; the one a click went to is filled with the family's deep colour. */
 .pv-mark {
   padding: 0 1px;
-  background-color: var(--selection);
+  background-color: var(--fam-tint);
   color: inherit;
-  text-decoration: underline 1px var(--green);
+  text-decoration: underline var(--fam-line) var(--fam-deep) 1.5px;
   text-underline-offset: 3px;
 }
 
 .pv-mark--current {
-  background-color: var(--green);
+  background-color: var(--fam-deep);
   color: var(--on-green);
   text-decoration: none;
+}
+
+/* The legend: a small block of the family's tint over its line (a bottom border in the line
+   style; borders have no wavy, so the systematic family draws its wave as an underline). */
+.pv-swatch {
+  flex: none;
+  display: inline-block;
+  width: 22px;
+  height: 11px;
+  border-bottom: 2px var(--fam-line) var(--fam-deep);
+  background-color: var(--fam-tint);
+}
+
+.pv-swatch.pv-fam--organism {
+  border-bottom-width: 3px;
+}
+
+.pv-swatch.pv-fam--systematic {
+  border-bottom: 0;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 11px;
+  vertical-align: top;
+}
+
+.pv-swatch.pv-fam--systematic::before {
+  content: "\00a0\00a0\00a0\00a0\00a0";
+  text-decoration: underline wavy var(--fam-deep) 1.5px;
+  text-underline-offset: 1px;
 }
 
 @media (forced-colors: active) {

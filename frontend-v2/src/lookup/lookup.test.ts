@@ -70,13 +70,13 @@ describe("coconutCountForDoi", () => {
     await coconutCountForDoi("https://doi.org/10.1/abc");
     const [url, init] = f.mock.calls[0]!;
     expect(url).toBe("/api/v2/coconut/search");
+    expect(JSON.parse(init.body)).not.toHaveProperty("sort");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
       type: "tags",
       tagType: "citations",
       query: "10.1/abc",
       limit: 20,
-      sort: "desc",
       page: 1,
       offset: 0,
     });
@@ -130,6 +130,9 @@ describe("coconutCountForDoi", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     expect(await coconutCountForDoi("10.1/x")).toBeNull();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({}, 500)));
+    expect(await coconutCountForDoi("10.1/x")).toBeNull();
+    const invalid = { message: "Invalid input parameters", errors: { sort: ["The selected sort is invalid."] } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(invalid, 400)));
     expect(await coconutCountForDoi("10.1/x")).toBeNull();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json("junk")));
     expect(await coconutCountForDoi("10.1/x")).toMatchObject({ count: 0 });

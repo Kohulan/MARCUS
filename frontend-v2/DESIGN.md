@@ -22,6 +22,18 @@ colors:
   on-orange: "#141414"
   on-charcoal: "#F4F3EA"
   selection: "#DCEBDF"
+  ann-organism: "#2F6A1A"
+  ann-organism-tint: "#C8E4A4"
+  ann-part: "#7A5600"
+  ann-part-tint: "#F7E08C"
+  ann-place: "#1D5DA6"
+  ann-place-tint: "#CFE3FA"
+  ann-name: "#A3305F"
+  ann-name-tint: "#FBD7E5"
+  ann-class: "#6A3CA6"
+  ann-class-tint: "#D2BEF2"
+  ann-systematic: "#17675F"
+  ann-systematic-tint: "#9FD6CB"
 typography:
   display:
     fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
@@ -228,6 +240,16 @@ components:
   toast-error:
     backgroundColor: "{colors.charcoal}"
     textColor: "{colors.on-charcoal}"
+  reading-progress:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.none}"
+    height: "10px"
+  reading-progress-fill:
+    backgroundColor: "{colors.green}"
+  reading-progress-compact:
+    height: "6px"
 ---
 
 # Design System: MARCUS
@@ -414,9 +436,33 @@ A data table drawn like a herbarium label: a charcoal header bar with on-charcoa
 The local model's suggestion for a paper, above its text in the Paper view's middle column (the text below scrolls on its own, the annotation at most 45% of the column).
 - **Start:** the small clear pill Annotate and one line in text-2 ("A model on this server suggests organism, place and compound names."); while it runs, "Annotating…" in the Reading shape (dashed orange edge), in the panel, in the status bar and in the tool home list. A failure says why in ink, with Try again.
 - **Focus:** a run's start and end are said; the focus goes to the panel while it runs, then to Edit or Try again, and back to Annotate after a refused start. A focus the panel moves after a mouse click shows no ring until a key is pressed.
-- **Values:** a specimen label: the charcoal head reads "Model suggestion" (or "Curated" once corrected) with the model's name in mono; one row per field that has values, the field's label as the mono row head. Each value found in the text is a square surface button with a control-border edge and its count in mono; the value whose occurrence the text shows fills forest green (on-green text, aria-current). A value not in the text is no button: a dashed edge and the count 0.
-- **Marks:** every occurrence in the text is a `<mark>` on selection mint with a 1px green underline; the occurrence a click went to is filled forest green with on-green text. A click shows the first occurrence, the next click the next (around to the first), centred in the text; a screen reader hears "value: 2 of 5". Marks are React text in `<mark>` elements, never HTML from the model.
+- **Values:** a specimen label: the charcoal head reads "Model suggestion" (or "Curated" once corrected) with the model's name in mono; one row per field that has values, the field's label as the mono row head after its family swatch. Each value found in the text is a square button on its family's tint with a 1px edge in the family's deep colour and its count in text-2 mono; the value whose occurrence the text shows fills with the family's deep colour (white text, aria-current). A value not in the text is no button: the same tint, a dashed edge and the count 0.
+- **Field families:** the 11 fields are read in six colour families, grouped the way a curator checks them (what was studied, which part of it, where it came from, what the compounds are called, what kind of compounds, their systematic names). Eleven hues could not be told apart; six can, and the fields that share a family are ones a curator reads together. Each family is a tint (tokens `ann-*-tint`), a deep colour (`ann-*`) and an underline style, set once per family (`.pv-fam--*` in paper.css); marks, value chips and swatches only read them.
+
+| Family | Fields | Tint / deep | Underline | Ink on tint | Text-2 on tint | White on deep | Deep on paper |
+|---|---|---|---|---|---|---|---|
+| Organism | Organism, Kingdom | #C8E4A4 / #2F6A1A (leaf green) | double | 11.8:1 | 7.2:1 | 6.6:1 | 5.9:1 |
+| Organism part | Organism part | #F7E08C / #7A5600 (bark ochre) | solid | 12.5:1 | 7.6:1 | 6.7:1 | 6.0:1 |
+| Place | Place, Habitat or host | #CFE3FA / #1D5DA6 (map blue) | solid | 12.5:1 | 7.6:1 | 6.6:1 | 6.0:1 |
+| Compound names | Compound names, Abbreviations | #FBD7E5 / #A3305F (rose) | dotted | 12.4:1 | 7.6:1 | 6.7:1 | 6.0:1 |
+| Compound class | Compound class, Compound series | #D2BEF2 / #6A3CA6 (violet) | dashed | 9.6:1 | 5.9:1 | 7.5:1 | 6.7:1 |
+| Systematic names | IUPAC names, Semi-systematic names | #9FD6CB / #17675F (teal) | wavy | 10.1:1 | 6.2:1 | 6.7:1 | 6.0:1 |
+
+  The deep colours are at least 4.1:1 on their own tint and 5.9:1 on paper and surface (underlines and edges need 3:1); every pair is pinned in styles.test.ts. Under simulated deuteranopia and protanopia (Machado 2009) three pairs come close in hue (organism and part, place and class, compound names and systematic names): each pair has different underline styles. Part and place share the solid line because ochre and blue stay apart in every common colour-vision deficiency. No tint is selection mint, and the clicked occurrence is a dark fill, so neither is mistaken for selected text. A field the client does not know takes the sunken ground with a text-2 line.
+- **Marks:** every occurrence in the text is a `<mark>` on its family's tint, underlined 1.5px in the family's deep colour and line style; the occurrence a click went to is filled with the family's deep colour, white text, no underline. Colour is never alone: each mark names its field ("Organism") as a title for the pointer and an `aria-description` for screen readers (never hidden text inside the mark, which would be copied with the text), the list names every field, and a click says "value: 2 of 5, Organism". The mark itself is not focusable, so for keyboard and touch users the line style, the legend and that announcement carry the field. Where values of two fields cover the same text, the pieces stay flat (never nested): the clicked field leads, else the most specific (the shorter span; on a tie the first field), its colour, and the title names both ("Compound names, Abbreviations"). The clicked occurrence is always one mark, naming every field inside it. A click shows the first occurrence, the next click the next (around to the first), centred in the text. Marks are React text in `<mark>` elements with a family class, never HTML from the model and never a style attribute. In forced colours, marks are Mark and the clicked one Highlight; the line styles stay.
+- **Legend:** before each field's name (in the list and in the correction form) a swatch, decorative (aria-hidden): a 22 × 11px block of the family's tint on a bottom border in its line style (2px; double 3px). Borders have no wavy, so the systematic family draws its wave as an underline under no-break spaces.
+- **Chip hover:** the family edge thickens to 3px.
 - **Corrections:** Edit opens one labelled box per field (one value a line), Save (green small pill) and Cancel; Escape cancels. Reset to model asks first.
+
+### Reading progress
+How far a paper's read has come, in the status bar both workspace views share and, compact, in the tool home's row of a busy paper. Beside the state badge (Reading… or Annotating…), never instead of it.
+- **Bar:** a native `<progress>` (max 100), full width, 10px tall, square, a 1px control-border edge (3.3:1 on paper), a surface track and a forest-green fill (about 10:1 on the track). The fill is drawn by CSS on the element's pseudo-parts: no style attribute, nothing set at run time. No transition (width is layout).
+- **Stages:** above the bar, one mono 12px uppercase line: Checking PDF → Reading pages 3/5 → Reading structures 10/15 → Reading the text → Finishing (Done once the paper is done). The text is read beside the pages and is ticked as soon as it is. Done stages in text-2 with a green Font Awesome check, the current one in ink at 500 with its count (`aria-current="step"`), the rest muted; the arrows are CSS content with empty alt text. A paper read without structures has no structures stage.
+- **Figure:** checking 5%, pages 35%, structures 35%, the text 20% (its step ended), the last 5% when the paper is done (70% for pages when there are no structures). Failed pages and structures count as handled. Structures are measured against those the unread pages can be expected to hold, and the shown figure is the highest so far in the run (a retried page starts a new run), so the bar never moves back.
+- **Nothing to measure yet:** before the PDF check counts the pages, and for an annotate-only run, the bar has no value: an empty ruler (a tick every 8px in tick on surface) that drifts slowly and stands still under reduced motion. Before the read starts the line reads the queue estimate ("About 3 min in the queue", or Waiting); after that the estimate stands in muted mono beside the stages while it is a minute or more (the waits are in the segmentation and OCSR queues).
+- **When:** while the paper is busy; a paper read while it is open ends on a full bar with every stage ticked; a paper opened done shows only its badge, and so does a done paper busy only reading structures again with another engine. A failed paper or a PDF that could not be read shows no bar: its failure lines say why, as before.
+- **Screen readers:** the bar is named "Reading progress" and speaks "Reading structures, 10 of 15" (`aria-valuetext`). A visually hidden polite status says the stage name when the stage changes, never a count.
+- **Compact (tool home):** under the row's counts, at most 360px: a 6px bar and one 11px mono line ("Reading pages 2/4", "Waiting"; none while annotating, the badge says it), no announcement. The row's steps are fetched with the list, every 5 s, only while the paper is busy; the bar waits for the first answer rather than guess "0/5".
 
 ### Stamp
 A round 2px ring rotated -12deg with Geist Mono 500 uppercase text: 66px / 10px on cards, 128px / 17px large. Accepted in accepted green, rejected in charcoal. When a decision is made it lands from scale 1.4 to rest in 160ms; no motion under reduced motion.

@@ -322,6 +322,13 @@
   color: var(--ink);
 }
 
+/* The reading progress bar takes the rest of the line. */
+.ws-status__progress {
+  flex: 1 1 420px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+}
+
 /* Polling: the live note sits at the far end, with a dashed mark like Reading…. */
 .ws-status__live {
   margin-left: auto;

@@ -656,7 +656,8 @@ describe("status bar", () => {
       steps: [...failedPage4("timeout"), step({ kind: "render_page", page: 4, status: "done" })],
     });
     await title();
-    await screen.findByText(/Pages read/);
+    await waitFor(() => expect(api.getSteps).toHaveBeenCalled());
+    await act(async () => {}); // the steps have landed
     expect(screen.queryByText(/could not be read/)).toBeNull();
   });
 
@@ -722,22 +723,67 @@ describe("status bar", () => {
         "This PDF could not be read: it is encrypted, damaged or has more than 100 pages",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Pages read/)).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
-  it("shows the per-step progress", async () => {
+  it("shows the reading progress: the stage, its count and the bar's spoken value", async () => {
     renderWorkspace({
       paper: paper({ status: "processing", pages: 2 }),
       steps: [
+        step({ kind: "check_pdf", page: null }),
         step({ kind: "segment_page", page: 0 }),
         step({ kind: "segment_page", page: 1, status: "running" }),
         step({ kind: "ocsr", segment_id: "g1", status: "done" }),
         step({ kind: "ocsr", segment_id: "g2", status: "queued" }),
       ],
     });
-    expect(
-      await screen.findByText("Pages read 1/2 · Structures read 1/2"),
-    ).toBeInTheDocument();
+    const bar = await screen.findByRole("progressbar", { name: "Reading progress" });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 1 of 2"));
+    const status = screen.getByRole("region", { name: "Status" });
+    expect(within(status).getByText("Reading pages", { selector: "li" })).toHaveAttribute("aria-current", "step");
+    expect(within(status).getByText("1/2")).toBeInTheDocument();
+    expect(within(status).getByText("Reading pages", { selector: "[role=status]" })).toBeInTheDocument();
+  });
+
+  it("a paper opened done shows its badge and no bar", async () => {
+    renderWorkspace();
+    await title();
+    await waitFor(() => expect(api.getSteps).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("a paper read while it is open ends on a full bar that says Done", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 1 }),
+      steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0, status: "running" })],
+    });
+    const bar = await screen.findByRole("progressbar", { name: "Reading progress" });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 0 of 1"));
+    act(() => {
+      client.setQueryData(keys.steps(ID), {
+        steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0 })],
+      });
+      client.setQueryData(keys.paper(ID), paper({ status: "done", pages: 1 }));
+    });
+    await waitFor(() => expect(bar).toHaveAttribute("value", "100"));
+    expect(bar).toHaveAttribute("aria-valuetext", "Done");
+  });
+
+  it("an annotate-only run has an indeterminate bar beside its Annotating… badge", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 1 }),
+      steps: [
+        step({ kind: "check_pdf", page: null }),
+        step({ kind: "segment_page", page: 0 }),
+        step({ kind: "annotate", page: null, status: "running" }),
+      ],
+    });
+    const status = await screen.findByRole("region", { name: "Status" });
+    await within(status).findByText("Annotating…");
+    const bar = within(status).getByRole("progressbar");
+    expect(bar).not.toHaveAttribute("value");
+    expect(bar).toHaveAttribute("aria-valuetext", "Annotating");
   });
 
   it("while waiting, shows this paper's queue estimate in whole minutes", async () => {
@@ -754,12 +800,39 @@ describe("status bar", () => {
     expect(await screen.findByText("About 3 min in the queue")).toBeInTheDocument();
   });
 
-  it("under a minute reads less than a minute", async () => {
+  it("under a minute reads less than a minute while nothing has started", async () => {
     renderWorkspace({
-      paper: paper({ status: "checking" }),
+      paper: paper({ status: "checking", pages: null }),
       queue: { papers: [{ id: ID, steps_ahead_by_queue: {}, estimate_s: 40 }], estimate_s: 40 },
     });
     expect(await screen.findByText("Less than a minute")).toBeInTheDocument();
+  });
+
+  it("keeps the queue estimate beside the stages once the read has started", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 2 }),
+      steps: [
+        step({ kind: "check_pdf", page: null }),
+        step({ kind: "segment_page", page: 0 }),
+        step({ kind: "segment_page", page: 1, status: "queued" }),
+      ],
+      queue: { papers: [{ id: ID, steps_ahead_by_queue: { "q.segment": 6 }, estimate_s: 330 }], estimate_s: 330 },
+    });
+    const status = await screen.findByRole("region", { name: "Status" });
+    expect(await within(status).findByText("About 6 min in the queue")).toBeInTheDocument();
+    expect(within(status).getByRole("list", { name: "Stages" })).toBeInTheDocument();
+  });
+
+  it("leaves out a wait under a minute once the read has started", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 2 }),
+      steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0, status: "running" })],
+      queue: { papers: [{ id: ID, steps_ahead_by_queue: { "q.segment": 1 }, estimate_s: 20 }], estimate_s: 20 },
+    });
+    await screen.findByRole("progressbar", { name: "Reading progress" });
+    await waitFor(() => expect(api.getQueue).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByText("Less than a minute")).toBeNull();
   });
 
   it("a finished paper does not ask for the queue", async () => {

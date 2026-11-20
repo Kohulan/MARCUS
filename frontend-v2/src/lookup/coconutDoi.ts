@@ -1,6 +1,6 @@
 // How many molecules COCONUT already holds for a DOI (v1 PdfViewerObject.checkInCoconut):
 // a tag search on citations, no login, through the MARCUS relay (COCONUT_API). Any failure
-// is null.
+// is null. No `sort`: COCONUT answers 400 to "desc" ("The selected sort is invalid.").
 import { COCONUT_API } from "../coconut/coconutApi";
 import { fetchJson, isRecord } from "./fetchJson";
 
@@ -53,7 +53,6 @@ export async function coconutCountForDoi(
           tagType: "citations",
           query: clean,
           limit: COCONUT_PAGE_SIZE,
-          sort: "desc",
           page: 1,
           offset: 0,
         }),
