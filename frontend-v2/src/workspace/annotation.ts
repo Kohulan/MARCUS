@@ -218,10 +218,14 @@ export function sameValues(a: AnnotationValues, b: AnnotationValues): boolean {
 
 /**
  * A refused start, save or reset in a few words: the API's own detail (503 "The annotation
- * model is not running" or "Annotation is not available", 503 busy, 422), except the 429 of
- * the per-owner limit on corrections.
+ * model is not running" or "Annotation is not available", 503 busy, 422), except a 429: the
+ * per-owner limit on starts (5 a minute) or on corrections.
  */
-export function annotationError(err: unknown): string {
-  if (err instanceof ApiError && err.status === 429) return "Too many changes, try again in a minute";
+export function annotationError(err: unknown, action: "start" | "change" = "change"): string {
+  if (err instanceof ApiError && err.status === 429) {
+    return action === "start"
+      ? "Too many starts, try again in a minute"
+      : "Too many changes, try again in a minute";
+  }
   return errorText(err);
 }

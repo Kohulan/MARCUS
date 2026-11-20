@@ -248,6 +248,10 @@ describe("annotation helpers", () => {
     expect(annotationError(new ApiError(429, "rate limited", 20))).toBe(
       "Too many changes, try again in a minute",
     );
+    // a start is not a change: its own limit (5 a minute) has its own words (F3)
+    expect(annotationError(new ApiError(429, "rate limited", 20), "start")).toBe(
+      "Too many starts, try again in a minute",
+    );
     expect(annotationError(new ApiError(503, "The server is busy, try again in a moment."))).toBe(
       "The server is busy, try again in a moment.",
     );

@@ -53,7 +53,7 @@ export default function AnnotationPanel(props: Props) {
     try {
       await props.onStart();
     } catch (err) {
-      setError(`Not started: ${annotationError(err)}`);
+      setError(`Not started: ${annotationError(err, "start")}`);
     } finally {
       setStarting(false);
     }

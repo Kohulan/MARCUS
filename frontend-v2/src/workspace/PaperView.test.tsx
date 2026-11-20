@@ -473,6 +473,15 @@ describe("Paper view: annotation", () => {
     expect(within(await panel()).getByRole("button", { name: "Annotate" })).toBeEnabled();
   });
 
+  it("a start refused by its rate limit (429) says too many starts, not changes", async () => {
+    vi.spyOn(api, "startAnnotation").mockRejectedValue(new ApiError(429, "rate limited", 30));
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
+    expect(await within(await panel()).findByRole("alert")).toHaveTextContent(
+      "Not started: Too many starts, try again in a minute",
+    );
+  });
+
   it("a start refused because the model is not running says so", async () => {
     vi.spyOn(api, "startAnnotation").mockRejectedValue(
       new ApiError(503, "The annotation model is not running"),
