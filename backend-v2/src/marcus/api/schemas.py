@@ -39,6 +39,7 @@ class PaperSummary(_Orm):
     to_review: int
     failed_pages: int
     failed: int
+    annotating: bool  # busy only with its annotation (its only step in flight is annotate)
 
 
 class PaperList(BaseModel):
@@ -255,10 +256,12 @@ StepState = Literal["none", "pending", "queued", "running", "done", "failed", "c
 class AnnotationField(BaseModel):
     key: str
     label: str
+    max_length: int  # the longest value a curation may hold in this field (the model's maxLength)
 
 
 class CoconutOrganism(BaseModel):
-    """frontend-v2 coconut OrganismDraft: parts and ecosystems are comma-separated."""
+    """frontend-v2 coconut OrganismDraft: parts and ecosystems are comma-separated (an item
+    with a comma in double quotes). The prefill leaves ecosystems empty."""
 
     name: str
     parts: str

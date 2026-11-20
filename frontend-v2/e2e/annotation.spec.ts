@@ -134,7 +134,7 @@ test("annotate the sample: the values, their occurrences, corrections kept and e
 
   // Export: the menu says so, and the files carry the curated values
   await page.getByRole("button", { name: "Export" }).click();
-  await expect(page.getByRole("group", { name: "Export" }).getByText("With the annotation")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Export" }).getByText(/^JSON: the whole annotation\./)).toBeVisible();
   const href = await page.getByRole("link", { name: "JSON, all" }).getAttribute("href");
   const doc = await (await page.request.get(href!)).json();
   expect(doc.annotation.source).toBe("curated");

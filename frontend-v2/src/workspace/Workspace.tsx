@@ -3,8 +3,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
 import { usePaper, useSteps } from "../api/queries";
-import type { PaperDetail } from "../api/types";
+import type { AnnotationOut, PaperDetail } from "../api/types";
 import SubmitForm from "../coconut/SubmitForm";
+import type { OrganismDraft } from "../coconut/types";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
@@ -25,6 +26,25 @@ import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
+
+/** The COCONUT form's starting organisms, and the note they carry when they are the model's. */
+type CoconutStart = { organisms: OrganismDraft[]; note: string | undefined };
+
+/**
+ * The annotation's organisms start the COCONUT form (the curator can change them), labelled as
+ * the model's suggestion unless they come from the curator's corrections; COCONUT has no
+ * kingdom field, so the kingdom is not carried over.
+ */
+function coconutStart(annotation: AnnotationOut | undefined): CoconutStart {
+  const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
+    name: o.name,
+    parts: o.parts,
+    location: o.location,
+    ecosystems: o.ecosystems,
+  }));
+  const suggested = organisms.length > 0 && annotation?.curated === null;
+  return { organisms, note: suggested ? "Organisms: model suggestion" : undefined };
+}
 
 /**
  * How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI).
@@ -129,18 +149,15 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     () => coconutStructures(ws.segments, paper.engine),
     [ws.segments, paper.engine],
   );
-  const [sending, setSending] = useState(false);
+  // The open form's starting organisms, fixed when it opens (a later change of the annotation
+  // does not rewrite them); `waiting`: the annotation had not answered yet, so its first answer
+  // still starts them (the form takes them only if the curator has not typed organisms).
+  const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
   const sendCount = toCoconut.length;
-  // The annotation's organisms start the COCONUT form (the curator can change them), labelled
-  // as the model's suggestion unless they come from the curator's corrections; COCONUT has no
-  // kingdom field, so the kingdom is not carried over.
   const annotation = useAnnotation(paper.id, ws.steps).data;
-  const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
-    name: o.name,
-    parts: o.parts,
-    location: o.location,
-    ecosystems: o.ecosystems,
-  }));
+  if (sending?.waiting && annotation !== undefined) {
+    setSending({ ...coconutStart(annotation), waiting: false });
+  }
   return (
     <main className="ws">
       <header className="ws-head">
@@ -177,7 +194,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
               disabled={sendCount === 0}
               describedBy={sendCount === 0 ? reasonId : undefined}
               hasPopup="dialog"
-              onClick={() => setSending(true)}
+              onClick={() =>
+                setSending({ ...coconutStart(annotation), waiting: annotation === undefined })
+              }
             >
               {`Send ${sendCount} to COCONUT`}
             </GlassButton>
@@ -250,14 +269,10 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           structures={toCoconut}
           initial={{
             title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
-            ...(organisms.length > 0 ? { organisms } : {}),
+            ...(sending.organisms.length > 0 ? { organisms: sending.organisms } : {}),
           }}
-          organismsNote={
-            organisms.length > 0 && annotation?.curated === null
-              ? "Organisms: model suggestion"
-              : undefined
-          }
-          onClose={() => setSending(false)}
+          organismsNote={sending.note}
+          onClose={() => setSending(null)}
         />
       )}
     </main>

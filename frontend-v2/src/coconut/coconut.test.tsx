@@ -12,6 +12,7 @@ import {
   mutateBody,
   NOT_SENT_ERROR,
   sentIds,
+  splitList,
   submitReports,
   TOKEN_KEY,
   UNKNOWN_ERROR,
@@ -301,6 +302,47 @@ describe("buildReport", () => {
     );
     expect(r.comment).toBe("Paper comment");
     expect(r.suggested_changes.new_molecule_data.references[0]!.organisms[0]!.name).toBe("Salix alba");
+  });
+});
+
+describe("comma-separated lists", () => {
+  it("splits on commas, keeps a double-quoted item whole and reads a doubled quote", () => {
+    expect(splitList(' bark, leaf ,, "roots, stems", "the ""inner"" bark" ')).toEqual([
+      "bark",
+      "leaf",
+      "roots, stems",
+      'the "inner" bark',
+    ]);
+  });
+
+  it("reads a quote that does not open an item, or is never closed, as text", () => {
+    expect(splitList('5" root, stem')).toEqual(['5" root', "stem"]);
+    expect(splitList('"roots, stems')).toEqual(['"roots', "stems"]);
+    expect(splitList('"a" b, c')).toEqual(["a b", "c"]);
+  });
+
+  it("carries a quoted part and ecosystem into the report as one item", () => {
+    const r = buildReport(
+      paper,
+      { segmentId: "s1", n: 1, smiles: "C" },
+      {
+        name: "M",
+        structuralComments: "",
+        organism: {
+          name: "Taxus brevifolia",
+          parts: '"roots, stems", bark',
+          location: "Oregon",
+          ecosystems: '"forest, temperate"',
+        },
+      },
+    );
+    expect(r.suggested_changes.new_molecule_data.references[0]!.organisms).toEqual([
+      {
+        name: "Taxus brevifolia",
+        parts: ["roots, stems", "bark"],
+        locations: [{ name: "Oregon", ecosystems: ["forest, temperate"] }],
+      },
+    ]);
   });
 });
 

@@ -8,9 +8,9 @@ import "./ui.css";
 
 /**
  * The "Waterline" nav: a glass pill whose marked item is a drop of green water. The drop
- * stretches to the item under the pointer or focus, then settles with a ripple, and rests on
- * the current page's item (none on the other pages). Everything it moves is two custom
- * properties set through the CSSOM (style.setProperty: allowed under style-src 'self', unlike
+ * slides to the item under the pointer or focus, then settles with a ripple, and rests on
+ * the current page's item (none on the other pages). It moves by transform only: its offset
+ * and width are two custom properties set through the CSSOM (style.setProperty: allowed under style-src 'self', unlike
  * a style attribute) and three classes; the look is all in ui.css. CSS only, no WebGL.
  */
 type Drop = { lastLeft: number | null; settle: number };
@@ -23,18 +23,17 @@ function ripple(wl: HTMLElement) {
 
 function place(wl: HTMLElement, drop: Drop, el: HTMLElement) {
   const left = el.offsetLeft;
-  const right = wl.clientWidth - left - el.offsetWidth;
   const shown = wl.classList.contains("has-drop");
   wl.dataset.dir =
     !shown || drop.lastLeft === null ? "none" : left > drop.lastLeft ? "right" : "left";
   const moved = left !== drop.lastLeft || !shown;
   drop.lastLeft = left;
-  wl.style.setProperty("--wl-l", `${left}px`);
-  wl.style.setProperty("--wl-r", `${right}px`);
+  wl.style.setProperty("--wl-x", `${left}px`);
+  wl.style.setProperty("--wl-w", `${el.offsetWidth}px`);
   wl.classList.add("has-drop");
   if (moved) {
     window.clearTimeout(drop.settle);
-    drop.settle = window.setTimeout(() => ripple(wl), shown ? 380 : 120);
+    drop.settle = window.setTimeout(() => ripple(wl), shown ? 420 : 120);
   }
 }
 

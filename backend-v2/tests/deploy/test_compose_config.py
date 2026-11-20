@@ -516,10 +516,11 @@ GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molnextr", "worker-m
 GPU_TOTAL_MIB = 32 * 1024
 CUDA_CONTEXT_MIB = 512
 BUDGET_LIMIT_MIB = 20 * 1024
-# llama-server (the MARCUS model): the Q8_0 GGUF (9.5 GB) plus an 8192-token context and compute
-# buffers, about 11 GB; llama.cpp cannot be capped, so it is counted on top of the model workers'
-# budgets and the card must still keep CARD_HEADROOM_MIB free.
-LLAMA_GPU_MIB = 11 * 1024
+# llama-server (the MARCUS model): the Q8_0 GGUF plus an 8192-token context and compute buffers,
+# measured 8.9 GB on the jarvis V100 (2026-11-20), counted here as 9 GiB; llama.cpp cannot be
+# capped, so it is counted on top of the model workers' budgets and the card must still keep
+# CARD_HEADROOM_MIB free.
+LLAMA_GPU_MIB = 9 * 1024
 CARD_HEADROOM_MIB = 2 * 1024
 
 
@@ -551,6 +552,16 @@ def test_gpu_override_budget_under_20gb():
     published = {name for name, svc in services.items() if svc.get("ports")}
     assert published == {"nginx"}
     assert _non_internal_members(config) == EGRESS_SERVICES
+
+
+def test_llama_gpu_memory_is_the_measured_figure_everywhere():
+    """Measured on the jarvis V100 (2026-11-20): llama-server with the Q8_0 GGUF at ctx 8192
+    takes 8.9 GB. The old "about 11 GB" estimate is gone from the files that size the card."""
+    assert LLAMA_GPU_MIB == 9 * 1024
+    for path in (ROOT / GPU, ROOT / "ops" / "annotate_smoke.sh", ROOT / "README.md"):
+        text = path.read_text()
+        assert "8.9 GB" in text, path.name
+        assert "11 GB" not in text, path.name
 
 
 def test_gpu_override_reserves_the_gpu_for_exactly_the_model_workers():
@@ -951,7 +962,7 @@ def _arg(command: list[str], flag: str) -> str:
 def test_llama_server_is_internal_read_only_and_mounts_the_model_read_only():
     services = _compose_config("docker-compose.yml", GPU)["services"]
     llama = services["llama-server"]
-    assert set(llama["networks"]) == {"internal"} and not llama.get("ports")
+    assert not llama.get("ports")
     assert llama["read_only"] is True and llama["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in llama["security_opt"]
     (vol,) = llama["volumes"]
@@ -971,6 +982,16 @@ def test_llama_server_is_internal_read_only_and_mounts_the_model_read_only():
     assert "llama-server" not in base and "worker-llm" not in base
 
 
+def test_llama_server_shares_its_own_internal_network_only_with_worker_llm():
+    """A-M8: no other container (not even one on `internal`) can reach llama-server."""
+    config = _compose_config("docker-compose.yml", GPU)
+    assert config["networks"]["llm"]["internal"] is True
+    members = {name for name, svc in config["services"].items() if "llm" in svc.get("networks", {})}
+    assert members == {"llama-server", "worker-llm"}
+    assert set(config["services"]["llama-server"]["networks"]) == {"llm"}
+    assert set(config["services"]["worker-llm"]["networks"]) == {"internal", "llm"}
+
+
 def test_llama_image_is_built_at_the_pinned_commit_for_the_v100():
     text = LLAMA_DOCKERFILE.read_text()
     assert f"ARG LLAMA_COMMIT={LLAMA_COMMIT}" in text
@@ -987,7 +1008,7 @@ def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
     cmd = worker["command"]
     assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
     assert _arg(cmd, "--include") == "marcus.workers.annotate"
-    assert set(worker["networks"]) == {"internal"} and worker["read_only"] is True
+    assert set(worker["networks"]) == {"internal", "llm"} and worker["read_only"] is True
     (vol,) = worker["volumes"]
     assert vol["target"] == "/data" and vol["read_only"] is True
     assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"

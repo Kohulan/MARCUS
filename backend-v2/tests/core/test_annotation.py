@@ -228,13 +228,33 @@ def test_coconut_prefill_maps_organism_fields():
     assert ann.coconut_prefill(shown) == {
         "organisms": [
             {"name": "Taxus brevifolia", "parts": "bark, leaves", "location": "Oregon",
-             "ecosystems": "forest"},
+             "ecosystems": ""},
             {"name": "T. baccata", "parts": "bark, leaves", "location": "Oregon",
-             "ecosystems": "forest"},
+             "ecosystems": ""},
         ],
         "kingdom": ["Plant"],
     }  # fmt: skip
     assert ann.coconut_prefill({f: [] for f in ann.FIELDS}) == {"organisms": [], "kingdom": []}
+
+
+def test_coconut_ecosystems_never_take_the_habitat_or_host_field():
+    """The "Habitat or host" field holds a host plant as often as a habitat (an endophyte's host):
+    the model cannot tell them apart, so nothing of it becomes a COCONUT ecosystem (F4)."""
+    shown = {f: [] for f in ann.FIELDS}
+    shown["organism_or_species"] = ["Fusarium sp."]
+    shown["location"] = ["Camptotheca acuminata", "marine sediment"]
+    (organism,) = ann.coconut_prefill(shown)["organisms"]
+    assert organism["ecosystems"] == ""
+
+
+def test_coconut_parts_keep_a_value_with_a_comma_whole():
+    """The form's parts are comma-separated: a value that holds a comma (or a double quote) is
+    written in double quotes, a quote inside doubled (frontend coconutApi `list`, F4)."""
+    shown = {f: [] for f in ann.FIELDS}
+    shown["organism_or_species"] = ["Taxus brevifolia"]
+    shown["organism_part"] = ["roots, stems", "bark", 'the "inner" bark']
+    (organism,) = ann.coconut_prefill(shown)["organisms"]
+    assert organism["parts"] == '"roots, stems", bark, "the ""inner"" bark"'
 
 
 def test_blocks_of_a_deeply_nested_document_need_no_recursion():
@@ -318,3 +338,17 @@ def test_the_fast_normalisation_equals_the_per_character_rules():
         for fold in (False, True):
             form, origin = ann._normalise(text, fold)
             assert (form, list(origin)) == slow(text, fold), (text, fold)
+
+
+def test_blocks_and_model_input_match_the_shared_parity_fixture():
+    """tests/fixtures/docling_parity.json is read by this test and by frontend-v2
+    src/workspace/doclingText.test.ts: the backend's walk and the Paper view's give the same
+    blocks, and the model input stays as recorded (review A-M4)."""
+    import pathlib
+
+    from marcus.workers.annotate.inputs import model_input
+
+    path = pathlib.Path(__file__).parents[1] / "fixtures" / "docling_parity.json"
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    assert ann.docling_blocks(fixture["doc"]) == [b["text"] for b in fixture["blocks"]]
+    assert model_input(fixture["doc"]) == fixture["input_text"]

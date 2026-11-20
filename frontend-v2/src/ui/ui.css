@@ -30,6 +30,31 @@
   border: 1px solid var(--line);
 }
 
+/* Skip to content: out of sight above the window until the keyboard reaches it. Body 4. */
+.skip {
+  position: absolute;
+  top: var(--s-75);
+  left: var(--s-75);
+  z-index: 20;
+  padding: var(--s-75) var(--s-100);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--porcelain);
+  font: 700 14px/20px var(--font-text);
+  color: var(--ink);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 300ms var(--ease);
+}
+
+.skip:focus {
+  transform: none;
+}
+
+.skip:hover {
+  color: var(--ink);
+}
+
 /* Header: the mark, then the Waterline pill, both free of the sheet -------- */
 
 .site-header {
@@ -43,8 +68,8 @@
 .site-header__mark {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 24px;
+  gap: var(--s-100);
+  padding: var(--s-100) var(--s-300);
   color: var(--green);
   text-decoration: none;
 }
@@ -72,21 +97,21 @@
 }
 
 .site-header__nav {
-  padding: 10px 24px;
+  padding: var(--s-100) var(--s-300);
 }
 
 /*
  * Waterline: a clear glass pill (blur and saturate; no refraction filter, no WebGL). The
- * marked item is a drop of green water that stretches to the item you pick and settles with
- * a ripple. Header.tsx sets --wl-l, --wl-r (the drop's edges) and --wl-mx (the pointer)
- * through the CSSOM, and the classes has-drop, is-settling and data-dir.
+ * marked item is a drop of green water that slides to the item you pick and settles with
+ * a ripple. Header.tsx sets --wl-x and --wl-w (the drop's offset and width), --wl-mx (the
+ * pointer) through the CSSOM, and the classes has-drop, is-settling and data-dir. The drop
+ * moves by transform only, on the one curve (--ease).
  */
 .wl {
-  --wl-ease: cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 4px;
+  padding: var(--s-50);
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.25));
   -webkit-backdrop-filter: blur(3px) saturate(1.8);
@@ -104,7 +129,7 @@
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 200ms var(--wl-ease);
+  transition: opacity 300ms var(--ease);
   background:
     radial-gradient(64px 20px at var(--wl-mx, 50%) 0, rgba(255, 255, 255, 0.95), transparent 72%),
     radial-gradient(84px 14px at var(--wl-mx, 50%) 100%, rgba(30, 77, 51, 0.2), transparent 72%);
@@ -114,26 +139,30 @@
   opacity: 1;
 }
 
+/* Title 5: Geist Mono 500, 12 / 16 */
 .wl__item {
   position: relative;
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  padding: 10px 18px;
+  gap: var(--s-75);
+  padding: var(--s-100) var(--s-200);
   border-radius: 999px;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 12px;
-  line-height: 1.4;
+  font: 500 12px/16px var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink);
   text-decoration: none;
+  transition: transform 300ms var(--ease);
 }
 
 .wl__item:hover {
   color: var(--ink);
+}
+
+.wl__item:active {
+  transform: scale(0.98);
 }
 
 .wl__item:focus-visible {
@@ -143,47 +172,38 @@
 }
 
 .wl__item .fa {
+  width: 14px;
+  height: 14px;
+  margin: 0;
   color: var(--green);
 }
 
 .wl__drop {
   position: absolute;
   z-index: 1;
-  top: 4px;
-  bottom: 4px;
-  left: var(--wl-l, 4px);
-  right: var(--wl-r, 4px);
+  top: var(--s-50);
+  bottom: var(--s-50);
+  left: 0;
+  width: var(--wl-w, 0);
   border-radius: 999px;
   pointer-events: none;
   opacity: 0;
-  transform: scale(0.72);
+  transform: translateX(var(--wl-x, 0));
   background: linear-gradient(180deg, rgba(45, 122, 70, 0.14), rgba(30, 77, 51, 0.3));
   box-shadow: var(--water-drop);
-  transition:
-    opacity 180ms var(--wl-ease),
-    transform 240ms var(--wl-ease);
+  transition: opacity 300ms var(--ease);
 }
 
 .wl.has-drop .wl__drop {
   opacity: 1;
-  transform: none;
 }
 
-/* The stretch: the leading edge runs ahead, the trailing edge follows. */
-.wl[data-dir="right"] .wl__drop {
-  transition:
-    right 240ms var(--wl-ease),
-    left 440ms var(--wl-ease) 70ms,
-    opacity 180ms,
-    transform 240ms;
-}
-
+/* From one item to the next it slides; it appears and goes by opacity alone. */
+.wl[data-dir="right"] .wl__drop,
 .wl[data-dir="left"] .wl__drop {
   transition:
-    left 240ms var(--wl-ease),
-    right 440ms var(--wl-ease) 70ms,
-    opacity 180ms,
-    transform 240ms;
+    transform 500ms var(--ease),
+    opacity 300ms var(--ease);
 }
 
 .wl__ripple {
@@ -194,26 +214,8 @@
   opacity: 0;
 }
 
-.wl.is-settling .wl__drop {
-  animation: wl-settle 460ms var(--wl-ease);
-}
-
 .wl.is-settling .wl__ripple {
-  animation: wl-ripple 620ms var(--wl-ease);
-}
-
-@keyframes wl-settle {
-  0% {
-    transform: scale(1.05, 0.9);
-  }
-
-  45% {
-    transform: scale(0.98, 1.05);
-  }
-
-  100% {
-    transform: none;
-  }
+  animation: wl-ripple 600ms var(--ease);
 }
 
 @keyframes wl-ripple {
@@ -228,11 +230,11 @@
   }
 }
 
-/* Reduced motion: the drop jumps to its item; no ripple, no meniscus. */
+/* Reduced motion: the drop jumps to its item and only fades (skill B7); no ripple, no
+   meniscus. */
 @media (prefers-reduced-motion: reduce) {
-  .wl .wl__drop {
-    transition: none !important;
-    animation: none !important;
+  .wl[data-dir] .wl__drop {
+    transition: opacity 300ms var(--ease) !important;
   }
 
   .wl .wl__ripple {
@@ -273,12 +275,12 @@
 
 @media (max-width: 559.98px) {
   .site-header__mark {
-    padding: 12px 16px 8px;
+    padding: var(--s-100) var(--s-200) var(--s-75);
   }
 
   .site-header__nav {
     width: 100%;
-    padding: 0 16px 14px;
+    padding: 0 var(--s-200) var(--s-200);
   }
 
   .wl {
@@ -287,7 +289,7 @@
   }
 
   .wl__item {
-    padding: 10px 12px;
+    padding: var(--s-100);
   }
 }
 
@@ -362,18 +364,20 @@
 
 /* The bubbles: three opaque porcelain pills (glazed white, unlike the glass header), the
    copyright far left, the credit in the middle, the links far right. The row lets clicks
-   through; only the bubbles take them. */
+   through; only the bubbles take them. Caption 5: Geist Mono 400, 12 / 16. */
 .site-footer--bubbles {
   position: sticky;
-  bottom: 12px;
+  bottom: var(--s-100);
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin: 12px 0 0;
-  padding: 0 12px;
-  font-size: 10px;
+  gap: var(--s-100);
+  margin: var(--s-100) 0 0;
+  padding: 0 var(--s-100);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
   color: var(--text-2);
   pointer-events: none;
 }
@@ -383,9 +387,9 @@
 .site-footer__nav {
   position: relative;
   margin: 0;
-  padding: 3px 14px;
+  padding: var(--s-50) var(--s-200);
   border-radius: 999px;
-  line-height: 24px;
+  line-height: 16px;
   white-space: nowrap;
   pointer-events: auto;
   background: radial-gradient(120% 90% at 30% 0%, var(--surface) 0%, #fbfbf7 45%, #efefe8 100%);
@@ -419,18 +423,26 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0 8px;
+  gap: 0 var(--s-75);
 }
 
-/* 24 px tall targets (WCAG 2.5.8), the credit's links too: a link never breaks inside. */
+/* 24 px tall targets (WCAG 2.5.8) on 16 px lines, the credit's links too: 4 px above and
+   below each link, taken back by its margin so the bubble stays 24 px. A link never breaks
+   inside. */
 .site-footer--bubbles a {
   display: inline-block;
-  min-height: 24px;
+  margin: calc(-1 * var(--s-50)) 0;
+  padding: var(--s-50) 0;
   color: var(--text-2);
+  transition: color 300ms var(--ease);
 }
 
 .site-footer--bubbles a:hover {
   color: var(--ink);
+}
+
+.site-footer--bubbles a:active {
+  transform: translateY(1px);
 }
 
 .site-footer--bubbles a:focus-visible {
@@ -438,17 +450,20 @@
 }
 
 .site-footer--bubbles .fa {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--s-50);
   color: var(--green);
 }
 
 .site-footer .fa-mug {
-  margin: 0 0.3em;
+  margin: 0 var(--s-50);
   transform-origin: 50% 100%;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .site-footer .fa-mug {
-    animation: mug-steam 2.6s ease-in-out infinite;
+    animation: mug-steam 2.6s var(--ease) infinite;
   }
 }
 
@@ -467,12 +482,13 @@
   }
 }
 
-/* Narrower than one line: the footer stops sticking and stacks its bubbles, centred. */
-@media (max-width: 1023.98px) {
+/* Narrower than one line (12 px text needs 1200 px): the footer stops sticking and stacks
+   its bubbles, centred. */
+@media (max-width: 1199.98px) {
   .site-footer--bubbles {
     position: static;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--s-75);
   }
 
   .site-footer__credit {

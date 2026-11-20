@@ -7,8 +7,8 @@
 #
 # PDF defaults to the sample paper (frontend-v2/public/sample/synth_015.pdf). GPU (default): the
 # CUDA image marcus-v2-llama:cuda-b12554 with one GPU (needs the NVIDIA Container Toolkit and
-# about 11 GB of free GPU memory). --cpu: the CPU image, no GPU, a long request timeout,
-# MARCUS_SMOKE_THREADS threads (default 16).
+# 8.9 GB of free GPU memory, measured on the jarvis V100). --cpu: the CPU image, no GPU, a long
+# request timeout, MARCUS_SMOKE_THREADS threads (default 16).
 # Images: marcus-v2-api:local and marcus-v2-cpu:local must exist (docker compose build api
 # worker-cpu); the llama image is built if missing (docker/Dockerfile.llama).
 #
