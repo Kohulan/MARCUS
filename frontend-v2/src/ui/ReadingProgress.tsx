@@ -10,6 +10,7 @@ const SAID: Record<Stage, string> = {
   checking: "Checking PDF",
   pages: "Reading pages",
   structures: "Reading structures",
+  text: "Reading the text",
   finishing: "Finishing",
   annotating: "", // the badge and the annotation panel say it
   done: "Done",
@@ -47,7 +48,7 @@ export default function ReadingProgress({
   progress: Model;
   /** The bar's accessible name. */
   label: string;
-  /** "About 3 min in the queue": shown until the read starts. */
+  /** "About 3 min in the queue": the line while waiting, then beside the stages. */
   queueNote?: string | null | undefined;
   announce?: boolean;
   compact?: boolean;
@@ -74,7 +75,7 @@ export default function ReadingProgress({
     );
   }
 
-  const queue = !progress.started && queueNote ? queueNote : null;
+  const queue = queueNote || null;
   return (
     <div className={`rp rp--${progress.stage}`}>
       <div className="rp__head">

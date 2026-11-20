@@ -800,12 +800,39 @@ describe("status bar", () => {
     expect(await screen.findByText("About 3 min in the queue")).toBeInTheDocument();
   });
 
-  it("under a minute reads less than a minute", async () => {
+  it("under a minute reads less than a minute while nothing has started", async () => {
     renderWorkspace({
-      paper: paper({ status: "checking" }),
+      paper: paper({ status: "checking", pages: null }),
       queue: { papers: [{ id: ID, steps_ahead_by_queue: {}, estimate_s: 40 }], estimate_s: 40 },
     });
     expect(await screen.findByText("Less than a minute")).toBeInTheDocument();
+  });
+
+  it("keeps the queue estimate beside the stages once the read has started", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 2 }),
+      steps: [
+        step({ kind: "check_pdf", page: null }),
+        step({ kind: "segment_page", page: 0 }),
+        step({ kind: "segment_page", page: 1, status: "queued" }),
+      ],
+      queue: { papers: [{ id: ID, steps_ahead_by_queue: { "q.segment": 6 }, estimate_s: 330 }], estimate_s: 330 },
+    });
+    const status = await screen.findByRole("region", { name: "Status" });
+    expect(await within(status).findByText("About 6 min in the queue")).toBeInTheDocument();
+    expect(within(status).getByRole("list", { name: "Stages" })).toBeInTheDocument();
+  });
+
+  it("leaves out a wait under a minute once the read has started", async () => {
+    renderWorkspace({
+      paper: paper({ status: "processing", pages: 2 }),
+      steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0, status: "running" })],
+      queue: { papers: [{ id: ID, steps_ahead_by_queue: { "q.segment": 1 }, estimate_s: 20 }], estimate_s: 20 },
+    });
+    await screen.findByRole("progressbar", { name: "Reading progress" });
+    await waitFor(() => expect(api.getQueue).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByText("Less than a minute")).toBeNull();
   });
 
   it("a finished paper does not ask for the queue", async () => {

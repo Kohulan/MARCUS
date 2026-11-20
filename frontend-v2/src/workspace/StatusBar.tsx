@@ -57,6 +57,10 @@ export default function StatusBar({ paper, steps, live }: Props) {
   const readingNow = reading !== null && reading.stage !== "done" && reading.stage !== "annotating";
   if (readingNow && !seenReading) setSeenReading(true);
   const showBar = reading !== null && (reading.stage !== "done" || seenReading);
+  // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
+  // the line while nothing has started, then beside the stages when it is a minute or more.
+  const queueNote =
+    mine && (reading?.stage === "waiting" || mine.estimate_s >= 60) ? queueText(mine.estimate_s) : null;
 
   useEffect(() => {
     setHeld((m) => {
@@ -112,7 +116,7 @@ export default function StatusBar({ paper, steps, live }: Props) {
             <ReadingProgress
               progress={reading}
               label="Reading progress"
-              queueNote={mine ? queueText(mine.estimate_s) : null}
+              queueNote={queueNote}
               announce
             />
           </div>

@@ -38,7 +38,7 @@ describe("readingProgress", () => {
     const r = readingProgress({ status: "checking", pages: null, ocsr_mode: "auto" }, [
       step({ kind: "check_pdf", page: null, status: "queued" }),
     ]);
-    expect(r).toMatchObject({ stage: "waiting", fraction: null, started: false, valueText: "Waiting" });
+    expect(r).toMatchObject({ stage: "waiting", fraction: null, valueText: "Waiting" });
   });
 
   it("checks the PDF with no figure while the pages are not known", () => {
@@ -50,6 +50,7 @@ describe("readingProgress", () => {
       ["Checking PDF", "current"],
       ["Reading pages", "next"],
       ["Reading structures", "next"],
+      ["Reading the text", "next"],
       ["Finishing", "next"],
     ]);
   });
@@ -75,27 +76,33 @@ describe("readingProgress", () => {
       ["Checking PDF", null, "done"],
       ["Reading pages", "3/5", "current"],
       ["Reading structures", null, "next"],
+      ["Reading the text", null, "next"],
       ["Finishing", null, "next"],
     ]);
     expect(r.fraction).toBeGreaterThan(0);
     expect(r.fraction).toBeLessThan(0.5);
-    expect(r.started).toBe(true);
   });
 
   it("reads structures once every page is read", () => {
-    const steps = [checkDone(), ...[0, 1, 2, 3, 4].flatMap(pageRead)];
+    const steps = [
+      checkDone(),
+      step({ kind: "docling", page: null, status: "running" }),
+      ...[0, 1, 2, 3, 4].flatMap(pageRead),
+    ];
     for (let i = 0; i < 15; i += 1) steps.push(ocsr(`g${i}`, i < 10 ? "done" : "running"));
     const r = readingProgress(busy(5), steps)!;
     expect(r.stage).toBe("structures");
     expect(r.structures).toEqual({ done: 10, total: 15 });
     expect(r.valueText).toBe("Reading structures, 10 of 15");
-    expect(r.stages.map((s) => s.state)).toEqual(["done", "done", "current", "next"]);
+    expect(r.stages.map((s) => s.state)).toEqual(["done", "done", "current", "next", "next"]);
     expect(r.stages[2]!.count).toBe("10/15");
   });
 
   it("the overall figure never falls while structures are found as pages are read", () => {
-    // Each page read finds two structures; a structure is read soon after its page.
-    const steps: StepOut[] = [checkDone()];
+    // Each page read finds two structures; a structure is read soon after its page; the text
+    // ends last. A step's status changes in place, as on the server.
+    const text = step({ kind: "docling", page: null, status: "running" });
+    const steps: StepOut[] = [checkDone(), text];
     let last = 0;
     const look = () => {
       const f = readingProgress(busy(5), steps)!.fraction!;
@@ -105,13 +112,17 @@ describe("readingProgress", () => {
     look();
     for (let p = 0; p < 5; p += 1) {
       steps.push(...pageRead(p));
-      steps.push(ocsr(`a${p}`, "queued"), ocsr(`b${p}`, "queued"));
+      const a = ocsr(`a${p}`, "queued");
+      const b = ocsr(`b${p}`, "queued");
+      steps.push(a, b);
       look();
-      steps.push(ocsr(`a${p}`, "done"));
+      a.status = "done";
       look();
-      steps.push(ocsr(`b${p}`, "done"));
+      b.status = "done";
       look();
     }
+    text.status = "done";
+    look();
     expect(last).toBeLessThan(1);
   });
 
@@ -150,29 +161,74 @@ describe("readingProgress", () => {
   });
 
   it("a structure read once stays read while another engine reads it again", () => {
-    const steps = [checkDone(), ...pageRead(0), ocsr("g1"), ocsr("g1", "running")];
-    expect(readingProgress(busy(1), steps)!.structures).toEqual({ done: 1, total: 1 });
+    const steps = [
+      checkDone(),
+      ...pageRead(0),
+      step({ kind: "render_page", page: 1, status: "running" }),
+      ocsr("g1"),
+      ocsr("g1", "running"),
+    ];
+    expect(readingProgress(busy(2), steps)!.structures).toEqual({ done: 1, total: 1 });
   });
 
-  it("finishes (other work, such as the text) once pages and structures are handled", () => {
-    const steps = [checkDone(), ...pageRead(0), ocsr("g1"), step({ kind: "docling", page: null, status: "running" })];
+  it("reads the text once pages and structures are handled, with its own share of the bar", () => {
+    const docling = (status: string) => step({ kind: "docling", page: null, status });
+    const steps = [checkDone(), docling("running"), ...pageRead(0), ocsr("g1")];
     const r = readingProgress(busy(1), steps)!;
-    expect(r.stage).toBe("finishing");
-    expect(r.fraction).toBeGreaterThan(0.9);
-    expect(r.fraction).toBeLessThan(1);
+    expect(r).toMatchObject({ stage: "text", valueText: "Reading the text" });
+    expect(r.fraction).toBeCloseTo(0.75, 5);
+    expect(r.stages.map((s) => [s.label, s.state])).toEqual([
+      ["Checking PDF", "done"],
+      ["Reading pages", "done"],
+      ["Reading structures", "done"],
+      ["Reading the text", "current"],
+      ["Finishing", "next"],
+    ]);
+    const done = readingProgress(busy(1), [checkDone(), docling("done"), ...pageRead(0), ocsr("g1")])!;
+    expect(done.stage).toBe("finishing");
+    expect(done.fraction).toBeCloseTo(0.95, 5);
+  });
+
+  it("the text read before the pages is ticked at once and counted", () => {
+    const steps = [
+      checkDone(),
+      step({ kind: "docling", page: null, status: "done" }),
+      ...pageRead(0),
+      step({ kind: "render_page", page: 1, status: "running" }),
+    ];
+    const r = readingProgress(busy(2), steps)!;
+    expect(r.stage).toBe("pages");
+    expect(r.stages.find((s) => s.key === "text")!.state).toBe("done");
+    expect(r.fraction).toBeCloseTo(0.05 + 0.2 + 0.35 * 0.5, 5);
   });
 
   it("a paper read without structures (ocsr off) has no structures stage", () => {
-    const r = readingProgress(busy(2, { ocsr_mode: "off" }), [checkDone(), ...pageRead(0)])!;
+    const steps = [checkDone(), step({ kind: "docling", page: null, status: "running" }), ...pageRead(0)];
+    const r = readingProgress(busy(2, { ocsr_mode: "off" }), steps)!;
     expect(r.structures).toBeNull();
-    expect(r.stages.map((s) => s.label)).toEqual(["Checking PDF", "Reading pages", "Finishing"]);
-    expect(r.fraction).toBeCloseTo(0.05 + 0.9 * 0.5, 5);
+    expect(r.stages.map((s) => s.label)).toEqual([
+      "Checking PDF",
+      "Reading pages",
+      "Reading the text",
+      "Finishing",
+    ]);
+    expect(r.fraction).toBeCloseTo(0.05 + 0.7 * 0.5, 5);
   });
 
   it("pages read with no structure found yet: the structures part waits for the pages", () => {
-    const r = readingProgress(busy(4), [checkDone(), ...pageRead(0), ...pageRead(1)])!;
+    const steps = [checkDone(), step({ kind: "docling", page: null, status: "queued" }), ...pageRead(0), ...pageRead(1)];
+    const r = readingProgress(busy(4), steps)!;
     expect(r.stage).toBe("pages");
-    expect(r.fraction).toBeCloseTo(0.05 + 0.45 * 0.5, 5);
+    expect(r.fraction).toBeCloseTo(0.05 + 0.35 * 0.5, 5);
+  });
+
+  it("no bar while the only work is reading read structures again (another engine on a done paper)", () => {
+    const steps = [checkDone(), ...pageRead(0), ocsr("g1"), ocsr("g1", "running")];
+    expect(readingProgress(busy(1), steps)).toBeNull();
+    // a structure read for the first time is a read
+    expect(readingProgress(busy(1), [checkDone(), ...pageRead(0), ocsr("g1", "running")])!.stage).toBe(
+      "structures",
+    );
   });
 
   it("an annotate-only run has no figure and says Annotating", () => {
@@ -194,6 +250,7 @@ describe("readingProgress", () => {
       ["Checking PDF", "done"],
       ["Reading pages", "done"],
       ["Reading structures", "done"],
+      ["Reading the text", "done"],
       ["Done", "done"],
     ]);
   });

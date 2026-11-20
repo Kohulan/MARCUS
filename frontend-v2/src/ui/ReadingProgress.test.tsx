@@ -19,7 +19,6 @@ const pages = (done: number, fraction: number): Model => ({
   fraction,
   pages: { done, total: 5 },
   structures: { done: 0, total: 0 },
-  started: true,
   valueText: `Reading pages, ${done} of 5`,
   stages: stagesAt(1, [null, `${done}/5`]),
 });
@@ -29,7 +28,6 @@ const structures = (done: number, total: number, fraction: number): Model => ({
   fraction,
   pages: { done: 5, total: 5 },
   structures: { done, total },
-  started: true,
   valueText: `Reading structures, ${done} of ${total}`,
   stages: stagesAt(2, [null, null, `${done}/${total}`]),
 });
@@ -39,7 +37,6 @@ const waiting: Model = {
   fraction: null,
   pages: null,
   structures: { done: 0, total: 0 },
-  started: false,
   valueText: "Waiting",
   stages: stagesAt(-1),
 };
@@ -78,6 +75,12 @@ describe("ReadingProgress", () => {
     expect(bar).toHaveAttribute("aria-valuetext", "Waiting");
     expect(screen.getByText("About 3 min in the queue")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Stages" })).toBeNull();
+  });
+
+  it("shows the queue estimate beside the stages once the read has started", () => {
+    render(<ReadingProgress progress={pages(1, 0.1)} label="p" queueNote="About 6 min in the queue" />);
+    expect(screen.getByRole("list", { name: "Stages" })).toBeInTheDocument();
+    expect(screen.getByText("About 6 min in the queue")).toBeInTheDocument();
   });
 
   it("never moves back while the paper is open", () => {
