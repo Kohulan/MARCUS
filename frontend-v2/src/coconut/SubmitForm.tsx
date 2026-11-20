@@ -23,6 +23,7 @@ import {
   unknownIds,
 } from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
+import { chunkNews, endNews, startNews } from "./sendNews";
 import SubmitResults from "./SubmitResults";
 import type {
   OrganismDraft,
@@ -90,6 +91,8 @@ export default function SubmitForm({
   const [again, setAgain] = useState<Set<string>>(() => new Set());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [phase, setPhase] = useState<Phase>({ kind: "form" });
+  // A send's announcements (sendNews): the start, each quarter, the end; null outside a send.
+  const [news, setNews] = useState<string | null>(null);
   const busy = useRef(false);
   // What the form started with, to ask before Close throws typed values away.
   const snapshot = JSON.stringify([fields, rows]);
@@ -196,7 +199,12 @@ export default function SubmitForm({
       report: buildReport(fields, s, rowOf(s.segmentId)),
     }));
     setPhase({ kind: "sending", done: 0, total: items.length });
+    setNews(startNews(items.length));
+    let before = 0;
     const results = await submitReports(token, items, (done, total, chunk) => {
+      const said = chunkNews(before, done, total);
+      before = done;
+      if (said) setNews(said);
       const ok = chunk.filter((r) => r.ok).map((r) => r.segmentId);
       const lost = chunk.filter((r) => !r.ok && r.error === UNKNOWN_ERROR).map((r) => r.segmentId);
       markSent(paper.id, ok);
@@ -212,6 +220,7 @@ export default function SubmitForm({
     setAgain(new Set());
     busy.current = false;
     setPhase({ kind: "results", results, structures: list });
+    setNews(endNews(results.filter((r) => r.ok).length, results.length));
   }
 
   function logOut() {
@@ -225,7 +234,10 @@ export default function SubmitForm({
       <SubmitResults
         structures={phase.structures}
         results={phase.results}
-        onBack={() => setPhase({ kind: "form" })}
+        onBack={() => {
+          setNews(null);
+          setPhase({ kind: "form" });
+        }}
         onClose={close}
       />
     );
@@ -426,7 +438,7 @@ export default function SubmitForm({
 
         <footer className="coconut__foot glassbed">
           <div className="coconut__progress">
-            <p id="coconut-status" className="coconut__status" role="status" aria-live="polite">
+            <p id="coconut-status" className="coconut__status">
               {sending ? `Sent ${phase.done} of ${phase.total}` : (token && problem) || ""}
             </p>
             {sending ? (
@@ -475,6 +487,10 @@ export default function SubmitForm({
         </div>
       </header>
       {body}
+      {/* Kept mounted (the results replace the form): the send's news, else the form's problem. */}
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {news ?? (phase.kind === "form" && token ? problem || "" : "")}
+      </p>
     </Modal>
   );
 }
