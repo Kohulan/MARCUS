@@ -34,3 +34,23 @@ def test_owner_ip_retention_days_setting(monkeypatch, clear_settings_cache):
     assert get_settings().owner_ip_retention_days == 7
     with pytest.raises(ValidationError):
         Settings(owner_ip_retention_days=0)
+
+
+def test_annotation_settings(monkeypatch, clear_settings_cache):
+    import pytest
+    from pydantic import ValidationError
+
+    s = Settings()
+    assert s.annotate_enabled is False  # offered only where a worker serves q.llm
+    assert (s.annotator, s.annotator_url) == ("llama", "http://llama-server:8080")
+    assert s.annotator_timeout_s < 120  # below the annotate step's soft limit
+    assert s.annotate_model == "qwen3.5-9b-marcus-v1"
+    assert s.rate_limit_annotate_per_min == 5
+    for bad in ("file:///etc/passwd", "llama-server:8080", "http://a b", "http://x/path"):
+        with pytest.raises(ValidationError):
+            Settings(annotator_url=bad)
+    with pytest.raises(ValidationError):
+        Settings(annotator="vllm")
+    monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "1")
+    clear_settings_cache()
+    assert get_settings().annotate_enabled is True

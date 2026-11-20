@@ -81,6 +81,20 @@ class Settings(BaseSettings):
     seg_version: str = Field("", max_length=200)
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
+    # Paper annotation with the local MARCUS model (marcus.workers.annotate, queue q.llm). The
+    # API offers it only where a worker serves q.llm: docker-compose.gpu.yml (llama-server) and
+    # docker-compose.fake.yml (the fake annotator) set it; elsewhere POST answers 503.
+    annotate_enabled: bool = False
+    # Worker side: "llama" = llama-server at annotator_url (internal network only); "fake" =
+    # the fake annotator (refused unless enable_fake_engines).
+    annotator: Literal["llama", "fake"] = "llama"
+    annotator_url: str = Field("http://llama-server:8080", pattern=r"^https?://[^\s/]+(:\d+)?/?$")
+    # One model request; below the annotate step's soft limit (120 s, marcus.core.queues).
+    annotator_timeout_s: float = Field(110.0, gt=0)
+    # Stored with every annotation; change them with the model file (docker-compose.gpu.yml).
+    annotate_model: str = Field("qwen3.5-9b-marcus-v1", min_length=1, max_length=200)
+    annotate_model_version: str = Field("Q8_0 llama.cpp b12554", min_length=1, max_length=200)
+    rate_limit_annotate_per_min: int = 5  # per owner: POST /papers/{id}/annotation
 
     @model_validator(mode="after")
     def _sessions_default(self):
