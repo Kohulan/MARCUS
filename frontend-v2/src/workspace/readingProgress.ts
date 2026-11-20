@@ -212,18 +212,3 @@ export function readingProgress(paper: PaperLike, steps: StepOut[]): ReadingProg
   if (!textDone) return make("text", fraction, "Reading the text");
   return make("finishing", fraction, "Finishing");
 }
-
-/** The figure shown so far in this run, and whether the paper was busy at the last look. */
-export type Climb = { max: number; busy: boolean };
-
-/**
- * The bar never moves back while a paper is read: the shown figure is the highest so far in
- * this run (a retried page is busy again and starts a new run). The same state back when
- * nothing changed.
- */
-export function climb(prev: Climb, fraction: number | null, busy: boolean): Climb {
-  if (busy && !prev.busy) return { max: fraction ?? 0, busy };
-  const max = fraction !== null && fraction > prev.max ? fraction : prev.max;
-  if (max === prev.max && busy === prev.busy) return prev;
-  return { max, busy };
-}

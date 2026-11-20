@@ -107,9 +107,22 @@
   color: var(--muted);
 }
 
+/* Uploading: the line, and the indeterminate bar under it. */
+.drop__progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 100%);
+  margin-top: 18px;
+}
+
+.drop__progress .pb {
+  align-self: stretch;
+}
+
 .drop__busy {
   display: inline-block;
-  margin-top: 18px;
   padding: 3px 8px;
   border: 1px dashed var(--orange);
   font-family: var(--font-mono);

@@ -333,6 +333,7 @@ describe("ImageResult", () => {
       .mockResolvedValue(job());
     renderPage();
     expect(await screen.findByText("Waiting in the queue")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Image progress" })).not.toHaveAttribute("aria-valuenow");
     expect(get).toHaveBeenCalledTimes(1);
 
     act(() => live.onEvent!());

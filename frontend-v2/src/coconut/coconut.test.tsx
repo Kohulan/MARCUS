@@ -496,9 +496,16 @@ describe("SubmitForm", () => {
     renderForm(many);
     fillPaper();
     fireEvent.click(screen.getByRole("button", { name: "Send 60 to COCONUT" }));
-    expect(await screen.findByText("Sent 50 of 60")).toBeInTheDocument();
+    expect(await screen.findByText("Sent 50 of 60", { selector: "#coconut-status" })).toBeInTheDocument();
+    // the live region says the start, each quarter crossed and the end, not every count
+    const live = screen.getByRole("status");
+    expect(live).toHaveTextContent("Sent 50 of 60");
+    const bar = screen.getByRole("progressbar", { name: "Sending to COCONUT" });
+    expect(bar).toHaveAttribute("aria-valuenow", "83");
+    expect(bar).toHaveAttribute("aria-valuetext", "Sent 50 of 60, 83%");
     await act(async () => release());
     expect(await screen.findByText("Report 60")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Sent 60 of 60");
   });
 
   it("sends once on a double click", async () => {

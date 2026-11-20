@@ -148,6 +148,7 @@ describe("StructureActions", () => {
     const { rerender } = render(<StructureActions {...base} />);
     fireEvent.click(screen.getByText("Look up in PubChem"));
     expect(await screen.findByText("Looking up…")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Looking up in PubChem" })).not.toHaveAttribute("aria-valuenow");
     rerender(<StructureActions {...base} smiles="CCN" />);
     expect(screen.queryByText("Looking up…")).toBeNull();
     expect(signal?.aborted).toBe(true);

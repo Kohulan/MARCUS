@@ -87,6 +87,15 @@ test("annotate the sample: the values, their occurrences, corrections kept and e
   await expect(ann.getByRole("status")).toHaveText("Annotating…");
   // the paper is busy only with its annotation: the status bar says so
   await expect(page.getByRole("region", { name: "Status" }).getByText("Annotating…")).toBeVisible();
+  // the model reports no progress: both bars show the time-based estimate, said as one
+  await expect(ann.getByRole("progressbar", { name: "Annotation progress" })).toHaveAttribute(
+    "aria-valuetext",
+    /^Annotating, (about \d+|100)%$/,
+  );
+  await expect(page.getByRole("region", { name: "Status" }).getByRole("progressbar")).toHaveAttribute(
+    "aria-valuetext",
+    /^Annotating, (about \d+|100)%$/,
+  );
 
   await expect(ann.getByText("Model suggestion")).toBeVisible({ timeout: 60_000 });
   await expect(ann.getByText("fake-annotator")).toBeVisible();

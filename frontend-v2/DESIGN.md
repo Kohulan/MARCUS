@@ -240,15 +240,15 @@ components:
   toast-error:
     backgroundColor: "{colors.charcoal}"
     textColor: "{colors.on-charcoal}"
-  reading-progress:
+  progress-bar:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
+    textColor: "{colors.text-2}"
     typography: "{typography.label}"
     rounded: "{rounded.none}"
     height: "10px"
-  reading-progress-fill:
+  progress-bar-fill:
     backgroundColor: "{colors.green}"
-  reading-progress-compact:
+  progress-bar-small:
     height: "6px"
 ---
 
@@ -454,15 +454,26 @@ The local model's suggestion for a paper, above its text in the Paper view's mid
 - **Chip hover:** the family edge thickens to 3px.
 - **Corrections:** Edit opens one labelled box per field (one value a line), Save (green small pill) and Cancel; Escape cancels. Reset to model asks first.
 
+### Progress bar
+One bar for every wait in the tool (`ui/ProgressBar`, `.pb` in ui.css), never a spinner.
+- **Measured:** a square track (1px control-border edge, 3.3:1 on paper; surface ground), 10px tall or 6px small, with a forest-green fill (about 10:1 on the track) and the percentage beside it: mono 12px (11px small), tabular figures so it does not jitter, text-2 (over 9:1 on paper), at least four characters wide. The figure is rounded down, so 100% means the work is done. The bar never moves back during a run (a run that starts again, a retried page, starts over).
+- **Motion:** the fill is `transform: scaleX(var(--pb))` with a 500ms transition on the one curve (`--ease`); `--pb` is set through the CSSOM, never a style attribute. The printed figure counts up with the fill (requestAnimationFrame on the same curve and time), never down; a bar that appears starts on its figure. While the work goes on a slow sheen (a band of surface at 22% over the green, still 5:1 on the track) crosses the filled part every 2.4s, clipped to it; none once the work is done, and a failed or stopped run shows no bar.
+- **Unmeasured:** an empty ruler (a tick every 8px in tick on surface) with a green segment, 30% of the track, sliding calmly across it every 2s (ease-in-out); no number.
+- **Reduced motion:** no sheen, no slide, no easing: the fill and the figure jump, the percentage is still printed.
+- **Screen readers:** `role="progressbar"` with a name, `aria-valuenow` (the figure) and `aria-valuetext` ("Reading structures, 10 of 15, 62%"); the printed figure is aria-hidden. Announcements belong to the caller and say a stage, never a count or a percent.
+- **Estimates:** a figure no one measures is printed "~60%" and said "about 60%", until it is full.
+- **Where:** the reading progress (below); Annotating (the panel and the status bar); Send to COCONUT ("Sent 50 of 60", 83%); Compare's Run all engines ("Running engines 1/3", engines read or failed of those it started, full for a moment, then gone). Unmeasured: uploading a file (fetch reports no upload progress), an image waiting or reading, an engine reading in Compare, Looking up in PubChem, Loading the text, Loading editor. Skeletons (a paper, an image or the list loading) stay skeletons; the review grid's Reading… badges stay badges.
+
 ### Reading progress
 How far a paper's read has come, in the status bar both workspace views share and, compact, in the tool home's row of a busy paper. Beside the state badge (Reading… or Annotating…), never instead of it.
-- **Bar:** a native `<progress>` (max 100), full width, 10px tall, square, a 1px control-border edge (3.3:1 on paper), a surface track and a forest-green fill (about 10:1 on the track). The fill is drawn by CSS on the element's pseudo-parts: no style attribute, nothing set at run time. No transition (width is layout).
+- **Bar:** the progress bar, full width, with its percentage.
 - **Stages:** above the bar, one mono 12px uppercase line: Checking PDF → Reading pages 3/5 → Reading structures 10/15 → Reading the text → Finishing (Done once the paper is done). The text is read beside the pages and is ticked as soon as it is. Done stages in text-2 with a green Font Awesome check, the current one in ink at 500 with its count (`aria-current="step"`), the rest muted; the arrows are CSS content with empty alt text. A paper read without structures has no structures stage.
 - **Figure:** checking 5%, pages 35%, structures 35%, the text 20% (its step ended), the last 5% when the paper is done (70% for pages when there are no structures). Failed pages and structures count as handled. Structures are measured against those the unread pages can be expected to hold, and the shown figure is the highest so far in the run (a retried page starts a new run), so the bar never moves back.
-- **Nothing to measure yet:** before the PDF check counts the pages, and for an annotate-only run, the bar has no value: an empty ruler (a tick every 8px in tick on surface) that drifts slowly and stands still under reduced motion. Before the read starts the line reads the queue estimate ("About 3 min in the queue", or Waiting); after that the estimate stands in muted mono beside the stages while it is a minute or more (the waits are in the segmentation and OCSR queues).
+- **Nothing to measure yet:** before the PDF check counts the pages the bar is unmeasured. Before the read starts the line reads the queue estimate ("About 3 min in the queue", or Waiting); after that the estimate stands in muted mono beside the stages while it is a minute or more (the waits are in the segmentation and OCSR queues).
+- **Annotating:** the model reports no progress, so an annotate run shows an estimate from the time since this page saw it start: an ease-out to 90% over the typical run (`ANNOTATE_TYPICAL_MS`, 6 s, an estimate), then a slow creep toward 95%, never past it. When the run ends the bar fills to 100% and stays a moment (600ms) before it goes; in the annotation panel the values show after that moment. A failed run shows its failure at once, never a full bar. The tool home's row shows the estimate too.
 - **When:** while the paper is busy; a paper read while it is open ends on a full bar with every stage ticked; a paper opened done shows only its badge, and so does a done paper busy only reading structures again with another engine. A failed paper or a PDF that could not be read shows no bar: its failure lines say why, as before.
-- **Screen readers:** the bar is named "Reading progress" and speaks "Reading structures, 10 of 15" (`aria-valuetext`). A visually hidden polite status says the stage name when the stage changes, never a count.
-- **Compact (tool home):** under the row's counts, at most 360px: a 6px bar and one 11px mono line ("Reading pages 2/4", "Waiting"; none while annotating, the badge says it), no announcement. The row's steps are fetched with the list, every 5 s, only while the paper is busy; the bar waits for the first answer rather than guess "0/5".
+- **Screen readers:** the bar is named "Reading progress" and speaks "Reading structures, 10 of 15, 62%". A visually hidden polite status says the stage name when the stage changes, never a count or a percent.
+- **Compact (tool home):** under the row's counts, at most 360px: a 6px bar with its percentage and one 11px mono line ("Reading pages 2/4", "Waiting"; none while annotating, the badge says it), no announcement. The row's steps are fetched with the list, every 5 s, only while the paper is busy; the bar waits for the first answer rather than guess "0/5".
 
 ### Stamp
 A round 2px ring rotated -12deg with Geist Mono 500 uppercase text: 66px / 10px on cards, 128px / 17px large. Accepted in accepted green, rejected in charcoal. When a decision is made it lands from scale 1.4 to rest in 160ms; no motion under reduced motion.

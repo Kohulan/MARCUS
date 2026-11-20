@@ -133,8 +133,11 @@
 .editor__loading {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   margin: 0;
   background-color: var(--surface);
   color: var(--muted);
@@ -142,4 +145,13 @@
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.editor__loading > p {
+  margin: 0;
+}
+
+.editor__loading .pb {
+  flex: none;
+  width: 200px;
 }

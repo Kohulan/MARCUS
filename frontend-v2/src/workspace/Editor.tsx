@@ -8,6 +8,7 @@ import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
 import { listenToFrame, postToFrame } from "./editorBridge";
 import "./editor.css";
@@ -141,7 +142,12 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
       ) : null}
 
       <div className="editor__frame" aria-busy={!ready}>
-        {ready ? null : <p className="editor__loading">Loading editor…</p>}
+        {ready ? null : (
+          <div className="editor__loading">
+            <p>Loading editor…</p>
+            <ProgressBar value={null} label="Loading editor" size="sm" />
+          </div>
+        )}
         {/* sandbox is kept with the frame's own CSP; same-origin, it does not isolate the
             frame from the app: the bridge's source and origin checks do that. */}
         <iframe

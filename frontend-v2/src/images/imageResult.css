@@ -116,6 +116,14 @@
   margin: 0;
 }
 
+/* Waiting or reading: the word, then the indeterminate bar (the engine reports no figure). */
+.ir-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+}
+
 .ir-status--wait {
   font-family: var(--font-mono);
   font-size: 12px;

@@ -738,7 +738,7 @@ describe("status bar", () => {
       ],
     });
     const bar = await screen.findByRole("progressbar", { name: "Reading progress" });
-    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 1 of 2"));
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 1 of 2, 31%"));
     const status = screen.getByRole("region", { name: "Status" });
     expect(within(status).getByText("Reading pages", { selector: "li" })).toHaveAttribute("aria-current", "step");
     expect(within(status).getByText("1/2")).toBeInTheDocument();
@@ -759,31 +759,38 @@ describe("status bar", () => {
       steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0, status: "running" })],
     });
     const bar = await screen.findByRole("progressbar", { name: "Reading progress" });
-    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 0 of 1"));
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 0 of 1, 5%"));
     act(() => {
       client.setQueryData(keys.steps(ID), {
         steps: [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0 })],
       });
       client.setQueryData(keys.paper(ID), paper({ status: "done", pages: 1 }));
     });
-    await waitFor(() => expect(bar).toHaveAttribute("value", "100"));
-    expect(bar).toHaveAttribute("aria-valuetext", "Done");
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "100"));
+    expect(bar).toHaveAttribute("aria-valuetext", "Done, 100%");
   });
 
-  it("an annotate-only run has an indeterminate bar beside its Annotating… badge", async () => {
+  it("an annotate-only run has its estimate (about n%) beside its Annotating… badge, then a full bar for a moment", async () => {
+    const before = [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0 })];
     renderWorkspace({
       paper: paper({ status: "processing", pages: 1 }),
-      steps: [
-        step({ kind: "check_pdf", page: null }),
-        step({ kind: "segment_page", page: 0 }),
-        step({ kind: "annotate", page: null, status: "running" }),
-      ],
+      steps: [...before, step({ kind: "annotate", page: null, status: "running" })],
     });
     const status = await screen.findByRole("region", { name: "Status" });
     await within(status).findByText("Annotating…");
     const bar = within(status).getByRole("progressbar");
-    expect(bar).not.toHaveAttribute("value");
-    expect(bar).toHaveAttribute("aria-valuetext", "Annotating");
+    expect(bar).toHaveAttribute("aria-valuetext", expect.stringMatching(/^Annotating, about \d+%$/));
+    expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThan(100);
+    expect(within(status).queryByRole("list", { name: "Stages" })).toBeNull();
+    act(() => {
+      client.setQueryData(keys.steps(ID), {
+        steps: [...before, step({ kind: "annotate", page: null, status: "done" })],
+      });
+      client.setQueryData(keys.paper(ID), paper({ status: "done", pages: 1 }));
+    });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "100"));
+    expect(bar).toHaveAttribute("aria-valuetext", "Annotating, 100%");
+    await waitFor(() => expect(within(status).queryByRole("progressbar")).toBeNull());
   });
 
   it("while waiting, shows this paper's queue estimate in whole minutes", async () => {

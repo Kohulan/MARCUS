@@ -4,6 +4,7 @@ import { TOO_LARGE } from "../api/client";
 import { ENGINES } from "../api/engines";
 import type { Engine } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import { ACCEPT, fileKind, MAX_BYTES, type FileKind } from "./files";
 import "./tool.css";
 
@@ -109,9 +110,13 @@ export default function DropZone({
         <h1 className="drop__title">Drop a PDF here</h1>
         <p className="drop__hint">or one structure image · PNG, JPEG, TIFF, WebP · max 20 MB</p>
         {busy ? (
-          <p className="drop__busy" role="status">
-            {busy}
-          </p>
+          <div className="drop__progress">
+            <p className="drop__busy" role="status">
+              {busy}
+            </p>
+            {/* fetch reports no upload progress: the indeterminate bar, no number */}
+            <ProgressBar value={null} label="Upload" size="sm" />
+          </div>
         ) : null}
         <div className="drop__message" role="alert">
           {message}
