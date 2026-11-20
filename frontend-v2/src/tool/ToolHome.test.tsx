@@ -456,6 +456,17 @@ describe("Papers list", () => {
     expect(within(row).queryByRole("status")).toBeNull();
   });
 
+  it("a busy paper's row waits for its steps before it shows a bar (no 0/5 guess)", async () => {
+    let answer!: (v: { steps: StepOut[] }) => void;
+    vi.mocked(api.getSteps).mockReturnValue(new Promise((r) => (answer = r)));
+    renderHome({ papers: [paper({ status: "processing", pages: 5 })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    await waitFor(() => expect(api.getSteps).toHaveBeenCalled());
+    expect(within(row).queryByRole("progressbar")).toBeNull();
+    answer({ steps: [] });
+    expect(await within(row).findByRole("progressbar")).toBeInTheDocument();
+  });
+
   it("a finished paper's row has no bar and asks for no steps", async () => {
     renderHome({ papers: [paper()] });
     await screen.findByText("Alkaloids from Coffea leaves");

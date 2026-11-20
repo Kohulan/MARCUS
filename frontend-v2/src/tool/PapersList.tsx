@@ -45,7 +45,8 @@ function deletionText(expiresAt: string, now = Date.now()): string {
 /** A busy paper's thin progress bar and its stage in a few words (its steps polled with the list). */
 function RowProgress({ paper }: { paper: PaperSummary }) {
   const steps = useRowSteps(paper.id).data?.steps;
-  const model = readingProgress(paper, steps ?? []);
+  // Nothing until the steps land: a guess from no steps would say "0/5" for a paper at 4/5.
+  const model = steps === undefined ? null : readingProgress(paper, steps);
   if (model === null) return null;
   return (
     <ReadingProgress progress={model} label={`Progress of ${paperName(paper)}`} compact />
