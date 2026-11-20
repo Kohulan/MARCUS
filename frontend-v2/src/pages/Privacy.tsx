@@ -10,7 +10,7 @@ export default function Privacy() {
       title="Privacy"
       docTitle={pageMeta("/privacy").title}
       lede="What MARCUS keeps, for how long, and who sees it."
-      updated="18 November 2026"
+      updated="20 November 2026"
     >
       <InfoSection title="What you upload">
         <p>
@@ -22,6 +22,7 @@ export default function Privacy() {
           <li>Everything from one upload is deleted 30 days after the upload.</li>
           <li>Deleting a paper in the tool removes it for you at once.</li>
           <li>Your files are not sent to outside AI services and not shared with others.</li>
+          <li>Annotate runs a model on MARCUS&apos;s own server; no paper text leaves it.</li>
           <li>
             To show the paper&apos;s title, the server looks up its DOI at Crossref or DataCite;
             only the DOI is sent.

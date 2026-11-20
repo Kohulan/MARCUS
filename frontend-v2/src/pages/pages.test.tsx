@@ -331,6 +331,10 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain(
       "The address is also kept with a paper while it is being processed",
     );
+    // the annotation model runs on MARCUS's own server: no paper text leaves it
+    expect(container.textContent).toContain(
+      "Annotate runs a model on MARCUS's own server; no paper text leaves it.",
+    );
     // R-F22: the one request the browser makes to COCONUT without a click
     expect(container.textContent).toContain(
       "Opening a paper with a DOI asks COCONUT how many structures it already has for that DOI.",
