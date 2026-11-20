@@ -6,6 +6,7 @@ import { act, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProgressBar, { useAnnotateEstimate } from "./ProgressBar";
+import { reduceMotion } from "../test/reduceMotion";
 import { ANNOTATE_TYPICAL_MS, END_HOLD_MS, FILL_MS } from "./progressMotion";
 
 const FAKE = [
@@ -18,23 +19,6 @@ const FAKE = [
   "performance",
   "Date",
 ] as const;
-
-function reduceMotion(on: boolean) {
-  const real = window.matchMedia;
-  window.matchMedia = vi.fn((query: string) => ({
-    matches: on && query.includes("reduce"),
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
-  return () => {
-    window.matchMedia = real;
-  };
-}
 
 const pct = () => document.querySelector(".pb__pct")!.textContent;
 const advance = (ms: number) =>

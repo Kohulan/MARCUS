@@ -13,6 +13,7 @@ import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { useReviewKeys } from "./useReviewKeys";
 import { useWorkspace } from "./useWorkspace";
 import Workspace from "./Workspace";
+import { reduceMotion } from "../test/reduceMotion";
 
 vi.mock("../api/useLiveEvents", () => ({
   useLiveEvents: () => ({ mode: "live", reconnect: () => undefined }),
@@ -301,17 +302,7 @@ describe("focus mode", () => {
 
   it("under reduced motion it moves on at once (no wait for the stamp)", async () => {
     putSpy();
-    const real = window.matchMedia;
-    window.matchMedia = vi.fn((query: string) => ({
-      matches: query.includes("reduce"),
-      media: query,
-      onchange: null,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-      addListener: () => undefined,
-      removeListener: () => undefined,
-      dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
+    const restore = reduceMotion(true);
     try {
       renderAt(paper([segment("s1"), segment("s2")]), "?s=s1&focus=1");
       await focusRegion();
@@ -323,7 +314,7 @@ describe("focus mode", () => {
       expect(screen.getByTestId("where")).toHaveTextContent("?s=s2&focus=1");
     } finally {
       vi.useRealTimers();
-      window.matchMedia = real;
+      restore();
     }
   });
 
