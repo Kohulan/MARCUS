@@ -54,6 +54,20 @@ const EXPECTED_TOKENS: Record<string, string> = {
   "--water-drop":
     "inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.35), " +
     "inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55), 0 5px 10px -7px rgba(15, 30, 22, 0.45)",
+  // The spacing table of the landing-page-design skill (B2), and its one motion curve (B7)
+  "--s-25": "2px",
+  "--s-50": "4px",
+  "--s-75": "8px",
+  "--s-100": "12px",
+  "--s-200": "16px",
+  "--s-300": "24px",
+  "--s-400": "32px",
+  "--s-500": "40px",
+  "--s-600": "48px",
+  "--s-700": "64px",
+  "--s-800": "80px",
+  "--s-900": "96px",
+  "--ease": "cubic-bezier(0.22, 1, 0.36, 1)",
 };
 
 /** Custom properties declared in tokens.css, name → value (whitespace collapsed). */
