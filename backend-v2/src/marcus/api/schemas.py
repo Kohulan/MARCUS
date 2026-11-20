@@ -40,6 +40,16 @@ class PaperSummary(_Orm):
     failed_pages: int
     failed: int
     annotating: bool  # busy only with its annotation (its only step in flight is annotate)
+    # The read's coarse progress, for the tool home's row bar (frontend readingProgress.ts reads
+    # the same from the steps): pages whose newest page step ended, structures with an OCSR step
+    # and those read (or with nothing in flight), the text read (every docling step ended; with
+    # none, every page), a check_pdf step started, busy only re-reading read structures.
+    pages_read: int
+    structures_total: int
+    structures_read: int
+    text_read: bool
+    check_started: bool
+    rereading: bool
 
 
 class PaperList(BaseModel):
@@ -259,6 +269,13 @@ class AnnotationField(BaseModel):
     max_length: int  # the longest value a curation may hold in this field (the model's maxLength)
 
 
+class AnnotationLimits(BaseModel):
+    """What one curation save may hold (PUT answers 422 beyond it)."""
+
+    max_values_per_field: int
+    max_total_values: int
+
+
 class CoconutOrganism(BaseModel):
     """frontend-v2 coconut OrganismDraft: parts and ecosystems are comma-separated (an item
     with a comma in double quotes). The prefill leaves ecosystems empty."""
@@ -285,6 +302,7 @@ class AnnotationOut(BaseModel):
     status: StepState
     step: StepOut | None
     fields: list[AnnotationField]
+    limits: AnnotationLimits
     model: str | None
     model_version: str | None
     output: Values | None

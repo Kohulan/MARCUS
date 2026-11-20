@@ -96,6 +96,8 @@ async def test_a_paper_without_annotation(app, async_db_session):
     }  # fmt: skip
     # the editor's per-value limit comes from here (B-M7): the model's maxLength per field
     assert {f["key"]: f["max_length"] for f in body["fields"]} == ann.MAX_LENGTH
+    # and the save's count limits (the PUT's 422 lines)
+    assert body["limits"] == {"max_values_per_field": 200, "max_total_values": 300}
     for key in ("output", "positions", "curated", "curated_positions", "values", "coconut"):
         assert body[key] is None
 

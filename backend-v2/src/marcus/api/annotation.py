@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.schemas import AnnotationField, AnnotationOut, StepOut
+from marcus.api.schemas import AnnotationField, AnnotationLimits, AnnotationOut, StepOut
 from marcus.core import annotation as ann
 from marcus.core.enums import StepKind
 from marcus.core.models import Annotation, Step
@@ -19,6 +19,9 @@ log = logging.getLogger(__name__)
 FIELD_LIST = [
     AnnotationField(key=f, label=ann.LABELS[f], max_length=ann.MAX_LENGTH[f]) for f in ann.FIELDS
 ]
+LIMITS = AnnotationLimits(
+    max_values_per_field=ann.MAX_VALUES_PER_FIELD, max_total_values=ann.MAX_CURATED_VALUES
+)
 
 
 def shown(row: Annotation | None) -> dict[str, list[str]] | None:
@@ -83,6 +86,7 @@ async def annotation_out(db: AsyncSession, paper_id: uuid.UUID) -> AnnotationOut
         status=step.status if step is not None else "none",
         step=StepOut.model_validate(step) if step is not None else None,
         fields=FIELD_LIST,
+        limits=LIMITS,
         model=row.model if row else None,
         model_version=row.model_version if row else None,
         output=row.output if row else None,

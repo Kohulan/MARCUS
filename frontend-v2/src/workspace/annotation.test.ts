@@ -60,6 +60,7 @@ function ann(over: Partial<AnnotationOut> = {}): AnnotationOut {
     status: "done",
     step: null,
     fields: [],
+    limits: { max_values_per_field: 200, max_total_values: 300 },
     model: "fake-annotator",
     model_version: "fake-1",
     output: { organism_or_species: ["Taxus brevifolia"] },

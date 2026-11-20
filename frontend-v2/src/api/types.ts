@@ -45,7 +45,18 @@ export interface PaperSummary {
   /** Undecided structures whose read failed (not in to_review). */
   failed: number;
   /** Busy only with its annotation (its only step in flight is annotate). */
-  annotating?: boolean;
+  annotating: boolean;
+  /**
+   * The read's coarse progress, as the workspace reads it from the steps (readCounts): pages
+   * whose newest page step ended, structures with an OCSR step and those read (or with nothing
+   * in flight), the text read, a PDF check started, busy only re-reading read structures.
+   */
+  pages_read: number;
+  structures_total: number;
+  structures_read: number;
+  text_read: boolean;
+  check_started: boolean;
+  rereading: boolean;
 }
 
 export interface PaperList {
@@ -230,6 +241,12 @@ export interface AnnotationField {
   max_length?: number;
 }
 
+/** What one curation save may hold (PUT answers 422 beyond it). */
+export interface AnnotationLimits {
+  max_values_per_field: number;
+  max_total_values: number;
+}
+
 /** The COCONUT form's organisms (coconut OrganismDraft); COCONUT has no kingdom field. */
 export interface AnnotationCoconut {
   organisms: { name: string; parts: string; location: string; ecosystems: string }[];
@@ -243,6 +260,7 @@ export interface AnnotationOut {
   status: string;
   step: StepOut | null;
   fields: AnnotationField[];
+  limits: AnnotationLimits;
   model: string | null;
   model_version: string | null;
   output: AnnotationValues | null;

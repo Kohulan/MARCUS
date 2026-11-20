@@ -1,6 +1,6 @@
 """A paper's annotation by the local MARCUS model (owner decision 2026-11-20).
 
-    GET    /papers/{id}/annotation           state, model values, curated values, positions
+    GET    /papers/{id}/annotation           state, model values, curated values, positions, limits
     POST   /papers/{id}/annotation           start (on demand); {"rerun": true} runs it again
     PUT    /papers/{id}/annotation/curation  save the curator's values (all 11 fields)
     DELETE /papers/{id}/annotation/curation  reset to the model's values

@@ -36,6 +36,13 @@ function paper(over: Partial<PaperSummary> = {}): PaperSummary {
     to_review: 3,
     failed_pages: 1,
     failed: 1,
+    annotating: false,
+    pages_read: 0,
+    structures_total: 0,
+    structures_read: 0,
+    text_read: false,
+    check_started: false,
+    rereading: false,
     ...over,
   };
 }
@@ -408,6 +415,13 @@ describe("Papers list", () => {
           to_review: 1,
           failed_pages: 0,
           failed: 0,
+          annotating: false,
+          pages_read: 0,
+          structures_total: 0,
+          structures_read: 0,
+          text_read: false,
+          check_started: false,
+          rereading: false,
         }),
       ],
     });

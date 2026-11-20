@@ -37,6 +37,13 @@ function paper(curation: CurationOut | null): PaperDetail {
     to_review: 2,
     failed_pages: 0,
     failed: 0,
+    annotating: false,
+    pages_read: 0,
+    structures_total: 0,
+    structures_read: 0,
+    text_read: false,
+    check_started: false,
+    rereading: false,
     counts: { steps_by_status: {} },
     segments: [
       { id: "s1", page: 0, idx: 0, bbox: [0, 0, 1, 1], curation, predictions: [] },
