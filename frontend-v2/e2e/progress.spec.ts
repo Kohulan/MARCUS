@@ -95,6 +95,7 @@ test("a read climbs through its stages, never back, and ends on Done; the list r
     "Checking PDF",
     "Reading pages",
     "Reading structures",
+    "Reading the text",
     "Done",
   ]);
   await expect(status.getByRole("status").filter({ hasText: "Done" })).toHaveCount(1);
