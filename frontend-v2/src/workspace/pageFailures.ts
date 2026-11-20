@@ -69,36 +69,3 @@ export function checkFailure(steps: StepOut[]): string | null {
   if (!check || check.status !== "failed") return null;
   return check.error_class === "bad_input" ? BAD_PDF : reasonText(check.error_class);
 }
-
-export type Progress = {
-  pagesRead: number;
-  /** Null until the PDF check has counted the pages. */
-  pages: number | null;
-  structuresRead: number;
-  /** Segments with an ocsr step (0 for a paper uploaded with ocsr=off). */
-  structures: number;
-};
-
-/**
- * Pages read: pages whose newest page step is done. A done render_page is the newest only
- * when the segmentation cache gave the page its segments: otherwise its segment_page step is
- * created in the same transaction that finishes the render (backend pipeline.py), so it is
- * already newer. Structures read:
- * segments with a finished ocsr step, of the segments that have one (a second engine run
- * on a read structure does not make it unread).
- */
-export function progress(steps: StepOut[], pages: number | null): Progress {
-  let pagesRead = 0;
-  for (const list of pageSteps(steps).values()) {
-    const newest = list[0]!;
-    if (newest.status === "done") pagesRead += 1;
-  }
-  const read = new Set<string>();
-  const all = new Set<string>();
-  for (const s of steps) {
-    if (s.kind !== "ocsr" || s.segment_id === null) continue;
-    all.add(s.segment_id);
-    if (s.status === "done") read.add(s.segment_id);
-  }
-  return { pagesRead, pages, structuresRead: read.size, structures: all.size };
-}

@@ -677,6 +677,149 @@
   color: var(--on-charcoal);
 }
 
+/* Reading progress --------------------------------------------------------- */
+/*
+ * A paper's read: the stages in mono, then a native <progress> drawn as a ruled readout
+ * (square, control-border edge, surface track, forest-green fill: 3.3:1 edge on paper, the
+ * fill about 10:1 on the track). Indeterminate is an empty ruler (a tick every 8px) that
+ * drifts slowly; no motion at all under reduced motion.
+ */
+
+.rp {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rp__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 20px;
+}
+
+.rp__stages,
+.rp__line,
+.rp__queue {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp__stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rp__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.rp__stage + .rp__stage::before {
+  content: "\2192" / "";
+  margin: 0 10px;
+  color: var(--control-border);
+}
+
+.rp__stage--done {
+  color: var(--text-2);
+}
+
+.rp__tick {
+  color: var(--green);
+}
+
+.rp__stage--current,
+.rp__line--current {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.rp__count {
+  white-space: pre;
+}
+
+.rp__line {
+  color: var(--text-2);
+}
+
+.rp__queue {
+  color: var(--muted);
+}
+
+.rp__bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--green);
+  appearance: none;
+}
+
+.rp__bar::-webkit-progress-bar {
+  background: var(--surface);
+}
+
+.rp__bar::-webkit-progress-value {
+  background: var(--green);
+}
+
+.rp__bar::-moz-progress-bar {
+  background: var(--green);
+}
+
+.rp__bar:indeterminate,
+.rp__bar:indeterminate::-webkit-progress-bar {
+  background: repeating-linear-gradient(90deg, var(--tick) 0 1px, var(--surface) 1px 8px);
+}
+
+.rp__bar:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+
+.rp--compact {
+  gap: 4px;
+  max-width: 360px;
+  margin-top: 8px;
+}
+
+.rp--compact .rp__bar {
+  height: 6px;
+}
+
+.rp--compact .rp__line {
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rp__bar:indeterminate,
+  .rp__bar:indeterminate::-webkit-progress-bar {
+    animation: rp-drift 1.6s linear infinite;
+  }
+}
+
+@keyframes rp-drift {
+  to {
+    background-position: 8px 0;
+  }
+}
+
 /* Structure drawing -------------------------------------------------------- */
 
 .structure {
