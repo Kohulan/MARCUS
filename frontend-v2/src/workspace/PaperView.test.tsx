@@ -584,6 +584,8 @@ describe("Paper view: annotation", () => {
     expect(within(p).getByText("Plantae").closest(".pv-ann__value")).toHaveClass("pv-fam--organism");
     const text = screen.getByRole("group", { name: "Paper text" });
     const marks = [...text.querySelectorAll("mark")];
+    // the field is named for pointer users (title) and for screen readers (aria-description)
+    for (const m of marks) expect(m.getAttribute("aria-description")).toBe(m.title);
     expect(marks.map((m) => [m.textContent, m.className, m.title])).toEqual([
       ["bark", "pv-mark pv-fam--part", "Organism part"],
       ["Taxus brevifolia", "pv-mark pv-fam--organism", "Organism"],
@@ -615,6 +617,7 @@ describe("Paper view: annotation", () => {
     expect(mark.querySelector("mark")).toBeNull();
     expect(mark).toHaveClass("pv-fam--part");
     expect(mark.title).toBe("Organism part, Compound names");
+    expect(mark).toHaveAttribute("aria-description", "Organism part, Compound names");
   });
 
   it("shows hostile model text as text, and values named __proto__ or constructor like any other", async () => {

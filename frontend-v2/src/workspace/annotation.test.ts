@@ -148,11 +148,15 @@ describe("annotation helpers", () => {
     expect(pieces.map((p) => p.text).join("")).toBe(text);
   });
 
-  it("the occurrence a click went to leads with the clicked field where fields overlap", () => {
+  it("the occurrence a click went to is one mark, led by the clicked field, naming every field in it", () => {
     const spans: [number, number, string][] = [[0, 16, "organism_or_species"], [0, 5, "trivial_name"]];
     expect(splitMarks("Taxus brevifolia", spans, [0, 16, "organism_or_species"])).toEqual([
-      { text: "Taxus", fields: ["organism_or_species", "trivial_name"], current: true },
-      { text: " brevifolia", fields: ["organism_or_species"], current: true },
+      { text: "Taxus brevifolia", fields: ["organism_or_species", "trivial_name"], current: true },
+    ]);
+    // the clicked field leads even over a shorter span of another field
+    expect(splitMarks("Taxus brevifolia", spans, [0, 5, "trivial_name"])).toEqual([
+      { text: "Taxus", fields: ["trivial_name", "organism_or_species"], current: true },
+      { text: " brevifolia", fields: ["organism_or_species"], current: false },
     ]);
   });
 

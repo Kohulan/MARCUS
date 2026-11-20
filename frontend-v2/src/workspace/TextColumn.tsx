@@ -44,8 +44,10 @@ function scrollToMiddle(container: HTMLElement | null, el: Element | null, smoot
 /**
  * One block of the text: plain, or cut into pieces with the annotation's values marked
  * (`<mark>` elements around React text nodes; never HTML from the text). Each mark takes its
- * leading field's family class (its colour) and is named by its fields' labels (title). The
- * current occurrence carries data-current, so it can be scrolled to.
+ * leading field's family class (its colour) and is named by its fields' labels: a title for the
+ * pointer, an aria-description for screen readers (never hidden text inside the mark, which
+ * would be copied with the text). The current occurrence carries data-current, so it can be
+ * scrolled to.
  */
 const Block = memo(function Block({
   block,
@@ -67,6 +69,7 @@ const Block = memo(function Block({
               className={`pv-mark ${familyClass(p.fields[0]!)}${p.current ? " pv-mark--current" : ""}`}
               data-current={p.current || undefined}
               title={markLabel(p.fields, label)}
+              aria-description={markLabel(p.fields, label)}
             >
               {p.text}
             </mark>

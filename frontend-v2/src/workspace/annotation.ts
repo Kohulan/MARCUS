@@ -98,8 +98,9 @@ export type Piece = { text: string; fields: string[]; current: boolean };
 /**
  * A block's text cut where marks begin and end, into flat pieces (marks never nest). Where
  * two fields cover the same text, the clicked occurrence's field leads, else the most
- * specific (the shortest span; on a tie, the first): its colour, both names. Spans outside
- * the text are clipped (or dropped when empty).
+ * specific (the shortest span; on a tie, the first): its colour, both names. The clicked
+ * occurrence is one piece, whatever other fields cover parts of it. Spans outside the text
+ * are clipped (or dropped when empty).
  */
 export function splitMarks(text: string, spans: FieldSpan[], current: FieldSpan | null): Piece[] {
   const len = text.length;
@@ -129,8 +130,13 @@ export function splitMarks(text: string, spans: FieldSpan[], current: FieldSpan 
     const fields = lead === undefined ? [] : [lead];
     for (const [, , f] of over) if (!fields.includes(f)) fields.push(f);
     const last = pieces[pieces.length - 1];
-    if (last && last.current === isCurrent && sameList(last.fields, fields)) last.text += text.slice(a, b);
-    else pieces.push({ text: text.slice(a, b), fields, current: isCurrent });
+    if (last && last.current && isCurrent) {
+      // the clicked occurrence stays one mark: it names every field found inside it
+      last.text += text.slice(a, b);
+      for (const f of fields) if (!last.fields.includes(f)) last.fields.push(f);
+    } else if (last && last.current === isCurrent && sameList(last.fields, fields)) {
+      last.text += text.slice(a, b);
+    } else pieces.push({ text: text.slice(a, b), fields, current: isCurrent });
   }
   return pieces;
 }
