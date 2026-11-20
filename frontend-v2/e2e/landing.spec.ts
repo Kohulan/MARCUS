@@ -110,6 +110,72 @@ test.describe("landing and info pages @mocked", () => {
     });
   }
 
+  // The name assembles: MARCUS as one word, then the column, then each word's rest. Every
+  // frame is a transform of the layout, so the end is the layout itself.
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    test(`${width} × ${height}: the name assembles from one word and ends on the layout`, async ({
+      browser,
+    }) => {
+      // the assembly's animations: count them, or hold them at a time (null: run to the end)
+      const acro = (at: number | null | undefined) => {
+        const all = document
+          .getAnimations()
+          .filter((a) => (a as CSSAnimation).animationName?.startsWith("acro-"));
+        for (const a of all) {
+          if (at === null) a.finish();
+          else if (at !== undefined) {
+            a.pause();
+            a.currentTime = at;
+          }
+        }
+        return all.length;
+      };
+      // the glyphs' own boxes (text ranges), whatever box the element draws
+      const glyphs = () =>
+        [...document.querySelectorAll(".acro b, .acro .acro__rest")].map((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const r = range.getBoundingClientRect();
+          return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) };
+        });
+      const open = async (reducedMotion: "reduce" | "no-preference") => {
+        const page = await browser.newPage({ viewport: { width, height }, reducedMotion });
+        await routeMatomo(page);
+        await page.goto("/", { waitUntil: "load" });
+        await page.evaluate(() => document.fonts.ready);
+        return page;
+      };
+
+      const still = await open("reduce");
+      expect(await still.evaluate(acro, undefined)).toBe(0);
+      const layout = await still.evaluate(glyphs);
+      await still.close();
+
+      const page = await open("no-preference");
+      expect(await page.evaluate(acro, 0)).toBe(24); // a show and a glide or slide for each of 6 initials and 6 rests
+      const start = await page.evaluate(glyphs);
+      const initials = start.filter((_, i) => i % 2 === 0);
+      // one row: the same top, left to right, each letter after the last
+      expect(new Set(initials.map((g) => g.y)).size).toBe(1);
+      for (let i = 1; i < initials.length; i++) {
+        const [prev, cur] = [initials[i - 1]!, initials[i]!];
+        expect(cur.x).toBeGreaterThanOrEqual(prev.x + prev.w - 2);
+        expect(cur.x).toBeLessThanOrEqual(prev.x + prev.w + 2);
+      }
+      const rests = await page.$$eval(".acro .acro__rest", (els) =>
+        els.map((el) => getComputedStyle(el).opacity),
+      );
+      expect(rests.every((o) => o === "0")).toBe(true);
+
+      await page.evaluate(acro, null);
+      expect(await page.evaluate(glyphs)).toEqual(layout);
+      await page.close();
+    });
+  }
+
   test("the first Tab reaches Skip to content, which leads past the header", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/about", { waitUntil: "networkidle" });

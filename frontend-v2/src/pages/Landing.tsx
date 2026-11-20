@@ -1,4 +1,5 @@
 import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
+import { useEffect } from "react";
 import Beams from "../ui/Beams";
 import { GlassLink } from "../ui/GlassButton";
 import Icon from "../ui/Icon";
@@ -12,24 +13,50 @@ import "./landing.css";
 
 const NAME = "Molecular Annotation and Recognition for Curating Unravelled Structures";
 
-/** One line of the acrostic: the bold green initial, then the rest of the word. */
-function Line({ initial, rest, link }: { initial: string; rest: string; link?: string }) {
+/**
+ * The name assembles once per page load (landing.css, .acro--assemble): pure CSS from the
+ * first paint, so the pre-rendered page needs no script for it. A later visit in the same tab
+ * (back from /about) shows the name at rest. False on the server and while hydrating.
+ */
+let assembled = false;
+
+/**
+ * One line of the acrostic: the bold green initial, then the rest of the word. `n` (1 to 6)
+ * is the line's place in the assembly (.acro__line--n).
+ */
+function Line({
+  n,
+  initial,
+  rest,
+  link,
+}: {
+  n: number;
+  initial: string;
+  rest: string;
+  link?: string;
+}) {
   return (
-    <span className="acro__line">
+    <span className={`acro__line acro__line--${n}`}>
       <b>{initial}</b>
-      {rest}
-      {link && (
-        <>
-          {" "}
-          <span className="acro__link">{link}</span>
-        </>
-      )}
+      <span className="acro__rest">
+        {rest}
+        {link && (
+          <>
+            {" "}
+            <span className="acro__link">{link}</span>
+          </>
+        )}
+      </span>
     </span>
   );
 }
 
 export default function Landing() {
   usePageTitle(pageMeta("/").title);
+  const assemble = !assembled;
+  useEffect(() => {
+    assembled = true;
+  }, []);
   return (
     <main className="home">
       <section className="landing" aria-label="MARCUS">
@@ -38,15 +65,15 @@ export default function Landing() {
           <div className="lead__title">
             {/* Drawn as an acrostic, read as the plain name: a screen reader would split
                 "M olecular" at each bold initial. */}
-            <h1 className="acro">
+            <h1 className={assemble ? "acro acro--assemble" : "acro"}>
               <span aria-hidden="true">
                 {/* the spaces keep a copied selection readable: "Molecular Annotation and …" */}
-                <Line initial="M" rest="olecular" />{" "}
-                <Line initial="A" rest="nnotation" link="and" />{" "}
-                <Line initial="R" rest="ecognition" link="for" />{" "}
-                <Line initial="C" rest="urating" />{" "}
-                <Line initial="U" rest="nravelled" />{" "}
-                <Line initial="S" rest="tructures" />
+                <Line n={1} initial="M" rest="olecular" />{" "}
+                <Line n={2} initial="A" rest="nnotation" link="and" />{" "}
+                <Line n={3} initial="R" rest="ecognition" link="for" />{" "}
+                <Line n={4} initial="C" rest="urating" />{" "}
+                <Line n={5} initial="U" rest="nravelled" />{" "}
+                <Line n={6} initial="S" rest="tructures" />
               </span>
               <span className="visually-hidden">{NAME}</span>
             </h1>
