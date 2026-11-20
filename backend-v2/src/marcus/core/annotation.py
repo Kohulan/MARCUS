@@ -202,7 +202,8 @@ def positions_error(found: object, values: dict[str, list[str]]) -> str | None:
 
 # --- the paper's text blocks (frontend-v2 doclingText.ts) -----------------------------------------
 
-_REF = re.compile(r"^#/(texts|groups)/(\d+)$")
+_REF = re.compile(r"#/(texts|groups)/([0-9]+)")  # fullmatch: JavaScript's ^...$ and \d
+_END = object()
 # JavaScript String.prototype.trim(): WhiteSpace and LineTerminator code points
 _JS_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008" \
     "\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"  # fmt: skip
@@ -230,28 +231,30 @@ def docling_blocks(doc: object) -> list[str]:
         return [t for t in map(_block, texts) if t is not None]
     groups = doc.get("groups") if isinstance(doc.get("groups"), list) else []
     out: list[str] = []
-    walking: set[str] = set()
-
-    def walk(children: list) -> None:
-        for child in children:
-            ref = child.get("$ref") if isinstance(child, dict) else None
-            m = _REF.match(ref) if isinstance(ref, str) else None
-            if m is None or m.group(0) in walking:
-                continue
-            i = int(m.group(2))
-            pool = texts if m.group(1) == "texts" else groups
-            item = pool[i] if i < len(pool) else None
-            if m.group(1) == "texts":
-                text = _block(item)
-                if text is not None:
-                    out.append(text)
-            kids = item.get("children") if isinstance(item, dict) else None
-            if isinstance(kids, list):
-                walking.add(m.group(0))
-                walk(kids)
-                walking.discard(m.group(0))
-
-    walk(body["children"])
+    walking: set[str] = set()  # the refs on the current path (a ref back to one is skipped)
+    stack: list[tuple] = [(iter(body["children"]), None)]  # iterative: no recursion limit
+    while stack:
+        children, ref_of_frame = stack[-1]
+        child = next(children, _END)
+        if child is _END:
+            stack.pop()
+            walking.discard(ref_of_frame)
+            continue
+        ref = child.get("$ref") if isinstance(child, dict) else None
+        m = _REF.fullmatch(ref) if isinstance(ref, str) else None
+        if m is None or m.group(0) in walking:
+            continue
+        i = int(m.group(2))
+        pool = texts if m.group(1) == "texts" else groups
+        item = pool[i] if i < len(pool) else None
+        if m.group(1) == "texts":
+            text = _block(item)
+            if text is not None:
+                out.append(text)
+        kids = item.get("children") if isinstance(item, dict) else None
+        if isinstance(kids, list):
+            walking.add(m.group(0))
+            stack.append((iter(kids), m.group(0)))
     return out
 
 

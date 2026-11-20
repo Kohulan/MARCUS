@@ -64,7 +64,7 @@ def annotate(step, session) -> dict:
     doc = _document(step)
     try:
         text = model_input(doc)
-    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError, RecursionError):
         raise BadInput("the paper's text is not a Docling document") from None
     if not text.strip():
         raise BadInput("no title, abstract or introduction found")

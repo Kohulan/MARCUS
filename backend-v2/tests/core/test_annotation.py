@@ -235,3 +235,22 @@ def test_coconut_prefill_maps_organism_fields():
         "kingdom": ["Plant"],
     }  # fmt: skip
     assert ann.coconut_prefill({f: [] for f in ann.FIELDS}) == {"organisms": [], "kingdom": []}
+
+
+def test_blocks_of_a_deeply_nested_document_need_no_recursion():
+    depth = 5000
+    groups = [{"children": [{"$ref": f"#/groups/{i + 1}"}]} for i in range(depth)]
+    groups.append({"children": [{"$ref": "#/texts/0"}]})
+    doc = {"body": {"children": [{"$ref": "#/groups/0"}]}, "groups": groups,
+           "texts": [_t(0, "text", "Deep.")]}  # fmt: skip
+    assert ann.docling_blocks(doc) == ["Deep."]
+
+
+def test_blocks_refs_are_matched_like_javascript():
+    doc = {
+        "body": {
+            "children": [{"$ref": "#/texts/0\n"}, {"$ref": "#/texts/\u0661"}, {"$ref": "#/texts/0"}]
+        },
+        "texts": [_t(0, "text", "Once."), _t(1, "text", "Never.")],
+    }
+    assert ann.docling_blocks(doc) == ["Once."]

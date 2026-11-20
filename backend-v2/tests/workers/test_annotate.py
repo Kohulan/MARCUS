@@ -259,3 +259,17 @@ def test_fake_handler_run_end_to_end(monkeypatch, clear_settings_cache):
     assert (out["model"], out["model_version"]) == ("fake-annotator", "fake-1")
     assert out["positions"]["abbreviation"]["NMR"]  # found in the abstract and later
     assert len(out["positions"]["abbreviation"]["NMR"]) == 2
+
+
+def test_a_document_nested_too_deep_for_the_input_builder_is_bad_input(stub):
+    depth = 5000
+    groups = [{"children": [{"$ref": f"#/groups/{i + 1}"}]} for i in range(depth)]
+    groups.append({"children": [{"$ref": "#/texts/0"}]})
+    doc = {
+        "body": {"children": [{"$ref": "#/groups/0"}]},
+        "groups": groups,
+        "texts": [{"label": "text", "text": ABSTRACT, "prov": [{"page_no": 1}]}],
+    }
+    with pytest.raises(BadInput):
+        annotate(view(paper_id=_paper_with_text(doc)), None)
+    assert stub.requests == []
