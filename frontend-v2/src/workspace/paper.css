@@ -9,6 +9,9 @@
  */
 
 .pv {
+  --pv-caption-h: 44px; /* a column's sticky caption (.pv-cap) */
+  --pv-tag-room: 28px; /* a marker's tag above its box (scrollWithin's margin) */
+  --pv-focus-room: 8px; /* clear space around a control scrolled into view */
   display: grid;
   grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
   height: calc(100vh - var(--pv-top, 0px));
@@ -17,18 +20,18 @@
   border-top: 1px solid var(--line);
 }
 
-/* A control the keyboard reaches is scrolled clear of the sticky caption (44 px), and on
-   the pages a marker's tag too (WCAG 2.4.11). */
+/* A control the keyboard reaches is scrolled clear of the sticky caption, and on the pages a
+   marker's tag too (WCAG 2.4.11). */
 .pv-col {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scroll-padding: 52px 0 8px;
+  scroll-padding: calc(var(--pv-caption-h) + var(--pv-focus-room)) 0 var(--pv-focus-room);
 }
 
 .pv-col--pages {
-  scroll-padding-top: 72px;
+  scroll-padding-top: calc(var(--pv-caption-h) + var(--pv-tag-room));
 }
 
 .pv-col + .pv-col {
@@ -53,7 +56,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--pv-caption-h);
   padding: 6px 16px;
   border-bottom: 1px solid var(--line);
   background-color: inherit;
