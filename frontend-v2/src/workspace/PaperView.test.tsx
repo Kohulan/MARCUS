@@ -819,6 +819,16 @@ describe("Paper view: annotation", () => {
     expect(live).toHaveTextContent("bark: 1 of 1");
   });
 
+  it("a paper busy only with its annotation says No pages / No structures found", async () => {
+    renderAt(paper([], { status: "processing", pages: 0 }), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep()],
+    });
+    expect(await screen.findByText("No structures found.")).toBeInTheDocument();
+    expect(screen.getByText("No pages.")).toBeInTheDocument();
+    expect(screen.queryByText(/appear here as/)).toBeNull();
+  });
+
   it("reads the annotation again when its step ends", async () => {
     renderAt(paper([segment("s1")], { status: "processing" }), {
       doc: ANN_DOC,

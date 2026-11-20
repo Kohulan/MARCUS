@@ -413,6 +413,13 @@ describe("Papers list", () => {
     expect(within(row).getByText("Reading…")).toBeInTheDocument();
   });
 
+  it("says Annotating… for a paper busy only with its annotation", async () => {
+    renderHome({ papers: [paper({ status: "processing", annotating: true })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    expect(within(row).getByText("Annotating…")).toBeInTheDocument();
+    expect(within(row).queryByText("Reading…")).toBeNull();
+  });
+
   it("says Not read yet for a finished paper uploaded with ocsr off", async () => {
     renderHome({ papers: [paper({ ocsr_mode: "off" })] });
     const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;

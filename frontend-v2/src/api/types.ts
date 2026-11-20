@@ -44,6 +44,8 @@ export interface PaperSummary {
   failed_pages: number;
   /** Undecided structures whose read failed (not in to_review). */
   failed: number;
+  /** Busy only with its annotation (its only step in flight is annotate). */
+  annotating?: boolean;
 }
 
 export interface PaperList {

@@ -19,7 +19,8 @@ export function ocsrSteps(segment: SegmentOut, steps: StepOut[]): StepOut[] {
  * `to-check`. With none: `reading` while an `ocsr` step of the segment is pending, queued or
  * running; `failed` when its newest `ocsr` step failed; `not-read` when it has no `ocsr`
  * step (a paper uploaded with `ocsr=off`; on an `auto` paper still being worked on, the step
- * is about to come, so that is `reading`); else `to-check`.
+ * is about to come, so that is `reading`, unless the paper is busy only with its annotation);
+ * else `to-check`.
  */
 export function cardState(segment: SegmentOut, steps: StepOut[], paper: PaperDetail): CardState {
   return stateOf(segment, ocsrSteps(segment, steps), paper);
@@ -33,7 +34,8 @@ export function stateOf(segment: SegmentOut, ocsr: StepOut[], paper: PaperDetail
   if (ocsr.some((s) => isStepActive(s.status))) return "reading";
   const newest = ocsr[0];
   if (newest === undefined) {
-    return paper.ocsr_mode !== "off" && isPaperBusy(paper.status) ? "reading" : "not-read";
+    const reading = isPaperBusy(paper.status) && !paper.annotating; // not an annotate run
+    return paper.ocsr_mode !== "off" && reading ? "reading" : "not-read";
   }
   return newest.status === "failed" ? "failed" : "to-check";
 }

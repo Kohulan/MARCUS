@@ -797,4 +797,23 @@ describe("cardState", () => {
       "not-read",
     );
   });
+
+  it("a paper busy only with its annotation is not reading its structures", () => {
+    const none = segment("s1", { predictions: [] });
+    expect(cardState(none, [], paper([], { status: "processing" }))).toBe("reading");
+    expect(cardState(none, [], paper([], { status: "processing", annotating: true }))).toBe(
+      "not-read",
+    );
+  });
+});
+
+describe("Review view while the paper is annotated", () => {
+  it("says No structures found, not that they appear as pages are read", async () => {
+    renderGrid(paper([], { status: "processing" }), [
+      step({ kind: "docling", page: null, engine: null, status: "done" }),
+      step({ kind: "annotate", page: null, engine: null, status: "running" }),
+    ]);
+    expect(await screen.findByText("No structures found.")).toBeInTheDocument();
+    expect(screen.queryByText("Structures appear here as pages are read.")).toBeNull();
+  });
 });

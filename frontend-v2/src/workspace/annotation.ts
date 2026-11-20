@@ -2,7 +2,7 @@
 // Paper view shows it: which spans of the text to mark, which occurrence a click goes to, and
 // the editing of a field as lines. Model text is data: it is only ever a React text node.
 import { ApiError, errorText } from "../api/client";
-import { isStepActive } from "../api/status";
+import { isPaperBusy, isStepActive } from "../api/status";
 import type {
   AnnotationHit,
   AnnotationField,
@@ -139,6 +139,17 @@ export function onlyAnnotating(steps: StepOut[]): boolean {
   const ann = newestAnnotate(steps);
   if (!ann || !isStepActive(ann.status)) return false;
   return steps.every((s) => s.kind === "annotate" || !isStepActive(s.status));
+}
+
+/**
+ * The paper is being read: busy with more than its annotation (an annotate run makes a done
+ * paper processing again; the server's `annotating` or the steps say when that is all).
+ */
+export function isPaperReading(
+  paper: { status: string; annotating?: boolean | undefined },
+  steps: StepOut[],
+): boolean {
+  return isPaperBusy(paper.status) && !paper.annotating && !onlyAnnotating(steps);
 }
 
 const REASONS: Record<string, string> = {
