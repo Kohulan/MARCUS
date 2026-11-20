@@ -368,9 +368,44 @@ describe("header", () => {
       expect(within(form).getByLabelText("Organism 2")).toHaveValue("Taxus baccata");
       // COCONUT has no kingdom field: it is not put anywhere
       expect(within(form).queryByDisplayValue(/Plantae/)).toBeNull();
+      // the model's values say so (decision 7), and the organism names point at it
+      expect(within(form).getByText("Organisms: model suggestion")).toBeInTheDocument();
+      expect(within(form).getByLabelText("Organism")).toHaveAccessibleDescription(
+        "Organisms: model suggestion",
+      );
+      expect(within(form).getByLabelText("Organism 2")).toHaveAccessibleDescription(
+        "Organisms: model suggestion",
+      );
       const name = within(form).getByLabelText("Organism");
       fireEvent.change(name, { target: { value: "Taxus wallichiana" } });
       expect(name).toHaveValue("Taxus wallichiana");
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
+  it("organisms from the curator's corrections carry no model label", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      const values = { organism_or_species: ["Taxus brevifolia"] };
+      renderWorkspace({
+        paper: paper({ segments: [seg("s1", { status: "accepted" })] }),
+        annotation: annotationOut({
+          status: "done",
+          values,
+          curated: values,
+          coconut: {
+            organisms: [{ name: "Taxus brevifolia", parts: "", location: "", ecosystems: "" }],
+            kingdom: [],
+          },
+        }),
+      });
+      await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+      await act(async () => undefined);
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      expect(within(form).getByLabelText("Organism")).toHaveValue("Taxus brevifolia");
+      expect(within(form).queryByText(/model suggestion/i)).toBeNull();
     } finally {
       sessionStorage.removeItem("marcus-coconut-token");
     }
@@ -385,6 +420,7 @@ describe("header", () => {
       const form = await screen.findByRole("dialog");
       expect(within(form).getByLabelText("Organism")).toHaveValue("");
       expect(within(form).queryByLabelText("Organism 2")).toBeNull();
+      expect(within(form).queryByText(/model suggestion/i)).toBeNull();
     } finally {
       sessionStorage.removeItem("marcus-coconut-token");
     }

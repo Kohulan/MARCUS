@@ -131,8 +131,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   );
   const [sending, setSending] = useState(false);
   const sendCount = toCoconut.length;
-  // The annotation's organisms start the COCONUT form (the curator can change them);
-  // COCONUT has no kingdom field, so the kingdom is not carried over.
+  // The annotation's organisms start the COCONUT form (the curator can change them), labelled
+  // as the model's suggestion unless they come from the curator's corrections; COCONUT has no
+  // kingdom field, so the kingdom is not carried over.
   const annotation = useAnnotation(paper.id, ws.steps).data;
   const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
     name: o.name,
@@ -251,6 +252,11 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
             ...(organisms.length > 0 ? { organisms } : {}),
           }}
+          organismsNote={
+            organisms.length > 0 && annotation?.curated === null
+              ? "Organisms: model suggestion"
+              : undefined
+          }
           onClose={() => setSending(false)}
         />
       )}

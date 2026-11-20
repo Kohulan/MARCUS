@@ -238,6 +238,12 @@
   display: flex;
 }
 
+/* "Organisms: model suggestion": the starting organisms came from the annotation model. */
+.coconut .coconut-paper__note {
+  margin: 14px 0 0;
+  color: var(--text-2);
+}
+
 .coconut-organism {
   display: flex;
   flex-direction: column;
