@@ -69,7 +69,7 @@ describe("coconutCountForDoi", () => {
     vi.stubGlobal("fetch", f);
     await coconutCountForDoi("https://doi.org/10.1/abc");
     const [url, init] = f.mock.calls[0]!;
-    expect(url).toBe("https://coconut.naturalproducts.net/api/search");
+    expect(url).toBe("/api/v2/coconut/search");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
       type: "tags",

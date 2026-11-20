@@ -37,6 +37,7 @@ def _compose_config(*files: str) -> dict:
         "HOME": os.environ.get("HOME", "/tmp"),
         "POSTGRES_PASSWORD": "test",
         "REDIS_PASSWORD": "test",
+        "GRAFANA_ADMIN_PASSWORD": "test",  # the monitoring override
     }
     args = [docker, "compose", "--project-directory", str(ROOT), "--env-file", os.devnull]
     for name in files:
@@ -263,7 +264,7 @@ UI_LOCATIONS_IN_IMAGE = "/etc/nginx/marcus/ui-locations.conf"
 # Exact, from Global Constraints (frontend v2 plan).
 APP_CSP = (
     "default-src 'self'; script-src 'self' https://matomo.nfdi4chem.de; "
-    "connect-src 'self' https://coconut.naturalproducts.net https://pubchem.ncbi.nlm.nih.gov "
+    "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov "
     "https://matomo.nfdi4chem.de; img-src 'self' data: blob: https://matomo.nfdi4chem.de; "
     "style-src 'self'; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; "
     "form-action 'self'; frame-ancestors 'none'"
@@ -346,6 +347,8 @@ def test_nginx_includes_the_ui_locations_instead_of_a_404():
 
 def test_ui_locations_carry_both_exact_csps_mime_types_and_gzip():
     conf = UI_LOCATIONS.read_text()
+    # COCONUT only through the relay (same origin): the browser never connects to it
+    assert "coconut" not in _strip_comments(conf)
     csps = set(re.findall(r'add_header Content-Security-Policy "([^"]*)" always;', conf))
     assert csps == {APP_CSP, KETCHER_CSP}
     assert re.search(r"^include /etc/nginx/mime\.types;", conf, re.M)
@@ -733,6 +736,13 @@ def test_nginx_edge_script_is_mounted_executable_into_the_entrypoint(compose):
 # --- the nginx container itself (docker; skipped without it) ----------------------------------
 
 NGINX_IMAGE = "nginxinc/nginx-unprivileged:1.27-alpine"
+# The files compose mounts into the production nginx (the UI locations are baked into its image).
+_NGINX_MOUNTS = [
+    "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
+    "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
+    "-v", f"{ROOT / 'docker' / 'coconut-relay.js'}:/etc/nginx/marcus/coconut-relay.js:ro",
+    "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
+]  # fmt: skip
 
 
 def _docker_or_skip() -> str:
@@ -752,9 +762,7 @@ def _nginx_run(env: dict[str, str], *cmd: str) -> subprocess.CompletedProcess:
     args = [
         docker, "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
         "--add-host", "api:127.0.0.1",
-        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
-        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
-        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
+        *_NGINX_MOUNTS,
     ]  # fmt: skip
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
@@ -792,9 +800,7 @@ def _client_seen_by_nginx(env: dict[str, str], xff: str) -> str:
     args = [
         docker, "run", "-d", "--name", name, "--network", "none", "--read-only",
         "--tmpfs", "/tmp", "--add-host", "api:127.0.0.1",
-        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
-        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
-        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
+        *_NGINX_MOUNTS,
     ]  # fmt: skip
     for key, value in env.items():
         args += ["-e", f"{key}={value}"]
@@ -873,15 +879,18 @@ def test_real_ip_switch_is_wired_in_compose_and_documented(compose):
 @pytest.fixture(scope="module")
 def nginx_url():
     """The production nginx (config and entrypoint script) on a loopback port, no API behind
-    it: a request nginx lets through ends as 502, one it refuses for its size as 413."""
+    it: a request nginx lets through ends as 502, one it refuses for its size as 413.
+
+    It runs on Docker's default bridge, which has a route out but no embedded DNS (no
+    127.0.0.11): the relay's upstream name never resolves, so the relay tests below reach no
+    COCONUT. Never move it to a user-defined network (those have Docker's DNS): the relay would
+    then send their logins to the real COCONUT."""
     docker = _docker_or_skip()
     name = f"marcus-bodysize-test-{os.getpid()}"
     args = [
         docker, "run", "-d", "--name", name, "--read-only", "--tmpfs", "/tmp",
         "-p", "127.0.0.1::8080", "--add-host", "api:127.0.0.1",
-        "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
-        "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
-        "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
+        *_NGINX_MOUNTS,
         NGINX_IMAGE,
     ]  # fmt: skip
     started = subprocess.run(args, capture_output=True, text=True, timeout=60)
@@ -1047,3 +1056,407 @@ def test_fake_stack_runs_the_fake_annotator():
     assert "llama-server" not in services
     (vol,) = worker["volumes"]
     assert vol["read_only"] is True
+
+
+# --- the COCONUT relay (owner decision 2026-11-20) ---------------------------------------------
+# COCONUT sends no CORS headers, so the browser cannot call it: nginx (already on `egress`)
+# relays exactly three fixed calls to the fixed host. The API stays without internet.
+
+NGINX_CONF = ROOT / "docker" / "nginx.conf"
+RELAY_JS = ROOT / "docker" / "coconut-relay.js"
+COCONUT_HOST = "coconut.naturalproducts.net"
+RELAY = {
+    "/api/v2/coconut/auth/login": "/api/auth/login",
+    "/api/v2/coconut/reports/mutate": "/api/reports/mutate",
+    "/api/v2/coconut/search": "/api/search",
+}
+FAKE_COCONUT_DIR = ROOT / "tests" / "fake_coconut"
+
+
+def _relay_blocks() -> tuple[str, dict[str, str]]:
+    """(the prefix block's own body, {exact path: its body}) of the relay locations."""
+    blocks = _location_blocks(NGINX_CONF.read_text())
+    prefix = [b for h, b in blocks if h == "location ^~ /api/v2/coconut/"]
+    assert len(prefix) == 1, [h for h, _ in blocks]
+    exact = {h.split()[2]: b for h, b in blocks if h.startswith("location = /api/v2/coconut/")}
+    return prefix[0], exact
+
+
+def _full_block(conf: str, head: str) -> str:
+    """The whole text of the block `head {...}`, nested blocks (the `if`s) included."""
+    text = _strip_comments(conf)
+    start = text.index(head + " {") + len(head) + 2
+    depth = 1
+    for i in range(start, len(text)):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        if depth == 0:
+            return text[start:i]
+    raise AssertionError(f"unclosed {head}")
+
+
+def _directive(body: str, name: str) -> list[str]:
+    return [v.strip() for v in re.findall(rf"^\s*{name}\s+([^;]+);", body, re.M)]
+
+
+def test_coconut_relay_has_exactly_three_fixed_routes():
+    prefix, exact = _relay_blocks()
+    assert set(exact) == set(RELAY)
+    for path, body in exact.items():
+        # the fixed upstream path, never built from the request
+        assert _directive(body, "proxy_pass") == [f"https://coconut{RELAY[path]}"], path
+        body = _full_block(NGINX_CONF.read_text(), f"location = {path}")
+        # POST only; no query; a JSON body only (a cross-site form post cannot send one)
+        assert re.search(r"if \(\$request_method != POST\)\s*\{\s*return 405;\s*\}", body), path
+        assert re.search(r"if \(\$is_args\)\s*\{\s*return 400;\s*\}", body), path
+        assert re.search(r'if \(\$content_type !~\* "[^"]*application/json[^"]*"\)\s*\{\s*'
+                         r"return 415;\s*\}", body), path  # fmt: skip
+    # anything else under the prefix: nginx's own 404 (never COCONUT, never the API)
+    assert _directive(prefix, "return") == ["404"]
+    conf = _strip_comments(NGINX_CONF.read_text())
+    assert len(re.findall(r"^\s*proxy_pass\s+https://", conf, re.M)) == 3
+    assert "$" not in "".join(re.findall(r"proxy_pass\s+https://([^;]+);", conf))
+
+
+def test_coconut_upstream_is_the_fixed_host_with_tls_verification():
+    conf = _strip_comments(NGINX_CONF.read_text())
+    upstream = re.search(r"upstream coconut \{([^}]*)\}", conf)
+    assert upstream, "upstream coconut missing"
+    # resolve: nginx starts (and the rest of MARCUS works) while COCONUT's name does not resolve
+    assert _directive(upstream.group(1), "server") == [f"{COCONUT_HOST}:443 resolve"]
+    prefix, _ = _relay_blocks()
+    assert _directive(prefix, "proxy_ssl_verify") == ["on"]
+    assert _directive(prefix, "proxy_ssl_server_name") == ["on"]
+    assert _directive(prefix, "proxy_ssl_name") == [COCONUT_HOST]
+    assert _directive(prefix, "proxy_ssl_trusted_certificate") == [
+        "/etc/ssl/certs/ca-certificates.crt"
+    ]
+    assert int(_directive(prefix, "proxy_ssl_verify_depth")[0]) >= 2
+
+
+def test_coconut_relay_sends_only_its_own_headers():
+    """No cookie, no client address, no Referer or Origin goes upstream: only the headers set
+    here. Authorization only on the mutate call (the one that needs the token)."""
+    prefix, exact = _relay_blocks()
+    assert _directive(prefix, "proxy_pass_request_headers") == ["off"]
+    sent = {
+        v.split()[0].lower(): v.split(None, 1)[1] for v in _directive(prefix, "proxy_set_header")
+    }
+    assert set(sent) == {"host", "content-type", "accept", "authorization", "user-agent"}
+    assert sent["host"] == COCONUT_HOST
+    assert sent["content-type"] == "$content_type"
+    assert sent["authorization"] == "$coconut_authorization"
+    for body in exact.values():  # a proxy_set_header here would drop the whole set above
+        assert not _directive(body, "proxy_set_header")
+    conf = _strip_comments(NGINX_CONF.read_text())
+    amap = re.search(r"map \$uri \$coconut_authorization \{([^}]*)\}", conf)
+    assert amap, "map $uri $coconut_authorization missing"
+    rows = dict(r.split() for r in _directive(amap.group(1), ""))
+    assert rows == {"default": '""', "/api/v2/coconut/reports/mutate": "$http_authorization"}
+
+
+def test_coconut_relay_returns_only_status_body_and_content_type():
+    """The njs header filter keeps Content-Type and Content-Length of COCONUT's answer and drops
+    every other upstream header (cookies, CORS, redirects, caching); nginx adds its own fixed
+    security headers. The judge checks it against the fake upstream."""
+    conf = _strip_comments(NGINX_CONF.read_text())
+    assert re.search(r"^load_module modules/ngx_http_js_module\.so;", conf, re.M)
+    assert "js_import coconut from /etc/nginx/marcus/coconut-relay.js;" in conf
+    prefix, _ = _relay_blocks()
+    assert _directive(prefix, "js_header_filter") == ["coconut.onlyStatusAndBody"]
+    for name in ("Set-Cookie", "Content-Security-Policy", "Access-Control-Allow-Origin"):
+        assert name in _directive(prefix, "proxy_hide_header"), name
+    added = {v.split()[0].lower() for v in _directive(prefix, "add_header")}
+    assert UI_HEADERS - {"permissions-policy"} <= added
+    assert "cache-control" in added
+    js = RELAY_JS.read_text()
+    keep = re.search(r"const KEEP = \[([^\]]*)\]", js)
+    assert keep, js
+    assert set(re.findall(r'"([^"]+)"', keep.group(1))) == {
+        "content-type",
+        "content-length",
+        "cache-control",
+        *(UI_HEADERS - {"permissions-policy"}),
+    }
+
+
+def test_coconut_relay_limits():
+    """Every call is limited per client (an IPv6 client by its /64), then in total: COCONUT sees
+    every MARCUS user as one address. Login is strict (credential stuffing); login and search
+    together stay under 60/min in total. Bodies sized to what the client sends; the client's
+    own timeouts."""
+    conf = _strip_comments(NGINX_CONF.read_text())
+    zones = {
+        z: (key, int(rate))
+        for key, z, rate in re.findall(
+            r"^\s*limit_req_zone\s+(\$\w+)\s+zone=(\w+):\w+\s+rate=(\d+)r/m;", conf, re.M
+        )
+    }
+    assert "js_set $coconut_client coconut.clientKey;" in conf
+    assert re.search(r"map \$request_method \$coconut_all \{\s*default all;\s*\}", conf)
+    for call in ("login", "search", "mutate"):
+        assert zones[f"coconut_{call}"][0] == "$coconut_client", call
+        assert zones[f"coconut_{call}_all"][0] == "$coconut_all", call
+    assert zones["coconut_login"][1] <= 5
+    assert zones["coconut_login_all"][1] + zones["coconut_search_all"][1] <= 50
+    _, exact = _relay_blocks()
+    login, mutate, search = (exact[p] for p in RELAY)
+    # per client first: a request refused for its client does not use up the total
+    assert _directive(login, "limit_req") == [
+        "zone=coconut_login burst=3 nodelay",
+        "zone=coconut_login_all burst=10 nodelay",
+    ]
+    assert _directive(search, "limit_req") == [
+        "zone=coconut_search burst=10 nodelay",
+        "zone=coconut_search_all burst=10 nodelay",
+    ]
+    assert _directive(mutate, "limit_req") == [
+        "zone=coconut_mutate burst=20 nodelay",
+        "zone=coconut_mutate_all burst=40 nodelay",
+    ]
+    assert re.search(r"^\s*limit_req_status\s+429;", conf, re.M)
+    assert _directive(login, "client_max_body_size") == ["8k"]
+    assert _directive(search, "client_max_body_size") == ["8k"]
+    assert _directive(mutate, "client_max_body_size") == ["2m"]  # 50 reports per chunk
+    assert _directive(login, "proxy_read_timeout") == ["30s"]
+    assert _directive(mutate, "proxy_read_timeout") == ["60s"]
+    assert _directive(search, "proxy_read_timeout") == ["10s"]
+
+
+def test_no_log_records_bodies_queries_or_credentials():
+    """The password and the token pass through and are never logged: no log format has a body,
+    a header with a secret, or a query; the relay logs the path without its query."""
+    secret = re.compile(r"\$(request_body|http_authorization|http_cookie|args|query_string|"
+                        r"request_uri|arg_\w+|sent_http_\w+|upstream_http_\w+)\b")  # fmt: skip
+    confs = (NGINX_CONF, FRONTEND / "deploy" / "dev-nginx.conf", UI_LOCATIONS)
+    for path in confs:
+        text = _strip_comments(path.read_text())
+        for fmt in re.findall(r"log_format\s+\w+\s+((?:'[^']*'\s*)+);", text):
+            assert not secret.search(fmt), (path.name, fmt)
+    conf = _strip_comments(NGINX_CONF.read_text())
+    relay_fmt = re.search(r"log_format coconut\s+((?:'[^']*'\s*)+);", conf)
+    assert relay_fmt and "$request " not in relay_fmt.group(1) + " "
+    assert '"$request_method $uri $server_protocol"' in relay_fmt.group(1)
+    prefix, _ = _relay_blocks()
+    assert _directive(prefix, "access_log") == ["/dev/stdout coconut"]
+
+
+def test_relay_js_is_mounted_into_nginx(compose):
+    nginx = compose["services"]["nginx"]
+    assert "./docker/coconut-relay.js:/etc/nginx/marcus/coconut-relay.js:ro" in nginx["volumes"]
+
+
+def test_production_points_at_the_real_coconut_and_only_the_fake_stack_at_the_fake(compose):
+    """Production (base, + GPU, + monitoring): nobody answers for COCONUT's name and nginx
+    trusts the system CA bundle. The fake stack: a fake COCONUT holds the name on the internal
+    network, and nginx trusts only the test CA, so even a lookup that reached the real host would
+    fail verification before sending."""
+    for files in (
+        ("docker-compose.yml",),
+        ("docker-compose.yml", "docker-compose.gpu.yml"),
+        ("docker-compose.yml", "docker-compose.gpu.yml", "docker-compose.monitoring.yml"),
+    ):
+        services = _compose_config(*files)["services"]
+        for name, svc in services.items():
+            for net in (svc.get("networks") or {}).values():
+                assert COCONUT_HOST not in ((net or {}).get("aliases") or []), (files, name)
+        targets = [v["target"] for v in services["nginx"]["volumes"]]
+        assert not any("ca-certificates" in t or t.startswith("/etc/ssl") for t in targets), files
+        assert "fake-coconut" not in services, files
+    services = _compose_config("docker-compose.yml", "docker-compose.fake.yml")["services"]
+    fake = services["fake-coconut"]
+    assert set(fake["networks"]) == {"internal"}
+    assert fake["networks"]["internal"]["aliases"] == [COCONUT_HOST]
+    assert "ports" not in fake
+    mounts = {v["target"]: v["source"] for v in services["nginx"]["volumes"]}
+    assert mounts["/etc/ssl/certs/ca-certificates.crt"] == str(FAKE_COCONUT_DIR / "ca.pem")
+    assert services["nginx"]["depends_on"]["fake-coconut"]["condition"] == "service_healthy"
+
+
+def test_fake_coconut_certificate_is_for_the_coconut_name_and_signed_by_the_test_ca():
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        pytest.skip("openssl not available")
+    ca, cert = FAKE_COCONUT_DIR / "ca.pem", FAKE_COCONUT_DIR / "cert.pem"
+    out = subprocess.run([openssl, "verify", "-CAfile", str(ca), str(cert)],
+                         capture_output=True, text=True)  # fmt: skip
+    assert out.returncode == 0, out.stdout + out.stderr
+    text = subprocess.run([openssl, "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
+                          capture_output=True, text=True).stdout  # fmt: skip
+    assert f"DNS:{COCONUT_HOST}" in text
+    # the CA's key was thrown away after signing: only the server's own test key is kept
+    assert sorted(p.name for p in FAKE_COCONUT_DIR.glob("*.pem")) == [
+        "ca.pem",
+        "cert.pem",
+        "key.pem",
+    ]
+
+
+def test_fake_coconut_tls_files_are_tracked_by_git():
+    """A fresh checkout must have them: compose would otherwise mount a directory over nginx's
+    CA bundle (nginx does not start) and the fake would die loading its certificate."""
+    git = shutil.which("git")
+    if git is None or not (ROOT.parent / ".git").exists():
+        pytest.skip("not a git checkout")
+    out = subprocess.run(
+        [git, "-C", str(ROOT.parent), "ls-files", "backend-v2/tests/fake_coconut"],
+        capture_output=True,
+        text=True,
+    )
+    assert out.returncode == 0, out.stderr
+    tracked = {Path(p).name for p in out.stdout.split()}
+    assert {"ca.pem", "cert.pem", "key.pem", "server.py", "gen-certs.sh"} <= tracked, tracked
+
+
+def _relay(url: str, method: str, path: str, body: bytes = b"{}", ctype="application/json",
+           **headers: str) -> int | str:  # fmt: skip
+    import httpx
+
+    hdrs = {"Content-Type": ctype, **headers} if ctype else dict(headers)
+    try:
+        return httpx.request(method, url + path, content=body, headers=hdrs, timeout=30).status_code
+    except httpx.HTTPError as exc:
+        return f"no answer: {type(exc).__name__}"
+
+
+@pytest.mark.parametrize("path", list(RELAY))
+@pytest.mark.parametrize("method", ["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"])
+def test_relay_refuses_every_method_but_post(nginx_url, path, method):
+    assert _relay(nginx_url, method, path) == 405
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v2/coconut/",
+        "/api/v2/coconut/auth",
+        "/api/v2/coconut/auth/logout",
+        "/api/v2/coconut/auth/login/",
+        "/api/v2/coconut/auth/login/x",
+        "/api/v2/coconut/reports",
+        "/api/v2/coconut/reports/1",
+        "/api/v2/coconut/search/x",
+        "/api/v2/coconut/users",
+        "/api/v2/coconut/https://example.org/",
+        "/api/v2/coconut//coconut.naturalproducts.net/api/auth/login",
+    ],
+)
+def test_relay_refuses_every_other_path(nginx_url, path):
+    assert _relay(nginx_url, "POST", path) == 404
+
+
+@pytest.mark.parametrize("path", list(RELAY))
+def test_relay_refuses_a_query_and_a_body_that_is_not_json(nginx_url, path):
+    assert _relay(nginx_url, "POST", path + "?url=https://example.org/") == 400
+    assert _relay(nginx_url, "POST", path, ctype="application/x-www-form-urlencoded") == 415
+    assert _relay(nginx_url, "POST", path, ctype="text/plain") == 415
+    assert _relay(nginx_url, "POST", path, ctype=None) == 415
+
+
+def test_relay_body_limits(nginx_url):
+    login, mutate, search = RELAY
+    assert _relay(nginx_url, "POST", login, b"{" + b" " * 9 * 1024 + b"}") == 413
+    assert _relay(nginx_url, "POST", search, b"{" + b" " * 9 * 1024 + b"}") == 413
+    assert _relay(nginx_url, "POST", mutate, b"{" + b" " * 3 * 1024 * 1024 + b"}") == 413
+
+
+def test_relay_without_an_upstream_is_a_502_and_login_is_rate_limited(nginx_url):
+    """No COCONUT behind this nginx (no DNS): a relayed call is nginx's 502, which the client
+    reads as "Could not reach COCONUT". The 5th login within the burst is 429 before it is
+    relayed. Only this test sends valid logins to this nginx."""
+    login, mutate, search = RELAY
+    assert _relay(nginx_url, "POST", mutate, Authorization="Bearer x") == 502
+    assert _relay(nginx_url, "POST", search) == 502
+    answers = [_relay(nginx_url, "POST", login) for _ in range(6)]
+    assert answers[:4] == [502] * 4, answers
+    assert answers[4:] == [429, 429], answers
+
+
+def _chunks(size: int):
+    yield b"{"
+    for _ in range(size // 1024):
+        yield b" " * 1024
+    yield b"}"
+
+
+def test_relay_refuses_a_chunked_body_over_the_limit(nginx_url):
+    """No Content-Length: the limit is met while the body is read (after the rate limits), still
+    413. Search and mutate here (login has the same directive; its budget belongs to the test
+    below)."""
+    import httpx
+
+    _, mutate, search = RELAY
+    for path, size in ((search, 9 * 1024), (mutate, 3 * 1024 * 1024)):
+        r = httpx.post(nginx_url + path, content=_chunks(size),
+                       headers={"Content-Type": "application/json"}, timeout=30)  # fmt: skip
+        assert r.request.headers.get("transfer-encoding") == "chunked"
+        assert r.status_code == 413, (path, r.status_code)
+
+
+_POSTS = r"""
+while read -r path xff; do
+  out=$(wget -q -O /dev/null --header "X-Forwarded-For: $xff" \
+        --header "Content-Type: application/json" --post-data '{}' \
+        "http://127.0.0.1:8080$path" 2>&1)
+  code=$(echo "$out" | sed -n 's/.*HTTP\/1\.1 \([0-9][0-9][0-9]\).*/\1/p' | head -n 1)
+  echo "${code:-200}"
+done
+"""
+
+
+def _relay_from(posts: list[tuple[str, str]]) -> list[int]:
+    """A fresh production nginx (no network at all: the relay reaches nothing, an allowed call
+    is 502) with the real_ip switch on for 127.0.0.1; each (path, client address) is POSTed from
+    inside the container with that address in X-Forwarded-For. Returns the statuses."""
+    docker = _docker_or_skip()
+    name = f"marcus-relaylimit-test-{os.getpid()}-{abs(hash(tuple(posts)))}"
+    args = [docker, "run", "-d", "--name", name, "--network", "none", "--read-only",
+            "--tmpfs", "/tmp", "--add-host", "api:127.0.0.1", *_NGINX_MOUNTS,
+            "-e", "MARCUS_REAL_IP_FROM=127.0.0.1", NGINX_IMAGE]  # fmt: skip
+    started = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    assert started.returncode == 0, started.stderr
+    try:
+        for _ in range(50):
+            ready = subprocess.run(
+                [docker, "exec", name, "sh", "-c", "test -f /tmp/nginx.pid"], capture_output=True
+            )
+            if ready.returncode == 0:
+                break
+            subprocess.run(["sleep", "0.1"])
+        lines = "".join(f"{path} {xff}\n" for path, xff in posts)
+        out = subprocess.run([docker, "exec", "-i", name, "sh", "-c", _POSTS], input=lines,
+                             capture_output=True, text=True, timeout=120)  # fmt: skip
+        assert out.returncode == 0, out.stderr
+        return [int(x) for x in out.stdout.split()]
+    finally:
+        subprocess.run([docker, "rm", "-f", name], capture_output=True, timeout=60)
+
+
+def test_relay_counts_an_ipv6_client_by_its_64():
+    login = "/api/v2/coconut/auth/login"
+    posts = [(login, "2001:db8:1:2::a")] * 4 + [
+        (login, "2001:db8:1:2:ffff:ffff:ffff:ffff"),  # same /64: limited
+        (login, "2001:db8:1:2:0:1::"),  # same /64, another spelling
+        (login, "2001:db8:1:3::a"),  # the next /64: its own budget
+        (login, "203.0.113.5"),
+        (login, "203.0.113.6"),  # IPv4: per address
+    ]
+    assert _relay_from(posts) == [502, 502, 502, 502, 429, 429, 502, 502, 502]
+
+
+@pytest.mark.parametrize(
+    ("path", "burst"),
+    [
+        ("/api/v2/coconut/auth/login", 10),
+        ("/api/v2/coconut/search", 10),
+        ("/api/v2/coconut/reports/mutate", 40),
+    ],  # fmt: skip
+)
+def test_relay_caps_every_call_in_total(path, burst):
+    """Many clients, one call each: past the total's burst (plus what its rate refills while
+    the burst runs) the relay answers 429, so no number of clients can push MARCUS over
+    COCONUT's limits."""
+    n = burst + 15
+    answers = _relay_from([(path, f"198.51.{i // 250}.{i % 250 + 1}") for i in range(n)])
+    assert answers[: burst + 1] == [502] * (burst + 1), answers
+    assert set(answers) == {502, 429}, answers
+    assert answers.count(429) >= 5, answers

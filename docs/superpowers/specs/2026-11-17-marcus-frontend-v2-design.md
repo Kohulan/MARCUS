@@ -239,7 +239,9 @@ v1 rough edges not carried over: dead feature links, the non-existent router lin
   at `/`, the API stays at `/api/v2`; the owner cookie (`Path=/api/v2`, SameSite=Strict)
   works without CORS.
 - CSP for the app: `default-src 'self'`; `connect-src 'self'` plus
-  `https://coconut.naturalproducts.net`, `https://pubchem.ncbi.nlm.nih.gov`, the Matomo host;
+  `https://pubchem.ncbi.nlm.nih.gov`, the Matomo host (COCONUT sends no CORS headers: since
+  2026-11-20 the browser reaches it only through the MARCUS relay `/api/v2/coconut/...`, same
+  origin; backend-v2/README.md "COCONUT relay");
   `script-src 'self'` plus the Matomo host; no inline scripts (Matomo snippet moved to a file).
 - Matomo **(decided)**: same tracker as v1 (`https://matomo.nfdi4chem.de/`, site id 7).
 - Tests: Vitest + Testing Library for components; Playwright e2e against the v2 fake

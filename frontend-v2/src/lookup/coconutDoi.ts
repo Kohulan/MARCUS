@@ -1,5 +1,6 @@
 // How many molecules COCONUT already holds for a DOI (v1 PdfViewerObject.checkInCoconut):
-// a tag search on citations, no login. Any failure is null.
+// a tag search on citations, no login, through the MARCUS relay (COCONUT_API). Any failure
+// is null.
 import { COCONUT_API } from "../coconut/coconutApi";
 import { fetchJson, isRecord } from "./fetchJson";
 

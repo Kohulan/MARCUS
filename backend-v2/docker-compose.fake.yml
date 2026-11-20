@@ -11,6 +11,12 @@
 # gateway), so the per-IP limits (new owners per hour, active papers, requests per minute)
 # are raised; per-owner limits and every other check stay as in docker-compose.yml.
 # YAML anchors do not cross files, so the shared worker settings are repeated here.
+#
+# COCONUT: a fake COCONUT (tests/fake_coconut/server.py) holds the name
+# coconut.naturalproducts.net on the internal network, and nginx trusts only the fake's test CA
+# (its CA bundle is replaced). The relay in docker/nginx.conf runs unchanged (fixed host, TLS
+# verification, SNI); nothing is ever sent to the real COCONUT: a request that somehow reached
+# it would fail certificate verification before any HTTP is sent.
 
 services:
   # The real DECIMER segmenter is replaced by worker-fake-segment below (both would consume
@@ -137,3 +143,36 @@ services:
       MARCUS_ENABLE_FAKE_ENGINES: "1"
       MARCUS_ANNOTATOR: fake
       MARCUS_FAKE_ANNOTATE_DELAY_S: "2"
+
+  fake-coconut:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Internal only (no route out), under COCONUT's name: Docker's DNS answers it with this
+    # container for everyone on the network, nginx's relay included.
+    networks:
+      internal:
+        aliases:
+          - coconut.naturalproducts.net
+    volumes:
+      - ./tests/fake_coconut:/fake:ro
+    command: ["python", "/fake/server.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 443), 2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    volumes:
+      - ./tests/fake_coconut/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+    # The fake holds COCONUT's name before nginx first resolves it.
+    depends_on:
+      fake-coconut:
+        condition: service_healthy

@@ -8,7 +8,7 @@ import { collectCspViolations, routeMatomo, uploadPaperViaApi } from "./helpers"
 // Exact, from Global Constraints (the Ketcher CSP as F1b narrowed it).
 const APP_CSP =
   "default-src 'self'; script-src 'self' https://matomo.nfdi4chem.de; " +
-  "connect-src 'self' https://coconut.naturalproducts.net https://pubchem.ncbi.nlm.nih.gov https://matomo.nfdi4chem.de; " +
+  "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov https://matomo.nfdi4chem.de; " +
   "img-src 'self' data: blob: https://matomo.nfdi4chem.de; style-src 'self'; font-src 'self'; " +
   "frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 const KETCHER_CSP =
