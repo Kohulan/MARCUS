@@ -650,6 +650,16 @@ describe("Paper view: annotation", () => {
     expect(within(p).queryByRole("button", { name: "Reset to model" })).toBeNull();
   });
 
+  it("an ended step whose annotation has not been read again still says Annotating…", async () => {
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      steps: [step({}), annStep({ status: "done" })],
+      ann: annotation({ status: "running", step: annStep() }),
+    });
+    expect(await within(await panel()).findByText("Annotating…")).toBeInTheDocument();
+    expect(within(await panel()).queryByRole("button", { name: "Annotate" })).toBeNull();
+  });
+
   it("reads the annotation again when its step ends", async () => {
     renderAt(paper([segment("s1")], { status: "processing" }), {
       doc: ANN_DOC,
@@ -658,7 +668,7 @@ describe("Paper view: annotation", () => {
     await within(await panel()).findByText("Annotating…");
     const get = vi.mocked(api.getAnnotation);
     const before = get.mock.calls.length;
-    get.mockResolvedValue(annotated());
+    get.mockResolvedValue(annotated({ step: annStep({ status: "done" }) }));
     vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), annStep({ status: "done" })] });
     await client.invalidateQueries({ queryKey: ["steps", ID] });
     expect(await within(await panel()).findByText("Model suggestion")).toBeInTheDocument();

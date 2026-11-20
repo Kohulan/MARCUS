@@ -130,9 +130,14 @@ export default function TextColumn({
   const annStep = newestAnnotate(steps);
   // The step a start made, until the steps show it (then its own status says).
   const [startedId, setStartedId] = useState<string | null>(null);
+  // Running: the step is active, a start is not in the steps yet, or the step has ended but
+  // the annotation has not been read since (no flash of the old state in between).
   const running =
     (annStep !== undefined && isStepActive(annStep.status)) ||
-    (startedId !== null && !steps.some((s) => s.id === startedId));
+    (startedId !== null && !steps.some((s) => s.id === startedId)) ||
+    (annStep !== undefined &&
+      annotation !== undefined &&
+      (annotation.step?.id !== annStep.id || annotation.step.status !== annStep.status));
   const values = annotation?.values ?? null;
   const positions = useMemo(() => (annotation ? shownPositions(annotation) : {}), [annotation]);
   const ranges = useMemo(
