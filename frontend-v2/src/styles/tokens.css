@@ -78,6 +78,23 @@
     inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55),
     0 5px 10px -7px rgba(15, 30, 22, 0.45);
 
+  /* Spacing: the landing-page-design skill's table (B2); nothing between, nothing outside */
+  --s-25: 2px;
+  --s-50: 4px;
+  --s-75: 8px;
+  --s-100: 12px;
+  --s-200: 16px;
+  --s-300: 24px;
+  --s-400: 32px;
+  --s-500: 40px;
+  --s-600: 48px;
+  --s-700: 64px;
+  --s-800: 80px;
+  --s-900: 96px;
+
+  /* Motion: the one curve (skill B7): 500ms for position, 300ms for colour and opacity */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
   /* Type */
   --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-text: "Geist", ui-sans-serif, system-ui, sans-serif;

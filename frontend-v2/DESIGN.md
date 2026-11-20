@@ -69,9 +69,9 @@ typography:
     lineHeight: 1.5
   display-acrostic:
     fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(34px, min(5.3vw, 8.8vh), 84px)"
+    fontSize: "72px"
     fontWeight: 400
-    lineHeight: 0.96
+    lineHeight: 1
     letterSpacing: "-0.035em"
   display-info:
     fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
@@ -169,12 +169,12 @@ components:
   nav-waterline-item:
     textColor: "{colors.ink}"
     rounded: "{rounded.pill}"
-    padding: "10px 18px"
+    padding: "12px 16px"
   footer-bubble:
     textColor: "{colors.text-2}"
     rounded: "{rounded.pill}"
-    padding: "3px 14px"
-    height: "30px"
+    padding: "4px 16px"
+    height: "24px"
   drop-ring:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
@@ -300,12 +300,14 @@ A muted field palette: warm paper and graphite rules, one deep forest green that
 
 ### Hierarchy
 - **Display** (Geist 700, clamp(36px, 4vw + 18px, 76px), line-height 0.92, -0.035em, uppercase, forest green): the one h1 per page, max about 14ch.
-- **Display acrostic** (the landing's h1 only; an owner-approved exception to Display = 700): the name spelled out, one word a line, uppercase, clamp(34px, min(5.3vw, 8.8vh), 84px), line-height 0.96. The initials M A R C U S are Geist 700 in forest green, the rest of each word Geist 400 in ink, "and" and "for" in muted. Screen readers get the plain name from a visually hidden copy; the drawn letters are aria-hidden.
+- **Display acrostic** (the landing's h1 only; an owner-approved exception to Display = 700): the name spelled out, one word a line, uppercase, on the type scale: 72px, 60px below 1280px wide or 800px tall (and below 1024px), 48px below 720px, 36px / 40px below 560px; line-height 1. The initials M A R C U S are Geist 700 in forest green, the rest of each word Geist 400 in ink, "and" and "for" in muted. Screen readers get the plain name from a visually hidden copy; the drawn letters are aria-hidden.
 - **Headline** (Geist 700, 30px, line-height 1, -0.02em, uppercase): section and card headings; 26px under 900px.
 - **Title** (Geist 700, 22px, line-height 1.2): names of things, such as a paper's file name or "Example paper"; sentence case and file case kept.
 - **Body** (Geist 400, 16px, line-height 1.6): prose, lead text capped at about 40ch.
 - **Body small** (Geist 400, 14px, line-height 1.5, text-2): card lines and notes, capped at about 42ch.
-- **Label** (Geist Mono 400, 11px, 0.05 to 0.08em, uppercase, muted): captions, readouts, specimen row heads, state words, footer.
+- **Label** (Geist Mono 400, 11px, 0.05 to 0.08em, uppercase, muted): captions, readouts, specimen row heads, state words, the workspace's thin footer.
+- **Landing, header and footer** follow the landing-page-design skill's type scale and spacing table (tokens.css --s-25 to --s-900) and its one curve (--ease, cubic-bezier(0.22, 1, 0.36, 1); 500ms for movement, 300ms for colour and opacity; transform and opacity only): the lead sentence Geist 400 18px / 28px, the facts line, the drop hint and the footer Geist Mono 400 12px / 16px, the nav items Geist Mono 500 12px / 16px, the drop ring's words Geist 700 16px / 24px, the sample pill Geist Mono 500 14px / 20px with 12px / 24px padding.
+- **Tagline** (the landing's second screen): "A machine finds and reads the structures. You decide which ones are right.", Geist 400 48px / 48px uppercase in ink (36px / 40px below 720px), max 680px, "You" Geist 700 in forest green. As it scrolls in, each word comes from a dimmed tone (50% opacity, "You" 60%: still 3:1 as large text) to full ink in reading order between 88% and 60% of the window height; once lit it stays lit. Pre-rendered, without IntersectionObserver and under reduced motion it is at full tone.
 - **Control label** (Geist Mono 500, 13px, 0.06em, uppercase; 12px in small pills, segments and the nav's items): every button and nav item.
 - **Data** (Geist Mono 400, 12px, line-height 1.5): SMILES and other machine strings, wrapping anywhere, never uppercased.
 
@@ -330,9 +332,9 @@ Secondary steps, each kept to one kind of thing:
 
 The app sits on one page: max width 1440px, 8px outer padding (12px at the bottom). The header (the mark and the Waterline pill) floats free above the ruled sheet, with no box or rule around it; the page below it carries the 1px line frame; the footer follows the page. Inside the frame, everything is rows of ruled cells. Cells share edges by sitting in a grid with a 1px gap over a line-coloured background, or by each cell ruling its own right and bottom edge, so the rules are always exactly 1px and never double.
 
-The header row: the mark on the left (24px inset), the Waterline pill on the right (10px 24px around it); below 560px the pill takes its own full-width row. Section insets are 24px horizontally (16px on phones); cell padding sits between 14px and 24px. Small gaps step 6 / 8 / 12 / 16 / 24px; the ruler tick unit is 8px and the glass-bed grid 16px.
+The header row: the mark on the left (24px inset), the Waterline pill on the right (12px 24px around it); below 560px the pill takes its own full-width row. Section insets are 24px horizontally (16px on phones); cell padding sits between 14px and 24px. Small gaps step 6 / 8 / 12 / 16 / 24px; the ruler tick unit is 8px and the glass-bed grid 16px.
 
-The review grid is auto-fill columns of at least 300px structure cells. Breakpoints observed: 560px (phone; the nav pill takes its own row), 600px (the About review grid is one column), 720px (phone insets), 860px (info pages stack), 1024px (the tool's minimum width: below it the tool shows a desktop-only note, the landing is one column, its drop ring says "Desktop screen needed", and the footer bubbles stop sticking and stack, centred), 1200px and 1280px (landing and workspace column changes). The landing is one screen: at 1440 × 900 and 1280 × 720 it does not scroll. Only the landing and the info pages are built for phones.
+The review grid is auto-fill columns of at least 300px structure cells. Breakpoints observed: 560px (phone; the nav pill takes its own row), 600px (the About review grid is one column), 720px (phone insets), 860px (info pages stack), 1024px (the tool's minimum width: below it the tool shows a desktop-only note, the landing is one column, its drop ring says "Desktop screen needed", and the landing's sample pill moves above the ring), 1200px (the footer bubbles stop sticking and stack, centred; landing and workspace column changes) and 1280px (the acrostic steps from 72px to 60px). The landing's first screen fills the window above the footer (the name, the ring and the sample pill in view down to 1280 × 720 and 1024 × 768); the tagline is the screen below it. Every page starts with a Skip to content link, out of sight until the keyboard reaches it. Only the landing and the info pages are built for phones.
 
 ## Elevation & Depth
 
@@ -391,17 +393,17 @@ Liquid glass on paper: tactile pills that are the only shiny thing on a matte sh
 - **Disabled:** 55% opacity, not-allowed cursor.
 
 ### Navigation (the Waterline)
-- **Style:** one clear glass pill (white 70% to 25%, blur 3px, saturate 1.8, glass shine and glass lift; no refraction filter, no WebGL), 4px inside padding, three items in Geist Mono 500 12px uppercase ink, each with its Font Awesome icon in green: About (circle-info), GitHub (github; opens in a new tab and says so to screen readers), Open the tool (arrow-right after the label).
-- **The drop:** the current page's item (aria-current="page"; none on the other pages) holds a drop of green water (a 14% to 30% green gradient with the water-drop shadow). Pointer or focus on another item stretches it there: the leading edge runs ahead in 240ms, the trailing edge follows in 440ms, then it settles with a squash and a 620ms ripple; it goes back to rest when pointer and focus leave. The pointer lifts a highlight on the rim. Positions are custom properties set through the CSSOM (style-src 'self' allows it).
+- **Style:** one clear glass pill (white 70% to 25%, blur 3px, saturate 1.8, glass shine and glass lift; no refraction filter, no WebGL), 4px inside padding, three items in Geist Mono 500 12px / 16px uppercase ink (12px / 16px padding, 8px to the 14px icon), each with its Font Awesome icon in green: About (circle-info), GitHub (github; opens in a new tab and says so to screen readers), Open the tool (arrow-right after the label).
+- **The drop:** the current page's item (aria-current="page"; none on the other pages) holds a drop of green water (a 14% to 30% green gradient with the water-drop shadow). Pointer or focus on another item slides it there by transform (500ms on the one curve; it takes the item's width at once), then a 600ms ripple settles it; it goes back to rest when pointer and focus leave. The pointer lifts a highlight on the rim. Its offset and width are custom properties set through the CSSOM (style-src 'self' allows it).
 - **Keys:** Arrow Left / Right, Home and End move focus along the items; focus is the 2px green outline at 1px offset, round.
-- **Fallbacks:** no stretch, ripple or rim light under reduced motion (the drop jumps); solid white with a control-border ring under reduced transparency; ButtonBorder edge and a Highlight-outlined drop in forced colours.
+- **Fallbacks:** no slide, ripple or rim light under reduced motion (the drop jumps and only fades); solid white with a control-border ring under reduced transparency; ButtonBorder edge and a Highlight-outlined drop in forced colours.
 - **Mobile:** below 560px the pill takes the full width under the mark.
 
 ### Footer (porcelain bubbles)
-Every page but the review workspace: three opaque porcelain bubbles, Geist Mono 10px uppercase in text-2 with green icons. Far left "© 2026 MARCUS" (copyright icon, "Copyright" for screen readers); middle "Built with [mug, gently rocking] by Kohulan.R at the Steinbeck Lab, Friedrich Schiller University Jena" (three links, new tab, no icons); far right "Disclaimer · Privacy" (scale-balanced, shield-halved). Each bubble is a white radial glaze (#FFFFFF to #EFEFE8) with the porcelain shadow and a soft highlight under the text. From 1024px the row sticks 12px above the window's bottom and follows the page in the flow, so at a page's end it rests under the content; below 1024px it is static and the bubbles stack, centred. Links are 24px tall targets. The review workspace keeps its thin mono line inside the page frame.
+Every page but the review workspace: three opaque porcelain bubbles, Geist Mono 12px / 16px uppercase in text-2 with 14px green icons, 4px / 16px padding. Far left "© 2026 MARCUS" (copyright icon, "Copyright" for screen readers); middle "Built with [mug, gently rocking] by Kohulan.R at the Steinbeck Lab, Friedrich Schiller University Jena" (three links, new tab, no icons); far right "Disclaimer · Privacy" (scale-balanced, shield-halved). Each bubble is a white radial glaze (#FFFFFF to #EFEFE8) with the porcelain shadow and a soft highlight under the text. From 1200px the row sticks 12px above the window's bottom and follows the page in the flow, so at a page's end it rests under the content; below 1200px it is static and the bubbles stack, centred. Links are 24px tall targets (a 4px hit area above and below each 16px line). The review workspace keeps its thin mono line inside the page frame.
 
 ### Drop ring (landing)
-The landing's drop zone is an empty benzene ring, 124px, drawn in control-border dashes on a white fill, with an upload arrow, "Drop a PDF here or browse" and "PDF up to 20 MB". One button (Enter, Space, click open the file picker). Hover and focus turn it green and draw its three double bonds; drag-over turns it orange, grows it 6% and runs the dashes (the Reading mark); a checked PDF closes the ring in accepted green with alternating double bonds (resonance) and "Uploading <file name>…" while the tool opens and uploads it; a refused file ("That file is not a PDF", "That PDF is larger than 20 MB") is struck through in charcoal like a rejected structure. Below 1024px it shows a monitor glyph and "Desktop screen needed" and takes no file. All motion is off under reduced motion.
+The landing's drop zone is an empty benzene ring, 124px, drawn in control-border dashes on a white fill, with an upload arrow, "Drop a PDF here or browse" and "PDF up to 20 MB". One button (Enter, Space, click open the file picker). Hover and focus turn it green and grow its three double bonds into place (opacity and scale); drag-over turns it orange, grows it 6% and runs the dashes (the Reading mark); a checked PDF closes the ring in accepted green with alternating double bonds (resonance) and "Uploading <file name>…" while the tool opens and uploads it; a refused file ("That file is not a PDF", "That PDF is larger than 20 MB") is struck through in charcoal like a rejected structure. Below 1024px it shows a monitor glyph and "Desktop screen needed" and takes no file. All motion is off under reduced motion. The ring's running dashes are the landing's one linear loop (a constant speed); everything else moves on the one curve.
 
 ### Icons
 Font Awesome Free 6.7.2 (CC BY 4.0, credited on the Disclaimer page), solid, regular and brands, imported by name and rendered by one Icon component as an inline `<svg viewBox><path>`: no icon font, no injected CSS. 1.05em, the text's colour (green in the nav and footer), always decorative beside a word.
