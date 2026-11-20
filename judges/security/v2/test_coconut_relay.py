@@ -216,7 +216,9 @@ def test_no_password_or_token_in_any_log(new_owner, fs_probe):
             assert canary not in logs, f"{canary[:10]}... in the logs of {container}"
     relay_lines = [ln for ln in _logs(nginx, since).splitlines() if f"{RELAY}/" in ln]
     assert len(relay_lines) >= 4, relay_lines
-    assert not any("?" in ln for ln in relay_lines), relay_lines
+    # the request with the query is logged by its path alone (status 400, no "?token=")
+    assert any(f'"POST {RELAY}/search HTTP/1.1" 400 ' in ln for ln in relay_lines), relay_lines
+    assert not any("?token=" in ln for ln in relay_lines), relay_lines
 
 
 def test_coconut_login_is_rate_limited(new_owner, fs_probe):
