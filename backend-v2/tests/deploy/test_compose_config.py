@@ -37,6 +37,7 @@ def _compose_config(*files: str) -> dict:
         "HOME": os.environ.get("HOME", "/tmp"),
         "POSTGRES_PASSWORD": "test",
         "REDIS_PASSWORD": "test",
+        "GRAFANA_ADMIN_PASSWORD": "test",  # the monitoring override
     }
     args = [docker, "compose", "--project-directory", str(ROOT), "--env-file", os.devnull]
     for name in files:
@@ -878,7 +879,12 @@ def test_real_ip_switch_is_wired_in_compose_and_documented(compose):
 @pytest.fixture(scope="module")
 def nginx_url():
     """The production nginx (config and entrypoint script) on a loopback port, no API behind
-    it: a request nginx lets through ends as 502, one it refuses for its size as 413."""
+    it: a request nginx lets through ends as 502, one it refuses for its size as 413.
+
+    It runs on Docker's default bridge, which has a route out but no embedded DNS (no
+    127.0.0.11): the relay's upstream name never resolves, so the relay tests below reach no
+    COCONUT. Never move it to a user-defined network (those have Docker's DNS): the relay would
+    then send their logins to the real COCONUT."""
     docker = _docker_or_skip()
     name = f"marcus-bodysize-test-{os.getpid()}"
     args = [
@@ -1174,8 +1180,10 @@ def test_coconut_relay_returns_only_status_body_and_content_type():
 
 
 def test_coconut_relay_limits():
-    """Login strictly per address and in total (credential stuffing; COCONUT sees every MARCUS
-    user as one address); bodies sized to what the client sends; the client's own timeouts."""
+    """Every call is limited per client (an IPv6 client by its /64), then in total: COCONUT sees
+    every MARCUS user as one address. Login is strict (credential stuffing); login and search
+    together stay under 60/min in total. Bodies sized to what the client sends; the client's
+    own timeouts."""
     conf = _strip_comments(NGINX_CONF.read_text())
     zones = {
         z: (key, int(rate))
@@ -1183,18 +1191,28 @@ def test_coconut_relay_limits():
             r"^\s*limit_req_zone\s+(\$\w+)\s+zone=(\w+):\w+\s+rate=(\d+)r/m;", conf, re.M
         )
     }
-    assert zones["coconut_login"] == ("$binary_remote_addr", zones["coconut_login"][1])
-    assert zones["coconut_login"][1] <= 5
-    assert zones["coconut_login_all"][0] == "$coconut_all"
+    assert "js_set $coconut_client coconut.clientKey;" in conf
     assert re.search(r"map \$request_method \$coconut_all \{\s*default all;\s*\}", conf)
+    for call in ("login", "search", "mutate"):
+        assert zones[f"coconut_{call}"][0] == "$coconut_client", call
+        assert zones[f"coconut_{call}_all"][0] == "$coconut_all", call
+    assert zones["coconut_login"][1] <= 5
+    assert zones["coconut_login_all"][1] + zones["coconut_search_all"][1] <= 50
     _, exact = _relay_blocks()
     login, mutate, search = (exact[p] for p in RELAY)
-    assert set(_directive(login, "limit_req")) == {
+    # per client first: a request refused for its client does not use up the total
+    assert _directive(login, "limit_req") == [
         "zone=coconut_login burst=3 nodelay",
         "zone=coconut_login_all burst=10 nodelay",
-    }
-    assert _directive(mutate, "limit_req")[0].startswith("zone=coconut_mutate ")
-    assert _directive(search, "limit_req")[0].startswith("zone=coconut_search ")
+    ]
+    assert _directive(search, "limit_req") == [
+        "zone=coconut_search burst=10 nodelay",
+        "zone=coconut_search_all burst=10 nodelay",
+    ]
+    assert _directive(mutate, "limit_req") == [
+        "zone=coconut_mutate burst=20 nodelay",
+        "zone=coconut_mutate_all burst=40 nodelay",
+    ]
     assert re.search(r"^\s*limit_req_status\s+429;", conf, re.M)
     assert _directive(login, "client_max_body_size") == ["8k"]
     assert _directive(search, "client_max_body_size") == ["8k"]
@@ -1228,14 +1246,22 @@ def test_relay_js_is_mounted_into_nginx(compose):
 
 
 def test_production_points_at_the_real_coconut_and_only_the_fake_stack_at_the_fake(compose):
-    """Production: nobody answers for COCONUT's name and nginx trusts the system CA bundle. The
-    fake stack: a fake COCONUT holds the name on the internal network, and nginx trusts only the
-    test CA, so even a lookup that reached the real host would fail verification before sending."""
-    for svc in compose["services"].values():
-        for net in svc.get("networks") or {}:
-            if isinstance(svc["networks"], dict) and svc["networks"][net]:
-                assert COCONUT_HOST not in (svc["networks"][net].get("aliases") or [])
-    assert not any("ca-certificates" in v for v in compose["services"]["nginx"]["volumes"])
+    """Production (base, + GPU, + monitoring): nobody answers for COCONUT's name and nginx
+    trusts the system CA bundle. The fake stack: a fake COCONUT holds the name on the internal
+    network, and nginx trusts only the test CA, so even a lookup that reached the real host would
+    fail verification before sending."""
+    for files in (
+        ("docker-compose.yml",),
+        ("docker-compose.yml", "docker-compose.gpu.yml"),
+        ("docker-compose.yml", "docker-compose.gpu.yml", "docker-compose.monitoring.yml"),
+    ):
+        services = _compose_config(*files)["services"]
+        for name, svc in services.items():
+            for net in (svc.get("networks") or {}).values():
+                assert COCONUT_HOST not in ((net or {}).get("aliases") or []), (files, name)
+        targets = [v["target"] for v in services["nginx"]["volumes"]]
+        assert not any("ca-certificates" in t or t.startswith("/etc/ssl") for t in targets), files
+        assert "fake-coconut" not in services, files
     services = _compose_config("docker-compose.yml", "docker-compose.fake.yml")["services"]
     fake = services["fake-coconut"]
     assert set(fake["networks"]) == {"internal"}
@@ -1343,3 +1369,94 @@ def test_relay_without_an_upstream_is_a_502_and_login_is_rate_limited(nginx_url)
     answers = [_relay(nginx_url, "POST", login) for _ in range(6)]
     assert answers[:4] == [502] * 4, answers
     assert answers[4:] == [429, 429], answers
+
+
+def _chunks(size: int):
+    yield b"{"
+    for _ in range(size // 1024):
+        yield b" " * 1024
+    yield b"}"
+
+
+def test_relay_refuses_a_chunked_body_over_the_limit(nginx_url):
+    """No Content-Length: the limit is met while the body is read (after the rate limits), still
+    413. Search and mutate here (login has the same directive; its budget belongs to the test
+    below)."""
+    import httpx
+
+    _, mutate, search = RELAY
+    for path, size in ((search, 9 * 1024), (mutate, 3 * 1024 * 1024)):
+        r = httpx.post(nginx_url + path, content=_chunks(size),
+                       headers={"Content-Type": "application/json"}, timeout=30)  # fmt: skip
+        assert r.request.headers.get("transfer-encoding") == "chunked"
+        assert r.status_code == 413, (path, r.status_code)
+
+
+_POSTS = r"""
+while read -r path xff; do
+  out=$(wget -q -O /dev/null --header "X-Forwarded-For: $xff" \
+        --header "Content-Type: application/json" --post-data '{}' \
+        "http://127.0.0.1:8080$path" 2>&1)
+  code=$(echo "$out" | sed -n 's/.*HTTP\/1\.1 \([0-9][0-9][0-9]\).*/\1/p' | head -n 1)
+  echo "${code:-200}"
+done
+"""
+
+
+def _relay_from(posts: list[tuple[str, str]]) -> list[int]:
+    """A fresh production nginx (no network at all: the relay reaches nothing, an allowed call
+    is 502) with the real_ip switch on for 127.0.0.1; each (path, client address) is POSTed from
+    inside the container with that address in X-Forwarded-For. Returns the statuses."""
+    docker = _docker_or_skip()
+    name = f"marcus-relaylimit-test-{os.getpid()}-{abs(hash(tuple(posts)))}"
+    args = [docker, "run", "-d", "--name", name, "--network", "none", "--read-only",
+            "--tmpfs", "/tmp", "--add-host", "api:127.0.0.1", *_NGINX_MOUNTS,
+            "-e", "MARCUS_REAL_IP_FROM=127.0.0.1", NGINX_IMAGE]  # fmt: skip
+    started = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    assert started.returncode == 0, started.stderr
+    try:
+        for _ in range(50):
+            ready = subprocess.run(
+                [docker, "exec", name, "sh", "-c", "test -f /tmp/nginx.pid"], capture_output=True
+            )
+            if ready.returncode == 0:
+                break
+            subprocess.run(["sleep", "0.1"])
+        lines = "".join(f"{path} {xff}\n" for path, xff in posts)
+        out = subprocess.run([docker, "exec", "-i", name, "sh", "-c", _POSTS], input=lines,
+                             capture_output=True, text=True, timeout=120)  # fmt: skip
+        assert out.returncode == 0, out.stderr
+        return [int(x) for x in out.stdout.split()]
+    finally:
+        subprocess.run([docker, "rm", "-f", name], capture_output=True, timeout=60)
+
+
+def test_relay_counts_an_ipv6_client_by_its_64():
+    login = "/api/v2/coconut/auth/login"
+    posts = [(login, "2001:db8:1:2::a")] * 4 + [
+        (login, "2001:db8:1:2:ffff:ffff:ffff:ffff"),  # same /64: limited
+        (login, "2001:db8:1:2:0:1::"),  # same /64, another spelling
+        (login, "2001:db8:1:3::a"),  # the next /64: its own budget
+        (login, "203.0.113.5"),
+        (login, "203.0.113.6"),  # IPv4: per address
+    ]
+    assert _relay_from(posts) == [502, 502, 502, 502, 429, 429, 502, 502, 502]
+
+
+@pytest.mark.parametrize(
+    ("path", "burst"),
+    [
+        ("/api/v2/coconut/auth/login", 10),
+        ("/api/v2/coconut/search", 10),
+        ("/api/v2/coconut/reports/mutate", 40),
+    ],  # fmt: skip
+)
+def test_relay_caps_every_call_in_total(path, burst):
+    """Many clients, one call each: past the total's burst (plus what its rate refills while
+    the burst runs) the relay answers 429, so no number of clients can push MARCUS over
+    COCONUT's limits."""
+    n = burst + 15
+    answers = _relay_from([(path, f"198.51.{i // 250}.{i % 250 + 1}") for i in range(n)])
+    assert answers[: burst + 1] == [502] * (burst + 1), answers
+    assert set(answers) == {502, 429}, answers
+    assert answers.count(429) >= 5, answers

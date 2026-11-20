@@ -33,12 +33,25 @@ COCONUT sends no CORS headers, so the browser cannot call it. nginx relays exact
 to the fixed host `https://coconut.naturalproducts.net` (TLS verified against the system CA
 bundle, SNI): `POST /api/v2/coconut/auth/login`, `/reports/mutate`, `/search` →
 `/api/auth/login`, `/api/reports/mutate`, `/api/search`. Anything else under
-`/api/v2/coconut/` is nginx's 404; other methods 405, a query 400, a non-JSON body 415. Only
-Host, Content-Type, Accept, a fixed User-Agent and (mutate only) Authorization go upstream;
-only the status, the body and its Content-Type come back (njs filter
-`docker/coconut-relay.js`). Logins are limited to 3/min per address (burst 3) and 30/min in
-total. The password and the token pass through and are never stored or logged (the relay's
-access log has the path only). The API stays without internet.
+`/api/v2/coconut/` is nginx's 404. In each of the three, in this order: a declared body over
+the limit 413 (8 KB login and search, 2 MB mutate), another method 405, a query 400, a non-JSON
+body 415, the rate limits 429, a chunked body over the limit 413. Only Host, Content-Type,
+Accept, a fixed User-Agent and (mutate only) Authorization go upstream; only the status, the
+body and its Content-Type come back (njs filter `docker/coconut-relay.js`). The password and
+the token pass through and are never stored or logged (the relay's access log has the path
+only). The API stays without internet.
+
+Limits, per client (an IPv6 client by its /64) and then in total, because COCONUT sees every
+MARCUS user as this one server: login 3/min per client (burst 3) and 30/min in total (burst
+10); search 10/min (burst 10) and 20/min in total (burst 10); mutate 60/min (burst 20) and
+120/min in total (burst 40). Login and search together stay at 50/min, under a typical 60/min
+per-address API limit at COCONUT. Owner item: ask the COCONUT team to allow-list the MARCUS
+server's address, so that COCONUT's own per-address limits never apply to all MARCUS users at
+once.
+
+"POST only" holds for this hop: COCONUT (Laravel) may treat a `_method` field in a JSON body as
+another method on the same fixed path. The relay adds no credential, so that gives a caller
+nothing their own token does not.
 
 The fake stack (`docker-compose.fake.yml`) adds a fake COCONUT (`tests/fake_coconut/`) under
 COCONUT's name on the internal network and makes nginx trust only its test CA: the same relay
@@ -133,7 +146,9 @@ switch that did not take fails the unit. It is not installed by anything here. O
   comma-separated single addresses, no names, no ranges) in `.env` as `MARCUS_REAL_IP_FROM=...`,
   run `docker compose -p marcus-v2 ... up -d nginx`, and check that `docker compose logs nginx`
   shows real client addresses (first field of each access line). `MARCUS_TRUSTED_PROXIES` (the
-  API) stays nginx's own address. A bad value stops nginx at start.
+  API) stays nginx's own address. A bad value stops nginx at start. **A blocker for the COCONUT
+  relay:** without it all users share one login budget (3/min, burst 3), and one user's typos
+  lock everyone out of the COCONUT login for about 20 s.
 - The Exclusive_Process setter (`nvidia-v100-setup.sh`, above) must be changed before the reboot test.
 - **Wipe the v2 data volumes before deploying c69cdbc** (or anything after it) over an older v2 stack: crops
   stored before it are already red/blue swapped, and the OCSR handler would swap them a second time.
