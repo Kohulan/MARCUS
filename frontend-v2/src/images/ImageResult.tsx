@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { useParams } from "react-router-dom";
 import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
 import { depictQuery, useReplyUrl } from "../api/depictions";
-import { engineName } from "../api/engines";
+import { engineName, firstRunNote } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isImageActive } from "../api/status";
@@ -184,6 +184,7 @@ function Result({
 
   const prediction = picked ?? mainPrediction(job);
   const status = mainStatus(job);
+  const slowNote = firstRunNote(job.engine);
   // The job engine failed and left nothing to show: the failure is the result (Retry).
   const failed = status === "failed" && mainPrediction(job) === null;
   const failedClass =
@@ -253,6 +254,7 @@ function Result({
                 <StateBadge state="reading" />
               </p>
               <ProgressBar value={null} label="Image progress" valueText="Reading" size="sm" />
+              {slowNote && <p className="ir-note">{slowNote}</p>}
             </div>
           )}
           {failed && (

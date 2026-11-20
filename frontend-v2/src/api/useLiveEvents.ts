@@ -24,7 +24,9 @@ const HIDDEN_CLOSE_MS = 60000;
  * - A tab hidden for more than 60 s closes its stream and stops polling (each open stream
  *   holds an HTTP/1.1 connection); shown again, it reopens and calls onEvent once.
  * - reconnect() opens a new stream when the mode is "ended" (after a prediction or page
- *   retry has reopened a finished paper or image job).
+ *   retry has reopened a finished paper or image job). Called while a stream is still open,
+ *   it is remembered: that stream may have read the job as finished before the new work was
+ *   accepted, so its `end` then opens one new stream instead of ending.
  */
 export function useLiveEvents(
   kind: "paper" | "image",
@@ -48,6 +50,7 @@ export function useLiveEvents(
     let hiddenTimer: ReturnType<typeof setTimeout> | null = null;
     let backoff = 0;
     let suspended = false; // closed because the tab was hidden too long
+    let again = false; // reconnect() came while a stream was open: its end opens a new one
 
     const fire = () => onEventRef.current();
     const parse = (data: unknown): unknown => {
@@ -85,6 +88,7 @@ export function useLiveEvents(
     const open = () => {
       closeStream();
       cancelReopen();
+      again = false; // a stream opened now reads the job after any accepted request
       const source = new EventSource(url);
       es = source;
       // Every handler ignores a stream that has since been replaced or closed.
@@ -116,8 +120,14 @@ export function useLiveEvents(
         "end",
         mine(() => {
           stopAll();
-          setMode("ended");
           fire();
+          if (again) {
+            backoff = 0;
+            setMode("connecting");
+            open();
+            return;
+          }
+          setMode("ended");
         }),
       );
       source.addEventListener(
@@ -160,7 +170,10 @@ export function useLiveEvents(
     };
 
     reopenEnded.current = () => {
-      if (current !== "ended") return;
+      if (current !== "ended") {
+        again = true;
+        return;
+      }
       backoff = 0;
       setMode("connecting");
       open();

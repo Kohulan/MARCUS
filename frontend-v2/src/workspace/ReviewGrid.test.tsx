@@ -243,6 +243,20 @@ describe("cards and their states", () => {
     expect(filter("To check")).toHaveTextContent("1");
   });
 
+  it("a card read again with DECIMER hand-drawn says its first run loads the model", async () => {
+    const note = "The first run can take about 30 s";
+    renderGrid(paper([segment("s1", { predictions: [] }), segment("s2", { predictions: [] })], { status: "processing" }), [
+      step({ segment_id: "s1", status: "failed", error_class: "timeout" }),
+      step({ segment_id: "s1", status: "queued", engine: "decimer-hand" }),
+      step({ segment_id: "s2", status: "running", engine: "molnextr" }),
+    ]);
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    await waitFor(() => expect(within(card("[01]")).getByText("Reading…")).toBeInTheDocument());
+    expect(card("[01]")).toHaveTextContent(note);
+    expect(within(card("[02]")).getByText("Reading…")).toBeInTheDocument();
+    expect(card("[02]")).not.toHaveTextContent(note);
+  });
+
   it("a failed OCSR step shows Failed, its reason and Try another engine", async () => {
     const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "x" });
     renderGrid(paper([segment("s1", { predictions: [] })]), [

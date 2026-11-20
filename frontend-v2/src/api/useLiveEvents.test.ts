@@ -210,6 +210,36 @@ describe("useLiveEvents", () => {
     expect(FakeEventSource.all).toHaveLength(1);
   });
 
+  // A run accepted while the old stream is still open (a re-run right after another one
+  // finished): that stream may already have read the paper as done and send `end`. The run's
+  // result must still arrive, so the end opens one new stream instead of ending.
+  it("reconnect() while open, then end: one new stream (the run is not lost)", () => {
+    const { hook, onEvent } = setup();
+    act(() => latest().emit("snapshot", '{"status":"processing"}'));
+    act(() => hook.result.current.reconnect());
+    expect(FakeEventSource.all).toHaveLength(1);
+    act(() => latest().emit("end", '{"status":"done"}'));
+    expect(FakeEventSource.all).toHaveLength(2);
+    expect(FakeEventSource.all[0]!.closed).toBe(true);
+    expect(hook.result.current.mode).toBe("connecting");
+    expect(onEvent).toHaveBeenCalledTimes(2); // the snapshot, then the end
+    act(() => latest().emit("snapshot", '{"status":"processing"}'));
+    expect(hook.result.current.mode).toBe("live");
+    // That stream's own end is final.
+    act(() => latest().emit("end", '{"status":"done"}'));
+    expect(FakeEventSource.all).toHaveLength(2);
+    expect(hook.result.current.mode).toBe("ended");
+  });
+
+  it("reconnect() while connecting, then end: one new stream", () => {
+    const { hook } = setup();
+    act(() => hook.result.current.reconnect());
+    act(() => latest().emit("snapshot", '{"status":"done"}'));
+    act(() => latest().emit("end", '{"status":"done"}'));
+    expect(FakeEventSource.all).toHaveLength(2);
+    expect(hook.result.current.mode).toBe("connecting");
+  });
+
   it("hidden for 61 s closes the stream and polling; visible reopens and calls onEvent once", () => {
     const { onEvent } = setup();
     const es = latest();

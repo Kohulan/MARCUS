@@ -3,7 +3,8 @@
 Called exactly as v1 (`backend/app/modules/ocsr_wrapper.py` get_decimer_prediction):
 `predict_SMILES(str(path), confidence=False, hand_drawn=hand_drawn)`; no molfile.
 
-The hand-drawn model loads on its first request only. decimer itself loads BOTH SavedModels
+The hand-drawn model loads on its first request only, unless MARCUS_PRELOAD_DECIMER_HAND is on
+(the GPU compose override sets it), then it loads at worker start as well. decimer itself loads BOTH SavedModels
 when `DECIMER.decimer` is imported (module level `get_models`), so the import runs with
 `tf.saved_model.load` wrapped: the hand-drawn model directory gets a `LazySavedModel` that
 loads the real model when first asked (`DecimerEngine(hand_drawn=True).load()`, or a call).
@@ -154,11 +155,20 @@ class DecimerEngine:
         return OcsrResult(smiles, None)
 
 
+def preload_hand() -> bool:
+    """MARCUS_PRELOAD_DECIMER_HAND=1: load the hand-drawn model at worker start too (GPU hosts:
+    ~23 s more start time, no extra GPU memory inside the TF budget), so its first request does
+    not wait for the model. Default off: on CPU the load costs ~76 s and most users never ask."""
+    return os.environ.get("MARCUS_PRELOAD_DECIMER_HAND", "").strip().lower() in ("1", "true", "yes")
+
+
 def register(name: Engine) -> None:
     """Called by marcus.workers.ocsr for each configured engine of this module."""
     if Engine(name) is Engine.DECIMER:
         register_engine(Engine.DECIMER, lambda: DecimerEngine(hand_drawn=False))
     elif Engine(name) is Engine.DECIMER_HAND:
-        register_engine(Engine.DECIMER_HAND, lambda: DecimerEngine(hand_drawn=True), preload=False)
+        register_engine(
+            Engine.DECIMER_HAND, lambda: DecimerEngine(hand_drawn=True), preload=preload_hand()
+        )
     else:
         raise ValueError(f"not a DECIMER engine: {name!r}")

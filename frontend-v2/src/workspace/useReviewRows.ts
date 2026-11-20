@@ -1,5 +1,7 @@
 import { useMemo } from "react";
+import { firstRunNote } from "../api/engines";
 import { reasonText } from "../api/reasons";
+import { isStepActive } from "../api/status";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { stateOf, type CardState } from "./cardState";
 import { newestFirst } from "./pageFailures";
@@ -13,6 +15,8 @@ export type ReviewRow = {
   /** For a failed structure: the reason (reasonText) and the engine that failed. */
   reason: string | null;
   failedEngine: string | null;
+  /** For a structure being read: firstRunNote of the engine reading it. */
+  readingNote: string | null;
 };
 
 const NO_STEPS: StepOut[] = [];
@@ -51,6 +55,8 @@ export function useReviewRows(
           state,
           reason: newest ? reasonText(newest.error_class) : null,
           failedEngine: newest?.engine ?? null,
+          readingNote:
+            state === "reading" ? firstRunNote(own.find((s) => isStepActive(s.status))?.engine) : null,
         };
       }),
     [segments, stepsBySegment, paper],
