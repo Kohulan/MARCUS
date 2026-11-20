@@ -30,8 +30,9 @@
 # The budgets cap the frameworks' allocators; every process's CUDA context (a few hundred MB)
 # comes on top. Each value can be changed from the environment without editing this file.
 #
-# Paper annotation (owner decision 2026-11-20): llama-server runs in its own container on the
-# internal network only (no port published, no internet), the GGUF mounted read-only from the
+# Paper annotation (owner decision 2026-11-20): llama-server runs in its own container on its own
+# internal network `llm`, shared only with worker-llm (no port published, no internet, no other
+# container can reach it), the GGUF mounted read-only from the
 # host (MARCUS_LLM_GGUF; never copied into an image). It must be readable by the container user
 # (MARCUS_LLM_USER, default 10001:10001; e.g. the file owner's "$(id -u):$(id -g)"). worker-llm
 # (the api image) consumes q.llm and calls it; the API offers annotation (MARCUS_ANNOTATE_ENABLED)
@@ -128,7 +129,7 @@ services:
       - ALL
     user: ${MARCUS_LLM_USER:-10001:10001}
     networks:
-      - internal
+      - llm
     volumes:
       - type: bind
         source: ${MARCUS_LLM_GGUF:-/srv/marcus/models/qwen3.5-9b-marcus-v1-Q8_0.gguf}
@@ -161,6 +162,7 @@ services:
       - ALL
     networks:
       - internal
+      - llm
     volumes:
       - data:/data:ro
     depends_on:
@@ -184,3 +186,8 @@ services:
       MARCUS_ANNOTATE_MODEL: ${MARCUS_ANNOTATE_MODEL:-qwen3.5-9b-marcus-v1}
       MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_ANNOTATE_MODEL_VERSION:-Q8_0 llama.cpp b12554}
     mem_limit: 1g
+
+networks:
+  # llama-server and worker-llm only (tests/deploy): no route out, no other member.
+  llm:
+    internal: true

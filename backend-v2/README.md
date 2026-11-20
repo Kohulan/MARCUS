@@ -144,7 +144,7 @@ On demand per paper (`POST /api/v2/papers/{id}/annotation`, routes in
 paper's Docling text (title, abstract, introduction, as trained), asks the MARCUS model and
 locates every value in the whole text. The GPU override runs the model in llama.cpp's
 `llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter commit 7fce543 for the
-V100) on the internal network only, with the GGUF mounted read-only:
+V100) on its own internal network, shared only with `worker-llm`, with the GGUF mounted read-only:
 
 ```bash
 MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf MARCUS_LLM_USER="$(stat -c %u:%g "$MARCUS_LLM_GGUF")" \
