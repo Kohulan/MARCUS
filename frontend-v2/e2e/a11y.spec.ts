@@ -35,6 +35,7 @@ async function routeApi(page: Page): Promise<void> {
     if (get && path === `/papers/${PID}`) return reply(route, fixture("paper.json"));
     if (get && path === `/papers/${PID}/steps`) return reply(route, fixture("steps.json"));
     if (get && path === `/papers/${PID}/text`) return reply(route, fixture("text.json"));
+    if (get && path === `/papers/${PID}/annotation`) return reply(route, fixture("annotation.json"));
     if (get && /^\/papers\/[^/]+\/pages\/\d+\/image$/.test(path)) {
       return reply(route, fixture("page.png"), "image/png");
     }
@@ -103,6 +104,17 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     const view = page.getByRole("region", { name: "Paper view" });
     await expect(view).toBeVisible();
     await expect(view.getByRole("button", { name: "Structure [01] on page 1" })).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
+
+  test("paper view: the annotation, a value shown in the text, and its corrections", async ({ page }) => {
+    await page.goto(`/app/papers/${PID}?view=paper`);
+    const ann = page.getByRole("region", { name: "Annotation" });
+    await ann.getByRole("button", { name: "NMR (5 in the text)" }).click();
+    await expect(page.locator(".pv-mark--current")).toHaveText("NMR");
+    await expectNoA11yViolations(page);
+    await ann.getByRole("button", { name: "Edit" }).click();
+    await expect(ann.getByLabel("Abbreviations")).toHaveValue("HPLC\nNMR\nHRMS");
     await expectNoA11yViolations(page);
   });
 
