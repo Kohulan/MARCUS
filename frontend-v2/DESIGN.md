@@ -409,6 +409,13 @@ Font Awesome Free 6.7.2 (CC BY 4.0, credited on the Disclaimer page), solid, reg
 ### Specimen label
 A data table drawn like a herbarium label: a charcoal header bar with on-charcoal mono caption, then rows on surface ruled by hair, mono uppercase row heads in muted, values in ink. A failed specimen lies on the hatched ground.
 
+### Annotation (Paper view)
+The local model's suggestion for a paper, above its text in the Paper view's middle column (the text below scrolls on its own, the annotation at most 45% of the column).
+- **Start:** the small clear pill Annotate and one line in text-2 ("A model on this server suggests organism, place and compound names."); while it runs, "Annotating…" in the Reading shape (dashed orange edge), in the panel and in the status bar. A failure says why in ink, with Try again.
+- **Values:** a specimen label: the charcoal head reads "Model suggestion" (or "Curated" once corrected) with the model's name in mono; one row per field that has values, the field's label as the mono row head. Each value found in the text is a square surface button with a control-border edge and its count in mono; the value whose occurrence the text shows fills forest green (on-green text, aria-current). A value not in the text is no button: a dashed edge and the count 0.
+- **Marks:** every occurrence in the text is a `<mark>` on selection mint with a 1px green underline; the occurrence a click went to is filled forest green with on-green text. A click shows the first occurrence, the next click the next (around to the first), centred in the text; a screen reader hears "value: 2 of 5". Marks are React text in `<mark>` elements, never HTML from the model.
+- **Corrections:** Edit opens one labelled box per field (one value a line), Save (green small pill) and Cancel; Escape cancels. Reset to model asks first.
+
 ### Stamp
 A round 2px ring rotated -12deg with Geist Mono 500 uppercase text: 66px / 10px on cards, 128px / 17px large. Accepted in accepted green, rejected in charcoal. When a decision is made it lands from scale 1.4 to rest in 160ms; no motion under reduced motion.
 
