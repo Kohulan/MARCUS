@@ -19,6 +19,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from marcus.core.annotation import doc_pools, resolve_ref
+
 MAX_CHARS = 6500
 ABSTRACT_MAX = 3200
 KEEP_LABELS = {"title", "section_header", "text", "paragraph", "list_item"}
@@ -71,32 +73,35 @@ def clean(t: str) -> str:
 
 
 def linearize(d: dict) -> list[dict]:
-    """Body items in Docling reading order: {label, text, page}."""
+    """Body items in Docling reading order: {label, text, page}. A ref is walked once (the first
+    time it is met); refs that do not resolve (marcus.core.annotation.resolve_ref, as the Paper
+    view's walk) are skipped."""
     out: list[dict] = []
     seen: set[str] = set()
+    texts, groups = doc_pools(d)
 
-    def resolve(ref: str):
-        _, kind, idx = ref.split("/")
-        return kind, d[kind][int(idx)]
-
-    def walk(node):
-        for child in node.get("children", []):
-            ref = child["$ref"]
-            if ref in seen:
+    def walk(node: object) -> None:  # recursive, as trained: too deep a document raises
+        kids = node.get("children") if isinstance(node, dict) else None
+        for child in kids if isinstance(kids, list) else []:
+            ref = child.get("$ref") if isinstance(child, dict) else None
+            found = resolve_ref(ref, texts, groups)
+            if found is None or ref in seen:
                 continue
             seen.add(ref)
-            kind, item = resolve(ref)
+            kind, item = found
+            if not isinstance(item, dict):
+                continue
             if kind == "texts":
-                page = item["prov"][0]["page_no"] if item.get("prov") else None
-                out.append(
-                    {"label": item.get("label"), "text": clean(item.get("text", "")), "page": page}
-                )
-                walk(item)  # list items / inline groups may nest
-            elif kind == "groups":
-                walk(item)
-            # pictures / tables: skipped; their child texts are figure-internal
+                prov, text = item.get("prov"), item.get("text")
+                first = prov[0] if isinstance(prov, list) and prov else None
+                page = first.get("page_no") if isinstance(first, dict) else None
+                text = clean(text if isinstance(text, str) else "")
+                out.append({"label": item.get("label"), "text": text, "page": page})
+            # texts: list items / inline groups may nest; groups: walked. pictures / tables
+            # are not texts or groups refs: skipped, their child texts are figure-internal
+            walk(item)
 
-    walk(d.get("body", {}))
+    walk(d.get("body"))
     return out
 
 

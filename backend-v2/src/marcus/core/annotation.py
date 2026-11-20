@@ -264,6 +264,27 @@ def _block(item: object) -> str | None:
     return text
 
 
+def resolve_ref(ref: object, texts: list, groups: list) -> tuple[str, object] | None:
+    """("texts" or "groups", the item) a child's `$ref` points at; None for anything else (not
+    `#/texts/i` or `#/groups/i`, or an index past the end)."""
+    m = _REF.fullmatch(ref) if isinstance(ref, str) else None
+    if m is None:
+        return None
+    pool = texts if m.group(1) == "texts" else groups
+    digits = m.group(2)
+    i = int(digits) if len(digits) < 10 else len(pool)  # 10 digits: past any real list
+    return (m.group(1), pool[i]) if i < len(pool) else None
+
+
+def doc_pools(doc: dict) -> tuple[list, list]:
+    """(texts, groups) of a Docling document, [] for one that is missing or not a list."""
+    texts, groups = doc.get("texts"), doc.get("groups")
+    return (
+        texts if isinstance(texts, list) else [],
+        groups if isinstance(groups, list) else [],
+    )
+
+
 def docling_blocks(doc: object) -> list[str]:
     """The texts of the Paper view's headings and paragraphs, in its order: `body.children`
     walked depth first (`#/texts/i` is texts[i] followed by its own children, `#/groups/i` is
@@ -271,11 +292,10 @@ def docling_blocks(doc: object) -> list[str]:
     body, the texts in array order. Blank texts are left out."""
     if not isinstance(doc, dict):
         return []
-    texts = doc.get("texts") if isinstance(doc.get("texts"), list) else []
+    texts, groups = doc_pools(doc)
     body = doc.get("body")
     if not isinstance(body, dict) or not isinstance(body.get("children"), list):
         return [t for t in map(_block, texts) if t is not None]
-    groups = doc.get("groups") if isinstance(doc.get("groups"), list) else []
     out: list[str] = []
     walking: set[str] = set()  # the refs on the current path (a ref back to one is skipped)
     stack: list[tuple] = [(iter(body["children"]), None)]  # iterative: no recursion limit
@@ -287,20 +307,18 @@ def docling_blocks(doc: object) -> list[str]:
             walking.discard(ref_of_frame)
             continue
         ref = child.get("$ref") if isinstance(child, dict) else None
-        m = _REF.fullmatch(ref) if isinstance(ref, str) else None
-        if m is None or m.group(0) in walking:
+        found = resolve_ref(ref, texts, groups)
+        if found is None or ref in walking:
             continue
-        i = int(m.group(2))
-        pool = texts if m.group(1) == "texts" else groups
-        item = pool[i] if i < len(pool) else None
-        if m.group(1) == "texts":
+        kind, item = found
+        if kind == "texts":
             text = _block(item)
             if text is not None:
                 out.append(text)
         kids = item.get("children") if isinstance(item, dict) else None
         if isinstance(kids, list):
-            walking.add(m.group(0))
-            stack.append((iter(kids), m.group(0)))
+            walking.add(ref)
+            stack.append((iter(kids), ref))
     return out
 
 

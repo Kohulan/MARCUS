@@ -59,3 +59,21 @@ def test_emails_are_removed_with_their_label():
 
 def test_a_document_without_text_gives_an_empty_input():
     assert model_input({"body": {"children": []}, "texts": []}) == ""
+
+
+def test_refs_the_paper_view_skips_are_skipped_not_raised():
+    """Refs past the end, malformed refs and items (docling_blocks skips them) do not raise; the
+    readable texts still come through."""
+    doc = _doc([("title", "Clerodane Diterpenoids from Casearia sylvestris"),
+                ("section_header", "Abstract"), ("text", ABSTRACT)])  # fmt: skip
+    doc["body"]["children"][1:1] = [
+        {"$ref": "#/texts/99"},
+        {"$ref": "#/groups/0"},
+        {"$ref": "#/texts/" + "9" * 5000},
+        {"$ref": 3},
+        "not a child",
+        None,
+    ]
+    doc["groups"] = [{"children": [{"$ref": "#/texts/77"}, {"oops": 1}]}, None]
+    expected = f"Clerodane Diterpenoids from Casearia sylvestris\tABSTRACT: {ABSTRACT}"
+    assert model_input(doc) == expected
