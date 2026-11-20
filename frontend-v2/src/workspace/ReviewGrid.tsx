@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "../api/client";
 import { asEngine, engineName } from "../api/engines";
 import { BulkPartialError, useBulkCuration } from "../api/queries";
-import { isPaperBusy } from "../api/status";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
+import { isPaperReading } from "./annotation";
 import { filterOf, hasDrawing, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
@@ -217,7 +217,7 @@ export default function ReviewGrid({
         <p className="rg-empty">
           {rows.length > 0
             ? "None here."
-            : isPaperBusy(paper.status)
+            : isPaperReading(paper, ws.steps)
               ? "Structures appear here as pages are read."
               : "No structures found."}
         </p>

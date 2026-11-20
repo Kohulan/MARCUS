@@ -7,7 +7,8 @@ split and deduplicated) and locates every value in the paper's whole text as the
 shows it (docling_blocks + Locator). The result goes to the planner, which checks it again
 before storing it (pipeline._check_annotate_result).
 
-Input problems are final (BadInput): no text file, a file that is not a Docling document, no
+Input problems are final (BadInput): no text file, one over MAX_TEXT_BYTES, a file that is not a
+Docling document, no
 title/abstract/introduction text. An answer outside the schema is final too (BadResult): the
 decoding is greedy, so a retry gives the same answer.
 """
@@ -15,6 +16,7 @@ decoding is greedy, so a retry gives the same answer.
 import json
 import time
 
+from marcus.core import annotation as ann
 from marcus.core.annotation import BadOutput, Locator, docling_blocks, parse_output, positions
 from marcus.core.enums import StepKind
 from marcus.core.pipeline import BadResult
@@ -45,6 +47,8 @@ def get_annotator():
 def _document(step) -> dict:
     path = paper_dir(step.paper_id) / "text.json"
     try:
+        if path.stat().st_size > ann.MAX_TEXT_BYTES:  # read under the worker's 1g mem_limit
+            raise BadInput("the paper's text is too large")
         doc = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise BadInput("the paper has no text") from None

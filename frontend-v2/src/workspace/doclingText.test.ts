@@ -1,6 +1,18 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DoclingDoc } from "../api/types";
-import { doclingBlocks } from "./doclingText";
+import { doclingBlocks, type TextBlock } from "./doclingText";
+
+/**
+ * The parity fixture shared with the backend (backend-v2 tests/core/test_annotation.py): the
+ * same document must give the same blocks here and in marcus.core.annotation.docling_blocks,
+ * whose positions the annotation marks use (review A-M4).
+ */
+const PARITY = JSON.parse(
+  // vitest runs in frontend-v2/ (as the e2e specs that read backend-v2 files)
+  readFileSync(resolve("../backend-v2/tests/fixtures/docling_parity.json"), "utf8"),
+) as { doc: DoclingDoc; blocks: TextBlock[] };
 
 const text = (i: number, label: string, value: string) => ({
   self_ref: `#/texts/${i}`,
@@ -98,5 +110,12 @@ describe("doclingBlocks", () => {
     const hostile = "<img src=x onerror=window.__xss=1>";
     const doc: DoclingDoc = { texts: [text(0, "text", hostile)] };
     expect(doclingBlocks(doc)).toEqual([{ kind: "paragraph", text: hostile }]);
+  });
+});
+
+describe("doclingBlocks parity with the backend", () => {
+  it("gives the shared fixture's blocks", () => {
+    expect(PARITY.blocks.length).toBeGreaterThan(5);
+    expect(doclingBlocks(PARITY.doc)).toEqual(PARITY.blocks);
   });
 });

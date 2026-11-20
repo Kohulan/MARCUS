@@ -66,10 +66,15 @@ export default function App() {
   return (
     <ToastProvider>
       <GlassFilter />
+      {/* The first stop for the keyboard: past the header to the page (skill B10). A plain
+          fragment link, so it works in the pre-rendered page before any script. */}
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
       <div className="frame">
         <div className="sheet">
           <Header />
-          <div className="sheet__page">
+          <div className="sheet__page" id="main">
             <AppRoutes />
           </div>
           <Footer />

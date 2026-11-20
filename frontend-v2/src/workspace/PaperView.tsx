@@ -9,9 +9,9 @@ import {
   type RefObject,
 } from "react";
 import { reasonText } from "../api/reasons";
-import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
+import { isPaperReading } from "./annotation";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
@@ -127,7 +127,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const busy = isPaperBusy(paper.status);
+  const busy = isPaperReading(paper, steps); // not while only its annotation runs
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
   const pages = paper.pages ?? 0;
   const images = useMemo(() => pageImages(steps, pages, busy), [steps, pages, busy]);

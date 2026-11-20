@@ -6,6 +6,7 @@ import {
   annotationError,
   blockRanges,
   FIELD_MAX,
+  fieldMax,
   hitsOf,
   linesOf,
   newestAnnotate,
@@ -182,6 +183,25 @@ describe("annotation helpers", () => {
     );
   });
 
+  it("takes each field's limit from the API's fields, the client table only as a fallback", () => {
+    const label = (key: string) => key;
+    const fields = [
+      { key: "Kingdom", label: "Kingdom", max_length: 10 },
+      { key: "geo_location", label: "Place" },
+    ];
+    expect(fieldMax(fields, "Kingdom")).toBe(10);
+    expect(fieldMax(fields, "geo_location")).toBe(348); // no max_length: the client table
+    expect(fieldMax([{ key: "Kingdom", label: "K", max_length: 0 }], "Kingdom")).toBe(60);
+    expect(fieldMax([], "constructor")).toBeUndefined();
+    expect(valuesProblem({ Kingdom: ["x".repeat(11)] }, label, fields)).toBe(
+      "A value in Kingdom is longer than 10 characters.",
+    );
+    expect(valuesProblem({ Kingdom: ["x".repeat(10)] }, label, fields)).toBeNull();
+    expect(valuesProblem({ geo_location: ["x".repeat(349)] }, label, fields)).toBe(
+      "A value in geo_location is longer than 348 characters.",
+    );
+  });
+
   it("compares value sets field by field (a missing field is none)", () => {
     expect(sameValues({ a: ["x"], b: [] }, { a: ["x"] })).toBe(true);
     expect(sameValues({ a: ["x", "y"] }, { a: ["y", "x"] })).toBe(false);
@@ -227,6 +247,10 @@ describe("annotation helpers", () => {
     );
     expect(annotationError(new ApiError(429, "rate limited", 20))).toBe(
       "Too many changes, try again in a minute",
+    );
+    // a start is not a change: its own limit (5 a minute) has its own words (F3)
+    expect(annotationError(new ApiError(429, "rate limited", 20), "start")).toBe(
+      "Too many starts, try again in a minute",
     );
     expect(annotationError(new ApiError(503, "The server is busy, try again in a moment."))).toBe(
       "The server is busy, try again in a moment.",

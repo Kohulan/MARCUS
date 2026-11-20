@@ -144,14 +144,15 @@ On demand per paper (`POST /api/v2/papers/{id}/annotation`, routes in
 paper's Docling text (title, abstract, introduction, as trained), asks the MARCUS model and
 locates every value in the whole text. The GPU override runs the model in llama.cpp's
 `llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter commit 7fce543 for the
-V100) on the internal network only, with the GGUF mounted read-only:
+V100) on its own internal network, shared only with `worker-llm`, with the GGUF mounted read-only:
 
 ```bash
 MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf MARCUS_LLM_USER="$(stat -c %u:%g "$MARCUS_LLM_GGUF")" \
   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-`worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
+Measured on the jarvis V100 (2026-11-20): 8.9 GB of GPU memory at ctx 8192, about 2 s per short
+paper. `worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
 picked from the text by fixed rules). Without either, the API answers 503 (`annotate_enabled`).
 Real-model smoke test, outside any stack (the sample PDF through docling, then the step's own
 handler against llama-server): `MARCUS_LLM_GGUF=... ops/annotate_smoke.sh` (`--cpu` without a

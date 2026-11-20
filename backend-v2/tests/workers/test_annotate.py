@@ -273,3 +273,22 @@ def test_a_document_nested_too_deep_for_the_input_builder_is_bad_input(stub):
     with pytest.raises(BadInput):
         annotate(view(paper_id=_paper_with_text(doc)), None)
     assert stub.requests == []
+
+
+def test_a_text_larger_than_the_cap_is_bad_input_and_never_parsed(stub, monkeypatch):
+    """worker-llm runs under mem_limit 1g: a Docling document over ann.MAX_TEXT_BYTES (the API's
+    cap too) is refused from its size, before it is read. Measured: parsing a 64 MB Docling-like
+    document peaks at about 365 MB of memory."""
+    pid = _paper_with_text()
+    size = (paper_dir(pid) / "text.json").stat().st_size
+    monkeypatch.setattr(ann, "MAX_TEXT_BYTES", size - 1)
+    with pytest.raises(BadInput, match="too large"):
+        annotate(view(paper_id=pid), None)
+    assert stub.requests == []
+
+
+def test_the_text_cap_is_shared_with_the_api():
+    from marcus.api import annotation as api_ann
+
+    assert ann.MAX_TEXT_BYTES == 64 * 2**20
+    assert not hasattr(api_ann, "MAX_TEXT_BYTES") or api_ann.MAX_TEXT_BYTES is ann.MAX_TEXT_BYTES

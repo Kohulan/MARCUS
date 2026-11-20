@@ -154,6 +154,19 @@ describe("App routes", () => {
     expect(container.querySelector(".frame > .sheet")).not.toBeNull();
   });
 
+  it.each(["/", "/about", "/privacy"])(
+    "on %s the first focusable element is Skip to content, and it leads to the page's main",
+    (path) => {
+      const { container } = renderAt(path);
+      const first = container.querySelector<HTMLElement>("a[href], button, input, [tabindex]");
+      expect(first).toHaveTextContent("Skip to content");
+      expect(first).toHaveAttribute("href", "#main");
+      const target = container.querySelector("#main");
+      expect(target).not.toBeNull();
+      expect(target!.querySelector("main") ?? target).toBe(screen.getByRole("main"));
+    },
+  );
+
   it("renders the not-found page for an unknown path", () => {
     renderAt("/no-such-page");
     expect(screen.getByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();

@@ -37,9 +37,13 @@ export type SubmitFormProps = {
   paper: { id: string; title: string | null; doi: string | null };
   /** The accepted structures to send, in (page, idx) order. */
   structures: SubmitStructure[];
-  /** Starting values for the paper's fields (for example a submission title). */
+  /**
+   * Starting values for the paper's fields (for example a submission title). Read when the
+   * form opens; organisms that come later (a new array) still start the form if the curator
+   * has not changed its organisms yet.
+   */
   initial?: Partial<PaperFields>;
-  /** Said by the organisms when their starting values are a model's suggestion. */
+  /** Said by the organisms while they are the starting ones of `initial` (a model's suggestion). */
   organismsNote?: string | undefined;
   onClose: () => void;
 };
@@ -88,7 +92,26 @@ export default function SubmitForm({
   const busy = useRef(false);
   // What the form started with, to ask before Close throws typed values away.
   const snapshot = JSON.stringify([fields, rows]);
-  const [startSnapshot] = useState(snapshot);
+  const [startSnapshot, setStartSnapshot] = useState(snapshot);
+
+  // Organisms that arrive after the form opened (the annotation answered late) start it as
+  // if they had been there, unless the curator has changed the organisms meanwhile.
+  const late = initial?.organisms;
+  const [seenOrganisms, setSeenOrganisms] = useState(late);
+  const [startOrganisms, setStartOrganisms] = useState(fields.organisms);
+  const [fromInitial, setFromInitial] = useState(Boolean(late?.length));
+  if (late !== seenOrganisms) {
+    setSeenOrganisms(late);
+    const untouched = JSON.stringify(fields.organisms) === JSON.stringify(startOrganisms);
+    if (late?.length && untouched && phase.kind === "form") {
+      const [startPaper, startRowsSeen] = JSON.parse(startSnapshot) as [PaperFields, unknown];
+      setFields((f) => ({ ...f, organisms: late }));
+      setStartOrganisms(late);
+      setStartSnapshot(JSON.stringify([{ ...startPaper, organisms: late }, startRowsSeen]));
+      setFromInitial(true);
+    }
+  }
+  const note = fromInitial && organismsNote ? organismsNote : undefined;
 
   function close() {
     if (busy.current) return;
@@ -255,16 +278,16 @@ export default function SubmitForm({
                 onChange={(e) => setPaper("comment", e.target.value)}
               />
             </Field>
-            {organismsNote ? (
+            {note ? (
               <p id="coconut-org-note" className="mono-label coconut-paper__note">
-                {organismsNote}
+                {note}
               </p>
             ) : null}
             {fields.organisms.map((o, i) => (
               <OrganismFields
                 key={i}
                 idBase={`coconut-org-${i}`}
-                describedBy={organismsNote ? "coconut-org-note" : undefined}
+                describedBy={note ? "coconut-org-note" : undefined}
                 label={i === 0 ? "Organism" : `Organism ${i + 1}`}
                 required={i === 0}
                 value={o}
