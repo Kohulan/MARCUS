@@ -68,13 +68,6 @@ export default function AnnotationPanel(props: Props) {
   } else {
     body = (
       <div className="pv-ann__start">
-        {failedStep ? (
-          <p className="pv-ann__problem">{`Annotation failed: ${annotateReason(failedStep.error_class)}`}</p>
-        ) : (
-          <p id={hintId} className="pv-ann__hint">
-            A model on this server suggests organism, place and compound names.
-          </p>
-        )}
         <GlassButton
           tint="clear"
           size="sm"
@@ -83,6 +76,13 @@ export default function AnnotationPanel(props: Props) {
         >
           {failedStep ? "Try again" : "Annotate"}
         </GlassButton>
+        {failedStep ? (
+          <p className="pv-ann__problem">{`Annotation failed: ${annotateReason(failedStep.error_class)}`}</p>
+        ) : (
+          <p id={hintId} className="pv-ann__hint">
+            A model on this server suggests organism, place and compound names.
+          </p>
+        )}
       </div>
     );
   }
@@ -125,7 +125,12 @@ function Fields({
   const wasEditing = useRef(false);
 
   useEffect(() => {
-    if (editing) form.current?.querySelector("textarea")?.focus();
+    if (editing) {
+      // the form starts at its top (its hint and first label in view), in the first box
+      const panel = form.current?.closest<HTMLElement>(".pv-ann");
+      if (panel) panel.scrollTop = 0;
+      form.current?.querySelector("textarea")?.focus({ preventScroll: true });
+    }
     else if (wasEditing.current) editButton.current?.focus();
     wasEditing.current = editing;
   }, [editing]);
