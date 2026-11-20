@@ -2,7 +2,7 @@ import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
-import { asEngine } from "../api/engines";
+import { asEngine, firstRunNote } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
@@ -272,10 +272,12 @@ export default function Compare({
 function resultText(r: EngineRow): ReactNode {
   if (r.prediction) return r.prediction.valid ? "Valid" : "Invalid";
   if (r.state === "reading") {
+    const note = firstRunNote(r.engine);
     return (
       <>
         Reading…
         <ProgressBar value={null} label={`Reading, ${r.label}`} size="sm" className="cmp-result__bar" />
+        {note && <span className="cmp-result__note">{note}</span>}
       </>
     );
   }

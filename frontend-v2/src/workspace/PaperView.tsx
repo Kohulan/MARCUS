@@ -246,6 +246,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   paperEngine={paper.engine}
                   reason={r.reason}
                   failedEngine={r.failedEngine}
+                  readingNote={r.readingNote}
                   current={selection === r.segmentId}
                   linked={hovered === r.segmentId}
                   onOpen={onSelect}

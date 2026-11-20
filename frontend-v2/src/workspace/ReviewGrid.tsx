@@ -233,6 +233,7 @@ export default function ReviewGrid({
               paperEngine={paper.engine}
               reason={r.reason}
               failedEngine={r.failedEngine}
+              readingNote={r.readingNote}
               selected={picked.has(r.segmentId)}
               current={selection === r.segmentId}
               onToggle={onToggle}

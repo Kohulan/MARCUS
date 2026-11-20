@@ -146,6 +146,34 @@ describe("Compare", () => {
     await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Run all engines" })).toBeNull());
   });
 
+  it("DECIMER hand-drawn reading says its first run loads the model; the others do not", async () => {
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const first = [prediction({ engine: "decimer" })];
+    const { props, rerender } = renderCompare({ predictions: first });
+    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    const note = "First run loads the model, about 30 s";
+    expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
+    expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
+    expect(cell("Result", "MolNexTR")).not.toHaveTextContent(note);
+    // MolNexTR and MolScribe are back; the hand-drawn model is still loading.
+    const steps = [step("decimer-hand", "running"), step("molnextr", "done"), step("molscribe", "done")];
+    const two = [...first, prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
+    const again = (predictions: PredictionOut[], s: typeof steps) =>
+      rerender(
+        <QueryClientProvider client={client}>
+          <ToastProvider>
+            <Compare {...props} predictions={predictions} steps={s} />
+          </ToastProvider>
+        </QueryClientProvider>,
+      );
+    again(two, steps);
+    expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
+    again([prediction({ engine: "decimer-hand" }), ...two], [step("decimer-hand", "done"), ...steps.slice(1)]);
+    expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Valid");
+    expect(cell("Result", "DECIMER hand-drawn")).not.toHaveTextContent(note);
+  });
+
   it("does not ask again for an engine with an active step", async () => {
     const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
     const { props } = renderCompare({

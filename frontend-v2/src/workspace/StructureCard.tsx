@@ -82,6 +82,8 @@ export type StructureCardProps = {
   /** For a failed card: the reason (reasonText) and the engine that failed. */
   reason: string | null;
   failedEngine: string | null;
+  /** For a card being read: a line on a slow first run (firstRunNote). */
+  readingNote?: string | null;
   /** Ticked for a bulk action; the grid's cards only. */
   selected?: boolean;
   /** The focused segment (`?s=`). */
@@ -121,6 +123,7 @@ function StructureCard({
   paperEngine,
   reason,
   failedEngine,
+  readingNote = null,
   selected = false,
   current,
   onToggle,
@@ -259,6 +262,9 @@ function StructureCard({
         )}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
+        {state === "reading" && readingNote !== null && (
+          <p className="card__reason">{readingNote}</p>
+        )}
         {/* Compact (Paper view): the stamp sits in the text column, clear of the drawing. */}
         {compact && stamp}
       </div>
