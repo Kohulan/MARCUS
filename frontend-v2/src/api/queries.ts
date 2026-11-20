@@ -181,18 +181,6 @@ export function useSteps(id: string) {
   });
 }
 
-/**
- * A busy paper's steps for its row in the tool home (the reading progress): fetched again
- * with the list, every LIST_POLL_MS, while the row is busy (it unmounts when the paper ends).
- */
-export function useRowSteps(id: string) {
-  return useQuery({
-    queryKey: keys.steps(id),
-    queryFn: ({ signal }) => api.getSteps(id, { signal }),
-    refetchInterval: LIST_POLL_MS,
-  });
-}
-
 /** The queue position; refetched every 10 s while `active` (a paper checking or processing). */
 export function useQueue(active: boolean) {
   return useQuery({

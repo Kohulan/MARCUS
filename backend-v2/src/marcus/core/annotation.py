@@ -23,6 +23,7 @@ import json
 import re
 import unicodedata
 from functools import lru_cache
+from pathlib import Path
 
 FIELDS = (
     "compound_group",
@@ -86,6 +87,19 @@ _SPACES = re.compile(r"\s+")
 
 class BadOutput(ValueError):
     """The model text is not the 11-key object the schema allows."""
+
+
+class TextTooLarge(ValueError):
+    """The paper's text file is larger than MAX_TEXT_BYTES (it is not read)."""
+
+
+def read_document(path: Path) -> object:
+    """The parsed JSON of a paper's text file (its Docling document; blocking read). A file over
+    MAX_TEXT_BYTES is refused before it is read (TextTooLarge); otherwise OSError or ValueError
+    as reading and parsing raise them."""
+    if path.stat().st_size > MAX_TEXT_BYTES:
+        raise TextTooLarge(path.parent.name)
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # --- decoding grammar --------------------------------------------------------------------------
@@ -250,6 +264,27 @@ def _block(item: object) -> str | None:
     return text
 
 
+def resolve_ref(ref: object, texts: list, groups: list) -> tuple[str, object] | None:
+    """("texts" or "groups", the item) a child's `$ref` points at; None for anything else (not
+    `#/texts/i` or `#/groups/i`, or an index past the end)."""
+    m = _REF.fullmatch(ref) if isinstance(ref, str) else None
+    if m is None:
+        return None
+    pool = texts if m.group(1) == "texts" else groups
+    digits = m.group(2)
+    i = int(digits) if len(digits) < 10 else len(pool)  # 10 digits: past any real list
+    return (m.group(1), pool[i]) if i < len(pool) else None
+
+
+def doc_pools(doc: dict) -> tuple[list, list]:
+    """(texts, groups) of a Docling document, [] for one that is missing or not a list."""
+    texts, groups = doc.get("texts"), doc.get("groups")
+    return (
+        texts if isinstance(texts, list) else [],
+        groups if isinstance(groups, list) else [],
+    )
+
+
 def docling_blocks(doc: object) -> list[str]:
     """The texts of the Paper view's headings and paragraphs, in its order: `body.children`
     walked depth first (`#/texts/i` is texts[i] followed by its own children, `#/groups/i` is
@@ -257,11 +292,10 @@ def docling_blocks(doc: object) -> list[str]:
     body, the texts in array order. Blank texts are left out."""
     if not isinstance(doc, dict):
         return []
-    texts = doc.get("texts") if isinstance(doc.get("texts"), list) else []
+    texts, groups = doc_pools(doc)
     body = doc.get("body")
     if not isinstance(body, dict) or not isinstance(body.get("children"), list):
         return [t for t in map(_block, texts) if t is not None]
-    groups = doc.get("groups") if isinstance(doc.get("groups"), list) else []
     out: list[str] = []
     walking: set[str] = set()  # the refs on the current path (a ref back to one is skipped)
     stack: list[tuple] = [(iter(body["children"]), None)]  # iterative: no recursion limit
@@ -273,20 +307,18 @@ def docling_blocks(doc: object) -> list[str]:
             walking.discard(ref_of_frame)
             continue
         ref = child.get("$ref") if isinstance(child, dict) else None
-        m = _REF.fullmatch(ref) if isinstance(ref, str) else None
-        if m is None or m.group(0) in walking:
+        found = resolve_ref(ref, texts, groups)
+        if found is None or ref in walking:
             continue
-        i = int(m.group(2))
-        pool = texts if m.group(1) == "texts" else groups
-        item = pool[i] if i < len(pool) else None
-        if m.group(1) == "texts":
+        kind, item = found
+        if kind == "texts":
             text = _block(item)
             if text is not None:
                 out.append(text)
         kids = item.get("children") if isinstance(item, dict) else None
         if isinstance(kids, list):
-            walking.add(m.group(0))
-            stack.append((iter(kids), m.group(0)))
+            walking.add(ref)
+            stack.append((iter(kids), ref))
     return out
 
 
@@ -352,9 +384,17 @@ def _normalise(text: str, fold: bool) -> tuple[str, list[int] | range]:
     return "".join(chars), origin
 
 
-def _utf16(text: str, index: int) -> int:
-    # surrogatepass: a lone surrogate counts as one code unit, as in JavaScript
-    return len(text[:index].encode("utf-16-le", "surrogatepass")) // 2
+def _utf16_offsets(text: str) -> list[int] | None:
+    """For each index 0..len(text), its offset in UTF-16 code units; None when every character
+    is one code unit (no astral character: the index is the offset). A lone surrogate counts
+    as one code unit, as in JavaScript."""
+    if not text or max(text) <= "\uffff":
+        return None
+    out, at = [0], 0
+    for c in text:
+        at += 2 if c > "\uffff" else 1
+        out.append(at)
+    return out
 
 
 class Locator:
@@ -365,6 +405,7 @@ class Locator:
     def __init__(self, blocks: list[str]):
         self.blocks = blocks
         self._forms: dict[bool, tuple[str, list[int], list[list[int]]]] = {}
+        self._units: dict[int, list[int] | None] = {}  # block -> _utf16_offsets, on first hit
 
     def _form(self, fold: bool) -> tuple[str, list[int], list[list[int]]]:
         """(joined text, start of each block in it, each block's origin map)."""
@@ -399,7 +440,10 @@ class Locator:
             # take along what counts as nothing (a combining accent, a soft hyphen)
             while end_cp < len(text) and _piece(text[end_cp]) == "":
                 end_cp += 1
-            hits.append([b, _utf16(text, start_cp), _utf16(text, end_cp)])
+            if b not in self._units:
+                self._units[b] = _utf16_offsets(text)
+            units = self._units[b]
+            hits.append([b, units[start_cp], units[end_cp]] if units else [b, start_cp, end_cp])
             if len(hits) == MAX_OCCURRENCES:
                 break
         return hits

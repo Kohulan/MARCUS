@@ -13,7 +13,6 @@ title/abstract/introduction text. An answer outside the schema is final too (Bad
 decoding is greedy, so a retry gives the same answer.
 """
 
-import json
 import time
 
 from marcus.core import annotation as ann
@@ -21,7 +20,7 @@ from marcus.core.annotation import BadOutput, Locator, docling_blocks, parse_out
 from marcus.core.enums import StepKind
 from marcus.core.pipeline import BadResult
 from marcus.core.settings import fake_enabled, get_settings
-from marcus.core.storage import paper_dir
+from marcus.core.storage import text_path
 from marcus.workers.annotate.fake import FakeAnnotator
 from marcus.workers.annotate.inputs import model_input
 from marcus.workers.annotate.llama import LlamaAnnotator
@@ -45,11 +44,10 @@ def get_annotator():
 
 
 def _document(step) -> dict:
-    path = paper_dir(step.paper_id) / "text.json"
     try:
-        if path.stat().st_size > ann.MAX_TEXT_BYTES:  # read under the worker's 1g mem_limit
-            raise BadInput("the paper's text is too large")
-        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc = ann.read_document(text_path(step.paper_id))  # under the worker's 1g mem_limit
+    except ann.TextTooLarge:
+        raise BadInput("the paper's text is too large") from None
     except FileNotFoundError:
         raise BadInput("the paper has no text") from None
     except (ValueError, OSError):

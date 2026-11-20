@@ -261,7 +261,7 @@ async def paper_text(
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     paper = await get_owned_paper(db, owner, paper_id)
-    path = storage.paper_dir(paper.id) / "text.json"
+    path = storage.text_path(paper.id)
     if not path.is_file():
         raise not_found()
     return FileResponse(path, media_type="application/json")

@@ -23,6 +23,11 @@ def pdf_path(paper_id: uuid.UUID) -> Path:
     return paper_dir(paper_id) / "source.pdf"
 
 
+def text_path(paper_id: uuid.UUID) -> Path:
+    """The paper's Docling document (written by the docling step)."""
+    return paper_dir(paper_id) / "text.json"
+
+
 def page_image_path(paper_id: uuid.UUID, page: int) -> Path:
     if isinstance(page, bool) or not isinstance(page, int):
         raise TypeError("page must be int")

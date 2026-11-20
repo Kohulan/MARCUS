@@ -284,6 +284,20 @@ UI_HEADERS = {
 }
 
 
+UI_INCLUDE = re.compile(r"^(\s*)include (/etc/nginx/marcus/(\S+));$", re.M)
+
+
+def _ui_locations() -> str:
+    """ui-locations.conf with its header files (deploy/headers-*.conf) read in where it
+    includes them, as nginx reads it."""
+
+    def read_in(m: re.Match) -> str:
+        part = (FRONTEND / "deploy" / m.group(3)).read_text()
+        return "\n".join(m.group(1) + line for line in part.splitlines())
+
+    return UI_INCLUDE.sub(read_in, UI_LOCATIONS.read_text())
+
+
 def _strip_comments(conf: str) -> str:
     return "\n".join(line.split("#", 1)[0] for line in conf.splitlines())
 
@@ -329,6 +343,16 @@ def test_frontend_image_serves_the_build_with_its_locations_file():
     assert re.search(
         rf"^COPY deploy/ui-locations\.conf {re.escape(UI_LOCATIONS_IN_IMAGE)}$", dockerfile, re.M
     )
+    # every header file it includes is in the image, and in the local dev nginx (serve-local.sh)
+    included = [m.group(2) for m in UI_INCLUDE.finditer(UI_LOCATIONS.read_text())]
+    assert {path.rsplit("/", 1)[1] for path in included} == {
+        "headers-app.conf", "headers-ketcher.conf"
+    }  # fmt: skip
+    serve_local = (FRONTEND / "scripts" / "serve-local.sh").read_text()
+    for path in set(included):
+        name = path.rsplit("/", 1)[1]
+        assert re.search(rf"^COPY deploy/{re.escape(name)} {re.escape(path)}$", dockerfile, re.M)
+        assert f'"$PWD/deploy/{name}:{path}:ro"' in serve_local, name
     ignored = (FRONTEND / ".dockerignore").read_text().split()
     for name in ("node_modules", "dist", "dist-ssr", "test-results", "playwright-report",
                  ".impeccable"):  # fmt: skip
@@ -342,11 +366,11 @@ def test_nginx_includes_the_ui_locations_instead_of_a_404():
     assert not re.search(r"location\s+/\s*\{\s*return\s+404;", conf)
     # the API locations are still there, and the UI file defines no API location
     assert "location /api/v2/ {" in conf
-    assert "/api/" not in _strip_comments(UI_LOCATIONS.read_text())
+    assert "/api/" not in _strip_comments(_ui_locations())
 
 
 def test_ui_locations_carry_both_exact_csps_mime_types_and_gzip():
-    conf = UI_LOCATIONS.read_text()
+    conf = _ui_locations()
     # COCONUT only through the relay (same origin): the browser never connects to it
     assert "coconut" not in _strip_comments(conf)
     csps = set(re.findall(r'add_header Content-Security-Policy "([^"]*)" always;', conf))
@@ -358,7 +382,7 @@ def test_ui_locations_carry_both_exact_csps_mime_types_and_gzip():
 def test_every_ui_location_with_headers_sets_all_six():
     """An add_header in a location drops every inherited one (the server's own security
     headers included): a location that sets any header must set the whole set, with always."""
-    blocks = _location_blocks(UI_LOCATIONS.read_text())
+    blocks = _location_blocks(_ui_locations())
     assert len(blocks) >= 5, blocks
     for head, body in blocks:
         names = {n.lower() for n in re.findall(r"^\s*add_header\s+(\S+)\s+.*\balways;", body, re.M)}
@@ -742,6 +766,8 @@ _NGINX_MOUNTS = [
     "-v", f"{ROOT / 'docker' / 'nginx-edge.sh'}:/docker-entrypoint.d/25-marcus-edge.sh:ro",
     "-v", f"{ROOT / 'docker' / 'coconut-relay.js'}:/etc/nginx/marcus/coconut-relay.js:ro",
     "-v", f"{UI_LOCATIONS}:{UI_LOCATIONS_IN_IMAGE}:ro",
+    *(arg for name in ("headers-app.conf", "headers-ketcher.conf") for arg in (
+        "-v", f"{FRONTEND / 'deploy' / name}:/etc/nginx/marcus/{name}:ro")),
 ]  # fmt: skip
 
 

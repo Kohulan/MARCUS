@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from rdkit import Chem
-from sqlalchemy import event, select, update
+from sqlalchemy import delete, event, select, update
 
 import marcus.api.routes
 from marcus.core import storage
@@ -704,3 +704,61 @@ async def test_list_papers_query_count_does_not_grow_with_papers(
         await seed_paper(db, alice)
     five = await statements()
     assert one == five
+
+
+PROGRESS_KEYS = (
+    "pages_read", "structures_total", "structures_read", "text_read", "check_started", "rereading"
+)  # fmt: skip
+
+
+def _progress(p: dict) -> tuple:
+    return tuple(p[k] for k in PROGRESS_KEYS)
+
+
+async def test_list_rows_carry_the_reads_progress(app, async_db_session):
+    """The row bar's progress comes with the list (no steps poll per row): the same figures the
+    workspace reads from the steps (frontend readingProgress.ts)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)  # 1 page read, 2 structures waiting
+    a, b = seeded.segment_ids
+
+    async def progress() -> tuple:
+        async with make_client(app, token) as c:
+            listed = (await c.get("/api/v2/papers")).json()["papers"]
+            detail = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+        assert _progress(listed[0]) == _progress(detail)
+        return _progress(listed[0])
+
+    assert await progress() == (1, 2, 0, False, True, False)
+    await _ocsr_step(db, a, "done")
+    await _ocsr_step(db, b, "failed")  # failed with nothing in flight: handled
+    assert await progress() == (1, 2, 2, False, True, False)
+    await db.execute(
+        update(Step)
+        .where(Step.paper_id == seeded.paper_id, Step.kind.in_(("docling", "doi")))
+        .values(status="done")
+    )
+    await db.commit()
+    assert await progress() == (1, 2, 2, True, True, False)
+    await _ocsr_step(db, a, "running", later_s=5)  # another engine on a read structure
+    assert await progress() == (1, 2, 2, True, True, True)
+    await _ocsr_step(db, b, "running", later_s=5)  # a retry of the failed one: reading
+    assert await progress() == (1, 2, 1, True, True, False)
+
+
+async def test_a_paper_without_a_docling_step_has_its_text_read_with_its_pages(
+    app, async_db_session
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    await db.execute(delete(Step).where(Step.paper_id == seeded.paper_id, Step.kind == "docling"))
+    await db.commit()
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert listed[0]["text_read"] is True
+    await _add_step(db, seeded.paper_id, "segment_page", "running")  # page 0 read again
+    async with make_client(app, token) as c:
+        listed = (await c.get("/api/v2/papers")).json()["papers"]
+    assert (listed[0]["pages_read"], listed[0]["text_read"]) == (0, False)

@@ -19,11 +19,15 @@ export function useDisclosure(place: Pick<PlaceOptions, "prefer" | "align"> = DO
   const panel = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
-  useAnchoredPanel(open, button, panel, place, () => {
-    const had = panel.current?.contains(document.activeElement) ?? false;
+  const close = (refocus: boolean) => {
     setOpen(false);
-    if (had) button.current?.focus({ preventScroll: true });
-  });
+    if (refocus) button.current?.focus({ preventScroll: true });
+  };
+
+  // Scrolled out of sight: focus that was in the panel goes back to its button.
+  useAnchoredPanel(open, button, panel, place, () =>
+    close(panel.current?.contains(document.activeElement) ?? false),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -37,11 +41,6 @@ export function useDisclosure(place: Pick<PlaceOptions, "prefer" | "align"> = DO
       document.removeEventListener("focusin", outside);
     };
   }, [open]);
-
-  const close = (refocus: boolean) => {
-    setOpen(false);
-    if (refocus) button.current?.focus();
-  };
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== "Escape" || !open) return;

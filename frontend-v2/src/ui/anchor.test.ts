@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placePanel, visibleArea, type Box, type PlaceOptions } from "./anchor";
+import { clippingAncestors, placePanel, visibleArea, type Box, type PlaceOptions } from "./anchor";
 
 const VIEW: Box = { top: 0, left: 0, right: 1024, bottom: 768 };
 const box = (left: number, top: number, w: number, h: number): Box => ({
@@ -95,7 +95,8 @@ describe("visibleArea", () => {
     document.body.append(col);
     col.getBoundingClientRect = () => DOMRect.fromRect({ x: 600, y: 260, width: 400, height: 500 });
     card.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 5000, height: 5000 });
-    const seen = visibleArea(button);
+    expect(clippingAncestors(button)).toEqual([col]);
+    const seen = visibleArea(clippingAncestors(button));
     expect(seen).toEqual({ top: 260, left: 600, right: 1000, bottom: 700 });
     col.remove();
     delete (root as { clientWidth?: number }).clientWidth;

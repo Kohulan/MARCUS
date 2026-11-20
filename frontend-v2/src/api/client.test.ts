@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   api,
   ApiError,
+  errorText,
   ownerReady,
   resetOwnerGate,
   SAVE_TIMEOUT_MS,
@@ -99,6 +100,28 @@ describe("ApiError", () => {
     }
     reply = () => new Response(null, { status: 500 });
     expect((await caught(api.getQueue())).detail).toBe("Something went wrong (HTTP 500).");
+  });
+});
+
+describe("errorText", () => {
+  it("shows the API's detail, a fixed sentence for anything else", () => {
+    expect(errorText(new ApiError(503, "The annotation model is not running"))).toBe(
+      "The annotation model is not running",
+    );
+    expect(errorText(new ApiError(422, "Value error, too many values"))).toBe("Value error, too many values");
+    expect(errorText(new Error("x"))).toBe("Something went wrong.");
+  });
+
+  it("a request limit's 429 says what was too many and how long to wait", () => {
+    expect(errorText(new ApiError(429, "rate limited", 20))).toBe("Too many requests, try again in 20 s");
+    expect(errorText(new ApiError(429, "rate limited", 20), "starts")).toBe("Too many starts, try again in 20 s");
+    expect(errorText(new ApiError(429, "rate limited"), "changes")).toBe("Too many changes, try again in a moment");
+    // nginx's own limit, with no JSON detail
+    expect(errorText(new ApiError(429, "Something went wrong (HTTP 429)."))).toBe(
+      "Too many requests, try again in a moment",
+    );
+    // a 429 with its own words keeps them
+    expect(errorText(new ApiError(429, "Too many active papers", 7))).toBe("Too many active papers");
   });
 });
 

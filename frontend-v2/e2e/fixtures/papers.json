@@ -16,7 +16,14 @@
    "rejected": 1,
    "to_review": 7,
    "failed_pages": 0,
-   "failed": 1
+   "failed": 1,
+   "annotating": false,
+   "pages_read": 5,
+   "structures_total": 10,
+   "structures_read": 10,
+   "text_read": true,
+   "check_started": true,
+   "rereading": false
   }
  ]
 }

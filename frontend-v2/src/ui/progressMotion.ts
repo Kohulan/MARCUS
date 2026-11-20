@@ -36,26 +36,24 @@ export function spokenValue(text: string, fraction: number | null, estimated = f
   return text ? `${text}, ${pct}` : pct;
 }
 
-// cubic-bezier(0.22, 1, 0.36, 1): the --ease token (tokens.css), solved for y at a given x.
-const X1 = 0.22;
-const Y1 = 1;
-const X2 = 0.36;
-const Y2 = 1;
+/** The --ease token's control points (tokens.css cubic-bezier(0.22, 1, 0.36, 1); a test keeps them equal). */
+export const EASE = [0.22, 1, 0.36, 1] as const;
+const [X1, Y1, X2, Y2] = EASE;
 const bez = (t: number, a: number, b: number) =>
   3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
+// d/dt of bez: positive on [0, 1] for these points (x only grows), so Newton converges.
+const slope = (t: number, a: number, b: number) =>
+  3 * a * (1 - t) ** 2 + 6 * (b - a) * t * (1 - t) + 3 * (1 - b) * t ** 2;
 
-/** The --ease curve at time share `x` (0 to 1): x(t) is solved by bisection, then y(t). */
+/** The --ease curve at time share `x` (0 to 1): x(t) = x solved by Newton's method, then y(t). */
 export function ease(x: number): number {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
-  let lo = 0;
-  let hi = 1;
-  for (let i = 0; i < 30; i += 1) {
-    const t = (lo + hi) / 2;
-    if (bez(t, X1, X2) < x) lo = t;
-    else hi = t;
+  let t = x;
+  for (let i = 0; i < 5; i += 1) {
+    t = Math.min(1, Math.max(0, t - (bez(t, X1, X2) - x) / slope(t, X1, X2)));
   }
-  return bez((lo + hi) / 2, Y1, Y2);
+  return bez(t, Y1, Y2);
 }
 
 /** The counted figure `elapsed` ms after it set off from `from` toward `to`; never below `from`. */

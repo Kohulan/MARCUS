@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "../api/client";
 import type { AnnotationOut, StepOut } from "../api/types";
 import {
-  annotateReason,
-  annotationError,
   blockRanges,
   FAMILIES,
   familyOf,
-  FIELD_MAX,
-  fieldMax,
+  fieldLabel,
   hitsOf,
   linesOf,
   markLabel,
   newestAnnotate,
   nextHit,
-  onlyAnnotating,
+  isAnnotating,
   sameValues,
   shownPositions,
   splitMarks,
@@ -60,6 +56,7 @@ function ann(over: Partial<AnnotationOut> = {}): AnnotationOut {
     status: "done",
     step: null,
     fields: [],
+    limits: { max_values_per_field: 200, max_total_values: 300 },
     model: "fake-annotator",
     model_version: "fake-1",
     output: { organism_or_species: ["Taxus brevifolia"] },
@@ -75,13 +72,9 @@ function ann(over: Partial<AnnotationOut> = {}): AnnotationOut {
   };
 }
 
-describe("annotation helpers", () => {
-  it("knows the server's per-value limit of all 11 fields", () => {
-    expect(Object.keys(FIELD_MAX).sort()).toEqual([...FIELDS].sort());
-    expect(FIELD_MAX.Kingdom).toBe(60);
-    expect(FIELD_MAX.iupac_name).toBe(7179);
-  });
+const LIMITS = { max_values_per_field: 200, max_total_values: 300 };
 
+describe("annotation helpers", () => {
   it("highlights the curated positions once there is a curation, else the model's", () => {
     expect(shownPositions(ann())).toEqual(ann().positions);
     const curatedPositions = { geo_location: { Jena: [[1, 0, 4]] as [number, number, number][] } };
@@ -215,18 +208,13 @@ describe("annotation helpers", () => {
     const docling = step({ id: "d", kind: "docling", status: "done" });
     expect(newestAnnotate([older, docling, newer])?.id).toBe("a2");
     expect(newestAnnotate([docling])).toBeUndefined();
-    expect(onlyAnnotating([older, docling, newer])).toBe(true);
-    expect(onlyAnnotating([newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);
-    expect(onlyAnnotating([older, docling])).toBe(false);
-  });
-
-  it("says why an annotation failed in words for this step", () => {
-    expect(annotateReason("bad_input")).toBe("no title, abstract or introduction was found");
-    expect(annotateReason("timeout")).toBe("it took too long");
-    expect(annotateReason("engine_error")).toBe("the model failed");
-    expect(annotateReason("worker_lost")).toBe("the worker stopped");
-    expect(annotateReason(null)).toBe("an unknown error");
-    expect(annotateReason("toString")).toBe("an unknown error");
+    const busy = { status: "processing" };
+    expect(isAnnotating(busy, [older, docling, newer])).toBe(true);
+    expect(isAnnotating(busy, [newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);
+    expect(isAnnotating(busy, [older, docling])).toBe(false);
+    // the server's flag says so before any steps are known; a done paper is never annotating
+    expect(isAnnotating({ status: "processing", annotating: true })).toBe(true);
+    expect(isAnnotating({ status: "done", annotating: true }, [newer])).toBe(false);
   });
 
   it("edits a field as lines: one value a line, blanks and repeats out", () => {
@@ -239,34 +227,26 @@ describe("annotation helpers", () => {
     expect(valuesOf("2,3-dihydroxy-1,4-dione")).toEqual(["2,3-dihydroxy-1,4-dione"]);
   });
 
-  it("tells a value set the server would refuse, by the field's label", () => {
-    const label = (key: string) => (key === "Kingdom" ? "Kingdom" : key);
-    expect(valuesProblem({ Kingdom: ["Plantae"] }, label)).toBeNull();
-    expect(valuesProblem({ Kingdom: ["x".repeat(61)] }, label)).toBe(
-      "A value in Kingdom is longer than 60 characters.",
-    );
-    expect(valuesProblem({ iupac_name: Array.from({ length: 201 }, (_, i) => `v${i}`) }, label)).toBe(
-      "iupac_name has more than 200 values.",
-    );
-  });
-
-  it("takes each field's limit from the API's fields, the client table only as a fallback", () => {
-    const label = (key: string) => key;
+  it("tells a value set the server would refuse, from the limits it serves, by the field's label", () => {
     const fields = [
       { key: "Kingdom", label: "Kingdom", max_length: 10 },
-      { key: "geo_location", label: "Place" },
+      { key: "geo_location", label: "Place", max_length: 348 },
     ];
-    expect(fieldMax(fields, "Kingdom")).toBe(10);
-    expect(fieldMax(fields, "geo_location")).toBe(348); // no max_length: the client table
-    expect(fieldMax([{ key: "Kingdom", label: "K", max_length: 0 }], "Kingdom")).toBe(60);
-    expect(fieldMax([], "constructor")).toBeUndefined();
-    expect(valuesProblem({ Kingdom: ["x".repeat(11)] }, label, fields)).toBe(
+    expect(valuesProblem({ Kingdom: ["Plantae"] }, fields, LIMITS)).toBeNull();
+    expect(valuesProblem({ Kingdom: ["x".repeat(11)] }, fields, LIMITS)).toBe(
       "A value in Kingdom is longer than 10 characters.",
     );
-    expect(valuesProblem({ Kingdom: ["x".repeat(10)] }, label, fields)).toBeNull();
-    expect(valuesProblem({ geo_location: ["x".repeat(349)] }, label, fields)).toBe(
-      "A value in geo_location is longer than 348 characters.",
+    expect(valuesProblem({ Kingdom: ["x".repeat(10)] }, fields, LIMITS)).toBeNull();
+    expect(valuesProblem({ geo_location: Array.from({ length: 201 }, (_, i) => `v${i}`) }, fields, LIMITS)).toBe(
+      "Place has more than 200 values.",
     );
+    expect(valuesProblem({ geo_location: ["a", "b"] }, fields, { ...LIMITS, max_values_per_field: 1 })).toBe(
+      "Place has more than 1 values.",
+    );
+    // a field the server did not send has no length limit here (its 422 still says so)
+    expect(valuesProblem({ trivial_name: ["x".repeat(9999)] }, fields, LIMITS)).toBeNull();
+    expect(fieldLabel(fields, "geo_location")).toBe("Place");
+    expect(fieldLabel(fields, "constructor")).toBe("constructor");
   });
 
   it("compares value sets field by field (a missing field is none)", () => {
@@ -294,37 +274,14 @@ describe("annotation helpers", () => {
     expect(valuesIn(values, "trivial_name")).toEqual(values.trivial_name);
     expect(valuesIn(values, "constructor")).toEqual([]);
     expect(valuesIn(null, "trivial_name")).toEqual([]);
-    expect(valuesProblem({ constructor: ["x"] } as unknown as Record<string, string[]>, String)).toBeNull();
+    expect(valuesProblem({ constructor: ["x"] } as unknown as Record<string, string[]>, [], LIMITS)).toBeNull();
   });
 
   it("caps the values in all at the server's 300", () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => `v${i}`);
-    expect(valuesProblem({ a: many(150), b: many(150) }, String)).toBeNull();
-    expect(valuesProblem({ a: many(150), b: many(151) }, String)).toBe(
+    expect(valuesProblem({ a: many(150), b: many(150) }, [], LIMITS)).toBeNull();
+    expect(valuesProblem({ a: many(150), b: many(151) }, [], LIMITS)).toBe(
       "At most 300 values in all (301 now).",
     );
-  });
-
-  it("words the server's refusals of a start or a save shortly", () => {
-    expect(annotationError(new ApiError(503, "The annotation model is not running"))).toBe(
-      "The annotation model is not running",
-    );
-    expect(annotationError(new ApiError(503, "Annotation is not available"))).toBe(
-      "Annotation is not available",
-    );
-    expect(annotationError(new ApiError(429, "rate limited", 20))).toBe(
-      "Too many changes, try again in a minute",
-    );
-    // a start is not a change: its own limit (5 a minute) has its own words (F3)
-    expect(annotationError(new ApiError(429, "rate limited", 20), "start")).toBe(
-      "Too many starts, try again in a minute",
-    );
-    expect(annotationError(new ApiError(503, "The server is busy, try again in a moment."))).toBe(
-      "The server is busy, try again in a moment.",
-    );
-    expect(annotationError(new ApiError(422, "Value error, too many values"))).toBe(
-      "Value error, too many values",
-    );
-    expect(annotationError(new Error("x"))).toBe("Something went wrong.");
   });
 });
