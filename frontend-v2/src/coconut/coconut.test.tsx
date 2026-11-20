@@ -123,13 +123,16 @@ describe("coconutLogin", () => {
     expect(getToken()).toBeNull();
   });
 
-  it("keeps COCONUT's own status through the relay: 403 and 422 wrong login, 429 busy", async () => {
+  it("keeps COCONUT's own status through the relay: 403 and 422 wrong login, 429 too many", async () => {
     for (const status of [403, 422]) {
       stubFetch(async () => json({ message: "no" }, status));
       await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
     }
+    // 429 on login: the relay's own login limit (or COCONUT's): too many attempts, not "busy"
     stubFetch(async () => json({ message: "Too Many Attempts." }, 429));
-    await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow("COCONUT is busy. Try again later");
+    await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow(
+      "Too many login attempts. Try again in a minute",
+    );
   });
 
   it("reads the relay's own failure (502, 503, 504: nginx's HTML page) as unreachable", async () => {

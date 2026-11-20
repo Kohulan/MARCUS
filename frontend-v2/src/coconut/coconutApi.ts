@@ -96,7 +96,8 @@ export async function coconutLogin(email: string, password: string): Promise<str
   if (res.status === 401 || res.status === 403 || res.status === 422) {
     throw new CoconutLoginError("Wrong email or password");
   }
-  if (res.status === 429) throw new CoconutLoginError(BUSY_ERROR);
+  // The relay limits logins per client (3 a minute) and COCONUT may too: "busy" would mislead.
+  if (res.status === 429) throw new CoconutLoginError("Too many login attempts. Try again in a minute");
   // The relay's own failure (COCONUT unreachable, or too slow): nginx's 502 / 504; 503 alike.
   if (res.status === 502 || res.status === 503 || res.status === 504) {
     throw new CoconutLoginError("Could not reach COCONUT");
