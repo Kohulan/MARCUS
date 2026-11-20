@@ -11,8 +11,8 @@ const SAMPLE_PDF = "public/sample/synth_015.pdf";
 
 test.beforeEach(async ({ page }) => {
   await routeMatomo(page);
-  // No request leaves for COCONUT (its DOI count, a submit): the form is only looked at.
-  await page.route("https://coconut.naturalproducts.net/**", (route) =>
+  // No request goes to the COCONUT relay (its DOI count, a submit): the form is only looked at.
+  await page.route("**/api/v2/coconut/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: '{"data":[]}' }),
   );
 });

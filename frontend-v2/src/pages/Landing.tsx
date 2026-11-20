@@ -4,13 +4,11 @@ import { GlassLink } from "../ui/GlassButton";
 import Icon from "../ui/Icon";
 import { pageMeta, usePageTitle } from "./meta";
 import RingDrop from "./RingDrop";
-import Tagline from "./Tagline";
 import "./landing.css";
 
-// The landing: a first screen of two cells, then the tagline. Left, the name spelled out as
+// The landing: a single screen of two cells. Left, the name spelled out as
 // an acrostic and the one sentence; right, the benzene-ring drop zone and the sample paper.
-// Soft beams of light rise behind both. Below, the tagline lights word by word as it
-// scrolls in. How it works, the review grid and the citation are on About.
+// Soft beams of light rise behind both. How it works, the review grid and the citation are on About.
 
 const NAME = "Molecular Annotation and Recognition for Curating Unravelled Structures";
 
@@ -86,7 +84,6 @@ export default function Landing() {
           </p>
         </div>
       </section>
-      <Tagline />
     </main>
   );
 }

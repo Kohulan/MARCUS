@@ -1,7 +1,7 @@
 /*
  * The landing. First screen: the name spelled out and one sentence on the left; the
- * benzene-ring drop zone and the sample paper on the right; soft beams behind. Below it, the
- * tagline, lit word by word as it scrolls in. Light only; every size is a class here (no
+ * benzene-ring drop zone and the sample paper on the right; soft beams behind. It is the whole
+ * page and fills the frame between header and footer. Light only; every size is a class here (no
  * style attributes: CSP style-src 'self'). base.css loads after this file: where a rule here
  * refines a base rule (.mono-label, h1), it is written with one more class.
  *
@@ -20,18 +20,10 @@
 .landing {
   position: relative;
   display: grid;
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   grid-template-columns: minmax(0, 1fr) minmax(400px, 40%);
   isolation: isolate;
   overflow: hidden;
-}
-
-/* The first screen fills the window above the footer; the tagline's rule shows below it. */
-@media (min-width: 1024px) {
-  .landing {
-    min-height: calc(100vh - 136px);
-    min-height: calc(100dvh - 136px);
-  }
 }
 
 /* Beams (ui/Beams.tsx): drawn small on the canvas, blurred here; behind everything, fainter
@@ -414,68 +406,6 @@
   margin: 0;
 }
 
-/* The tagline: the acrostic's voice (Geist 400 uppercase, 48 / 48), one screen below ---- */
-
-.tagline {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 72vh;
-  padding: var(--s-900) var(--s-300);
-  border-top: 1px solid var(--line);
-}
-
-.tagline .corner {
-  position: absolute;
-  right: var(--s-300);
-}
-
-.tagline .corner:nth-of-type(1) {
-  top: var(--s-300);
-}
-
-.tagline .corner:nth-of-type(2) {
-  bottom: var(--s-300);
-}
-
-.tagline__text {
-  max-width: 680px;
-  font: 400 48px/48px var(--font-head);
-  letter-spacing: -0.035em;
-  text-transform: uppercase;
-  color: var(--ink);
-  text-wrap: balance;
-}
-
-.tagline__text b {
-  font-weight: 700;
-  color: var(--green);
-}
-
-/* Armed by Tagline.tsx once it can watch the scroll: the words wait dimmed, still 3:1 on
-   paper as large text (pinned in pages.test.tsx), and come to full tone one by one. */
-.tagline__w {
-  transition: opacity 500ms var(--ease);
-}
-
-.tagline.is-armed .tagline__w {
-  opacity: 0.5;
-}
-
-.tagline.is-armed .tagline__w--you {
-  opacity: 0.6;
-}
-
-.tagline.is-armed .tagline__w.is-lit {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tagline.is-armed .tagline__w {
-    opacity: 1;
-  }
-}
-
 @media (max-width: 1199.98px) {
   .landing {
     grid-template-columns: minmax(0, 1fr) minmax(360px, 38%);
@@ -560,16 +490,6 @@
 
   .act {
     padding: var(--s-300) var(--s-200) var(--s-500);
-  }
-
-  .tagline {
-    min-height: 60vh;
-    padding: var(--s-700) var(--s-200);
-  }
-
-  .tagline__text {
-    font-size: 36px;
-    line-height: 40px;
   }
 }
 

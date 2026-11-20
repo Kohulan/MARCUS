@@ -415,6 +415,8 @@ services:
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx-edge.sh:/docker-entrypoint.d/25-marcus-edge.sh:ro
+      # The COCONUT relay's answer filter (njs, docker/nginx.conf).
+      - ./docker/coconut-relay.js:/etc/nginx/marcus/coconut-relay.js:ro
     # Read by docker/nginx-edge.sh at start: per-address caps on requests and uploads in progress.
     environment:
       MARCUS_NGINX_CONN_PER_IP: ${MARCUS_NGINX_CONN_PER_IP:-64}
