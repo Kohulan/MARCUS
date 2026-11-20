@@ -12,7 +12,8 @@ The three relayed calls, as COCONUT answers them:
 - POST /api/reports/mutate with "Authorization: Bearer TOKEN": {created: [ids]}; more than
   MAX_ITEMS items: 422 about the list; "Bearer status-NNN": status NNN; any other or no
   token: 401.
-- POST /api/search: SEARCH_DOI has SEARCH_ROWS rows (data.data); every other query none.
+- POST /api/search: SEARCH_DOI has SEARCH_ROWS rows (data.data); every other query none. A
+  `sort` other than "relevance" gets 400, as the real COCONUT answers "desc".
 
 Anything else: 404. Every answer carries headers the relay must drop (EXTRA_HEADERS).
 
@@ -129,6 +130,10 @@ class Handler(BaseHTTPRequestHandler):
                 created = [next(_ids) for _ in items]
             return self._answer(200, {"created": created})
         if url.path == "/api/search":
+            if "sort" in body and body["sort"] != "relevance":
+                msg = "The selected sort is invalid."
+                errors = {"sort": [msg]}
+                return self._answer(400, {"message": "Invalid input parameters", "errors": errors})
             n = SEARCH_ROWS if body.get("query") == SEARCH_DOI else 0
             rows = [{"identifier": f"CNP{i:07d}"} for i in range(1, n + 1)]
             return self._answer(200, {"data": {"data": rows}})
