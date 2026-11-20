@@ -6,21 +6,19 @@ import { api } from "../api/client";
 import { keys } from "../api/queries";
 import { isStepActive } from "../api/status";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
-import { newestAnnotate } from "./annotation";
 
 /**
  * GET /papers/{id}/annotation. Read again (never cancelling a read on the wire) when the
- * paper's newest annotate step has ended and the annotation was read before that: a run that
+ * paper's newest annotate step (`step`, newestAnnotate) has ended and the annotation was read before that: a run that
  * finished or failed while the paper is open. Asked once per difference, so an answer that
  * still differs does not loop.
  */
-export function useAnnotation(paperId: string, steps: StepOut[]) {
+export function useAnnotation(paperId: string, step: StepOut | undefined) {
   const client = useQueryClient();
   const query = useQuery({
     queryKey: keys.annotation(paperId),
     queryFn: ({ signal }) => api.getAnnotation(paperId, { signal }),
   });
-  const step = newestAnnotate(steps);
   const ended = step && !isStepActive(step.status) ? `${step.id}:${step.status}` : null;
   const read = query.data?.step ? `${query.data.step.id}:${query.data.step.status}` : null;
   const stale = ended !== null && query.data !== undefined && read !== ended;

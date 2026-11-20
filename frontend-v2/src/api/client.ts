@@ -46,9 +46,21 @@ export class ApiError extends Error {
   }
 }
 
-/** The text to show for a failed request: the API's detail, else a fixed sentence. */
-export function errorText(err: unknown): string {
-  return err instanceof ApiError ? err.detail : "Something went wrong.";
+/** The API's terse 429 detail for its per-owner request limits (backend api/security.py). */
+const RATE_LIMITED = "rate limited";
+
+/**
+ * The text to show for a failed request: the API's detail, else a fixed sentence. A 429 of a
+ * request limit (the API's, or nginx's with no detail) says how long to wait, naming `what`
+ * was too many ("Too many starts, try again in 30 s"); other 429s keep their own detail.
+ */
+export function errorText(err: unknown, what = "requests"): string {
+  if (!(err instanceof ApiError)) return "Something went wrong.";
+  if (err.status === 429 && (err.detail === RATE_LIMITED || err.detail === fallbackDetail(429))) {
+    const when = err.retryAfter !== undefined ? `in ${err.retryAfter} s` : "in a moment";
+    return `Too many ${what}, try again ${when}`;
+  }
+  return err.detail;
 }
 
 /** Gone: 404 (missing, deleted, expired or another browser's; the API does not say which) or 422. */

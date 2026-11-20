@@ -80,10 +80,11 @@ describe("useAnchoredPanel", () => {
   it("calls onAway once its button is scrolled out of its column", async () => {
     const onAway = vi.fn();
     HTMLButtonElement.prototype.getBoundingClientRect = rect(900, 600, 80, 32);
-    const { container } = render(<Menu open onAway={onAway} />);
+    const { container, rerender } = render(<Menu open={false} onAway={onAway} />);
     const col = container.querySelector<HTMLElement>(".col")!;
-    col.style.overflowY = "auto";
+    col.style.overflowY = "auto"; // the column clips: found once, when the panel opens
     col.getBoundingClientRect = rect(600, 260, 420, 500);
+    rerender(<Menu open onAway={onAway} />);
     expect(onAway).not.toHaveBeenCalled();
     HTMLButtonElement.prototype.getBoundingClientRect = rect(900, 200, 80, 32);
     col.dispatchEvent(new Event("scroll"));

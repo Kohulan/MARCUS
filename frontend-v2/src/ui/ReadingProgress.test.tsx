@@ -4,9 +4,9 @@
 import { act, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ANNOTATE_TYPICAL_MS, FILL_MS } from "./progressMotion";
+import { ANNOTATE_TYPICAL_MS, END_HOLD_MS, FILL_MS } from "./progressMotion";
 import type { ReadingProgress as Model } from "../workspace/readingProgress";
-import ReadingProgress from "./ReadingProgress";
+import ReadingProgress, { useShownProgress } from "./ReadingProgress";
 
 const stagesAt = (current: number, counts: (string | null)[] = []): Model["stages"] =>
   (["check", "pages", "structures", "end"] as const).map((key, i) => ({
@@ -22,6 +22,9 @@ const pages = (done: number, fraction: number): Model => ({
   pages: { done, total: 5 },
   structures: { done: 0, total: 0 },
   valueText: `Reading pages, ${done} of 5`,
+  line: `Reading pages ${done}/5`,
+  said: "Reading pages",
+  estimated: false,
   stages: stagesAt(1, [null, `${done}/5`]),
 });
 
@@ -31,6 +34,9 @@ const structures = (done: number, total: number, fraction: number): Model => ({
   pages: { done: 5, total: 5 },
   structures: { done, total },
   valueText: `Reading structures, ${done} of ${total}`,
+  line: `Reading structures ${done}/${total}`,
+  said: "Reading structures",
+  estimated: false,
   stages: stagesAt(2, [null, null, `${done}/${total}`]),
 });
 
@@ -40,6 +46,9 @@ const waiting: Model = {
   pages: null,
   structures: { done: 0, total: 0 },
   valueText: "Waiting",
+  line: "Waiting",
+  said: "Waiting",
+  estimated: false,
   stages: stagesAt(-1),
 };
 
@@ -122,28 +131,43 @@ describe("ReadingProgress", () => {
     expect(html).not.toMatch(/style=/);
   });
 
-  describe("an annotate run (no figure from the model)", () => {
+  describe("an annotate run (no figure from the model): useShownProgress", () => {
+    const FAKE = [
+      "setInterval",
+      "clearInterval",
+      "setTimeout",
+      "clearTimeout",
+      "Date",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "performance",
+    ] as const;
     afterEach(() => {
       vi.useRealTimers();
     });
-    const annotating: Model = { ...waiting, stage: "annotating", valueText: "Annotating" };
+    const annotating: Model = {
+      ...waiting,
+      stage: "annotating",
+      valueText: "Annotating",
+      line: "",
+      said: "",
+      estimated: true,
+      stages: [],
+    };
+    const done: Model = { ...waiting, stage: "done", fraction: 1, valueText: "Done", line: "", said: "Done" };
+
+    function Shown({ model, keepDone }: { model: Model | null; keepDone?: boolean }) {
+      const shown = useShownProgress(model, { keepDone: keepDone ?? false });
+      return shown ? <ReadingProgress progress={shown} label="Reading progress" announce /> : null;
+    }
 
     it("shows the time-based estimate, labelled as one, and never 100% while it runs", () => {
-      vi.useFakeTimers({
-        toFake: [
-          "setInterval",
-          "clearInterval",
-          "setTimeout",
-          "clearTimeout",
-          "Date",
-          "requestAnimationFrame",
-          "cancelAnimationFrame",
-          "performance",
-        ],
-      });
-      render(<ReadingProgress progress={annotating} label="Reading progress" />);
+      vi.useFakeTimers({ toFake: [...FAKE] });
+      render(<Shown model={annotating} />);
       const bar = screen.getByRole("progressbar");
       expect(bar).toHaveAttribute("aria-valuenow", "0");
+      expect(screen.queryByRole("list", { name: "Stages" })).toBeNull();
+      expect(screen.getByRole("status")).toHaveTextContent(/^$/); // the badge says Annotating
       act(() => {
         vi.advanceTimersByTime(ANNOTATE_TYPICAL_MS);
       });
@@ -157,6 +181,33 @@ describe("ReadingProgress", () => {
         vi.advanceTimersByTime(30 * 60_000);
       });
       expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(95);
+    });
+
+    it("ends on its full bar for a moment, then no bar for the done paper", () => {
+      vi.useFakeTimers({ toFake: [...FAKE] });
+      const { rerender } = render(<Shown model={annotating} />);
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      rerender(<Shown model={done} />);
+      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Annotating, 100%");
+      act(() => {
+        vi.advanceTimersByTime(END_HOLD_MS + 50);
+      });
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("a read seen here keeps its full bar when it is done, if asked to", () => {
+      const { rerender } = render(<Shown model={pages(4, 0.8)} keepDone />);
+      rerender(<Shown model={done} keepDone />);
+      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+      rerender(<Shown model={null} keepDone />);
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("a paper opened done has no bar", () => {
+      render(<Shown model={done} keepDone />);
+      expect(screen.queryByRole("progressbar")).toBeNull();
     });
   });
 });

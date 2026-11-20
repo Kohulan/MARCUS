@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient } from "../api/queries";
-import type { ImageJobSummary, PaperSummary, StepOut } from "../api/types";
+import type { ImageJobSummary, PaperSummary } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { handOff } from "./files";
 import ToolHome from "./ToolHome";
@@ -36,6 +36,13 @@ function paper(over: Partial<PaperSummary> = {}): PaperSummary {
     to_review: 3,
     failed_pages: 1,
     failed: 1,
+    annotating: false,
+    pages_read: 0,
+    structures_total: 0,
+    structures_read: 0,
+    text_read: false,
+    check_started: false,
+    rereading: false,
     ...over,
   };
 }
@@ -408,6 +415,13 @@ describe("Papers list", () => {
           to_review: 1,
           failed_pages: 0,
           failed: 0,
+          annotating: false,
+          pages_read: 0,
+          structures_total: 0,
+          structures_read: 0,
+          text_read: false,
+          check_started: false,
+          rereading: false,
         }),
       ],
     });
@@ -423,30 +437,10 @@ describe("Papers list", () => {
     expect(within(row).queryByText("Reading…")).toBeNull();
   });
 
-  it("a busy paper's row has a thin progress bar and its stage in a few words", async () => {
-    const step = (over: Partial<StepOut>): StepOut => ({
-      id: Math.random().toString(36),
-      kind: "segment_page",
-      page: 0,
-      segment_id: null,
-      status: "done",
-      attempts: 1,
-      error_class: null,
-      engine: null,
-      created_at: "2026-11-18T10:00:00.000000Z",
-      started_at: null,
-      finished_at: null,
-      ...over,
+  it("a busy paper's row has a thin progress bar and its stage in a few words, from the list", async () => {
+    renderHome({
+      papers: [paper({ status: "processing", pages: 4, pages_read: 2, check_started: true })],
     });
-    vi.mocked(api.getSteps).mockResolvedValue({
-      steps: [
-        step({ kind: "check_pdf", page: null }),
-        step({ page: 0 }),
-        step({ page: 1 }),
-        step({ page: 2, status: "running" }),
-      ],
-    });
-    renderHome({ papers: [paper({ status: "processing", pages: 4 })] });
     const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
     const bar = await within(row).findByRole("progressbar", {
       name: "Progress of Alkaloids from Coffea leaves",
@@ -455,34 +449,23 @@ describe("Papers list", () => {
     expect(bar).toHaveAttribute("aria-valuenow", "22");
     expect(within(row).getByText("Reading pages 2/4")).toBeInTheDocument();
     expect(within(row).getByText("22%")).toBeInTheDocument();
-    expect(api.getSteps).toHaveBeenCalledWith("p1", expect.anything());
+    // the counts come with the list: no steps asked for per row
+    expect(api.getSteps).not.toHaveBeenCalled();
     // no announcements from the list: a row's figure changes with every poll
     expect(within(row).queryByRole("status")).toBeNull();
   });
 
-  it("a busy paper's row waits for its steps before it shows a bar (no 0/5 guess)", async () => {
-    let answer!: (v: { steps: StepOut[] }) => void;
-    vi.mocked(api.getSteps).mockReturnValue(new Promise((r) => (answer = r)));
-    renderHome({ papers: [paper({ status: "processing", pages: 5 })] });
-    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
-    await waitFor(() => expect(api.getSteps).toHaveBeenCalled());
-    expect(within(row).queryByRole("progressbar")).toBeNull();
-    answer({ steps: [] });
-    expect(await within(row).findByRole("progressbar")).toBeInTheDocument();
-  });
-
-  it("a finished paper's row has no bar and asks for no steps", async () => {
+  it("a finished paper's row has no bar", async () => {
     renderHome({ papers: [paper()] });
     await screen.findByText("Alkaloids from Coffea leaves");
     expect(screen.queryByRole("progressbar")).toBeNull();
-    expect(api.getSteps).not.toHaveBeenCalled();
   });
 
-  it("an annotating paper's row has an indeterminate bar and no second word", async () => {
+  it("an annotating paper's row has an estimated bar and no second word", async () => {
     renderHome({ papers: [paper({ status: "processing", annotating: true })] });
     const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
     const bar = await within(row).findByRole("progressbar");
-    expect(bar).not.toHaveAttribute("value");
+    expect(bar).toHaveAttribute("aria-valuetext", "Annotating, about 0%");
     expect(within(row).getAllByText(/Annotating/)).toHaveLength(1);
   });
 

@@ -22,21 +22,14 @@ import StateBadge from "./StateBadge";
 import Structure from "./Structure";
 import { structureTag } from "./tag";
 import { ToastHost, ToastProvider, useToast } from "./Toasts";
+import { reduceMotion } from "../test/reduceMotion";
 
 const realMatchMedia = window.matchMedia;
 const realInnerWidth = window.innerWidth;
 
+/** The real matchMedia comes back after each test (afterEach), as after the stubs below. */
 function mockReducedMotion(reduce: boolean) {
-  window.matchMedia = vi.fn((query: string) => ({
-    matches: reduce && query.includes("prefers-reduced-motion: reduce"),
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(() => false),
-  })) as unknown as typeof window.matchMedia;
+  reduceMotion(reduce);
 }
 
 function setWidth(px: number) {

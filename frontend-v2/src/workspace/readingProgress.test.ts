@@ -1,7 +1,7 @@
 // readingProgress: the stages and the overall figure of a paper being read.
 import { describe, expect, it } from "vitest";
 import type { StepOut } from "../api/types";
-import { readingProgress } from "./readingProgress";
+import { progressOf, readingProgress } from "./readingProgress";
 
 let seq = 0;
 function step(over: Partial<StepOut>): StepOut {
@@ -259,5 +259,35 @@ describe("readingProgress", () => {
     expect(readingProgress({ status: "failed", pages: null, ocsr_mode: "auto" }, [])).toBeNull();
     const bad = [step({ kind: "check_pdf", page: null, status: "failed", error_class: "bad_input" })];
     expect(readingProgress({ status: "checking", pages: null, ocsr_mode: "auto" }, bad)).toBeNull();
+  });
+
+  it("reads the papers list's counts as the steps (the tool home's rows poll no steps)", () => {
+    const counts = {
+      annotating: false,
+      pages_read: 2,
+      structures_total: 3,
+      structures_read: 1,
+      text_read: false,
+      check_started: true,
+      rereading: false,
+    };
+    const row = progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts })!;
+    expect(row).toMatchObject({
+      stage: "pages",
+      valueText: "Reading pages, 2 of 4",
+      line: "Reading pages 2/4",
+      said: "Reading pages",
+      estimated: false,
+    });
+    const steps = [checkDone(), ...pageRead(0), ...pageRead(1), ocsr("g1"), ocsr("g2", "running"), ocsr("g3", "queued")];
+    expect(readingProgress(busy(4), steps)).toEqual(row);
+    expect(progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts, annotating: true })).toMatchObject({
+      stage: "annotating",
+      line: "",
+      said: "",
+      estimated: true,
+      stages: [],
+    });
+    expect(progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts, rereading: true })).toBeNull();
   });
 });

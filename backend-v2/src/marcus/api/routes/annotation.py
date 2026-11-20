@@ -1,6 +1,6 @@
 """A paper's annotation by the local MARCUS model (owner decision 2026-11-20).
 
-    GET    /papers/{id}/annotation           state, model values, curated values, positions
+    GET    /papers/{id}/annotation           state, model values, curated values, positions, limits
     POST   /papers/{id}/annotation           start (on demand); {"rerun": true} runs it again
     PUT    /papers/{id}/annotation/curation  save the curator's values (all 11 fields)
     DELETE /papers/{id}/annotation/curation  reset to the model's values
@@ -31,16 +31,18 @@ from marcus.api.schemas import (
     AnnotationStarted,
 )
 from marcus.api.security import annotate_limit, curation_limit
+from marcus.core import storage
 from marcus.core.db import get_db
+from marcus.core.enums import StepKind
 from marcus.core.models import Owner
 from marcus.core.pipeline import AnnotateNotAllowed, request_annotation
+from marcus.core.queues import queue_for
 from marcus.core.settings import get_settings
 
 router = APIRouter()
 
 NOT_AVAILABLE = "Annotation is not available"
 NOT_RUNNING = "The annotation model is not running"
-LLM_QUEUE = "q.llm"
 NO_TEXT = "The text of this paper is not ready"
 NOTHING_TO_CORRECT = "This paper has no annotation yet"
 
@@ -75,7 +77,7 @@ async def start_annotation(
     if not get_settings().annotate_enabled:
         raise HTTPException(status_code=503, detail=NOT_AVAILABLE)
     # the /ready consumer check and its cache (routes.health.live_queues, via create_app)
-    if LLM_QUEUE not in await request.app.state.live_queues():
+    if queue_for(StepKind.ANNOTATE, None) not in await request.app.state.live_queues():
         raise HTTPException(status_code=503, detail=NOT_RUNNING)
     paper = await get_owned_paper(db, owner, paper_id)
     rerun = body.rerun if body is not None else False
@@ -115,7 +117,7 @@ async def put_annotation_curation(
     known = reads.known_positions(row)
     await db.commit()  # end the read transaction: locating reads the text file
     # CPU-bound (text normalisation, search): in the chem process, not on the event loop's GIL
-    found = await CHEM.run(reads.locate, reads.text_path(paper.id), body.values, known)
+    found = await CHEM.run(reads.locate, storage.text_path(paper.id), body.values, known)
     row = await reads.load_for_update(db, paper.id)
     if row is None:  # deleted meanwhile
         await db.rollback()

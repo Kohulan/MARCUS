@@ -4,7 +4,7 @@
 // inputs with staleTime Infinity, so a second look at the same structures costs nothing.
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, errorText } from "../api/client";
 import type { Highlight, RenewHighlight } from "../api/depictions";
 import { ENGINES, engineName } from "../api/engines";
 import { reasonText } from "../api/reasons";
@@ -63,12 +63,9 @@ export function enginesToRun(rows: EngineRow[]): Engine[] {
   });
 }
 
-/** "Too many requests, try again in N s" for a 429; null for anything else. */
+/** "Too many requests, try again in N s" for a 429 (errorText); null for anything else. */
 export function tooManyText(err: unknown): string | null {
-  if (!(err instanceof ApiError) || err.status !== 429) return null;
-  return err.retryAfter !== undefined
-    ? `Too many requests, try again in ${err.retryAfter} s`
-    : "Too many requests, try again in a moment";
+  return err instanceof ApiError && err.status === 429 ? errorText(err) : null;
 }
 
 const sorted = <T>(list: T[]) => [...list].sort();

@@ -3,13 +3,16 @@
 // the text. The curator can correct the values (one a line per field) and go back to the
 // model's. Every value is model or curator text: rendered as React text only.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { errorText } from "../api/client";
+import { reasonText } from "../api/reasons";
+import { isStepActive } from "../api/status";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar, { useAnnotateEstimate } from "../ui/ProgressBar";
+import { focusLost } from "../ui/focus";
 import {
-  annotateReason,
-  annotationError,
   familyClass,
+  fieldLabel,
   hitsOf,
   linesOf,
   sameValues,
@@ -71,7 +74,7 @@ export default function AnnotationPanel(props: Props) {
     try {
       await props.onStart();
     } catch (err) {
-      setError(`Not started: ${annotationError(err, "start")}`);
+      setError(`Not started: ${errorText(err, "starts")}`);
     } finally {
       setStarting(false);
     }
@@ -80,8 +83,16 @@ export default function AnnotationPanel(props: Props) {
   const newest = step ?? annotation.step ?? undefined;
   const failedStep = newest?.status === "failed" ? newest : null;
 
+  // The model reports no progress: the bar shows the time-based estimate while the run goes
+  // on (never 100%; one clock with the status bar's, by the step's id), then a run that ends
+  // with values stays on its full bar for a moment (END_HOLD_MS) before the values show. A
+  // failed run shows its failure at once.
+  const figure = useAnnotateEstimate(
+    running || starting,
+    running && step && isStepActive(step.status) ? step.id : null,
+  );
   const phase: "running" | "values" | "failed" | "start" =
-    running || starting
+    running || starting || (figure === 1 && annotation.values !== null && failedStep === null)
       ? "running"
       : annotation.values !== null
         ? "values"
@@ -89,45 +100,39 @@ export default function AnnotationPanel(props: Props) {
           ? "failed"
           : "start";
 
-  // The model reports no progress: the bar shows the time-based estimate while the run goes
-  // on (never 100%), then a run that ends with values stays on its full bar for a moment
-  // (END_HOLD_MS) before the values show. A failed run shows its failure at once.
-  const figure = useAnnotateEstimate(phase === "running");
-  const view = phase === "values" && failedStep === null && figure === 1 ? "running" : phase;
-
   // A run that starts or ends is said; the control that was clicked is gone, so the focus
   // (when it was in the panel, or dropped to the page with that control) goes to the panel
   // while it runs, then to Edit or Try again (a refused start: back to Annotate). A run that
   // fails over values already shown is said as failed. A focus elsewhere on the page stays.
-  const before = useRef(view);
+  const before = useRef(phase);
   useEffect(() => {
     const was = before.current;
-    before.current = view;
-    if (was === view) return;
+    before.current = phase;
+    if (was === phase) return;
     const box = section.current;
     const active = document.activeElement;
-    const ours = !active || active === document.body || (box !== null && box.contains(active));
+    const ours = focusLost(active) || (box !== null && box.contains(active));
     const take = (el: HTMLElement | null | undefined) => {
       if (ours) focusAfter(el);
     };
-    const failed = () => say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
-    if (view === "running") {
+    const failed = () => say(`Annotation failed: ${reasonText(failedStep?.error_class ?? null, "annotate")}`);
+    if (phase === "running") {
       say("Annotating…");
       take(box);
-    } else if (was === "running" && view === "values") {
+    } else if (was === "running" && phase === "values") {
       if (failedStep) failed();
       else say("Annotation ready");
       take(box?.querySelector<HTMLElement>(".pv-ann__actions button"));
-    } else if (was === "running" && view === "failed") {
+    } else if (was === "running" && phase === "failed") {
       failed();
       take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
-    } else if (was === "running" && view === "start") {
+    } else if (was === "running" && phase === "start") {
       take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
     }
-  }, [view, failedStep, say, focusAfter]);
+  }, [phase, failedStep, say, focusAfter]);
 
   let body;
-  if (view === "running") {
+  if (phase === "running") {
     body = (
       <div className="pv-ann__state">
         <span className="state badge badge--dashed">Annotating…</span>
@@ -141,7 +146,7 @@ export default function AnnotationPanel(props: Props) {
         />
       </div>
     );
-  } else if (view === "values") {
+  } else if (phase === "values") {
     body = <Fields {...props} failedStep={failedStep} say={say} focusAfter={focusAfter} />;
   } else {
     body = (
@@ -155,7 +160,7 @@ export default function AnnotationPanel(props: Props) {
           {failedStep ? "Try again" : "Annotate"}
         </GlassButton>
         {failedStep ? (
-          <p className="pv-ann__problem">{`Annotation failed: ${annotateReason(failedStep.error_class)}`}</p>
+          <p className="pv-ann__problem">{`Annotation failed: ${reasonText(failedStep.error_class, "annotate")}`}</p>
         ) : (
           <p id={hintId} className="pv-ann__hint">
             A model on this server suggests organism, place and compound names.
@@ -208,7 +213,7 @@ function Fields({
   const values = annotation.values!;
   const positions = shownPositions(annotation);
   const curated = annotation.curated !== null;
-  const labelOf = (key: string) => annotation.fields.find((f) => f.key === key)?.label ?? key;
+  const labelOf = (key: string) => fieldLabel(annotation.fields, key);
   const filled = annotation.fields.filter((f) => valuesIn(values, f.key).length > 0);
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -256,7 +261,7 @@ function Fields({
     const next: AnnotationValues = Object.fromEntries(
       annotation.fields.map((f) => [f.key, valuesOf(Object.hasOwn(draft, f.key) ? draft[f.key]! : "")]),
     );
-    const why = valuesProblem(next, labelOf, annotation.fields);
+    const why = valuesProblem(next, annotation.fields, annotation.limits);
     if (why) {
       setProblem(why);
       return;
@@ -272,7 +277,7 @@ function Fields({
       setDraft(null);
       say("Saved");
     } catch (err) {
-      setProblem(`Not saved: ${annotationError(err)}`);
+      setProblem(`Not saved: ${errorText(err, "changes")}`);
     } finally {
       setBusy(false);
     }
@@ -288,7 +293,7 @@ function Fields({
       // Reset to model is gone with the curation: the focus goes to Edit (once enabled again)
       refocus.current = true;
     } catch (err) {
-      setProblem(`Not reset: ${annotationError(err)}`);
+      setProblem(`Not reset: ${errorText(err, "changes")}`);
     } finally {
       setBusy(false);
     }
@@ -417,7 +422,7 @@ function Fields({
       )}
       {failedStep && (
         <p className="pv-ann__problem">
-          {`The last run failed: ${annotateReason(failedStep.error_class)}`}
+          {`The last run failed: ${reasonText(failedStep.error_class, "annotate")}`}
         </p>
       )}
       <div className="pv-ann__actions">

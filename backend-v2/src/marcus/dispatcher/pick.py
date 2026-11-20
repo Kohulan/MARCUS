@@ -17,7 +17,7 @@ from collections.abc import Callable
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.orm import Session
 
-from marcus.core.enums import ErrorClass, StepKind, StepStatus
+from marcus.core.enums import WAITING_STEPS, ErrorClass, StepKind, StepStatus
 from marcus.core.models import Paper, Step
 from marcus.core.pipeline import fail_step, lock_parent, parent_gone
 from marcus.core.queues import (
@@ -30,6 +30,7 @@ from marcus.core.queues import (
     SLOTS,
     TIME_LIMITS,
     docling_slots,
+    queue_for,
 )
 from marcus.core.settings import get_settings
 
@@ -215,6 +216,20 @@ def _stuck():
     )
 
 
+def _lock_status(session: Session, step_id: uuid.UUID, *still) -> str | None:
+    """Lock the step's parent, then the step if it still matches `still` (the planner's lock
+    order); its status, or None when it no longer matches or the step or its parent is gone
+    (nothing is locked then but the parent)."""
+    ids = session.execute(
+        select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
+    ).one_or_none()
+    if ids is None or parent_gone(lock_parent(session, ids.paper_id, ids.image_job_id)):
+        return None
+    return session.execute(
+        select(Step.status).where(Step.id == step_id, *still).with_for_update()
+    ).scalar_one_or_none()
+
+
 def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> bool:
     """In the current transaction, lock the step's parent then the step and, if the step is
     still stuck, fail it as worker_lost (retryable). A step stuck in `queued` never started,
@@ -226,14 +241,7 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     A missing or deleted parent is left alone (no attempt added): fail_step would ignore it.
     Does not commit. Returns True if the step was failed or put back.
     """
-    ids = session.execute(
-        select(Step.paper_id, Step.image_job_id).where(Step.id == step_id)
-    ).one_or_none()
-    if ids is None or parent_gone(lock_parent(session, ids.paper_id, ids.image_job_id)):
-        return False
-    status = session.execute(
-        select(Step.status).where(Step.id == step_id, _stuck()).with_for_update()
-    ).scalar_one_or_none()
+    status = _lock_status(session, step_id, _stuck())
     if status is None:
         return False
     if status == StepStatus.QUEUED.value and not served:
@@ -252,7 +260,7 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     return True
 
 
-ANNOTATE_QUEUE = "q.llm"
+ANNOTATE_QUEUE = queue_for(StepKind.ANNOTATE, None)
 NO_ANNOTATOR = "no annotation worker"
 
 
@@ -264,7 +272,7 @@ def _unserved_annotations(session: Session) -> list[uuid.UUID]:
         session.execute(
             select(Step.id).where(
                 Step.kind == StepKind.ANNOTATE.value,
-                Step.status.in_((StepStatus.PENDING.value, StepStatus.QUEUED.value)),
+                Step.status.in_(WAITING_STEPS),
                 Step.created_at < old,
             )
         ).scalars()
@@ -275,13 +283,7 @@ def fail_unserved_annotation(session: Session, step_id: uuid.UUID) -> bool:
     """In the current transaction, lock the step's parent then the step and, if it is still
     waiting, fail it for good as engine_error: the model service is not running, so the paper
     goes back to done. Does not commit. True if failed."""
-    ids = session.execute(select(Step.paper_id).where(Step.id == step_id)).one_or_none()
-    if ids is None or parent_gone(lock_parent(session, ids.paper_id, None)):
-        return False
-    status = session.execute(
-        select(Step.status).where(Step.id == step_id).with_for_update()
-    ).scalar_one_or_none()
-    if status not in (StepStatus.PENDING.value, StepStatus.QUEUED.value):
+    if _lock_status(session, step_id, Step.status.in_(WAITING_STEPS)) is None:
         return False
     fail_step(session, step_id, ErrorClass.ENGINE_ERROR, NO_ANNOTATOR, retryable=False)
     return True

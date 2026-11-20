@@ -1,8 +1,10 @@
 // How far a paper's read has come: its stages in plain words and one overall figure, for the
 // status bar's progress bar and the tool home's rows. Pages are 0-based here, as in the API.
+// The workspace reads the counts from the paper's steps (readCounts); the tool home gets the
+// same counts with the papers list (PaperSummary), so its rows poll no steps.
 import { isPaperBusy, isStepActive } from "../api/status";
-import type { StepOut } from "../api/types";
-import { onlyAnnotating } from "./annotation";
+import type { PaperSummary, StepOut } from "../api/types";
+import { isAnnotating } from "./annotation";
 import { checkFailure, pageSteps } from "./pageFailures";
 
 export type Stage =
@@ -33,8 +35,27 @@ export type ReadingProgress = {
   structures: { done: number; total: number } | null;
   /** The bar's spoken value: "Reading structures, 10 of 15". */
   valueText: string;
+  /** The tool home row's line: "Reading pages 2/4", "Waiting"; "" when there is none. */
+  line: string;
+  /** Said once when the stage changes; "" while annotating (the badge and the panel say it). */
+  said: string;
+  /** The figure is an annotate run's time-based estimate (its model reports no progress). */
+  estimated: boolean;
+  /** The stages, done ones ticked, the current one counted; [] while annotating. */
   stages: StageMark[];
 };
+
+/** What a read is measured by: the papers list's fields, or readCounts from the steps. */
+export type ReadCounts = Pick<
+  PaperSummary,
+  | "annotating"
+  | "pages_read"
+  | "structures_total"
+  | "structures_read"
+  | "text_read"
+  | "check_started"
+  | "rereading"
+>;
 
 type PaperLike = {
   status: string;
@@ -108,88 +129,108 @@ function structuresHandled(steps: StepOut[]): { done: number; total: number } {
   return { done, total: all.size };
 }
 
-const LABEL: Record<StageMark["key"], string> = {
-  check: "Checking PDF",
-  pages: "Reading pages",
-  structures: "Reading structures",
-  text: "Reading the text",
-  end: "Finishing",
-};
-
-const ORDER: Record<Stage, number> = {
-  waiting: -1,
-  checking: 0,
-  pages: 1,
-  structures: 2,
-  text: 3,
-  finishing: 4,
-  annotating: 4,
-  done: 5,
-};
-
-const INDEX: Record<StageMark["key"], number> = { check: 0, pages: 1, structures: 2, text: 3, end: 4 };
-
-function marks(
-  stage: Stage,
-  pages: ReadingProgress["pages"],
-  structures: ReadingProgress["structures"],
-  withStructures: boolean,
-  textDone: boolean,
-): StageMark[] {
-  const keys: StageMark["key"][] = withStructures
-    ? ["check", "pages", "structures", "text", "end"]
-    : ["check", "pages", "text", "end"];
-  const at = ORDER[stage];
-  return keys.map((key) => {
-    const i = INDEX[key];
-    let state: StageMark["state"] = i < at ? "done" : i === at ? "current" : "next";
-    // The text is read beside the pages: ticked as soon as it is, whatever the stage.
-    if (key === "text" && textDone && state === "next") state = "done";
-    let count: string | null = null;
-    if (state === "current" && key === "pages" && pages) count = `${pages.done}/${pages.total}`;
-    if (state === "current" && key === "structures" && structures) {
-      count = `${structures.done}/${structures.total}`;
-    }
-    const label = key === "end" && stage === "done" ? "Done" : LABEL[key];
-    return { key, label, count, state };
-  });
+/** The counts the papers list sends (backend api/read.py paper_counts), from the steps. */
+export function readCounts(paper: PaperLike, steps: StepOut[]): ReadCounts {
+  const pagesRead = paper.pages === null ? 0 : pagesHandled(steps, paper.pages);
+  const structures = structuresHandled(steps);
+  return {
+    annotating: isAnnotating(paper, steps),
+    pages_read: pagesRead,
+    structures_total: structures.total,
+    structures_read: structures.done,
+    text_read: textHandled(steps, paper.pages !== null && pagesRead >= paper.pages),
+    check_started: steps.some(
+      (s) => s.kind === "check_pdf" && (s.status === "running" || ENDED.has(s.status)),
+    ),
+    rereading: onlyRereading(steps),
+  };
 }
 
-/**
- * The read's stage and overall figure, or null when there is no read to show (a failed paper,
- * a PDF that could not be read: the status bar says why as before).
- */
-export function readingProgress(paper: PaperLike, steps: StepOut[]): ReadingProgress | null {
-  if (paper.status === "failed" || checkFailure(steps) !== null) return null;
-  const withStructures = paper.ocsr_mode !== "off";
-  const total = paper.pages;
-  const pages = total === null ? null : { done: pagesHandled(steps, total), total };
-  const found = structuresHandled(steps);
-  const structures = withStructures ? found : null;
-  const textDone = textHandled(steps, pages !== null && pages.done >= pages.total);
+/** Each stage's words and place (a mark's state comes from it: before, at or after). */
+const STAGES: Record<Stage, { label: string; order: number }> = {
+  waiting: { label: "Waiting", order: -1 },
+  checking: { label: "Checking PDF", order: 0 },
+  pages: { label: "Reading pages", order: 1 },
+  structures: { label: "Reading structures", order: 2 },
+  text: { label: "Reading the text", order: 3 },
+  finishing: { label: "Finishing", order: 4 },
+  annotating: { label: "Annotating", order: 4 },
+  done: { label: "Done", order: 5 },
+};
 
-  const make = (stage: Stage, fraction: number | null, valueText: string): ReadingProgress => ({
+/** The marks of a read, each the stage it stands for. */
+const MARKS: [StageMark["key"], Stage][] = [
+  ["check", "checking"],
+  ["pages", "pages"],
+  ["structures", "structures"],
+  ["text", "text"],
+  ["end", "finishing"],
+];
+
+type Read = {
+  pages: ReadingProgress["pages"];
+  structures: ReadingProgress["structures"];
+  textDone: boolean;
+};
+
+const NO_READ: Read = { pages: null, structures: null, textDone: false };
+
+/** The model of one stage: its words (bar, row line, announcement) and its marks. */
+function make(stage: Stage, fraction: number | null, read: Read): ReadingProgress {
+  const { pages, structures, textDone } = read;
+  const counted = stage === "pages" ? pages : stage === "structures" ? structures : null;
+  const { label, order } = STAGES[stage];
+  const count = counted ? `${counted.done}/${counted.total}` : null;
+  const estimated = stage === "annotating";
+  const stages = estimated
+    ? []
+    : MARKS.filter(([key]) => key !== "structures" || structures !== null).map(
+        ([key, at]): StageMark => {
+          const i = STAGES[at].order;
+          let state: StageMark["state"] = i < order ? "done" : i === order ? "current" : "next";
+          // The text is read beside the pages: ticked as soon as it is, whatever the stage.
+          if (key === "text" && textDone && state === "next") state = "done";
+          const mark = key === "end" && stage === "done" ? "done" : at;
+          return { key, label: STAGES[mark].label, count: at === stage ? count : null, state };
+        },
+      );
+  return {
     stage,
     fraction,
     pages,
     structures,
-    valueText,
-    stages: marks(stage, pages, structures, withStructures, textDone),
-  });
+    valueText: counted ? `${label}, ${counted.done} of ${counted.total}` : label,
+    line: estimated || stage === "done" ? "" : count ? `${label} ${count}` : label,
+    said: estimated ? "" : label,
+    estimated,
+    stages,
+  };
+}
 
-  if (paper.status === "done") return make("done", 1, "Done");
+/** A finished annotate run's full bar, held for a moment before the bar goes. */
+export const ANNOTATE_END = make("annotating", 1, NO_READ);
+
+/**
+ * The read's stage and overall figure from its counts (the papers list's fields, or
+ * readCounts), or null when there is no read to show (a failed paper; busy only reading read
+ * structures again).
+ */
+export function progressOf(paper: PaperLike & ReadCounts): ReadingProgress | null {
+  if (paper.status === "failed") return null;
+  const total = paper.pages;
+  const pages = total === null ? null : { done: paper.pages_read, total };
+  const structures =
+    paper.ocsr_mode !== "off" ? { done: paper.structures_read, total: paper.structures_total } : null;
+  const read: Read = { pages, structures, textDone: paper.text_read };
+
+  if (paper.status === "done") return make("done", 1, read);
   if (!isPaperBusy(paper.status)) return null;
-  if (paper.annotating || onlyAnnotating(steps)) return make("annotating", null, "Annotating");
-  if (onlyRereading(steps)) return null;
-  if (pages === null) {
-    const check = steps.some(
-      (s) => s.kind === "check_pdf" && (s.status === "running" || ENDED.has(s.status)),
-    );
-    return check ? make("checking", null, "Checking PDF") : make("waiting", null, "Waiting");
-  }
+  if (paper.annotating) return make("annotating", null, read);
+  if (paper.rereading) return null;
+  if (pages === null) return make(paper.check_started ? "checking" : "waiting", null, read);
 
   const pageFrac = pages.total > 0 ? pages.done / pages.total : 1;
-  let fraction = CHECK + (textDone ? TEXT : 0);
+  let fraction = CHECK + (read.textDone ? TEXT : 0);
   let structFrac = 0;
   if (structures === null) {
     fraction += (PAGES + STRUCTURES) * pageFrac;
@@ -199,16 +240,18 @@ export function readingProgress(paper: PaperLike, steps: StepOut[]): ReadingProg
     fraction += PAGES * pageFrac + STRUCTURES * structFrac;
   }
 
-  if (pages.done < pages.total) {
-    return make("pages", fraction, `Reading pages, ${pages.done} of ${pages.total}`);
-  }
+  if (pages.done < pages.total) return make("pages", fraction, read);
   if (structures !== null && structures.done < structures.total) {
-    return make(
-      "structures",
-      fraction,
-      `Reading structures, ${structures.done} of ${structures.total}`,
-    );
+    return make("structures", fraction, read);
   }
-  if (!textDone) return make("text", fraction, "Reading the text");
-  return make("finishing", fraction, "Finishing");
+  return make(read.textDone ? "finishing" : "text", fraction, read);
+}
+
+/**
+ * The read's stage and overall figure from the paper's steps, or null when there is no read
+ * to show (progressOf; also a PDF that could not be read: the status bar says why as before).
+ */
+export function readingProgress(paper: PaperLike, steps: StepOut[]): ReadingProgress | null {
+  if (checkFailure(steps) !== null) return null;
+  return progressOf({ ...paper, ...readCounts(paper, steps) });
 }

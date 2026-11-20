@@ -96,6 +96,8 @@ async def test_a_paper_without_annotation(app, async_db_session):
     }  # fmt: skip
     # the editor's per-value limit comes from here (B-M7): the model's maxLength per field
     assert {f["key"]: f["max_length"] for f in body["fields"]} == ann.MAX_LENGTH
+    # and the save's count limits (the PUT's 422 lines)
+    assert body["limits"] == {"max_values_per_field": 200, "max_total_values": 300}
     for key in ("output", "positions", "curated", "curated_positions", "values", "coconut"):
         assert body[key] is None
 
@@ -394,12 +396,12 @@ def test_locate_reuses_known_positions_and_reads_no_text_when_all_are_known(monk
     )
     values = {f: [] for f in ann.FIELDS} | {"geo_location": ["Oregon", "USA"]}
     known = {"Oregon": [[9, 9, 9]]}
-    found = reads.locate(reads.text_path(paper_id), values, known)
+    found = reads.locate(storage.text_path(paper_id), values, known)
     assert searched == ["USA"]  # only the new value is searched
     assert found["geo_location"] == {"Oregon": [[9, 9, 9]], "USA": [[2, 34, 37]]}
     monkeypatch.setattr(reads, "text_blocks", lambda pid: pytest.fail("text read"))
     assert reads.locate(
-        reads.text_path(paper_id), {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known
+        storage.text_path(paper_id), {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known
     )["Kingdom"] == {"Oregon": [[9, 9, 9]]}
 
 

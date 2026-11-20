@@ -16,6 +16,8 @@ docker run -d --rm --name marcus-ui-dev --network host \
   -v "$PWD/dist:/usr/share/nginx/marcus-ui:ro" \
   -v "$PWD/deploy/dev-nginx.conf:/etc/nginx/nginx.conf:ro" \
   -v "$PWD/deploy/ui-locations.conf:/etc/nginx/marcus/ui-locations.conf:ro" \
+  -v "$PWD/deploy/headers-app.conf:/etc/nginx/marcus/headers-app.conf:ro" \
+  -v "$PWD/deploy/headers-ketcher.conf:/etc/nginx/marcus/headers-ketcher.conf:ro" \
   nginxinc/nginx-unprivileged:1.27-alpine >/dev/null
 
 i=0

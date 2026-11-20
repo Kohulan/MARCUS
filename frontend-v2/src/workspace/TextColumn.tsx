@@ -12,35 +12,25 @@ import AnnotationPanel from "./AnnotationPanel";
 import {
   blockRanges,
   familyClass,
+  fieldLabel,
   hitsOf,
   markLabel,
+  markRuns,
   newestAnnotate,
   nextHit,
+  piecesOf,
   shownPositions,
-  splitMarks,
   type FieldSpan,
   type HitAt,
 } from "./annotation";
 import { doclingBlocks, type TextBlock } from "./doclingText";
 import { newestFirst } from "./pageFailures";
+import { scrollWithin } from "./scrollWithin";
 import { useAnnotation, useAnnotationActions } from "./useAnnotation";
 
 const NO_BLOCKS: TextBlock[] = [];
 const NO_STEPS: StepOut[] = [];
 const NO_RANGES = new Map<number, FieldSpan[]>();
-
-/** Scrolls `container` so `el` sits in its middle (an occurrence keeps text around it). */
-function scrollToMiddle(container: HTMLElement | null, el: Element | null, smooth: boolean) {
-  if (!container || !el) return;
-  const c = container.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  const top = container.scrollTop + (r.top - c.top) - (c.height - r.height) / 2;
-  if (typeof container.scrollTo === "function") {
-    container.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
-  } else {
-    container.scrollTop = top;
-  }
-}
 
 /**
  * One block of the text: plain, or cut into pieces with the annotation's values marked
@@ -53,17 +43,27 @@ function scrollToMiddle(container: HTMLElement | null, el: Element | null, smoot
 const Block = memo(function Block({
   block,
   spans,
-  current,
+  curStart,
+  curEnd,
+  curField,
   label,
 }: {
   block: TextBlock;
   spans: FieldSpan[] | undefined;
-  current: FieldSpan | null;
+  /** The current occurrence in this block, as primitives (the memo holds across renders). */
+  curStart?: number | undefined;
+  curEnd?: number | undefined;
+  curField?: string | undefined;
   label: (field: string) => string;
 }) {
+  const runs = useMemo(() => (spans ? markRuns(block.text.length, spans) : null), [block.text, spans]);
+  const current: FieldSpan | null =
+    curStart !== undefined && curEnd !== undefined && curField !== undefined
+      ? [curStart, curEnd, curField]
+      : null;
   const content =
-    spans || current
-      ? splitMarks(block.text, spans ?? [], current).map((p, i) =>
+    runs || current
+      ? piecesOf(block.text, runs ?? markRuns(block.text.length, []), current).map((p, i) =>
           p.fields.length > 0 ? (
             <mark
               key={i}
@@ -135,10 +135,10 @@ export default function TextColumn({
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
 
-  const annotationQuery = useAnnotation(paperId, steps);
+  const annStep = useMemo(() => newestAnnotate(steps), [steps]);
+  const annotationQuery = useAnnotation(paperId, annStep);
   const annotation = annotationQuery.data;
   const actions = useAnnotationActions(paperId, onStarted);
-  const annStep = newestAnnotate(steps);
   // The step a start made, until the steps show it (then its own status says).
   const [startedId, setStartedId] = useState<string | null>(null);
   // Running: the step is active, a start is not in the steps yet, or the step has ended but
@@ -157,10 +157,7 @@ export default function TextColumn({
     [values, positions],
   );
   const fields = annotation?.fields;
-  const label = useCallback(
-    (key: string) => fields?.find((f) => f.key === key)?.label ?? key,
-    [fields],
-  );
+  const label = useCallback((key: string) => fieldLabel(fields, key), [fields]);
   const [at, setAt] = useState<HitAt | null>(null);
   const hit: AnnotationHit | undefined = at
     ? hitsOf(positions, at.field, at.value)[at.index]
@@ -185,7 +182,7 @@ export default function TextColumn({
   // A click (or the annotation changing under it) brings the shown occurrence into view.
   useLayoutEffect(() => {
     if (!at) return;
-    scrollToMiddle(scroller.current, scroller.current?.querySelector("[data-current]") ?? null, !reduce);
+    scrollWithin(scroller.current, scroller.current?.querySelector("[data-current]"), "center", !reduce);
   }, [at, hitBlock, hitStart, reduce]);
 
   const notReady = waiting || (text.error instanceof ApiError && text.error.status === 404);
@@ -222,7 +219,9 @@ export default function TextColumn({
             key={i}
             block={b}
             spans={ranges.get(i)}
-            current={hit && at && hit[0] === i ? [hit[1], hit[2], at.field] : null}
+            {...(hit && at && hit[0] === i
+              ? { curStart: hit[1], curEnd: hit[2], curField: at.field }
+              : {})}
             label={label}
           />
         ))}
