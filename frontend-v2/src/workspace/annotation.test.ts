@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../api/client";
 import type { AnnotationOut, StepOut } from "../api/types";
 import {
   annotateReason,
+  annotationError,
   blockRanges,
   FIELD_MAX,
   hitsOf,
@@ -206,5 +208,32 @@ describe("annotation helpers", () => {
     expect(valuesIn(values, "constructor")).toEqual([]);
     expect(valuesIn(null, "trivial_name")).toEqual([]);
     expect(valuesProblem({ constructor: ["x"] } as unknown as Record<string, string[]>, String)).toBeNull();
+  });
+
+  it("caps the values in all at the server's 300", () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `v${i}`);
+    expect(valuesProblem({ a: many(150), b: many(150) }, String)).toBeNull();
+    expect(valuesProblem({ a: many(150), b: many(151) }, String)).toBe(
+      "At most 300 values in all (301 now).",
+    );
+  });
+
+  it("words the server's refusals of a start or a save shortly", () => {
+    expect(annotationError(new ApiError(503, "The annotation model is not running"))).toBe(
+      "The annotation model is not running",
+    );
+    expect(annotationError(new ApiError(503, "Annotation is not available"))).toBe(
+      "Annotation is not available",
+    );
+    expect(annotationError(new ApiError(429, "rate limited", 20))).toBe(
+      "Too many changes, try again in a minute",
+    );
+    expect(annotationError(new ApiError(503, "The server is busy, try again in a moment."))).toBe(
+      "The server is busy, try again in a moment.",
+    );
+    expect(annotationError(new ApiError(422, "Value error, too many values"))).toBe(
+      "Value error, too many values",
+    );
+    expect(annotationError(new Error("x"))).toBe("Something went wrong.");
   });
 });

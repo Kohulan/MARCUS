@@ -3,11 +3,11 @@
 // the text. The curator can correct the values (one a line per field) and go back to the
 // model's. Every value is model or curator text: rendered as React text only.
 import { useEffect, useId, useRef, useState } from "react";
-import { errorText } from "../api/client";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import {
   annotateReason,
+  annotationError,
   hitsOf,
   linesOf,
   sameValues,
@@ -47,7 +47,7 @@ export default function AnnotationPanel(props: Props) {
     try {
       await props.onStart();
     } catch (err) {
-      setError(`Not started: ${errorText(err)}`);
+      setError(`Not started: ${annotationError(err)}`);
     } finally {
       setStarting(false);
     }
@@ -146,6 +146,11 @@ function Fields({
     setDraft(Object.fromEntries(annotation.fields.map((f) => [f.key, linesOf(valuesIn(values, f.key))])));
   }
 
+  function cancel() {
+    setDraft(null);
+    setProblem(null);
+  }
+
   async function save() {
     if (!draft || busy) return;
     const next: AnnotationValues = Object.fromEntries(
@@ -167,7 +172,7 @@ function Fields({
       setDraft(null);
       say("Saved");
     } catch (err) {
-      setProblem(`Not saved: ${errorText(err)}`);
+      setProblem(`Not saved: ${annotationError(err)}`);
     } finally {
       setBusy(false);
     }
@@ -178,9 +183,10 @@ function Fields({
     setBusy(true);
     try {
       await onReset();
+      setProblem(null);
       say("Model values shown");
     } catch (err) {
-      say(`Not reset: ${errorText(err)}`);
+      setProblem(`Not reset: ${annotationError(err)}`);
     } finally {
       setBusy(false);
     }
@@ -200,7 +206,7 @@ function Fields({
         onKeyDown={(e) => {
           if (e.key === "Escape" && !busy) {
             e.stopPropagation();
-            setDraft(null);
+            cancel();
           }
         }}
       >
@@ -239,7 +245,7 @@ function Fields({
           <GlassButton tint="green" size="sm" type="submit" disabled={busy}>
             Save
           </GlassButton>
-          <GlassButton tint="clear" size="sm" disabled={busy} onClick={() => setDraft(null)}>
+          <GlassButton tint="clear" size="sm" disabled={busy} onClick={cancel}>
             Cancel
           </GlassButton>
         </div>
@@ -298,6 +304,11 @@ function Fields({
           </dl>
         )}
       </div>
+      {problem !== null && (
+        <p className="pv-ann__problem" role="alert">
+          {problem}
+        </p>
+      )}
       {failedStep && (
         <p className="pv-ann__problem">
           {`The last run failed: ${annotateReason(failedStep.error_class)}`}

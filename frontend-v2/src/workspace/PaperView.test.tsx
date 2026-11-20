@@ -473,6 +473,18 @@ describe("Paper view: annotation", () => {
     expect(within(await panel()).getByRole("button", { name: "Annotate" })).toBeEnabled();
   });
 
+  it("a start refused because the model is not running says so", async () => {
+    vi.spyOn(api, "startAnnotation").mockRejectedValue(
+      new ApiError(503, "The annotation model is not running"),
+    );
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    fireEvent.click(within(await panel()).getByRole("button", { name: "Annotate" }));
+    expect(await within(await panel()).findByRole("alert")).toHaveTextContent(
+      "Not started: The annotation model is not running",
+    );
+    expect(within(await panel()).queryByText("Annotating…")).toBeNull();
+  });
+
   it("a run that ended failed says why and offers Try again", async () => {
     const start = vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-2" });
     const failed = annStep({ status: "failed", error_class: "bad_input" });
@@ -612,6 +624,53 @@ describe("Paper view: annotation", () => {
       "A value in Kingdom is longer than 60 characters.",
     );
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [new ApiError(429, "rate limited", 30), "Not saved: Too many changes, try again in a minute"],
+    [new ApiError(503, "The server is busy, try again in a moment."), "Not saved: The server is busy, try again in a moment."],
+    [new ApiError(422, "Value error, at most 300 values in all"), "Not saved: Value error, at most 300 values in all"],
+  ])("a refused save (%s) says why and keeps what was typed", async (err, said) => {
+    vi.spyOn(api, "saveAnnotation").mockRejectedValue(err);
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    fireEvent.change(within(p).getByLabelText("Place"), { target: { value: "Oregon" } });
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    expect(await within(p).findByRole("alert")).toHaveTextContent(said);
+    expect(within(p).getByLabelText("Place")).toHaveValue("Oregon");
+    expect(within(p).getByRole("button", { name: "Save" })).toBeEnabled();
+    fireEvent.click(within(p).getByRole("button", { name: "Cancel" }));
+    expect(within(p).queryByRole("alert")).toBeNull();
+  });
+
+  it("Save refuses more than 300 values in all before asking the server", async () => {
+    const save = vi.spyOn(api, "saveAnnotation");
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated() });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    const lines = (n: number, tag: string) => Array.from({ length: n }, (_, i) => `${tag}${i}`).join("\n");
+    fireEvent.change(within(p).getByLabelText("IUPAC names"), { target: { value: lines(150, "a") } });
+    fireEvent.change(within(p).getByLabelText("Compound names"), { target: { value: lines(150, "b") } });
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    expect(await within(p).findByRole("alert")).toHaveTextContent("At most 300 values in all (303 now).");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("a refused reset (429) says so where it can be seen", async () => {
+    const curated = { ...annotated().values!, organism_part: [] };
+    vi.spyOn(api, "resetAnnotation").mockRejectedValue(new ApiError(429, "rate limited", 30));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      ann: annotated({ curated, values: curated, curated_positions: {} }),
+    });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Reset to model" }));
+    expect(await within(p).findByRole("alert")).toHaveTextContent(
+      "Not reset: Too many changes, try again in a minute",
+    );
+    expect(within(p).getByText("Curated")).toBeInTheDocument();
   });
 
   it("Cancel and Escape leave the values as they were; unchanged values are not saved", async () => {

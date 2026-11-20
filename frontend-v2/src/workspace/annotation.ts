@@ -1,6 +1,7 @@
 // The paper's annotation (the local model's suggestion, or the curator's corrections) as the
 // Paper view shows it: which spans of the text to mark, which occurrence a click goes to, and
 // the editing of a field as lines. Model text is data: it is only ever a React text node.
+import { ApiError, errorText } from "../api/client";
 import { isStepActive } from "../api/status";
 import type {
   AnnotationHit,
@@ -31,6 +32,9 @@ export const FIELD_MAX: Readonly<Record<string, number>> = {
 
 /** The most values a field keeps (MAX_VALUES_PER_FIELD). */
 export const FIELD_MAX_VALUES = 200;
+
+/** The most values a correction holds in all fields together (more: 422). */
+export const TOTAL_MAX_VALUES = 300;
 
 /** The positions of the values shown: the curator's once saved, else the model's. */
 export function shownPositions(a: AnnotationOut): AnnotationPositions {
@@ -166,6 +170,8 @@ export function valuesProblem(
   values: AnnotationValues,
   label: (field: string) => string,
 ): string | null {
+  const total = Object.values(values).reduce((n, list) => n + list.length, 0);
+  if (total > TOTAL_MAX_VALUES) return `At most ${TOTAL_MAX_VALUES} values in all (${total} now).`;
   for (const [field, list] of Object.entries(values)) {
     if (list.length > FIELD_MAX_VALUES) {
       return `${label(field)} has more than ${FIELD_MAX_VALUES} values.`;
@@ -187,4 +193,14 @@ export function sameValues(a: AnnotationValues, b: AnnotationValues): boolean {
     if (x.length !== y.length || x.some((v, i) => v !== y[i])) return false;
   }
   return true;
+}
+
+/**
+ * A refused start, save or reset in a few words: the API's own detail (503 "The annotation
+ * model is not running" or "Annotation is not available", 503 busy, 422), except the 429 of
+ * the per-owner limit on corrections.
+ */
+export function annotationError(err: unknown): string {
+  if (err instanceof ApiError && err.status === 429) return "Too many changes, try again in a minute";
+  return errorText(err);
 }
