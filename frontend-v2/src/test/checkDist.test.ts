@@ -15,11 +15,16 @@ function page(title: string, body = "<p>ok</p>"): string {
 
 // As React pre-renders it: the acrostic hidden from screen readers, the plain name for them.
 const HOME_H1 =
-  '<h1 class="acro"><span aria-hidden="true"><span class="acro__line"><b>M</b>olecular</span>' +
-  '<span class="acro__line"><b>A</b>nnotation<!-- --> <span class="acro__link">and</span></span>' +
-  '<span class="acro__line"><b>R</b>ecognition<!-- --> <span class="acro__link">for</span></span>' +
-  '<span class="acro__line"><b>C</b>urating</span><span class="acro__line"><b>U</b>nravelled</span>' +
-  '<span class="acro__line"><b>S</b>tructures</span></span>' +
+  '<h1 class="acro acro--assemble"><span aria-hidden="true">' +
+  '<span class="acro__line acro__line--1"><b>M</b><span class="acro__rest">olecular</span></span>' +
+  '<span class="acro__line acro__line--2"><b>A</b><span class="acro__rest">nnotation<!-- --> ' +
+  '<span class="acro__link">and</span></span></span>' +
+  '<span class="acro__line acro__line--3"><b>R</b><span class="acro__rest">ecognition<!-- --> ' +
+  '<span class="acro__link">for</span></span></span>' +
+  '<span class="acro__line acro__line--4"><b>C</b><span class="acro__rest">urating</span></span>' +
+  '<span class="acro__line acro__line--5"><b>U</b><span class="acro__rest">nravelled</span></span>' +
+  '<span class="acro__line acro__line--6"><b>S</b><span class="acro__rest">tructures</span></span>' +
+  "</span>" +
   '<span class="visually-hidden">Molecular Annotation and Recognition for Curating Unravelled ' +
   "Structures</span></h1>";
 
