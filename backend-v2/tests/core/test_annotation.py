@@ -293,3 +293,28 @@ def test_parse_output_unquotes_a_cut_quoted_field():
     cut = ("'taxane A', " * 40)[: ann.MAX_LENGTH["compound_group"]]
     raw = json.dumps({f: "nan" for f in ann.FIELDS} | {"compound_group": cut})
     assert ann.parse_output(raw)["compound_group"] == ["taxane A"]
+
+
+def test_locate_counts_a_lone_surrogate_as_one_code_unit():
+    assert ann.Locator(["a\ud800 Taxus"]).find("Taxus") == [[0, 3, 8]]
+
+
+def test_the_fast_normalisation_equals_the_per_character_rules():
+    def slow(text, fold):
+        chars, origin = [], []
+        for i, ch in enumerate(text):
+            for c in ann._piece(ch, fold):
+                if c == " " and chars and chars[-1] == " ":
+                    continue
+                chars.append(c)
+                origin.append(i)
+        return "".join(chars), origin
+
+    samples = [
+        "Taxus  brevi­folia leaves", "a­ b", "x  y", "\x00\x7f́",
+        "A–B  C", "ﬁne İx", "  lead", "trail  ", "café café", "",
+    ]  # fmt: skip
+    for text in samples:
+        for fold in (False, True):
+            form, origin = ann._normalise(text, fold)
+            assert (form, list(origin)) == slow(text, fold), (text, fold)

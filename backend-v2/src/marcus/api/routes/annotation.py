@@ -8,7 +8,9 @@
 Every route is owner-scoped (another owner's paper is the same 404 as a missing one). POST is
 rate-limited per owner (`rate_limit_annotate_per_min`, failing closed) and idempotent: a step
 still waiting or running is returned again, and a paper that has an annotation gets 200 with
-no step unless `rerun` is asked for. Progress arrives on the paper's event stream
+no step unless `rerun` is asked for. PUT/DELETE curation are rate-limited per owner
+(`rate_limit_curation_per_min`); a save holds at most 300 values, and only values not located
+before are searched, in the chem process. Progress arrives on the paper's event stream
 (GET /papers/{id}/events) as step events of kind `annotate`: starting the step puts a done
 paper back to `processing`, so a client reopens the stream after POST.
 """
@@ -17,10 +19,10 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import annotation as reads
+from marcus.api.chempool import CHEM
 from marcus.api.deps import current_owner, get_owned_paper, not_found, work_ip
 from marcus.api.schemas import (
     AnnotationCurationIn,
@@ -28,7 +30,7 @@ from marcus.api.schemas import (
     AnnotationStart,
     AnnotationStarted,
 )
-from marcus.api.security import annotate_limit
+from marcus.api.security import annotate_limit, curation_limit
 from marcus.core.db import get_db
 from marcus.core.models import Owner
 from marcus.core.pipeline import AnnotateNotAllowed, request_annotation
@@ -87,7 +89,11 @@ async def start_annotation(
     return AnnotationStarted(step_id=step.id)
 
 
-@router.put("/papers/{paper_id}/annotation/curation", response_model=AnnotationOut)
+@router.put(
+    "/papers/{paper_id}/annotation/curation",
+    response_model=AnnotationOut,
+    dependencies=[Depends(curation_limit)],
+)
 async def put_annotation_curation(
     paper_id: uuid.UUID,
     body: AnnotationCurationIn,
@@ -95,10 +101,13 @@ async def put_annotation_curation(
     db: AsyncSession = Depends(get_db),
 ) -> AnnotationOut:
     paper = await get_owned_paper(db, owner, paper_id)
-    if await reads.load(db, paper.id) is None:
+    row = await reads.load(db, paper.id)
+    if row is None:
         raise HTTPException(status_code=409, detail=NOTHING_TO_CORRECT)
+    known = reads.known_positions(row)
     await db.commit()  # end the read transaction: locating reads the text file
-    found = await run_in_threadpool(reads.locate, paper.id, body.values)
+    # CPU-bound (text normalisation, search): in the chem process, not on the event loop's GIL
+    found = await CHEM.run(reads.locate, paper.id, body.values, known)
     row = await reads.load_for_update(db, paper.id)
     if row is None:  # deleted meanwhile
         await db.rollback()
@@ -110,7 +119,11 @@ async def put_annotation_curation(
     return await reads.annotation_out(db, paper.id)
 
 
-@router.delete("/papers/{paper_id}/annotation/curation", response_model=AnnotationOut)
+@router.delete(
+    "/papers/{paper_id}/annotation/curation",
+    response_model=AnnotationOut,
+    dependencies=[Depends(curation_limit)],
+)
 async def reset_annotation_curation(
     paper_id: uuid.UUID,
     owner: Owner = Depends(current_owner),

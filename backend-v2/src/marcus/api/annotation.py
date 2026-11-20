@@ -111,6 +111,23 @@ def text_blocks(paper_id: uuid.UUID) -> list[str]:
         return []
 
 
-def locate(paper_id: uuid.UUID, values: dict[str, list[str]]) -> dict:
-    """Positions of `values` in the paper's text (blocking: run it in a thread)."""
-    return ann.positions(ann.Locator(text_blocks(paper_id)), values)
+def known_positions(row: Annotation) -> dict[str, list]:
+    """value -> positions, for every value already located on this paper (the model's and the
+    stored curation's). A value's positions do not depend on its field."""
+    known: dict[str, list] = {}
+    for found in (row.positions, row.curated_positions or {}):
+        for per_value in found.values():
+            known.update(per_value)
+    return known
+
+
+def locate(paper_id: uuid.UUID, values: dict[str, list[str]], known: dict[str, list]) -> dict:
+    """Positions of `values` in the paper's text, {field: {value: positions}}. Values in
+    `known` keep theirs; only new ones are searched, and the text is read only for them.
+    Blocking and CPU-bound: the route runs it in the chem process (marcus.api.chempool)."""
+    new = {v for items in values.values() for v in items if v not in known}
+    found = dict(known)
+    if new:
+        locator = ann.Locator(text_blocks(paper_id))
+        found.update((v, locator.find(v)) for v in new)
+    return {field: {v: found[v] for v in values.get(field, [])} for field in ann.FIELDS}

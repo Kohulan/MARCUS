@@ -18,9 +18,11 @@ value's start and end offsets in the block's text in UTF-16 code units (JavaScri
 indices), end exclusive.
 """
 
+import bisect
 import json
 import re
 import unicodedata
+from functools import lru_cache
 
 FIELDS = (
     "compound_group",
@@ -69,6 +71,7 @@ SYSTEM_PROMPT = "Extract the compound information from the Paragraph."
 MAX_OUTPUT_TOKENS = 4096
 EMPTY = {"", "nan", "none", "null", "n/a", "na", "[]"}
 MAX_VALUES_PER_FIELD = 200  # values kept per field (model or curator)
+MAX_CURATED_VALUES = 300  # values in one curation save, all fields together
 MAX_OCCURRENCES = 200  # positions kept per value
 
 _QUOTED_SEP = re.compile(r"['\u2018\u2019]\s*,\s*['\u2018\u2019]")
@@ -289,9 +292,11 @@ def docling_blocks(doc: object) -> list[str]:
 _DASHES = set("\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe58\ufe63\uff0d")
 
 
-def _piece(ch: str) -> str:
+@lru_cache(maxsize=8192)
+def _piece(ch: str, fold: bool = False) -> str:
     """What one character of the text counts as when matching: compatibility form without
-    accents, every dash a hyphen, any whitespace one space, a soft hyphen nothing."""
+    accents, every dash a hyphen, any whitespace one space, a soft hyphen nothing; lower-cased
+    when `fold`. Cached: a paper has few distinct characters."""
     if ch == "\u00ad":
         return ""
     if ch.isspace():
@@ -300,56 +305,100 @@ def _piece(ch: str) -> str:
         return "-"
     decomposed = unicodedata.normalize("NFKD", ch)
     kept = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return "".join("-" if c in _DASHES else c for c in kept)
+    piece = "".join("-" if c in _DASHES else c for c in kept)
+    return piece.lower() if fold else piece
 
 
-def _normalise(text: str, fold: bool) -> tuple[str, list[int]]:
+_TOKENS = re.compile(r"[!-~]+|\s+|.", re.DOTALL)  # printable ASCII runs, space runs, any other
+
+
+def _normalise(text: str, fold: bool) -> tuple[str, list[int] | range]:
     """(matching form of `text`, for each of its characters the index in `text` it came from).
-    Runs of spaces become one."""
+    Every character counts as its `_piece`; runs of spaces become one. Printable ASCII runs are
+    their own pieces (lower-cased when folding) and are copied whole, not per character."""
+    # Fast path (most blocks): every character's piece is one character and no two spaces end
+    # up side by side, so the form is a per-character translation and the map the identity.
+    table = {ord(c): _piece(c, fold) for c in set(text)}
+    if all(len(p) == 1 for p in table.values()):
+        form = text.translate(table)
+        if "  " not in form:
+            return form, range(len(form))
     chars: list[str] = []
     origin: list[int] = []
-    for i, ch in enumerate(text):
-        piece = _piece(ch)
-        if fold:
-            piece = piece.lower()
-        for c in piece:
-            if c == " " and chars and chars[-1] == " ":
-                continue
-            chars.append(c)
-            origin.append(i)
+    last = ""
+    for m in _TOKENS.finditer(text):
+        token, i = m.group(), m.start()
+        if token[0] > " " and token[0] <= "~":
+            chars.append(token.lower() if fold else token)
+            origin.extend(range(i, i + len(token)))
+            last = token[-1]
+            continue
+        if token.isspace():  # a run of spaces: one space (if the last character is not one)
+            if last != " ":
+                chars.append(" ")
+                origin.append(i)
+                last = " "
+            continue
+        for k, ch in enumerate(token):
+            for c in _piece(ch, fold):
+                if c == " " and last == " ":
+                    continue
+                chars.append(c)
+                origin.append(i + k)
+                last = c
     return "".join(chars), origin
 
 
 def _utf16(text: str, index: int) -> int:
-    return len(text[:index].encode("utf-16-le")) // 2
+    # surrogatepass: a lone surrogate counts as one code unit, as in JavaScript
+    return len(text[:index].encode("utf-16-le", "surrogatepass")) // 2
 
 
 class Locator:
-    """Finds values in the paper's text blocks (built once per paper)."""
+    """Finds values in the paper's text blocks (built once per paper). Each matching form (own
+    case, any case) is built on first use: the blocks normalised and joined by newlines (a
+    normalised text has none, so no match crosses a block)."""
 
     def __init__(self, blocks: list[str]):
         self.blocks = blocks
-        self._forms = {fold: [_normalise(b, fold) for b in blocks] for fold in (False, True)}
+        self._forms: dict[bool, tuple[str, list[int], list[list[int]]]] = {}
+
+    def _form(self, fold: bool) -> tuple[str, list[int], list[list[int]]]:
+        """(joined text, start of each block in it, each block's origin map)."""
+        if fold not in self._forms:
+            parts, starts, origins, at = [], [], [], 0
+            for block in self.blocks:
+                form, origin = _normalise(block, fold)
+                parts.append(form)
+                starts.append(at)
+                origins.append(origin)
+                at += len(form) + 1
+            self._forms[fold] = ("\n".join(parts), starts, origins)
+        return self._forms[fold]
 
     def _scan(self, needle: str, fold: bool) -> list[list[int]]:
+        joined, starts, origins = self._form(fold)
+        literal = re.escape(needle)
+        pattern = literal
+        # whole spans only: no letter or digit right before or after a value that starts or
+        # ends with one. The check before is a lookbehind AFTER the literal, so the regex
+        # engine can still search for the literal first.
+        if needle[0].isalnum():
+            pattern += rf"(?<![^\W_]{literal})"
+        if needle[-1].isalnum():
+            pattern += r"(?![^\W_])"
         hits: list[list[int]] = []
-        edge_start, edge_end = needle[0].isalnum(), needle[-1].isalnum()
-        for b, (form, origin) in enumerate(self._forms[fold]):
-            at = form.find(needle)
-            while at >= 0:
-                end = at + len(needle)
-                clear_before = not edge_start or at == 0 or not form[at - 1].isalnum()
-                clear_after = not edge_end or end == len(form) or not form[end].isalnum()
-                if clear_before and clear_after:
-                    text = self.blocks[b]
-                    start_cp, end_cp = origin[at], origin[end - 1] + 1
-                    # take along what counts as nothing (a combining accent, a soft hyphen)
-                    while end_cp < len(text) and _piece(text[end_cp]) == "":
-                        end_cp += 1
-                    hits.append([b, _utf16(text, start_cp), _utf16(text, end_cp)])
-                    if len(hits) == MAX_OCCURRENCES:
-                        return hits
-                at = form.find(needle, end if clear_before and clear_after else at + 1)
+        for m in re.finditer(pattern, joined):
+            at, end = m.span()
+            b = bisect.bisect_right(starts, at) - 1
+            text, origin = self.blocks[b], origins[b]
+            start_cp, end_cp = origin[at - starts[b]], origin[end - 1 - starts[b]] + 1
+            # take along what counts as nothing (a combining accent, a soft hyphen)
+            while end_cp < len(text) and _piece(text[end_cp]) == "":
+                end_cp += 1
+            hits.append([b, _utf16(text, start_cp), _utf16(text, end_cp)])
+            if len(hits) == MAX_OCCURRENCES:
+                break
         return hits
 
     def find(self, value: str) -> list[list[int]]:
