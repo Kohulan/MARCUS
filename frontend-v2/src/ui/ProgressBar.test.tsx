@@ -200,6 +200,21 @@ describe("useAnnotateEstimate", () => {
     expect(value()).toBeLessThan(0.3);
   });
 
+  it("every bar of one run counts from one clock (the panel and the status bar say the same)", () => {
+    function Two({ second }: { second: boolean }) {
+      const a = useAnnotateEstimate(true, "step-1");
+      const b = useAnnotateEstimate(second, second ? "step-1" : null);
+      return <p data-testid="v">{`${a?.toFixed(2)} ${b === null ? "none" : b.toFixed(2)}`}</p>;
+    }
+    const { rerender } = render(<Two second={false} />);
+    advance(3000);
+    rerender(<Two second />); // the second bar sees the run 3 s in
+    advance(500);
+    const [a, b] = screen.getByTestId("v").textContent!.split(" ");
+    expect(b).toBe(a);
+    expect(Number(a)).toBeGreaterThan(0.6);
+  });
+
   it("a new run starts again from zero", () => {
     const { rerender } = render(<Probe running />);
     advance(5000);
