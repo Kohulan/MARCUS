@@ -5,7 +5,7 @@ from tests.conftest import _assert_test_database, alembic_config
 
 EXPECTED = {
     "owners", "papers", "steps", "segments", "predictions", "curation",
-    "image_jobs", "seg_cache", "ocsr_cache",
+    "image_jobs", "seg_cache", "ocsr_cache", "annotations",
 }  # fmt: skip
 
 # 0002: column + index
@@ -224,5 +224,31 @@ def test_migration_0009_work_started_ip_at_up_down(migrated_db):
         for table in ("papers", "image_jobs"):
             assert "started_ip_at" not in _columns(engine, table)
             assert "started_ip" in _columns(engine, table)
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0010_annotations_up_down(migrated_db):
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("annotations")}
+        assert set(cols) == {
+            "paper_id", "model", "model_version", "output", "positions", "curated",
+            "curated_positions", "created_at", "updated_at", "curated_at",
+        }  # fmt: skip
+        nullable = {name for name, c in cols.items() if c["nullable"]}
+        assert nullable == {"curated", "curated_positions", "curated_at"}
+        assert inspect(engine).get_pk_constraint("annotations")["constrained_columns"] == [
+            "paper_id"
+        ]
+        (fk,) = inspect(engine).get_foreign_keys("annotations")
+        assert fk["referred_table"] == "papers" and fk["options"]["ondelete"] == "CASCADE"
+        command.downgrade(cfg, "0009")
+        assert "annotations" not in inspect(engine).get_table_names()
     finally:
         command.upgrade(cfg, "head")

@@ -155,6 +155,51 @@ def empty_values() -> dict[str, list[str]]:
     return {field: [] for field in FIELDS}
 
 
+# --- checks of stored shapes (worker results are data: checked before they are stored) -------
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 2**31
+
+
+def values_error(values: object, max_chars: dict[str, int] | int = MAX_LENGTH) -> str | None:
+    """Why `values` is not {field: [distinct non-empty strings]} over exactly FIELDS, or None."""
+    if not isinstance(values, dict) or set(values) != set(FIELDS):
+        return "values must have exactly the 11 fields"
+    for field in FIELDS:
+        items = values[field]
+        limit = max_chars if isinstance(max_chars, int) else max_chars[field]
+        if not isinstance(items, list) or len(items) > MAX_VALUES_PER_FIELD:
+            return f"{field}: must be a list of at most {MAX_VALUES_PER_FIELD} values"
+        for item in items:
+            if not isinstance(item, str) or not item.strip() or "\x00" in item:
+                return f"{field}: every value must be a non-empty string"
+            if len(item) > limit:
+                return f"{field}: a value is longer than {limit} characters"
+        if len(set(items)) != len(items):
+            return f"{field}: values must be distinct"
+    return None
+
+
+def positions_error(found: object, values: dict[str, list[str]]) -> str | None:
+    """Why `found` is not {field: {value: [[block, start, end], ...]}} for exactly `values`."""
+    if not isinstance(found, dict) or set(found) != set(FIELDS):
+        return "positions must have exactly the 11 fields"
+    for field in FIELDS:
+        per_value = found[field]
+        if not isinstance(per_value, dict) or set(per_value) != set(values[field]):
+            return f"{field}: positions must cover exactly its values"
+        for hits in per_value.values():
+            if not isinstance(hits, list) or len(hits) > MAX_OCCURRENCES:
+                return f"{field}: at most {MAX_OCCURRENCES} positions per value"
+            for hit in hits:
+                if not (isinstance(hit, list) and len(hit) == 3 and all(map(_is_int, hit))):
+                    return f"{field}: a position is [block, start, end]"
+                if hit[1] >= hit[2]:
+                    return f"{field}: a position must end after it starts"
+    return None
+
+
 # --- the paper's text blocks (frontend-v2 doclingText.ts) -----------------------------------------
 
 _REF = re.compile(r"^#/(texts|groups)/(\d+)$")

@@ -5,6 +5,12 @@ transaction. Steps are created only when their inputs exist: completing a step c
 successors. Functions that change a paper lock its row first (SELECT ... FOR UPDATE), so two
 workers finishing the last two steps of one paper cannot both miss the `done` transition.
 
+Annotation (owner decision 2026-11-20): on demand only. request_annotation adds one `annotate`
+step (q.llm) to a paper whose docling step is done; its result (the MARCUS model's values and
+their positions in the text, marcus.core.annotation) is stored in the paper's one `annotations`
+row. A re-run replaces the model's values and keeps the curator's. An annotate step never
+decides whether the paper is done or failed.
+
 Segmentation cache (spec §7): when the last page of a paper is segmented and every page was
 segmented successfully by one segmenter version, the planner stores the paper's segments under
 (owner, pdf_sha256, seg_cache_key(version)). A later paper of the same owner with the same PDF
@@ -30,7 +36,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import storage
+from marcus.core import annotation, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -41,6 +47,7 @@ from marcus.core.enums import (
     StepStatus,
 )
 from marcus.core.models import (
+    Annotation,
     Curation,
     ImageJob,
     Owner,
@@ -57,6 +64,7 @@ log = logging.getLogger(__name__)
 
 DOCLING_SEQ = 100_000
 DOI_SEQ = 100_001
+ANNOTATE_SEQ = 100_002
 MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
@@ -96,6 +104,14 @@ class RetryNotAllowed(Exception):
     """retry_page refused: the page has not failed, is still running, or has no retries left."""
 
     def __init__(self, reason: Literal["not_failed", "busy", "limit"]):
+        super().__init__(reason)
+        self.reason = reason
+
+
+class AnnotateNotAllowed(Exception):
+    """request_annotation refused: the paper has no text (its docling step is not done)."""
+
+    def __init__(self, reason: Literal["no_text"]):
         super().__init__(reason)
         self.reason = reason
 
@@ -457,6 +473,22 @@ def _check_doi_result(result: dict) -> None:
         raise BadResult("doi: 'year' must be an int or null")
 
 
+def _check_annotate_result(result: dict) -> None:
+    for key in ("model", "model_version"):
+        value = result.get(key)
+        if not _is_text(value) or not value or len(value) > MAX_VERSION_CHARS:
+            raise BadResult(f"annotate: {key!r} must be a non-empty string of at most "
+                            f"{MAX_VERSION_CHARS} characters")  # fmt: skip
+    output = result.get("output")
+    error = annotation.values_error(output) or annotation.positions_error(
+        result.get("positions"), output
+    )
+    if error:
+        raise BadResult(f"annotate: {error}")
+    if not _is_int(result.get("ms")):
+        raise BadResult("annotate: 'ms' must be a non-negative int")
+
+
 def _check_nothing(result: dict) -> None:
     pass
 
@@ -466,6 +498,7 @@ _CHECK = {
     StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
     StepKind.OCSR.value: _check_ocsr_result,
     StepKind.DOI.value: _check_doi_result,
+    StepKind.ANNOTATE.value: _check_annotate_result,
 }
 
 
@@ -694,6 +727,23 @@ def _after_doi(session: Session, paper: Paper, step: Step, result: dict) -> list
     return []
 
 
+def _after_annotate(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    """Store the model's values (a re-run replaces them; the curator's stay)."""
+    step.model_version = result["model_version"]
+    model = {
+        "model": result["model"],
+        "model_version": result["model_version"],
+        "output": result["output"],
+        "positions": result["positions"],
+    }
+    session.execute(
+        pg_insert(Annotation)
+        .values(paper_id=paper.id, **model)
+        .on_conflict_do_update(index_elements=["paper_id"], set_={**model, "updated_at": _now()})
+    )
+    return []
+
+
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     # docling: the text file already sits in the paper dir; nothing to store.
     return []
@@ -706,6 +756,7 @@ _AFTER = {
     StepKind.OCSR.value: _after_ocsr,
     StepKind.DOCLING.value: _no_successors,
     StepKind.DOI.value: _after_doi,
+    StepKind.ANNOTATE.value: _after_annotate,
 }
 
 
@@ -805,8 +856,8 @@ def fail_step(
 
 
 def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = True) -> None:
-    """Cancel all active steps, mark the paper deleted, drop the seg_cache row it made and
-    remove its files. Caller commits.
+    """Cancel all active steps, mark the paper deleted, drop the seg_cache row it made and its
+    annotation, and remove its files. Caller commits.
 
     A running step's late result is dropped by complete_step / fail_step. A file that cannot
     be removed (any OSError) is logged and does not abort the transaction: the paper is
@@ -825,11 +876,12 @@ def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = Tru
     )
     paper.status = PaperStatus.DELETED.value
     keep_address(paper, None)
-    session.execute(
-        delete(SegCache)
-        .where(SegCache.paper_id == paper_id)
-        .execution_options(synchronize_session=False)
-    )
+    for model in (SegCache, Annotation):  # the annotation holds text from the paper: gone now
+        session.execute(
+            delete(model)
+            .where(model.paper_id == paper_id)
+            .execution_options(synchronize_session=False)
+        )
     session.flush()
     if remove_files:
         remove_paper_files(paper_id)
@@ -953,5 +1005,48 @@ def request_image_ocsr(
     if job.status not in (ImageJobStatus.QUEUED.value, ImageJobStatus.PROCESSING.value):
         keep_address(job, started_ip)  # active again, from this address
     job.status = ImageJobStatus.QUEUED.value
+    session.flush()
+    return step
+
+
+def request_annotation(
+    session: Session, paper_id: uuid.UUID, rerun: bool = False, started_ip: str | None = None
+) -> Step | None:
+    """Ask for the paper's annotation: a new pending `annotate` step, or None when the paper
+    already has one and `rerun` is false. An annotate step still pending, queued or running is
+    returned instead of a new one (repeat clicks). A `done`/`failed` paper goes back to
+    `processing` with `started_ip` until the step ends. Caller commits.
+
+    Locks the paper first. Raises ValueError for a missing or deleted paper and
+    AnnotateNotAllowed("no_text") unless the paper's docling step is done.
+    """
+    paper = _lock(session, Paper, paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper not found")
+    session.flush()
+    kind = Step.paper_id == paper.id
+    running = session.execute(
+        select(Step)
+        .where(kind, Step.kind == StepKind.ANNOTATE.value, Step.status.in_(ACTIVE))
+        .order_by(Step.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if running is not None:
+        return running
+    text = session.execute(
+        select(func.count())
+        .select_from(Step)
+        .where(kind, Step.kind == StepKind.DOCLING.value, Step.status == StepStatus.DONE.value)
+    ).scalar_one()
+    if not text:
+        raise AnnotateNotAllowed("no_text")
+    if not rerun and session.get(Annotation, paper.id) is not None:
+        return None
+    step = _new_step(paper, StepKind.ANNOTATE, ANNOTATE_SEQ, created_at=_now())
+    session.add(step)
+    if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
+        paper.status = PaperStatus.PROCESSING.value
+        paper.error = None
+        keep_address(paper, started_ip)
     session.flush()
     return step
