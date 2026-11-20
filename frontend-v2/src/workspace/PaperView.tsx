@@ -46,7 +46,10 @@ function pageImages(steps: StepOut[], pages: number, busy: boolean): PageImage[]
   });
 }
 
-/** Scrolls `container` so `el` is in view: only as far as needed, or to its top. */
+/**
+ * Scrolls `container` so `el` is in view: only as far as needed, or to its top. The view is
+ * the column under its sticky caption, which would otherwise cover what it scrolled to.
+ */
 function scrollWithin(
   container: HTMLElement | null,
   el: Element | null | undefined,
@@ -56,11 +59,13 @@ function scrollWithin(
   if (!container || !el) return;
   const margin = 28; // room for a marker's tag above its box
   const c = container.getBoundingClientRect();
+  const cap = container.querySelector(":scope > .pv-cap")?.getBoundingClientRect().height ?? 0;
+  const edge = c.top + cap + margin;
   const r = el.getBoundingClientRect();
   let delta = 0;
-  if (block === "start" || r.top < c.top + margin) delta = r.top - c.top - margin;
+  if (block === "start" || r.top < edge) delta = r.top - edge;
   else if (r.bottom > c.bottom - margin) {
-    delta = Math.min(r.bottom - c.bottom + margin, r.top - c.top - margin);
+    delta = Math.min(r.bottom - c.bottom + margin, r.top - edge);
   }
   if (Math.abs(delta) < 1) return;
   const top = container.scrollTop + delta;

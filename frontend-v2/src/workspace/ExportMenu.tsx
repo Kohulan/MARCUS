@@ -29,7 +29,7 @@ export default function ExportMenu({
   /** The paper has an annotation (JSON object; CSV columns and SDF properties per structure). */
   annotated?: boolean;
 }) {
-  const { open, setOpen, root, button, panelId, onKeyDown } = useDisclosure();
+  const { open, setOpen, root, button, panel, panelId, onKeyDown } = useDisclosure();
 
   return (
     <div className="ws-export" ref={root} onKeyDown={onKeyDown}>
@@ -43,7 +43,7 @@ export default function ExportMenu({
         Export
       </GlassButton>
       {open && (
-        <div id={panelId} className="ws-export__panel" role="group" aria-label="Export">
+        <div ref={panel} id={panelId} className="ws-export__panel" role="group" aria-label="Export">
           <table className="ws-export__table">
             <tbody>
               {FORMATS.map(({ format, label }) => (
