@@ -193,22 +193,31 @@ export function newestAnnotate(steps: StepOut[]): StepOut | undefined {
   return newestFirst(steps.filter((s) => s.kind === "annotate"))[0];
 }
 
-/** The paper is busy only because it is being annotated (its other steps are finished). */
-export function onlyAnnotating(steps: StepOut[]): boolean {
-  const ann = newestAnnotate(steps);
-  if (!ann || !isStepActive(ann.status)) return false;
-  return steps.every((s) => s.kind === "annotate" || !isStepActive(s.status));
+/** Its only steps in flight are annotate steps (the server's `annotating`, from the steps). */
+function onlyAnnotating(steps: StepOut[]): boolean {
+  let annotating = false;
+  for (const s of steps) {
+    if (!isStepActive(s.status)) continue;
+    if (s.kind !== "annotate") return false;
+    annotating = true;
+  }
+  return annotating;
 }
 
+type PaperState = { status: string; annotating?: boolean | undefined };
+
 /**
- * The paper is being read: busy with more than its annotation (an annotate run makes a done
- * paper processing again; the server's `annotating` or the steps say when that is all).
+ * The paper is busy only with its annotation (an annotate run makes a done paper processing
+ * again): the server's `annotating`, or, fresher where they are known, its steps.
  */
-export function isPaperReading(
-  paper: { status: string; annotating?: boolean | undefined },
-  steps: StepOut[],
-): boolean {
-  return isPaperBusy(paper.status) && !paper.annotating && !onlyAnnotating(steps);
+export function isAnnotating(paper: PaperState, steps?: StepOut[]): boolean {
+  if (!isPaperBusy(paper.status)) return false;
+  return paper.annotating === true || (steps !== undefined && onlyAnnotating(steps));
+}
+
+/** The paper is being read: busy with more than its annotation. */
+export function isPaperReading(paper: PaperState, steps?: StepOut[]): boolean {
+  return isPaperBusy(paper.status) && !isAnnotating(paper, steps);
 }
 
 const REASONS: Record<string, string> = {

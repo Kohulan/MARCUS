@@ -3,18 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, api, errorText } from "../api/client";
 import { keys, refreshPaper, useQueue, useSteps } from "../api/queries";
 import { reasonText } from "../api/reasons";
-import { isPaperBusy } from "../api/status";
+import { isPaperBusy, isStepActive } from "../api/status";
 import type { PaperDetail, StepOut } from "../api/types";
 import type { useLiveEvents } from "../api/useLiveEvents";
 import { GlassButton } from "../ui/GlassButton";
-import { useHeldAfter } from "../ui/ProgressBar";
-import { END_HOLD_MS } from "../ui/progressMotion";
-import ReadingProgress from "../ui/ReadingProgress";
+import ReadingProgress, { useShownProgress } from "../ui/ReadingProgress";
 import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
-import { onlyAnnotating } from "./annotation";
 import { checkFailure as checkFailureOf, pageFailures } from "./pageFailures";
-import { readingProgress } from "./readingProgress";
+import { progressOf, readCounts } from "./readingProgress";
 import "./workspace.css";
 
 /** "About 3 min in the queue" (whole minutes, rounded up); under 60 s "Less than a minute". */
@@ -26,6 +23,8 @@ function queueText(seconds: number): string {
 type Props = {
   paper: PaperDetail;
   steps: StepOut[];
+  /** The paper's newest annotate step (newestAnnotate). */
+  annotateStep: StepOut | undefined;
   live: ReturnType<typeof useLiveEvents>;
 };
 
@@ -35,7 +34,7 @@ type Props = {
  * could not be read), the live note,
  * then one hatched line per failed page with its reason and a retry.
  */
-export default function StatusBar({ paper, steps, live }: Props) {
+export default function StatusBar({ paper, steps, annotateStep, live }: Props) {
   const client = useQueryClient();
   const toast = useToast();
   const waiting = isPaperBusy(paper.status);
@@ -49,24 +48,20 @@ export default function StatusBar({ paper, steps, live }: Props) {
   // Once per steps change, not on every workspace render (each ← / → in focus mode is one).
   const failedPages = useMemo(() => pageFailures(steps), [steps]);
   const checkFailure = useMemo(() => checkFailureOf(steps), [steps]);
-  const { status, pages, ocsr_mode: ocsrMode, annotating } = paper;
+  const { status, pages, ocsr_mode: ocsrMode, annotating: flagged } = paper;
+  const counts = useMemo(
+    () => readCounts({ status, pages, ocsr_mode: ocsrMode, annotating: flagged }, steps),
+    [status, pages, ocsrMode, flagged, steps],
+  );
   const reading = useMemo(
-    () => readingProgress({ status, pages, ocsr_mode: ocsrMode, annotating }, steps),
-    [status, pages, ocsrMode, annotating, steps],
+    () => (checkFailure === null ? progressOf({ status, pages, ocsr_mode: ocsrMode, ...counts }) : null),
+    [checkFailure, status, pages, ocsrMode, counts],
   );
   // A paper read while it is open ends on a full bar; one opened done shows only its badge.
-  const [seenReading, setSeenReading] = useState(false);
-  const readingNow = reading !== null && reading.stage !== "done" && reading.stage !== "annotating";
-  if (readingNow && !seenReading) setSeenReading(true);
-  // An annotate run seen here ends on its full bar for a moment (the estimate never says 100%
-  // before the run ends), then the bar goes: the paper is done, its badge says so.
-  const annotatingHeld = useHeldAfter(reading?.stage === "annotating", END_HOLD_MS);
-  const annotated = reading?.stage === "done" && annotatingHeld && !seenReading;
-  const shown =
-    reading !== null && annotated
-      ? { ...reading, stage: "annotating" as const, fraction: 1, valueText: "Annotating" }
-      : reading;
-  const showBar = reading !== null && (reading.stage !== "done" || seenReading || annotated);
+  const shown = useShownProgress(reading, {
+    run: annotateStep && isStepActive(annotateStep.status) ? annotateStep.id : null,
+    keepDone: true,
+  });
   // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
   // the line while nothing has started, then beside the stages when it is a minute or more.
   const queueNote =
@@ -113,7 +108,7 @@ export default function StatusBar({ paper, steps, live }: Props) {
           <ItemState
             status={paper.status}
             notRead={paper.ocsr_mode === "off"}
-            annotating={waiting && onlyAnnotating(steps)}
+            annotating={counts.annotating}
           />
         </span>
         {checkFailure !== null && (
@@ -121,7 +116,7 @@ export default function StatusBar({ paper, steps, live }: Props) {
             {`This PDF could not be read: ${checkFailure}`}
           </p>
         )}
-        {shown !== null && showBar && (
+        {shown !== null && (
           <div className="ws-status__cell ws-status__progress">
             <ReadingProgress
               progress={shown}

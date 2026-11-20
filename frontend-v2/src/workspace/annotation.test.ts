@@ -14,7 +14,7 @@ import {
   markLabel,
   newestAnnotate,
   nextHit,
-  onlyAnnotating,
+  isAnnotating,
   sameValues,
   shownPositions,
   splitMarks,
@@ -216,9 +216,13 @@ describe("annotation helpers", () => {
     const docling = step({ id: "d", kind: "docling", status: "done" });
     expect(newestAnnotate([older, docling, newer])?.id).toBe("a2");
     expect(newestAnnotate([docling])).toBeUndefined();
-    expect(onlyAnnotating([older, docling, newer])).toBe(true);
-    expect(onlyAnnotating([newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);
-    expect(onlyAnnotating([older, docling])).toBe(false);
+    const busy = { status: "processing" };
+    expect(isAnnotating(busy, [older, docling, newer])).toBe(true);
+    expect(isAnnotating(busy, [newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);
+    expect(isAnnotating(busy, [older, docling])).toBe(false);
+    // the server's flag says so before any steps are known; a done paper is never annotating
+    expect(isAnnotating({ status: "processing", annotating: true })).toBe(true);
+    expect(isAnnotating({ status: "done", annotating: true }, [newer])).toBe(false);
   });
 
   it("says why an annotation failed in words for this step", () => {

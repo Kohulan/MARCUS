@@ -135,10 +135,10 @@ export default function TextColumn({
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
 
-  const annotationQuery = useAnnotation(paperId, steps);
+  const annStep = useMemo(() => newestAnnotate(steps), [steps]);
+  const annotationQuery = useAnnotation(paperId, annStep);
   const annotation = annotationQuery.data;
   const actions = useAnnotationActions(paperId, onStarted);
-  const annStep = newestAnnotate(steps);
   // The step a start made, until the steps show it (then its own status says).
   const [startedId, setStartedId] = useState<string | null>(null);
   // Running: the step is active, a start is not in the steps yet, or the step has ended but

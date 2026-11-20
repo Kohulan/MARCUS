@@ -17,16 +17,15 @@ const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLa
 
 /** The highest figure so far in this run (progressMotion climb); null stays indeterminate. */
 function useClimbing(value: number | null, active: boolean): number | null {
-  const [state, setState] = useState<Climb>({ max: value ?? 0, busy: active });
-  const next = climb(state, value, active);
-  if (next !== state) setState(next); // during render: no extra frame
-  return value === null ? null : next.max;
+  const run = useRef<Climb>({ max: value ?? 0, busy: active });
+  run.current = climb(run.current, value, active); // same inputs, same state: safe in render
+  return value === null ? null : run.current.max;
 }
 
 /**
  * The printed figure: it counts up to each new value on the fill's curve and time (one
- * requestAnimationFrame loop), never down; it jumps under reduced motion, when it appears,
- * and when a new run starts lower.
+ * requestAnimationFrame loop, a render only when the whole percent changes), never down; it
+ * jumps under reduced motion, when it appears, and when a new run starts lower.
  */
 function useCountUp(target: number | null, reduce: boolean): number | null {
   const [shown, setShown] = useState(target);
@@ -50,7 +49,9 @@ function useCountUp(target: number | null, reduce: boolean): number | null {
       start ??= now;
       const v = countFrame(from, target, now - start, FILL_MS);
       at.current = v;
-      setShown(v);
+      setShown((prev) =>
+        v < target && prev !== null && percentOf(prev) === percentOf(v) ? prev : v,
+      );
       if (v < target) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -75,33 +76,43 @@ export function useHeldAfter(on: boolean, ms: number): boolean {
 }
 
 /** How often the annotate estimate moves on (the fill eases between the steps). */
-const ESTIMATE_TICK_MS = 250;
+const ESTIMATE_TICK_MS = 500;
+
+/** When each annotate run was first seen on this page, by its step id (one clock per run). */
+const runStarts = new Map<string, number>();
 
 /**
- * An annotate run's figure, which its model does not report: the time-based estimate
- * (progressMotion annotateEstimate, from the moment this page saw the run start) while it
- * runs, 1 for END_HOLD_MS once it has ended, null before a run and after the hold. A caller
- * whose run failed shows no bar, so the 1 is only ever seen for a run that finished.
+ * An annotate run's figure, which its model does not report: while `running`, the time-based
+ * estimate (progressMotion annotateEstimate, in whole percents) from the moment this page saw
+ * the run start; 1 for END_HOLD_MS once it has ended; null before a run and after the hold.
+ * `run` (its step id, once known) shares one clock between every bar of that run, so the
+ * annotation panel and the status bar say the same figure. A caller whose run failed shows
+ * no bar, so the 1 is only ever seen for a run that finished.
  */
-export function useAnnotateEstimate(running: boolean): number | null {
-  const [start, setStart] = useState<number | null>(null);
+export function useAnnotateEstimate(running: boolean, run: string | null = null): number | null {
+  const start = useRef<number | null>(null);
   const [now, setNow] = useState(0);
-  const [was, setWas] = useState(running);
   const held = useHeldAfter(running, END_HOLD_MS);
-  if (running !== was) {
-    setWas(running);
-    if (running) setStart(Date.now()); // a new run, even one inside the last one's hold
-  } else if (running && start === null) setStart(Date.now());
-  else if (!held && start !== null) setStart(null);
 
   useEffect(() => {
-    if (!running) return;
+    if (!running) {
+      start.current = null; // the next run, even one inside this one's hold, starts at zero
+      return;
+    }
+    start.current ??= Date.now();
+    if (run !== null) {
+      const shared = runStarts.get(run);
+      if (shared === undefined) runStarts.set(run, start.current);
+      else start.current = shared;
+    }
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), ESTIMATE_TICK_MS);
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, run]);
 
-  if (running) return start === null ? 0 : annotateEstimate(Math.max(now, start) - start);
-  return held ? 1 : null;
+  if (!running) return held ? 1 : null;
+  if (start.current === null) return 0;
+  return percentOf(annotateEstimate(now - start.current)) / 100;
 }
 
 /**

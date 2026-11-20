@@ -1,5 +1,7 @@
 // The figures behind every progress bar: the shown percentage (100 only when the work is
 // done), the one motion curve, the count-up frame (never down) and the annotate estimate.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ANNOTATE_CAP,
@@ -10,6 +12,7 @@ import {
   type Climb,
   countFrame,
   ease,
+  EASE,
   FILL_MS,
   percentOf,
   spokenValue,
@@ -52,6 +55,11 @@ describe("spokenValue", () => {
 });
 
 describe("ease (the --ease curve, cubic-bezier(0.22, 1, 0.36, 1))", () => {
+  it("is the --ease token's curve", () => {
+    const tokens = readFileSync(resolve(process.cwd(), "src/styles/tokens.css"), "utf8");
+    expect(tokens).toContain(`--ease: cubic-bezier(${EASE.join(", ")});`);
+  });
+
   it("starts at 0, ends at 1 and never goes back", () => {
     expect(ease(0)).toBe(0);
     expect(ease(1)).toBe(1);

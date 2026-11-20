@@ -1,17 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api, errorText } from "../api/client";
-import { keys, useRowSteps } from "../api/queries";
-import { isPaperBusy } from "../api/status";
+import { keys } from "../api/queries";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
-import ReadingProgress from "../ui/ReadingProgress";
+import ReadingProgress, { useShownProgress } from "../ui/ReadingProgress";
 import { ItemState } from "../ui/StateBadge";
 import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
-import { readingProgress } from "../workspace/readingProgress";
+import { isAnnotating } from "../workspace/annotation";
+import { progressOf } from "../workspace/readingProgress";
 import "./tool.css";
 
 const DAY_MS = 86_400_000;
@@ -42,11 +42,12 @@ function deletionText(expiresAt: string, now = Date.now()): string {
   return `Deleted in ${plural(Math.ceil(days), "day")}`;
 }
 
-/** A busy paper's thin progress bar and its stage in a few words (its steps polled with the list). */
+/**
+ * A busy paper's thin progress bar and its stage in a few words, from the read's counts the
+ * list brings (no steps asked for); an annotate run ends on its full bar for a moment.
+ */
 function RowProgress({ paper }: { paper: PaperSummary }) {
-  const steps = useRowSteps(paper.id).data?.steps;
-  // Nothing until the steps land: a guess from no steps would say "0/5" for a paper at 4/5.
-  const model = steps === undefined ? null : readingProgress(paper, steps);
+  const model = useShownProgress(useMemo(() => progressOf(paper), [paper]));
   if (model === null) return null;
   return (
     <ReadingProgress progress={model} label={`Progress of ${paperName(paper)}`} compact />
@@ -89,14 +90,14 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         <ItemState
           status={paper.status}
           notRead={paper.ocsr_mode === "off"}
-          annotating={paper.annotating === true}
+          annotating={isAnnotating(paper)}
         />
       </div>
       <div className="item__main">
         <p className="item__name">{paperName(paper)}</p>
         {paper.title?.trim() ? <p className="item__file">{paper.display_name}</p> : null}
         <p className="item__counts">{countsText(paper)}</p>
-        {isPaperBusy(paper.status) ? <RowProgress paper={paper} /> : null}
+        <RowProgress paper={paper} />
       </div>
       <p className="item__expiry">{deletionText(paper.expires_at)}</p>
       <div className="item__actions">

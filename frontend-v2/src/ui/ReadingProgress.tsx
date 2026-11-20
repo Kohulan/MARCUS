@@ -1,26 +1,30 @@
 import { faCheck } from "@fortawesome/free-solid-svg-icons";
-import type { ReadingProgress as Model, Stage } from "../workspace/readingProgress";
+import { useState } from "react";
+import { ANNOTATE_END, type ReadingProgress as Model } from "../workspace/readingProgress";
 import Icon from "./Icon";
 import ProgressBar, { useAnnotateEstimate } from "./ProgressBar";
 import "./ui.css";
 
-/** The stage's name, said once when the stage changes (never on a new count). */
-const SAID: Record<Stage, string> = {
-  waiting: "Waiting",
-  checking: "Checking PDF",
-  pages: "Reading pages",
-  structures: "Reading structures",
-  text: "Reading the text",
-  finishing: "Finishing",
-  annotating: "", // the badge and the annotation panel say it
-  done: "Done",
-};
-
-function shortLine(p: Model): string {
-  const current = p.stages.find((s) => s.state === "current");
-  if (p.stage === "waiting") return "Waiting";
-  if (!current || p.stage === "annotating") return "";
-  return current.count ? `${current.label} ${current.count}` : current.label;
+/**
+ * What a reading bar shows of `model` (readingProgress), or null for no bar: the one owner of
+ * an annotate run's figure. A run, whose model reports no progress, gets the time-based
+ * estimate (useAnnotateEstimate; `run`, its step id, shares the clock with the annotation
+ * panel) and ends on its full bar for a moment before the bar goes. A finished read keeps its
+ * full bar when `keepDone` and it was read while shown here; otherwise a done paper has no bar.
+ */
+export function useShownProgress(
+  model: Model | null,
+  { run = null, keepDone = false }: { run?: string | null; keepDone?: boolean } = {},
+): Model | null {
+  const estimated = model?.estimated === true;
+  const figure = useAnnotateEstimate(estimated, run);
+  const [seen, setSeen] = useState(false);
+  if (model !== null && !estimated && model.stage !== "done" && !seen) setSeen(true);
+  if (model === null) return null;
+  if (estimated) return model.fraction === null ? { ...model, fraction: figure ?? 0 } : model;
+  if (model.stage !== "done") return model;
+  if (keepDone && seen) return model;
+  return figure === 1 ? ANNOTATE_END : null;
 }
 
 /**
@@ -28,8 +32,8 @@ function shortLine(p: Model): string {
  * beside it, never back during a run) with the stage in words. The full form lists the
  * stages, done ones ticked, the current one marked; `announce` adds a polite status that
  * changes with the stage only, never with a count or a percent. `compact` is the tool home's
- * row: a thin bar and one short line. An annotate run, whose model reports no progress,
- * shows the time-based estimate (useAnnotateEstimate) unless the model gives a figure.
+ * row: a thin bar and one short line. The model is shown as given (useShownProgress fills an
+ * annotate run's figure).
  */
 export default function ReadingProgress({
   progress,
@@ -46,37 +50,34 @@ export default function ReadingProgress({
   announce?: boolean;
   compact?: boolean;
 }) {
-  const annotating = progress.stage === "annotating";
-  const estimate = useAnnotateEstimate(annotating && progress.fraction === null);
-  const value = annotating ? (progress.fraction ?? estimate ?? 0) : progress.fraction;
   const bar = (
     <ProgressBar
-      value={value}
+      value={progress.fraction}
       label={label}
       valueText={progress.valueText}
-      active={progress.stage !== "done" && value !== 1}
+      active={progress.stage !== "done" && progress.fraction !== 1}
       size={compact ? "sm" : "md"}
-      estimated={annotating}
+      estimated={progress.estimated}
     />
   );
 
   if (compact) {
-    const line = shortLine(progress);
     return (
       <div className="rp rp--compact">
         {bar}
-        {line ? <p className="rp__line">{line}</p> : null}
+        {progress.line ? <p className="rp__line">{progress.line}</p> : null}
       </div>
     );
   }
 
   const queue = queueNote || null;
+  const waiting = progress.stage === "waiting";
   return (
     <div className={`rp rp--${progress.stage}`}>
       <div className="rp__head">
-        {progress.stage === "waiting" ? (
-          <p className="rp__line rp__line--current">{queue ?? "Waiting"}</p>
-        ) : progress.stage === "annotating" ? null : (
+        {waiting ? (
+          <p className="rp__line rp__line--current">{queue ?? progress.line}</p>
+        ) : progress.stages.length > 0 ? (
           <ol className="rp__stages" aria-label="Stages">
             {progress.stages.map((s) => (
               <li
@@ -90,13 +91,13 @@ export default function ReadingProgress({
               </li>
             ))}
           </ol>
-        )}
-        {queue && progress.stage !== "waiting" ? <p className="rp__queue">{queue}</p> : null}
+        ) : null}
+        {queue && !waiting ? <p className="rp__queue">{queue}</p> : null}
       </div>
       {bar}
       {announce ? (
         <p className="visually-hidden" role="status" aria-live="polite">
-          {SAID[progress.stage]}
+          {progress.said}
         </p>
       ) : null}
     </div>
