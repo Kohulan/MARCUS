@@ -30,6 +30,31 @@
   border: 1px solid var(--line);
 }
 
+/* Skip to content: out of sight above the window until the keyboard reaches it. Body 4. */
+.skip {
+  position: absolute;
+  top: var(--s-75);
+  left: var(--s-75);
+  z-index: 20;
+  padding: var(--s-75) var(--s-100);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--porcelain);
+  font: 700 14px/20px var(--font-text);
+  color: var(--ink);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 300ms var(--ease);
+}
+
+.skip:focus {
+  transform: none;
+}
+
+.skip:hover {
+  color: var(--ink);
+}
+
 /* Header: the mark, then the Waterline pill, both free of the sheet -------- */
 
 .site-header {
