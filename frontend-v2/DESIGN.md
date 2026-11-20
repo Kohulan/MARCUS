@@ -228,6 +228,16 @@ components:
   toast-error:
     backgroundColor: "{colors.charcoal}"
     textColor: "{colors.on-charcoal}"
+  reading-progress:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.none}"
+    height: "10px"
+  reading-progress-fill:
+    backgroundColor: "{colors.green}"
+  reading-progress-compact:
+    height: "6px"
 ---
 
 # Design System: MARCUS
@@ -417,6 +427,16 @@ The local model's suggestion for a paper, above its text in the Paper view's mid
 - **Values:** a specimen label: the charcoal head reads "Model suggestion" (or "Curated" once corrected) with the model's name in mono; one row per field that has values, the field's label as the mono row head. Each value found in the text is a square surface button with a control-border edge and its count in mono; the value whose occurrence the text shows fills forest green (on-green text, aria-current). A value not in the text is no button: a dashed edge and the count 0.
 - **Marks:** every occurrence in the text is a `<mark>` on selection mint with a 1px green underline; the occurrence a click went to is filled forest green with on-green text. A click shows the first occurrence, the next click the next (around to the first), centred in the text; a screen reader hears "value: 2 of 5". Marks are React text in `<mark>` elements, never HTML from the model.
 - **Corrections:** Edit opens one labelled box per field (one value a line), Save (green small pill) and Cancel; Escape cancels. Reset to model asks first.
+
+### Reading progress
+How far a paper's read has come, in the status bar both workspace views share and, compact, in the tool home's row of a busy paper. Beside the state badge (Reading… or Annotating…), never instead of it.
+- **Bar:** a native `<progress>` (max 100), full width, 10px tall, square, a 1px control-border edge (3.3:1 on paper), a surface track and a forest-green fill (about 10:1 on the track). The fill is drawn by CSS on the element's pseudo-parts: no style attribute, nothing set at run time. No transition (width is layout).
+- **Stages:** above the bar, one mono 12px uppercase line: Checking PDF → Reading pages 3/5 → Reading structures 10/15 → Finishing (Done once the paper is done). Done stages in text-2 with a green Font Awesome check, the current one in ink at 500 with its count (`aria-current="step"`), the rest muted; the arrows are CSS content with empty alt text. A paper read without structures has no structures stage.
+- **Figure:** checking 5%, pages 45%, structures 45%, the rest when the paper is done. Failed pages and structures count as handled. Structures are measured against those the unread pages can be expected to hold, and the shown figure is the highest so far in the run (a retried page starts a new run), so the bar never moves back.
+- **Nothing to measure yet:** before the PDF check counts the pages, and for an annotate-only run, the bar has no value: an empty ruler (a tick every 8px in tick on surface) that drifts slowly and stands still under reduced motion. Before the read starts the line reads the queue estimate ("About 3 min in the queue", or Waiting).
+- **When:** while the paper is busy; a paper read while it is open ends on a full bar with every stage ticked; a paper opened done shows only its badge. A failed paper or a PDF that could not be read shows no bar: its failure lines say why, as before.
+- **Screen readers:** the bar is named "Reading progress" and speaks "Reading structures, 10 of 15" (`aria-valuetext`). A visually hidden polite status says the stage name when the stage changes, never a count.
+- **Compact (tool home):** under the row's counts, at most 360px: a 6px bar and one 11px mono line ("Reading pages 2/4", "Waiting"; none while annotating, the badge says it), no announcement. The row's steps are fetched with the list, every 5 s, only while the paper is busy.
 
 ### Stamp
 A round 2px ring rotated -12deg with Geist Mono 500 uppercase text: 66px / 10px on cards, 128px / 17px large. Accepted in accepted green, rejected in charcoal. When a decision is made it lands from scale 1.4 to rest in 160ms; no motion under reduced motion.
