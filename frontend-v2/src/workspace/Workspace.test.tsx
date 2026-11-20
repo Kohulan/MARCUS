@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient, keys } from "../api/queries";
 import type {
+  AnnotationOut,
   CurationOut,
   PaperDetail,
   PredictionOut,
@@ -129,9 +130,38 @@ function Where() {
 
 let client: QueryClient;
 
+/** GET /papers/{id}/annotation: none yet, unless a test hands one. */
+function annotationOut(over: Partial<AnnotationOut> = {}): AnnotationOut {
+  return {
+    available: true,
+    status: "none",
+    step: null,
+    fields: [],
+    model: null,
+    model_version: null,
+    output: null,
+    positions: null,
+    curated: null,
+    curated_positions: null,
+    values: null,
+    coconut: null,
+    created_at: null,
+    updated_at: null,
+    curated_at: null,
+    ...over,
+  };
+}
+
 function renderWorkspace(
-  opts: { search?: string; paper?: PaperDetail; steps?: StepOut[]; queue?: QueueOut } = {},
+  opts: {
+    search?: string;
+    paper?: PaperDetail;
+    steps?: StepOut[];
+    queue?: QueueOut;
+    annotation?: AnnotationOut;
+  } = {},
 ) {
+  vi.spyOn(api, "getAnnotation").mockResolvedValue(opts.annotation ?? annotationOut());
   if (opts.paper !== undefined || !vi.isMockFunction(api.getPaper)) {
     vi.spyOn(api, "getPaper").mockResolvedValue(opts.paper ?? paper());
   }
@@ -307,6 +337,95 @@ describe("header", () => {
     }
   });
 
+  it("starts the organisms from the paper's annotation; the curator can still change them", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      renderWorkspace({
+        paper: paper({ segments: [seg("s1", { status: "accepted" })] }),
+        annotation: annotationOut({
+          status: "done",
+          values: { organism_or_species: ["Taxus brevifolia", "Taxus baccata"] },
+          coconut: {
+            organisms: [
+              { name: "Taxus brevifolia", parts: "bark, leaves", location: "China", ecosystems: "forest" },
+              { name: "Taxus baccata", parts: "bark, leaves", location: "China", ecosystems: "forest" },
+            ],
+            kingdom: ["Plantae"],
+          },
+        }),
+      });
+      await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+      await act(async () => undefined);
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      expect(within(form).getByLabelText("Organism")).toHaveValue("Taxus brevifolia");
+      expect(within(form).getAllByLabelText("Parts").map((el) => (el as HTMLInputElement).value)).toEqual([
+        "bark, leaves",
+        "bark, leaves",
+      ]);
+      expect(within(form).getAllByLabelText("Location")[0]).toHaveValue("China");
+      expect(within(form).getAllByLabelText("Ecosystems")[0]).toHaveValue("forest");
+      expect(within(form).getByLabelText("Organism 2")).toHaveValue("Taxus baccata");
+      // COCONUT has no kingdom field: it is not put anywhere
+      expect(within(form).queryByDisplayValue(/Plantae/)).toBeNull();
+      // the model's values say so (decision 7), and the organism names point at it
+      expect(within(form).getByText("Organisms: model suggestion")).toBeInTheDocument();
+      expect(within(form).getByLabelText("Organism")).toHaveAccessibleDescription(
+        "Organisms: model suggestion",
+      );
+      expect(within(form).getByLabelText("Organism 2")).toHaveAccessibleDescription(
+        "Organisms: model suggestion",
+      );
+      const name = within(form).getByLabelText("Organism");
+      fireEvent.change(name, { target: { value: "Taxus wallichiana" } });
+      expect(name).toHaveValue("Taxus wallichiana");
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
+  it("organisms from the curator's corrections carry no model label", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      const values = { organism_or_species: ["Taxus brevifolia"] };
+      renderWorkspace({
+        paper: paper({ segments: [seg("s1", { status: "accepted" })] }),
+        annotation: annotationOut({
+          status: "done",
+          values,
+          curated: values,
+          coconut: {
+            organisms: [{ name: "Taxus brevifolia", parts: "", location: "", ecosystems: "" }],
+            kingdom: [],
+          },
+        }),
+      });
+      await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+      await act(async () => undefined);
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      expect(within(form).getByLabelText("Organism")).toHaveValue("Taxus brevifolia");
+      expect(within(form).queryByText(/model suggestion/i)).toBeNull();
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
+  it("starts with one empty organism when the paper has no annotation", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      renderWorkspace({ paper: paper({ segments: [seg("s1", { status: "accepted" })] }) });
+      await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      expect(within(form).getByLabelText("Organism")).toHaveValue("");
+      expect(within(form).queryByLabelText("Organism 2")).toBeNull();
+      expect(within(form).queryByText(/model suggestion/i)).toBeNull();
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
   it.each([
     ["Rajan", 2025, "MARCUS_Submission Rajan 2025"],
     ["Rajan", null, "MARCUS_Submission Rajan"],
@@ -344,6 +463,20 @@ describe("export menu", () => {
       `/api/v2/papers/${ID}/export?format=json&status=all`,
     );
     expect(within(menu).getAllByRole("link")).toHaveLength(6);
+  });
+
+  it("says that every file carries the annotation once the paper has one", async () => {
+    const { unmount } = renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Export" }));
+    await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+    expect(screen.queryByText("With the annotation")).toBeNull();
+    unmount();
+    renderWorkspace({ annotation: annotationOut({ status: "done", values: { Kingdom: ["Plantae"] } }) });
+    const button = await screen.findByRole("button", { name: "Export" });
+    await waitFor(() => {
+      fireEvent.click(button);
+      expect(within(screen.getByRole("group", { name: "Export" })).getByText("With the annotation")).toBeInTheDocument();
+    });
   });
 
   it("Escape closes the menu and gives the focus back", async () => {

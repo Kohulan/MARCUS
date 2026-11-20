@@ -43,8 +43,19 @@ export default function StateBadge({ state }: { state: CardState }) {
   }
 }
 
-/** A paper's or image job's state as its word and its shape. */
-export function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
+/**
+ * A paper's or image job's state as its word and its shape. `annotating`: a busy paper whose
+ * only work is its annotation says so, in the Reading shape.
+ */
+export function ItemState({
+  status,
+  notRead,
+  annotating,
+}: {
+  status: string;
+  notRead?: boolean;
+  annotating?: boolean;
+}) {
   if (status === "failed") return <StateBadge state="failed" />;
   if (status === "done") {
     if (notRead) return <StateBadge state="not-read" />;
@@ -55,5 +66,6 @@ export function ItemState({ status, notRead }: { status: string; notRead?: boole
       </span>
     );
   }
+  if (annotating) return <span className="state badge badge--dashed">Annotating…</span>;
   return <StateBadge state="reading" />;
 }

@@ -10,18 +10,20 @@ export default function Privacy() {
       title="Privacy"
       docTitle={pageMeta("/privacy").title}
       lede="What MARCUS keeps, for how long, and who sees it."
-      updated="18 November 2026"
+      updated="20 November 2026"
     >
       <InfoSection title="What you upload">
         <p>
           A PDF or one structure image, max 20 MB. To read it, MARCUS stores the file, the page
-          images, the structure crops, the extracted text, the structures it found and your
-          decisions on them, on the servers of Friedrich Schiller University Jena.
+          images, the structure crops, the extracted text, the annotation and your corrections
+          to it, the structures it found and your decisions on them, on the servers of Friedrich
+          Schiller University Jena.
         </p>
         <ul>
           <li>Everything from one upload is deleted 30 days after the upload.</li>
           <li>Deleting a paper in the tool removes it for you at once.</li>
           <li>Your files are not sent to outside AI services and not shared with others.</li>
+          <li>Annotate runs a model on MARCUS&apos;s own server; no paper text leaves it.</li>
           <li>
             To show the paper&apos;s title, the server looks up its DOI at Crossref or DataCite;
             only the DOI is sent.

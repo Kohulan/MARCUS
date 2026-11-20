@@ -152,6 +152,18 @@
   outline-offset: -2px;
 }
 
+.ws .ws-export__note {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
 @keyframes ws-pop {
   from {
     opacity: 0;

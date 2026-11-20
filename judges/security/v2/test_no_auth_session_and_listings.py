@@ -11,8 +11,8 @@ v2: every resource belongs to an owner (anonymous `marcus_owner` cookie, or an `
                                         the reviewed allowlist below, and every route but
                                         health/ready must depend on the owner (current_owner)
     GET /api/v2/papers, GET /api/v2/images (+ every per-paper/segment/image route, incl.
-    steps, depiction, bulk curation, page retry, the image file, its events and its
-    predictions)                        my resources only; others' ids get the one 404
+    steps, depiction, bulk curation, page retry, the annotation and its curation, the image
+    file, its events and its predictions)  my resources only; others' ids get the one 404
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from v2.helpers import (
     upload_image,
     upload_paper,
     wait_image,
+    wait_paper,
 )
 
 
@@ -78,6 +79,10 @@ ALLOWED_ROUTES = {
     ("GET", f"{API}/papers/{{paper_id}}/text"),
     ("GET", f"{API}/papers/{{paper_id}}/export"),
     ("GET", f"{API}/papers/{{paper_id}}/events"),
+    ("GET", f"{API}/papers/{{paper_id}}/annotation"),
+    ("POST", f"{API}/papers/{{paper_id}}/annotation"),
+    ("PUT", f"{API}/papers/{{paper_id}}/annotation/curation"),
+    ("DELETE", f"{API}/papers/{{paper_id}}/annotation/curation"),
     ("PUT", f"{API}/papers/{{paper_id}}/curation"),
     ("POST", f"{API}/papers/{{paper_id}}/pages/{{n}}/retry"),
     ("POST", f"{API}/images"),
@@ -165,6 +170,17 @@ def test_uploaded_pdf_is_not_listed_to_an_unrelated_caller(shared_paper, new_own
     listing = expect_ok(sp.owner.get(f"{API}/papers"), "GET /api/v2/papers").json()
     assert pid in {p["id"] for p in listing["papers"]}, "owner's own listing misses the paper"
     expect_ok(sp.owner.get(f"{API}/papers/{pid}/steps"), "GET /api/v2/papers/{id}/steps (R18)")
+    # The annotation routes work for the owner (the fake annotator runs in the fake stack).
+    expect_ok(sp.owner.post(f"{API}/papers/{pid}/annotation"), "POST /api/v2/papers/{id}/annotation")
+    wait_paper(sp.owner, pid)  # the annotate step ended: the shared paper is settled again
+    state = expect_ok(sp.owner.get(f"{API}/papers/{pid}/annotation"),
+                      "GET /api/v2/papers/{id}/annotation").json()
+    assert state["status"] == "done", f"the owner's annotation did not finish: {state}"
+    expect_ok(sp.owner.put(f"{API}/papers/{pid}/annotation/curation", json={"values": state["values"]}),
+              "PUT /api/v2/papers/{id}/annotation/curation")
+    expect_ok(sp.owner.delete(f"{API}/papers/{pid}/annotation/curation"),
+              "DELETE /api/v2/papers/{id}/annotation/curation")
+    no_values = {"values": {key: [] for key in state["values"]}}
 
     img_owner = new_owner()
     job = upload_image(img_owner)
@@ -188,6 +204,10 @@ def test_uploaded_pdf_is_not_listed_to_an_unrelated_caller(shared_paper, new_own
         ("GET", "/segments/{s}/depiction", None),
         ("PUT", "/papers/{p}/curation", {"items": [{"segment_id": sid, "status": "accepted"}]}),
         ("POST", "/papers/{p}/pages/0/retry", None),
+        ("GET", "/papers/{p}/annotation", None),
+        ("POST", "/papers/{p}/annotation", {"rerun": True}),
+        ("PUT", "/papers/{p}/annotation/curation", no_values),
+        ("DELETE", "/papers/{p}/annotation/curation", None),
         ("GET", "/images/{j}", None),
         ("GET", "/images/{j}/image", None),
         ("GET", "/images/{j}/events", None),

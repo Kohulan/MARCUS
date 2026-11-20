@@ -4,6 +4,11 @@ Choice per segment, in order: a curated SMILES/molfile (a SMILES is derived from
 curated molfile when none was given); else the newest valid prediction
 of the paper's engine; else the newest valid prediction of any engine. Segments without any
 structure are left out; rejected ones too, unless `include_rejected`.
+
+The paper's annotation (owner decision 6), when it has one, goes with every format: the JSON
+file has a paper-level `annotation` object (the values shown: the curator's, else the model's;
+plus the model's own), CSV rows get the organism/source fields as columns and SDF records as
+properties (values joined with "; "). `annotation` is a plain dict (api.annotation.for_export).
 """
 
 import csv
@@ -92,7 +97,23 @@ def choose(
     return out
 
 
-def to_json(paper: Paper, chosen: list[Chosen]) -> bytes:
+# organism/source fields of the annotation as CSV columns and SDF properties
+SOURCE_FIELDS = (
+    ("organism", "organism_or_species", "MARCUS_ORGANISM"),
+    ("organism_part", "organism_part", "MARCUS_ORGANISM_PART"),
+    ("geo_location", "geo_location", "MARCUS_GEO_LOCATION"),
+    ("kingdom", "Kingdom", "MARCUS_KINGDOM"),
+)
+VALUE_SEPARATOR = "; "
+
+
+def _source_values(annotation: dict | None) -> list[str]:
+    """The organism/source fields' shown values, joined, in SOURCE_FIELDS order ("" if none)."""
+    values = (annotation or {}).get("values") or {}
+    return [VALUE_SEPARATOR.join(values.get(field, [])) for _, field, _ in SOURCE_FIELDS]
+
+
+def to_json(paper: Paper, chosen: list[Chosen], annotation: dict | None = None) -> bytes:
     doc = {
         "paper": {
             "id": str(paper.id),
@@ -117,6 +138,7 @@ def to_json(paper: Paper, chosen: list[Chosen]) -> bytes:
             }
             for c in chosen
         ],
+        "annotation": annotation,
     }
     return json.dumps(doc, indent=2).encode("utf-8")
 
@@ -130,17 +152,21 @@ def csv_cell(value: object) -> str:
     return "'" + text if text.startswith(_FORMULA_START) else text
 
 
-CSV_HEADER = ["segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source"]
+CSV_HEADER = [
+    "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
+    *(column for column, _, _ in SOURCE_FIELDS),
+]  # fmt: skip
 
 
-def to_csv(chosen: list[Chosen]) -> bytes:
+def to_csv(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(CSV_HEADER)
+    source = _source_values(annotation)
     for c in chosen:
         row = [
             c.segment_id, c.page, c.idx, c.smiles, c.status, c.engine, c.note,
-            "true" if c.edited else "false", c.source,
+            "true" if c.edited else "false", c.source, *source,
         ]  # fmt: skip
         writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue().encode("utf-8")
@@ -153,10 +179,15 @@ def sdf_text(value: str) -> str:
     return " " + text if text.startswith("$$$$") else text
 
 
-def to_sdf(chosen: list[Chosen]) -> bytes:
+def to_sdf(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
     """One record per segment RDKit can build a molecule for; RDKit writes every record."""
     buf = io.StringIO()
     writer = Chem.SDWriter(buf)
+    source = [
+        (prop, value)
+        for (_, _, prop), value in zip(SOURCE_FIELDS, _source_values(annotation), strict=True)
+        if value
+    ]
     for c in chosen:
         mol = mol_for_sdf(c.smiles, c.molfile)
         if mol is None:
@@ -171,6 +202,8 @@ def to_sdf(chosen: list[Chosen]) -> bytes:
         if c.note is not None:
             mol.SetProp("MARCUS_NOTE", sdf_text(c.note))
         mol.SetProp("MARCUS_EDITED", "true" if c.edited else "false")
+        for prop, value in source:
+            mol.SetProp(prop, sdf_text(value))
         writer.write(mol)
     writer.close()
     return buf.getvalue().encode("utf-8")
@@ -183,6 +216,7 @@ def build(
     curations: dict[uuid.UUID, Curation],
     predictions: dict[uuid.UUID, list[Prediction]],
     status: ExportStatus | None = None,
+    annotation: dict | None = None,
 ) -> bytes:
     """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
     marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
@@ -191,7 +225,7 @@ def build(
     if status == "accepted":
         chosen = [c for c in chosen if c.status == "accepted"]
     if fmt == "json":
-        return to_json(paper, chosen)
+        return to_json(paper, chosen, annotation)
     if fmt == "csv":
-        return to_csv(chosen)
-    return to_sdf(chosen)
+        return to_csv(chosen, annotation)
+    return to_sdf(chosen, annotation)

@@ -106,6 +106,12 @@ class LiveQueues:
 _live_queues = LiveQueues()
 
 
+async def live_queues() -> frozenset[str]:
+    """The queues with a live consumer, from the same per-process cache as /ready (at most
+    one broker broadcast per READY_CACHE_S). Also used before starting an annotation."""
+    return await _live_queues.get()
+
+
 async def _database_ok(db: AsyncSession) -> bool:
     try:
         with anyio.fail_after(CHECK_TIMEOUT_S):

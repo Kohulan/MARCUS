@@ -321,18 +321,29 @@
 
 /* Text ----------------------------------------------------------------------- */
 
+/* The text column holds its caption, the annotation (its own scroll, at most 45% of the
+   column; 70% while it is being corrected) and the text, which scrolls on its own: a value
+   can be clicked again while the text shows its last occurrence. */
+.pv-col--text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pv-col--text > .pv-cap {
+  flex: none;
+}
+
 .pv-text {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
   padding: 18px 28px 48px;
 }
 
-.pv .pv-text__later {
-  max-width: 68ch;
-  margin: 0 0 22px;
-  padding: 10px 12px;
-  border: 1px dashed var(--control-border);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
+.pv-text:focus-visible {
+  outline-offset: -3px;
 }
 
 .pv-text__body {
@@ -378,6 +389,241 @@
 
 .pv-text__state > p {
   margin: 0;
+}
+
+/* Annotation ----------------------------------------------------------------- */
+
+.pv-ann {
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Focused by the panel itself while a run goes (its button is gone): an inset outline. */
+.pv-ann:focus-visible {
+  outline-offset: -3px;
+}
+
+.pv-ann:has(.pv-ann__form) {
+  max-height: 70%;
+}
+
+.pv .pv-ann p {
+  margin: 0;
+}
+
+.pv-ann__start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pv .pv-ann__hint,
+.pv .pv-ann__none {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pv .pv-ann__none {
+  padding: 8px 10px;
+}
+
+.pv .pv-ann__problem {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* The values: a specimen label (charcoal head, surface rows ruled by hair). */
+.pv-ann__label {
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+}
+
+.pv .pv-ann__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 10px;
+  background-color: var(--charcoal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-charcoal);
+}
+
+.pv-ann__model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.pv-ann__list {
+  margin: 0;
+}
+
+.pv-ann__row {
+  display: grid;
+  grid-template-columns: minmax(88px, 28%) 1fr;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--hair);
+}
+
+.pv-ann__row:first-child {
+  border-top: 0;
+}
+
+.pv-ann__key {
+  padding-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-ann__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.pv-ann__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background-color: var(--surface);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+button.pv-ann__value {
+  cursor: pointer;
+}
+
+button.pv-ann__value:hover {
+  background-color: var(--sunken);
+}
+
+/* The value whose occurrence the text shows: the pressed-segment green. */
+.pv-ann__value--shown,
+button.pv-ann__value--shown:hover {
+  border-color: var(--green);
+  background-color: var(--green);
+  color: var(--on-green);
+}
+
+/* Not in the text (an inferred kingdom): no button, a dashed edge and the count 0. */
+.pv-ann__value--absent {
+  border-style: dashed;
+  color: var(--text-2);
+}
+
+.pv-ann__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pv-ann__value--shown .pv-ann__count {
+  color: var(--on-green);
+}
+
+.pv-ann__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Correcting: one labelled box per field, one value a line. */
+.pv-ann__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pv-ann__fields {
+  display: grid;
+  gap: 8px;
+}
+
+.pv-ann__field {
+  display: grid;
+  gap: 4px;
+}
+
+.pv-ann__input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background-color: var(--surface);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.pv-ann__input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Marks in the text: every occurrence of a shown value; the one a click went to is filled. */
+.pv-mark {
+  padding: 0 1px;
+  background-color: var(--selection);
+  color: inherit;
+  text-decoration: underline 1px var(--green);
+  text-underline-offset: 3px;
+}
+
+.pv-mark--current {
+  background-color: var(--green);
+  color: var(--on-green);
+  text-decoration: none;
+}
+
+@media (forced-colors: active) {
+  .pv-mark {
+    background-color: Mark;
+    color: MarkText;
+  }
+
+  .pv-mark--current,
+  .pv-ann__value--shown {
+    background-color: Highlight;
+    color: HighlightText;
+  }
 }
 
 /* Structures ----------------------------------------------------------------- */

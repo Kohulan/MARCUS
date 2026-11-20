@@ -9,7 +9,7 @@ uses the docker CLI to stop and restart one worker container. Without a reachabl
 test is skipped with a message saying so.
 
 Values mirror docker-compose.fake.yml: 2 fake segments per page, segmentation 2 s per page,
-fake OCSR 1 s per segment.
+fake OCSR 1 s per segment, fake annotation 2 s per paper.
 
 Segmentation cache: a PDF whose bytes were segmented before is not segmented again (its
 segments come from seg_cache). Every upload therefore appends a fresh nonce after the PDF's
@@ -210,6 +210,93 @@ def test_upload_to_done_with_fake_engines():
         assert r.status_code == 200 and r.content.startswith(b"\x89PNG")
     finally:
         owner.close()
+
+
+def test_annotation_on_demand_with_the_fake_annotator():
+    """Annotate after the paper is done: the step runs on q.llm (worker-fake-annotate), its
+    progress arrives on the paper's event stream, the values come back with positions that
+    point at them in the text, and curation, reset and the exports work."""
+    owner = Owner()
+    try:
+        paper_id, _ = owner.upload("synth_015.pdf")
+        assert owner.wait_terminal(paper_id, timeout_s=300)["status"] == "done"
+        url = f"/api/v2/papers/{paper_id}/annotation"
+        before = owner.client.get(url).json()
+        assert before["available"] is True and before["status"] == "none"
+
+        r = owner.client.post(url)
+        assert r.status_code == 202, r.text
+        step_id = r.json()["step_id"]
+        kinds = []
+        for _, event in _step_events(owner, paper_id, timeout_s=120):
+            if event.get("kind") == "annotate":
+                kinds.append(event["status"])
+                assert event["step_id"] == step_id
+            if event.get("status") in ("done", "failed") and event.get("kind") == "annotate":
+                break
+        assert kinds and kinds[-1] == "done", kinds  # "running" may precede the subscription
+        owner.wait_terminal(paper_id, timeout_s=60)
+
+        done = owner.client.get(url).json()
+        assert done["status"] == "done" and done["model"] == "fake-annotator"
+        values = done["values"]
+        # the model input is title + abstract + introduction only: docling makes the sample's
+        # "Compound <n>" lines headings, so they are not in it (and not in trivial_name)
+        assert values["trivial_name"] == []
+        assert values["abbreviation"] == ["HPLC", "NMR", "HRMS"]
+        text = owner.client.get(f"/api/v2/papers/{paper_id}/text").json()
+        blocks = _blocks(text)
+        for value, hits in done["positions"]["abbreviation"].items():
+            assert len(hits) == 5, (value, hits)  # once per page of the sample
+            for block, start, end in hits:
+                assert _utf16(blocks[block], start, end) == value
+
+        again = owner.client.post(url)
+        assert again.status_code == 200 and again.json() == {"step_id": None}
+
+        values["geo_location"] = ["Jena"]
+        saved = owner.client.put(f"{url}/curation", json={"values": values})
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["values"]["geo_location"] == ["Jena"]
+        doc = owner.client.get(f"/api/v2/papers/{paper_id}/export").json()
+        assert doc["annotation"]["source"] == "curated"
+        assert doc["annotation"]["values"]["geo_location"] == ["Jena"]
+        reset = owner.client.delete(f"{url}/curation").json()
+        assert reset["curated"] is None and reset["values"] == reset["output"]
+    finally:
+        owner.close()
+
+
+def _blocks(doc: dict) -> list[str]:
+    """The Paper view's text blocks (frontend-v2 doclingBlocks), as the API's positions count
+    them. The e2e tests import no application code, so the walk is repeated here."""
+    texts, groups = doc.get("texts") or [], doc.get("groups") or []
+    out: list[str] = []
+
+    def walk(children, walking):
+        for child in children:
+            ref = child.get("$ref", "")
+            kind, _, idx = ref[2:].partition("/")
+            if kind not in ("texts", "groups") or not idx.isdigit() or ref in walking:
+                continue
+            pool = texts if kind == "texts" else groups
+            item = pool[int(idx)] if int(idx) < len(pool) else None
+            if (
+                kind == "texts"
+                and item
+                and isinstance(item.get("text"), str)
+                and item["text"].strip()
+            ):
+                out.append(item["text"])
+            if item and isinstance(item.get("children"), list):
+                walk(item["children"], walking | {ref})
+
+    walk(doc["body"]["children"], frozenset())
+    return out
+
+
+def _utf16(text: str, start: int, end: int) -> str:
+    return text.encode("utf-16-le")[2 * start : 2 * end].decode("utf-16-le")
 
 
 def test_same_pdf_twice_second_paper_from_segmentation_cache():

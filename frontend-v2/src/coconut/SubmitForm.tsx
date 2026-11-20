@@ -39,6 +39,8 @@ export type SubmitFormProps = {
   structures: SubmitStructure[];
   /** Starting values for the paper's fields (for example a submission title). */
   initial?: Partial<PaperFields>;
+  /** Said by the organisms when their starting values are a model's suggestion. */
+  organismsNote?: string | undefined;
   onClose: () => void;
 };
 
@@ -68,7 +70,13 @@ function startRows(structures: SubmitStructure[]): Record<string, StructureField
   );
 }
 
-export default function SubmitForm({ paper, structures, initial, onClose }: SubmitFormProps) {
+export default function SubmitForm({
+  paper,
+  structures,
+  initial,
+  organismsNote,
+  onClose,
+}: SubmitFormProps) {
   const [token, setToken] = useState<string | null>(() => getToken());
   const [fields, setFields] = useState<PaperFields>(() => startFields(paper, initial));
   const [rows, setRows] = useState(() => startRows(structures));
@@ -247,10 +255,16 @@ export default function SubmitForm({ paper, structures, initial, onClose }: Subm
                 onChange={(e) => setPaper("comment", e.target.value)}
               />
             </Field>
+            {organismsNote ? (
+              <p id="coconut-org-note" className="mono-label coconut-paper__note">
+                {organismsNote}
+              </p>
+            ) : null}
             {fields.organisms.map((o, i) => (
               <OrganismFields
                 key={i}
                 idBase={`coconut-org-${i}`}
+                describedBy={organismsNote ? "coconut-org-note" : undefined}
                 label={i === 0 ? "Organism" : `Organism ${i + 1}`}
                 required={i === 0}
                 value={o}
@@ -469,6 +483,8 @@ type OrganismFieldsProps = {
   value: OrganismDraft;
   onChange: (change: Partial<OrganismDraft>) => void;
   onRemove?: (() => void) | undefined;
+  /** Id of a note about the starting values (a model's suggestion). */
+  describedBy?: string | undefined;
 };
 
 /** An organism: name, parts, one location and its ecosystems (lists are comma-separated). */
@@ -480,6 +496,7 @@ function OrganismFields({
   value,
   onChange,
   onRemove,
+  describedBy,
 }: OrganismFieldsProps) {
   return (
     <div className="coconut-organism">
@@ -489,6 +506,7 @@ function OrganismFields({
             id={`${idBase}-name`}
             className="coconut-input"
             aria-required={required || undefined}
+            aria-describedby={describedBy}
             placeholder={placeholder}
             value={value.name}
             onChange={(e) => onChange({ name: e.target.value })}
