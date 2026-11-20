@@ -366,9 +366,17 @@ def _normalise(text: str, fold: bool) -> tuple[str, list[int] | range]:
     return "".join(chars), origin
 
 
-def _utf16(text: str, index: int) -> int:
-    # surrogatepass: a lone surrogate counts as one code unit, as in JavaScript
-    return len(text[:index].encode("utf-16-le", "surrogatepass")) // 2
+def _utf16_offsets(text: str) -> list[int] | None:
+    """For each index 0..len(text), its offset in UTF-16 code units; None when every character
+    is one code unit (no astral character: the index is the offset). A lone surrogate counts
+    as one code unit, as in JavaScript."""
+    if not text or max(text) <= "\uffff":
+        return None
+    out, at = [0], 0
+    for c in text:
+        at += 2 if c > "\uffff" else 1
+        out.append(at)
+    return out
 
 
 class Locator:
@@ -379,6 +387,7 @@ class Locator:
     def __init__(self, blocks: list[str]):
         self.blocks = blocks
         self._forms: dict[bool, tuple[str, list[int], list[list[int]]]] = {}
+        self._units: dict[int, list[int] | None] = {}  # block -> _utf16_offsets, on first hit
 
     def _form(self, fold: bool) -> tuple[str, list[int], list[list[int]]]:
         """(joined text, start of each block in it, each block's origin map)."""
@@ -413,7 +422,10 @@ class Locator:
             # take along what counts as nothing (a combining accent, a soft hyphen)
             while end_cp < len(text) and _piece(text[end_cp]) == "":
                 end_cp += 1
-            hits.append([b, _utf16(text, start_cp), _utf16(text, end_cp)])
+            if b not in self._units:
+                self._units[b] = _utf16_offsets(text)
+            units = self._units[b]
+            hits.append([b, units[start_cp], units[end_cp]] if units else [b, start_cp, end_cp])
             if len(hits) == MAX_OCCURRENCES:
                 break
         return hits

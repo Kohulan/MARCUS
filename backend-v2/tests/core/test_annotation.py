@@ -183,6 +183,16 @@ def test_locate_finds_every_occurrence_with_utf16_offsets():
     assert js_like[26 * 2 : 46 * 2].decode("utf-16-le") == "Sinularia flexibilis"
 
 
+def test_utf16_offsets_match_the_encoded_length_of_every_prefix():
+    assert ann._utf16_offsets("plain text") is None  # BMP only: index == offset
+    assert ann._utf16_offsets("lone \ud800 surrogate") is None  # one code unit, as in JS
+    text = "a\U0001d6fcb\ud800c\U0001f600"
+    offsets = ann._utf16_offsets(text)
+    assert offsets == [
+        len(text[:i].encode("utf-16-le", "surrogatepass")) // 2 for i in range(len(text) + 1)
+    ]
+
+
 def test_locate_ignores_whitespace_soft_hyphens_dashes_and_accents_but_keeps_word_edges():
     blocks = ["Iso-\u00adlated from Taxus  brevi\u00adfolia leaves, a taxane\u2013diterpene."]
     loc = ann.Locator(blocks)
