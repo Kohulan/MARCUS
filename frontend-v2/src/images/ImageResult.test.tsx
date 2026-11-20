@@ -221,6 +221,21 @@ describe("ImageResult", () => {
       renderPage();
       expect(await screen.findByText("Reading…")).toBeInTheDocument();
       expect(screen.queryByText("Waiting in the queue")).toBeNull();
+      expect(screen.queryByText("The first run can take about 30 s")).toBeNull();
+    });
+
+    it("a DECIMER hand-drawn job says its first run loads the model while it reads", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({
+          status: "processing",
+          engine: "decimer-hand",
+          prediction: null,
+          steps: [{ engine: "decimer-hand", status: "running", error_class: null }],
+        }),
+      );
+      renderPage();
+      expect(await screen.findByText("Reading…")).toBeInTheDocument();
+      expect(screen.getByText("The first run can take about 30 s")).toBeInTheDocument();
     });
   });
 

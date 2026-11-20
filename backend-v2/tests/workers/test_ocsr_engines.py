@@ -25,6 +25,7 @@ def _registry(monkeypatch):
     monkeypatch.setattr(base, "PRELOAD", set(base.PRELOAD))
     monkeypatch.setattr(base, "_ENGINES", {})
     monkeypatch.delenv("MARCUS_OCSR_ENGINES", raising=False)
+    monkeypatch.delenv("MARCUS_PRELOAD_DECIMER_HAND", raising=False)
 
 
 # --- configuration -----------------------------------------------------------------------
@@ -58,6 +59,22 @@ def test_decimer_worker_registers_both_but_preloads_only_normal(monkeypatch):
     assert ocsr.register_configured_engines() == [Engine.DECIMER, Engine.DECIMER_HAND]
     assert {"decimer", "decimer-hand"} <= set(base.FACTORIES)
     assert "decimer" in base.PRELOAD
+    assert "decimer-hand" not in base.PRELOAD
+
+
+@pytest.mark.parametrize("value", ["1", "true", "YES"])
+def test_preload_decimer_hand_switch_preloads_both(monkeypatch, value):
+    monkeypatch.setenv("MARCUS_PRELOAD_DECIMER_HAND", value)
+    monkeypatch.setenv("MARCUS_OCSR_ENGINES", "decimer,decimer-hand")
+    ocsr.register_configured_engines()
+    assert {"decimer", "decimer-hand"} <= base.PRELOAD
+
+
+@pytest.mark.parametrize("value", ["", "0", "false"])
+def test_preload_decimer_hand_switch_off(monkeypatch, value):
+    monkeypatch.setenv("MARCUS_PRELOAD_DECIMER_HAND", value)
+    monkeypatch.setenv("MARCUS_OCSR_ENGINES", "decimer,decimer-hand")
+    ocsr.register_configured_engines()
     assert "decimer-hand" not in base.PRELOAD
 
 

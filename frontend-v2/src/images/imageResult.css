@@ -124,6 +124,13 @@
   max-width: 280px;
 }
 
+.ir-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
 .ir-status--wait {
   font-family: var(--font-mono);
   font-size: 12px;

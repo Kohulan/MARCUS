@@ -191,6 +191,14 @@
   margin-top: 6px;
 }
 
+.cmp-result__note {
+  display: block;
+  max-width: 160px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .cmp-result--failed {
   color: var(--ink);
 }
