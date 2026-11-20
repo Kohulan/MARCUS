@@ -22,10 +22,28 @@ change needs `up -d --build nginx`. The app is at http://localhost:18090/.
 
 `internal` is an internal Docker network (no route out of the host); every service is on it.
 Only `nginx` (its published port needs a non-internal network) and `worker-cpu` (the DOI
-lookups, the only internet access the spec allows) also join `egress`. nginx keeps the fixed
+lookups) also join `egress`; nginx's only outbound calls are the COCONUT relay below. nginx keeps the fixed
 address 172.30.0.10 outside the dynamic pool (`MARCUS_TRUSTED_PROXIES`). With the monitoring
 override, Grafana publishes 127.0.0.1:13000 through its own `grafana-edge` network, which does no
 masquerading (no route out either).
+
+### COCONUT relay
+
+COCONUT sends no CORS headers, so the browser cannot call it. nginx relays exactly three calls
+to the fixed host `https://coconut.naturalproducts.net` (TLS verified against the system CA
+bundle, SNI): `POST /api/v2/coconut/auth/login`, `/reports/mutate`, `/search` →
+`/api/auth/login`, `/api/reports/mutate`, `/api/search`. Anything else under
+`/api/v2/coconut/` is nginx's 404; other methods 405, a query 400, a non-JSON body 415. Only
+Host, Content-Type, Accept, a fixed User-Agent and (mutate only) Authorization go upstream;
+only the status, the body and its Content-Type come back (njs filter
+`docker/coconut-relay.js`). Logins are limited to 3/min per address (burst 3) and 30/min in
+total. The password and the token pass through and are never stored or logged (the relay's
+access log has the path only). The API stays without internet.
+
+The fake stack (`docker-compose.fake.yml`) adds a fake COCONUT (`tests/fake_coconut/`) under
+COCONUT's name on the internal network and makes nginx trust only its test CA: the same relay
+config runs, and nothing reaches the real COCONUT. Login `curator@example.org` /
+`fake-coconut-password`.
 
 Switching a running stack to these networks: run `up -d --force-recreate` once (or `down` first;
 volumes stay). Compose recreates a changed network, but containers it does not recreate (e.g.
