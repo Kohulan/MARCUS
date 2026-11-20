@@ -52,6 +52,22 @@
   --focus: var(--green);
   --selection: #DCEBDF;
 
+  /* Annotation highlights (DESIGN.md Annotation): six families, each a tint (marks, value
+     chips, swatches; ink and text-2 at least 4.5:1 on it) and a deep colour (underlines,
+     edges, the clicked occurrence's fill; white at least 4.5:1 on it, 3:1 on the page) */
+  --ann-organism: #2F6A1A;
+  --ann-organism-tint: #C8E4A4;
+  --ann-part: #7A5600;
+  --ann-part-tint: #F7E08C;
+  --ann-place: #1D5DA6;
+  --ann-place-tint: #CFE3FA;
+  --ann-name: #A3305F;
+  --ann-name-tint: #FBD7E5;
+  --ann-class: #6A3CA6;
+  --ann-class-tint: #D2BEF2;
+  --ann-systematic: #17675F;
+  --ann-systematic-tint: #9FD6CB;
+
   /* Elevation: one green-black ambient family, one lift per kind of floating object */
   --lift-glass: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
   --lift-menu: 0 12px 28px -10px rgba(15, 30, 22, 0.35);
