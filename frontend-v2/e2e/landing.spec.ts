@@ -87,8 +87,7 @@ test.describe("landing and info pages @mocked", () => {
     expect(filter).toContain("url(");
   });
 
-  // The first screen: the name, the drop zone and the sample pill in the first viewport; the
-  // tagline waits below it.
+  // The first screen: the name, the drop zone and the sample pill in the first viewport.
   for (const [width, height] of [
     [1440, 900],
     [1366, 768],
@@ -108,47 +107,8 @@ test.describe("landing and info pages @mocked", () => {
       await expect(page.getByRole("link", { name: /^Try a sample paper/ })).toBeInViewport({
         ratio: 1,
       });
-      await expect(page.locator(".tagline__text")).not.toBeInViewport();
     });
   }
-
-  test("the tagline lights word by word on the way down, in reading order, and stays lit", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/", { waitUntil: "networkidle" });
-    const words = page.locator(".tagline__w");
-    const lit = () =>
-      words.evaluateAll((els) => els.map((el) => el.classList.contains("is-lit")));
-    await expect(page.locator(".tagline")).toHaveClass(/is-armed/);
-    expect((await lit()).some(Boolean)).toBe(false);
-    // the dimmed tone is still large-text AA: axe finds nothing on the armed page
-    await expectNoA11yViolations(page);
-    // its top at 80 % of the window: past the first line, not the last
-    await page.evaluate(() => {
-      const t = document.querySelector(".tagline__text")!;
-      window.scrollBy(0, t.getBoundingClientRect().top - window.innerHeight * 0.8);
-    });
-    await expect.poll(async () => (await lit()).filter(Boolean).length).toBeGreaterThan(0);
-    const some = await lit();
-    const n = some.filter(Boolean).length;
-    expect(n).toBeLessThan(some.length);
-    expect(some).toEqual(some.map((_, i) => i < n));
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(200);
-    expect((await lit()).filter(Boolean)).toHaveLength(n);
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    await expect.poll(async () => (await lit()).every(Boolean)).toBe(true);
-    await expect(words.first()).toHaveCSS("opacity", "1");
-  });
-
-  test("under reduced motion the tagline is at full tone from the start", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/", { waitUntil: "networkidle" });
-    await expect(page.locator(".tagline")).not.toHaveClass(/is-armed/);
-    for (const w of await page.locator(".tagline__w").all()) await expect(w).toHaveCSS("opacity", "1");
-  });
 
   test("the first Tab reaches Skip to content, which leads past the header", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
