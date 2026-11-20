@@ -10,13 +10,15 @@ import { saveBlob } from "../ui/saveBlob";
 import AnnotationPanel from "./AnnotationPanel";
 import {
   blockRanges,
+  familyClass,
   hitsOf,
+  markLabel,
   newestAnnotate,
   nextHit,
   shownPositions,
   splitMarks,
+  type FieldSpan,
   type HitAt,
-  type Span,
 } from "./annotation";
 import { doclingBlocks, type TextBlock } from "./doclingText";
 import { newestFirst } from "./pageFailures";
@@ -24,7 +26,7 @@ import { useAnnotation, useAnnotationActions } from "./useAnnotation";
 
 const NO_BLOCKS: TextBlock[] = [];
 const NO_STEPS: StepOut[] = [];
-const NO_RANGES = new Map<number, Span[]>();
+const NO_RANGES = new Map<number, FieldSpan[]>();
 
 /** Scrolls `container` so `el` sits in its middle (an occurrence keeps text around it). */
 function scrollToMiddle(container: HTMLElement | null, el: Element | null, smooth: boolean) {
@@ -41,26 +43,33 @@ function scrollToMiddle(container: HTMLElement | null, el: Element | null, smoot
 
 /**
  * One block of the text: plain, or cut into pieces with the annotation's values marked
- * (`<mark>` elements around React text nodes; never HTML from the text). The current
- * occurrence carries data-current, so it can be scrolled to.
+ * (`<mark>` elements around React text nodes; never HTML from the text). Each mark takes its
+ * leading field's family class (its colour) and is named by its fields' labels: a title for the
+ * pointer, an aria-description for screen readers (never hidden text inside the mark, which
+ * would be copied with the text). The current occurrence carries data-current, so it can be
+ * scrolled to.
  */
 const Block = memo(function Block({
   block,
   spans,
   current,
+  label,
 }: {
   block: TextBlock;
-  spans: Span[] | undefined;
-  current: Span | null;
+  spans: FieldSpan[] | undefined;
+  current: FieldSpan | null;
+  label: (field: string) => string;
 }) {
   const content =
     spans || current
       ? splitMarks(block.text, spans ?? [], current).map((p, i) =>
-          p.mark ? (
+          p.fields.length > 0 ? (
             <mark
               key={i}
-              className={p.current ? "pv-mark pv-mark--current" : "pv-mark"}
+              className={`pv-mark ${familyClass(p.fields[0]!)}${p.current ? " pv-mark--current" : ""}`}
               data-current={p.current || undefined}
+              title={markLabel(p.fields, label)}
+              aria-description={markLabel(p.fields, label)}
             >
               {p.text}
             </mark>
@@ -146,6 +155,11 @@ export default function TextColumn({
     () => (values ? blockRanges(values, positions) : NO_RANGES),
     [values, positions],
   );
+  const fields = annotation?.fields;
+  const label = useCallback(
+    (key: string) => fields?.find((f) => f.key === key)?.label ?? key,
+    [fields],
+  );
   const [at, setAt] = useState<HitAt | null>(null);
   const hit: AnnotationHit | undefined = at
     ? hitsOf(positions, at.field, at.value)[at.index]
@@ -206,7 +220,8 @@ export default function TextColumn({
             key={i}
             block={b}
             spans={ranges.get(i)}
-            current={hit && hit[0] === i ? [hit[1], hit[2]] : null}
+            current={hit && at && hit[0] === i ? [hit[1], hit[2], at.field] : null}
+            label={label}
           />
         ))}
       </div>

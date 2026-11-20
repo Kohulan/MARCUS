@@ -2,13 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api, errorText } from "../api/client";
-import { keys } from "../api/queries";
+import { keys, useRowSteps } from "../api/queries";
+import { isPaperBusy } from "../api/status";
 import type { ImageJobSummary, PaperList, PaperSummary } from "../api/types";
 import { GlassButton, GlassLink } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
+import ReadingProgress from "../ui/ReadingProgress";
 import { ItemState } from "../ui/StateBadge";
 import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
+import { readingProgress } from "../workspace/readingProgress";
 import "./tool.css";
 
 const DAY_MS = 86_400_000;
@@ -37,6 +40,17 @@ function deletionText(expiresAt: string, now = Date.now()): string {
   const days = (Date.parse(expiresAt) - now) / DAY_MS;
   if (!(days >= 1)) return "Deleted today"; // also an unreadable date
   return `Deleted in ${plural(Math.ceil(days), "day")}`;
+}
+
+/** A busy paper's thin progress bar and its stage in a few words (its steps polled with the list). */
+function RowProgress({ paper }: { paper: PaperSummary }) {
+  const steps = useRowSteps(paper.id).data?.steps;
+  // Nothing until the steps land: a guess from no steps would say "0/5" for a paper at 4/5.
+  const model = steps === undefined ? null : readingProgress(paper, steps);
+  if (model === null) return null;
+  return (
+    <ReadingProgress progress={model} label={`Progress of ${paperName(paper)}`} compact />
+  );
 }
 
 function PaperRow({ paper }: { paper: PaperSummary }) {
@@ -82,6 +96,7 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
         <p className="item__name">{paperName(paper)}</p>
         {paper.title?.trim() ? <p className="item__file">{paper.display_name}</p> : null}
         <p className="item__counts">{countsText(paper)}</p>
+        {isPaperBusy(paper.status) ? <RowProgress paper={paper} /> : null}
       </div>
       <p className="item__expiry">{deletionText(paper.expires_at)}</p>
       <div className="item__actions">
@@ -185,9 +200,9 @@ function LoadError({ error, retry }: { error: unknown; retry: () => void }) {
 }
 
 /**
- * This browser's papers (title or file name, state, counts, days to deletion, Open,
- * Delete with a confirm) and, below, its single-image jobs. `sample` is the sample-paper
- * button: in the heading row, or alone in the empty state.
+ * This browser's papers (title or file name, state, counts, a busy one's progress, days to
+ * deletion, Open, Delete with a confirm) and, below, its single-image jobs. `sample` is the
+ * sample-paper button: in the heading row, or alone in the empty state.
  */
 export default function PapersList({
   papers,

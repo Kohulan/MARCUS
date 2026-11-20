@@ -34,6 +34,18 @@ const EXPECTED_TOKENS: Record<string, string> = {
   "--on-green": "#FFFFFF",
   "--on-charcoal": "#F4F3EA",
   "--selection": "#DCEBDF",
+  "--ann-organism": "#2F6A1A",
+  "--ann-organism-tint": "#C8E4A4",
+  "--ann-part": "#7A5600",
+  "--ann-part-tint": "#F7E08C",
+  "--ann-place": "#1D5DA6",
+  "--ann-place-tint": "#CFE3FA",
+  "--ann-name": "#A3305F",
+  "--ann-name-tint": "#FBD7E5",
+  "--ann-class": "#6A3CA6",
+  "--ann-class-tint": "#D2BEF2",
+  "--ann-systematic": "#17675F",
+  "--ann-systematic-tint": "#9FD6CB",
   "--focus": "var(--green)",
   "--font-head": '"Geist", ui-sans-serif, system-ui, sans-serif',
   "--font-text": '"Geist", ui-sans-serif, system-ui, sans-serif',
@@ -161,6 +173,45 @@ describe("tokens.css", () => {
     ["--orange", "--surface"] as const,
   ])("shape %s on %s is at least 3:1", (fg, bg) => {
     expect(contrast(hex(fg), hex(bg))).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// The annotation families: text on every tint, white on every deep colour, the deep marks
+// (underline, edge) against the page and against their own tint.
+describe("annotation colours", () => {
+  const families = ["organism", "part", "place", "name", "class", "systematic"];
+
+  it("declares a deep colour and a tint per family", () => {
+    const ann = [...tokens.keys()].filter((k) => k.startsWith("--ann-")).sort();
+    expect(ann).toEqual(families.flatMap((f) => [`--ann-${f}`, `--ann-${f}-tint`]).sort());
+  });
+
+  it.each(families.flatMap((f) => ["--ink", "--text-2"].map((fg) => [fg, f] as const)))(
+    "text %s on the %s tint is at least 4.5:1",
+    (fg, f) => {
+      expect(contrast(hex(fg), hex(`--ann-${f}-tint`))).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(families)("white (on-green) on the %s deep colour is at least 4.5:1", (f) => {
+    expect(contrast(hex("--on-green"), hex(`--ann-${f}`))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(families.flatMap((f) => ["--paper", "--surface", `--ann-${f}-tint`].map((bg) => [f, bg] as const)))(
+    "the %s deep colour on %s is at least 3:1",
+    (f, bg) => {
+      expect(contrast(hex(`--ann-${f}`), hex(bg))).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it("no stylesheet writes a colour literal for the annotation (tokens only)", () => {
+    const paper = stripComments(
+      readFileSync(resolve(process.cwd(), "src/workspace/paper.css"), "utf8"),
+    );
+    expect(paper).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+    for (const f of families) {
+      expect(paper).toMatch(new RegExp(`\\.pv-fam--${f}\\s*\\{[^}]*--fam-tint:\\s*var\\(--ann-${f}-tint\\)`));
+    }
   });
 });
 

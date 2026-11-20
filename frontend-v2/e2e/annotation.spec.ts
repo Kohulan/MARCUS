@@ -108,10 +108,10 @@ test("annotate the sample: the values, their occurrences, corrections kept and e
   const current = text.locator(".pv-mark--current");
   await expect(current).toHaveText("NMR");
   await expect(current).toBeInViewport();
-  await expect(ann.getByRole("status")).toHaveText("NMR: 1 of 5");
+  await expect(ann.getByRole("status")).toHaveText("NMR: 1 of 5, Abbreviations");
   // the next click (Enter on the focused button) goes to the next occurrence, further down
   await page.keyboard.press("Enter");
-  await expect(ann.getByRole("status")).toHaveText("NMR: 2 of 5");
+  await expect(ann.getByRole("status")).toHaveText("NMR: 2 of 5, Abbreviations");
   await expect(current).toBeInViewport();
   const nmrs = text.locator("mark", { hasText: /^NMR$/ });
   await expect(nmrs.nth(1)).toHaveClass(/pv-mark--current/);
@@ -204,6 +204,35 @@ test("the COCONUT form starts from the annotation's organism, part and place", a
   await expect(ann.getByRole("button", { name: /^Taxus brevifolia/ })).toBeVisible();
   await expect(ann.getByRole("button", { name: /^bark/ })).toBeVisible();
   await expect(ann.getByRole("button", { name: /^China/ })).toBeVisible();
+
+  // Each field family has its own colour: the chip, the legend swatch and the marks, each
+  // mark named by its field (colour is never alone)
+  const text = page.getByRole("group", { name: "Paper text" });
+  const families = [
+    ["Taxus brevifolia", "organism", "Organism"],
+    ["bark", "part", "Organism part"],
+    ["China", "place", "Place"],
+  ] as const;
+  const tints = new Map<string, string>();
+  for (const [value, family, label] of families) {
+    await expect(ann.getByRole("button", { name: new RegExp(`^${value}`) })).toHaveClass(
+      new RegExp(`pv-fam--${family}`),
+    );
+    const mark = text.locator(`mark.pv-fam--${family}`, { hasText: value }).first();
+    await expect(mark).toHaveAttribute("title", label);
+    tints.set(family, await mark.evaluate((m) => getComputedStyle(m).backgroundColor));
+    const swatch = ann.getByRole("term").filter({ hasText: new RegExp(`^${label}$`) }).locator(".pv-swatch");
+    await expect(swatch).toHaveClass(new RegExp(`pv-fam--${family}`));
+  }
+  expect(new Set(tints.values()).size).toBe(3);
+  expect([...tints.values()]).not.toContain("rgba(0, 0, 0, 0)");
+  // the occurrence a click went to: filled with its family's deep colour, apart from its tint
+  await ann.getByRole("button", { name: /^bark/ }).click();
+  const current = text.locator("mark.pv-mark--current");
+  await expect(current).toHaveClass(/pv-fam--part/);
+  await expect(ann.getByRole("status")).toHaveText(/^bark: 1 of \d+, Organism part$/);
+  const fill = await current.evaluate((m) => getComputedStyle(m).backgroundColor);
+  expect(fill).not.toBe(tints.get("part"));
   await expect(page.getByRole("region", { name: "Status" }).getByText("Done")).toBeVisible({
     timeout: 30_000,
   });

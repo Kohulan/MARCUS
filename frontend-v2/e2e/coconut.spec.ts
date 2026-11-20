@@ -81,9 +81,10 @@ test("log in, fill the form and send one structure to COCONUT through the relay"
 });
 
 test("the DOI search goes through the relay too", async ({ page }) => {
-  const search = (query: string) =>
+  // The UI's body (lookup/coconutDoi.ts): no `sort`, which COCONUT refuses as "desc".
+  const search = (query: string, extra: Record<string, unknown> = {}) =>
     page.request.post("/api/v2/coconut/search", {
-      data: { type: "tags", tagType: "citations", query, limit: 20, sort: "desc", page: 1, offset: 0 },
+      data: { type: "tags", tagType: "citations", query, limit: 20, page: 1, offset: 0, ...extra },
     });
   const hit = await search(FAKE_DOI);
   expect(hit.status()).toBe(200);
@@ -91,4 +92,5 @@ test("the DOI search goes through the relay too", async ({ page }) => {
   expect(((await hit.json()) as { data: { data: unknown[] } }).data.data).toHaveLength(3);
   const none = await search("10.1/nothing");
   expect(((await none.json()) as { data: { data: unknown[] } }).data.data).toHaveLength(0);
+  expect((await search(FAKE_DOI, { sort: "desc" })).status()).toBe(400);
 });

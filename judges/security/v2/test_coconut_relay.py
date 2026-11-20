@@ -29,7 +29,7 @@ from v2.helpers import docker_probe, expect_ok
 RELAY = "/api/v2/coconut"
 COCONUT_HOST = "coconut.naturalproducts.net"
 SEARCH = {"type": "tags", "tagType": "citations", "query": "10.1/judge", "limit": 20,
-          "sort": "desc", "page": 1, "offset": 0}  # fmt: skip
+          "page": 1, "offset": 0}  # fmt: skip
 # What the relay sends upstream, and nothing else (connection, content-length: nginx's own).
 UPSTREAM_HEADERS = {"host", "content-type", "accept", "user-agent", "connection", "content-length"}
 # What may come back: COCONUT's Content-Type / Content-Length, nginx's own fixed headers.

@@ -7,24 +7,18 @@ import { isPaperBusy } from "../api/status";
 import type { PaperDetail, StepOut } from "../api/types";
 import type { useLiveEvents } from "../api/useLiveEvents";
 import { GlassButton } from "../ui/GlassButton";
+import ReadingProgress from "../ui/ReadingProgress";
 import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
 import { onlyAnnotating } from "./annotation";
-import { checkFailure as checkFailureOf, pageFailures, progress } from "./pageFailures";
+import { checkFailure as checkFailureOf, pageFailures } from "./pageFailures";
+import { readingProgress } from "./readingProgress";
 import "./workspace.css";
 
 /** "About 3 min in the queue" (whole minutes, rounded up); under 60 s "Less than a minute". */
 function queueText(seconds: number): string {
   if (seconds < 60) return "Less than a minute";
   return `About ${Math.ceil(seconds / 60)} min in the queue`;
-}
-
-function progressText(steps: StepOut[], pages: number | null): string | null {
-  const p = progress(steps, pages);
-  const parts: string[] = [];
-  if (p.pages !== null) parts.push(`Pages read ${p.pagesRead}/${p.pages}`);
-  if (p.structures > 0) parts.push(`Structures read ${p.structuresRead}/${p.structures}`);
-  return parts.length ? parts.join(" · ") : null;
 }
 
 type Props = {
@@ -34,8 +28,9 @@ type Props = {
 };
 
 /**
- * The status bar both views share: the paper's state word, its place in the queue while it
- * waits, per-step progress (or the one line of a PDF that could not be read), the live note,
+ * The status bar both views share: the paper's state word, the reading progress bar (its
+ * stages, and its place in the queue until the read starts; or the one line of a PDF that
+ * could not be read), the live note,
  * then one hatched line per failed page with its reason and a retry.
  */
 export default function StatusBar({ paper, steps, live }: Props) {
@@ -52,10 +47,20 @@ export default function StatusBar({ paper, steps, live }: Props) {
   // Once per steps change, not on every workspace render (each ← / → in focus mode is one).
   const failedPages = useMemo(() => pageFailures(steps), [steps]);
   const checkFailure = useMemo(() => checkFailureOf(steps), [steps]);
-  const readout = useMemo(
-    () => (checkFailure === null ? progressText(steps, paper.pages) : null),
-    [checkFailure, steps, paper.pages],
+  const { status, pages, ocsr_mode: ocsrMode, annotating } = paper;
+  const reading = useMemo(
+    () => readingProgress({ status, pages, ocsr_mode: ocsrMode, annotating }, steps),
+    [status, pages, ocsrMode, annotating, steps],
   );
+  // A paper read while it is open ends on a full bar; one opened done shows only its badge.
+  const [seenReading, setSeenReading] = useState(false);
+  const readingNow = reading !== null && reading.stage !== "done" && reading.stage !== "annotating";
+  if (readingNow && !seenReading) setSeenReading(true);
+  const showBar = reading !== null && (reading.stage !== "done" || seenReading);
+  // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
+  // the line while nothing has started, then beside the stages when it is a minute or more.
+  const queueNote =
+    mine && (reading?.stage === "waiting" || mine.estimate_s >= 60) ? queueText(mine.estimate_s) : null;
 
   useEffect(() => {
     setHeld((m) => {
@@ -101,13 +106,21 @@ export default function StatusBar({ paper, steps, live }: Props) {
             annotating={waiting && onlyAnnotating(steps)}
           />
         </span>
-        {mine && <span className="ws-status__cell ws-status__readout">{queueText(mine.estimate_s)}</span>}
         {checkFailure !== null && (
           <p className="ws-status__cell ws-status__problem hatch">
             {`This PDF could not be read: ${checkFailure}`}
           </p>
         )}
-        {readout !== null && <span className="ws-status__cell ws-status__readout">{readout}</span>}
+        {reading !== null && showBar && (
+          <div className="ws-status__cell ws-status__progress">
+            <ReadingProgress
+              progress={reading}
+              label="Reading progress"
+              queueNote={queueNote}
+              announce
+            />
+          </div>
+        )}
         {live.mode === "polling" && (
           <span className="ws-status__cell ws-status__live">
             Live updates paused, checking every 2 s
