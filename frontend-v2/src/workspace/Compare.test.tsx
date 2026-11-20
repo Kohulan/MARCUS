@@ -152,7 +152,7 @@ describe("Compare", () => {
     const { props, rerender } = renderCompare({ predictions: first });
     fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    const note = "First run loads the model, about 30 s";
+    const note = "The first run can take about 30 s";
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
     expect(cell("Result", "MolNexTR")).not.toHaveTextContent(note);

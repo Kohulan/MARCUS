@@ -244,7 +244,7 @@ describe("cards and their states", () => {
   });
 
   it("a card read again with DECIMER hand-drawn says its first run loads the model", async () => {
-    const note = "First run loads the model, about 30 s";
+    const note = "The first run can take about 30 s";
     renderGrid(paper([segment("s1", { predictions: [] }), segment("s2", { predictions: [] })], { status: "processing" }), [
       step({ segment_id: "s1", status: "failed", error_class: "timeout" }),
       step({ segment_id: "s1", status: "queued", engine: "decimer-hand" }),
