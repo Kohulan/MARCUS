@@ -309,6 +309,8 @@ describe("A PDF handed over by the landing's drop zone", () => {
     const reply = deferred();
     renderHome({ at: at(handOff(fileOf("a.pdf", "application/pdf"))), papersReply: reply.promise });
     expect(await screen.findByText("Uploading a.pdf…")).toBeInTheDocument();
+    // fetch reports no upload progress: the indeterminate bar, no number
+    expect(screen.getByRole("progressbar", { name: "Upload" })).not.toHaveAttribute("aria-valuenow");
     expect(api.uploadPaper).not.toHaveBeenCalled();
     reply.resolve({ papers: [] });
     expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();

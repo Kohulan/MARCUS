@@ -8,6 +8,7 @@ import { loadedDrawing } from "../api/depictions";
 import { molfileQuery } from "./useCompare";
 import { pubchemBySmiles, type PubchemHit } from "../lookup/pubchem";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import { saveBlob } from "../ui/saveBlob";
 import "./structureActions.css";
 
@@ -207,8 +208,13 @@ export default function StructureActions({
           </GlassButton>
         )}
       </div>
-      <p className="structure-actions__status" role="status" aria-live="polite">
-        {lookup?.state === "busy" && "Looking up…"}
+      <div className="structure-actions__status" role="status" aria-live="polite">
+        {lookup?.state === "busy" && (
+          <>
+            Looking up…
+            <ProgressBar value={null} label="Looking up in PubChem" size="sm" className="structure-actions__bar" />
+          </>
+        )}
         {lookup?.state === "none" && "Not found in PubChem"}
         {lookup?.state === "hit" && (
           <>
@@ -221,7 +227,7 @@ export default function StructureActions({
         )}
         {!lookup && note}
         {lookup && note && <span> {note}</span>}
-      </p>
+      </div>
     </div>
   );
 }

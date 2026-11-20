@@ -5,6 +5,7 @@ import { reasonText } from "../api/reasons";
 import { isPaperBusy, isStepActive } from "../api/status";
 import type { AnnotationHit, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { saveBlob } from "../ui/saveBlob";
 import AnnotationPanel from "./AnnotationPanel";
@@ -206,9 +207,10 @@ export default function TextColumn({
     );
   } else if (!text.data) {
     body = (
-      <p className="pv-text__state" role="status">
-        Loading the text…
-      </p>
+      <div className="pv-text__state">
+        <p role="status">Loading the text…</p>
+        <ProgressBar value={null} label="Loading the text" size="sm" className="pv-text__bar" />
+      </div>
     );
   } else if (blocks.length === 0) {
     body = <p className="pv-text__state">No text was found in this paper.</p>;

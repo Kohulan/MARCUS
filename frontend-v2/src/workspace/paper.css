@@ -398,6 +398,11 @@
   margin: 0;
 }
 
+.pv-text__bar {
+  align-self: stretch;
+  max-width: 240px;
+}
+
 /* Annotation ----------------------------------------------------------------- */
 
 .pv-ann {
