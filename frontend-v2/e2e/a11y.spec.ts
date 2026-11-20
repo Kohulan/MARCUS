@@ -55,9 +55,10 @@ async function routeApi(page: Page): Promise<void> {
     }
     return route.fulfill({ status: 404, contentType: "application/json", body: '{"detail":"not found"}' });
   });
-  // Third parties: Matomo (empty 204), COCONUT's DOI search (nothing found), PubChem (none).
+  // Third parties: Matomo (empty 204), COCONUT's DOI search through the MARCUS relay (nothing
+  // found), PubChem (none).
   await routeMatomo(page);
-  await page.route("https://coconut.naturalproducts.net/**", (route) =>
+  await page.route("**/api/v2/coconut/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: '{"data":[]}' }),
   );
   await page.route("https://pubchem.ncbi.nlm.nih.gov/**", (route) =>
