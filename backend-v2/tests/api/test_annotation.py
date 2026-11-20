@@ -60,8 +60,13 @@ async def run_annotate(db, paper_id, result) -> None:
 
 @pytest.fixture
 def enabled(monkeypatch, clear_settings_cache):
+    """Annotation offered, and a live q.llm consumer (the /ready consumer check, faked)."""
+    from marcus.api.routes import health
+
     monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "1")
     clear_settings_cache()
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
 
 
 @pytest.fixture
@@ -353,3 +358,22 @@ def test_locate_reuses_known_positions_and_reads_no_text_when_all_are_known(monk
     assert reads.locate(paper_id, {f: [] for f in ann.FIELDS} | {"Kingdom": ["Oregon"]}, known)[
         "Kingdom"
     ] == {"Oregon": [[9, 9, 9]]}
+
+
+async def test_start_is_503_while_no_annotation_worker_is_running(
+    app, async_db_session, ready, monkeypatch
+):
+    from marcus.api.routes import health
+
+    token, paper_id, bob = ready
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.tools"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    async with make_client(app, token) as c:
+        own = await c.post(f"/api/v2/papers/{paper_id}/annotation")
+        state = await c.get(f"/api/v2/papers/{paper_id}/annotation")
+    async with make_client(app, bob) as c:
+        theirs = await c.post(f"/api/v2/papers/{paper_id}/annotation")
+    assert own.status_code == theirs.status_code == 503
+    assert own.json() == theirs.json() == {"detail": "The annotation model is not running"}
+    assert state.json()["status"] == "none"
+    assert (await paper_row(async_db_session, paper_id)).status == "done"  # not reopened

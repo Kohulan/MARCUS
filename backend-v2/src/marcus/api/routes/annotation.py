@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api import annotation as reads
 from marcus.api.chempool import CHEM
 from marcus.api.deps import current_owner, get_owned_paper, not_found, work_ip
+from marcus.api.routes import health  # the /ready consumer check (one shared cache)
 from marcus.api.schemas import (
     AnnotationCurationIn,
     AnnotationOut,
@@ -39,6 +40,8 @@ from marcus.core.settings import get_settings
 router = APIRouter()
 
 NOT_AVAILABLE = "Annotation is not available"
+NOT_RUNNING = "The annotation model is not running"
+LLM_QUEUE = "q.llm"
 NO_TEXT = "The text of this paper is not ready"
 NOTHING_TO_CORRECT = "This paper has no annotation yet"
 
@@ -67,8 +70,13 @@ async def start_annotation(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> AnnotationStarted:
-    if not get_settings().annotate_enabled:  # before the owner check: no existence oracle
+    # Both before the owner check (no existence oracle). Offered, but no worker consumes q.llm
+    # (llama-server down, worker-llm not started): refuse instead of reopening the paper for a
+    # step nobody runs.
+    if not get_settings().annotate_enabled:
         raise HTTPException(status_code=503, detail=NOT_AVAILABLE)
+    if LLM_QUEUE not in await health.live_queues():
+        raise HTTPException(status_code=503, detail=NOT_RUNNING)
     paper = await get_owned_paper(db, owner, paper_id)
     rerun = body.rerun if body is not None else False
     ip = work_ip(request)

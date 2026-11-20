@@ -24,6 +24,7 @@ from marcus.api import security
 from marcus.api.deps import UNKNOWN_IP, client_ip, rate_key_for_ip
 from marcus.api.main import create_app
 from marcus.api.routes import events as events_route
+from marcus.api.routes import health as health_route
 from marcus.core.db import get_db
 from marcus.core.events import paper_channel
 from marcus.core.settings import Settings, get_settings
@@ -154,6 +155,8 @@ def fill(path: str) -> str:
 
 async def test_headers_on_every_route(app, monkeypatch):
     env(monkeypatch, annotate_enabled="1")  # else POST .../annotation is a deliberate 503
+    monkeypatch.setattr(health_route, "inspect_live_queues", lambda: {"q.llm"})  # as above
+    monkeypatch.setattr(health_route, "_live_queues", health_route.LiveQueues())
     async with client(app) as c:
         assert (await c.get("/api/v2/papers")).status_code == 200  # owner cookie first
         for method, path in sorted(ALLOWED_ROUTES):
