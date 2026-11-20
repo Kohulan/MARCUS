@@ -64,6 +64,7 @@
 .landing .acro {
   font-size: 72px;
   font-weight: 400;
+  --acro-lh: 1em; /* the line height, for the assembly below */
   line-height: 1;
   letter-spacing: -0.035em;
   color: var(--ink);
@@ -87,6 +88,91 @@
 
 .acro__link {
   color: var(--muted);
+}
+
+/*
+ * The assembly, once per page load (Landing.tsx adds .acro--assemble on the first visit):
+ * the six initials stand as one word, MARCUS, centred on the title's box; they glide into
+ * the column; then each word's rest slides out from behind its initial. 1.5 s in all, on the
+ * one curve, transform and opacity only. The final box is the layout itself (every frame is a
+ * transform of it): nothing shifts when it ends, and the page reads the same without it.
+ *
+ * Where each initial starts: --acro-dx is its place in the word, the word centred on the
+ * h1. Measured on Geist 700 at -0.035em (in em, so every breakpoint scales with it): the
+ * initials' kerned offsets in "MARCUS" 0, 0.868, 1.541, 2.187, 2.888, 3.561; the word 4.207
+ * wide; the h1 8.392 wide (its widest line, "Recognition for"); so 2.093 + the offset.
+ * Vertically each starts on the middle of the six lines: (2.5 - n + 1) line heights.
+ */
+.acro__line--1 {
+  --acro-i: 0;
+  --acro-dx: 2.093em;
+}
+
+.acro__line--2 {
+  --acro-i: 1;
+  --acro-dx: 2.96em;
+}
+
+.acro__line--3 {
+  --acro-i: 2;
+  --acro-dx: 3.634em;
+}
+
+.acro__line--4 {
+  --acro-i: 3;
+  --acro-dx: 4.279em;
+}
+
+.acro__line--5 {
+  --acro-i: 4;
+  --acro-dx: 4.98em;
+}
+
+.acro__line--6 {
+  --acro-i: 5;
+  --acro-dx: 5.654em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .acro--assemble b,
+  .acro--assemble .acro__rest {
+    display: inline-block;
+  }
+
+  /* the word shows (300 ms), then each initial glides to its line (500 ms, 30 ms apart) */
+  .acro--assemble b {
+    animation:
+      acro-show 300ms var(--ease) both,
+      acro-glide 500ms var(--ease) calc(350ms + var(--acro-i) * 30ms) both;
+  }
+
+  /* each rest slides out from behind its initial as it lands (500 ms, 60 ms apart); it
+     shows a beat after it sets off, so it never draws over the initial */
+  .acro--assemble .acro__rest {
+    --acro-at: calc(700ms + var(--acro-i) * 60ms);
+
+    animation:
+      acro-slide 500ms var(--ease) var(--acro-at) both,
+      acro-show 400ms var(--ease) calc(var(--acro-at) + 100ms) both;
+  }
+}
+
+@keyframes acro-show {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes acro-glide {
+  from {
+    transform: translate(var(--acro-dx), calc((2.5 - var(--acro-i)) * var(--acro-lh)));
+  }
+}
+
+@keyframes acro-slide {
+  from {
+    transform: translateX(-0.25em);
+  }
 }
 
 .lead__text {
@@ -496,6 +582,7 @@
 @media (max-width: 559.98px) {
   .landing .acro {
     font-size: 36px;
+    --acro-lh: 40px;
     line-height: 40px;
   }
 }
