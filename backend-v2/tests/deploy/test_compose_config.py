@@ -516,10 +516,11 @@ GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molnextr", "worker-m
 GPU_TOTAL_MIB = 32 * 1024
 CUDA_CONTEXT_MIB = 512
 BUDGET_LIMIT_MIB = 20 * 1024
-# llama-server (the MARCUS model): the Q8_0 GGUF (9.5 GB) plus an 8192-token context and compute
-# buffers, about 11 GB; llama.cpp cannot be capped, so it is counted on top of the model workers'
-# budgets and the card must still keep CARD_HEADROOM_MIB free.
-LLAMA_GPU_MIB = 11 * 1024
+# llama-server (the MARCUS model): the Q8_0 GGUF plus an 8192-token context and compute buffers,
+# measured 8.9 GB on the jarvis V100 (2026-11-20), counted here as 9 GiB; llama.cpp cannot be
+# capped, so it is counted on top of the model workers' budgets and the card must still keep
+# CARD_HEADROOM_MIB free.
+LLAMA_GPU_MIB = 9 * 1024
 CARD_HEADROOM_MIB = 2 * 1024
 
 
@@ -551,6 +552,16 @@ def test_gpu_override_budget_under_20gb():
     published = {name for name, svc in services.items() if svc.get("ports")}
     assert published == {"nginx"}
     assert _non_internal_members(config) == EGRESS_SERVICES
+
+
+def test_llama_gpu_memory_is_the_measured_figure_everywhere():
+    """Measured on the jarvis V100 (2026-11-20): llama-server with the Q8_0 GGUF at ctx 8192
+    takes 8.9 GB. The old "about 11 GB" estimate is gone from the files that size the card."""
+    assert LLAMA_GPU_MIB == 9 * 1024
+    for path in (ROOT / GPU, ROOT / "ops" / "annotate_smoke.sh", ROOT / "README.md"):
+        text = path.read_text()
+        assert "8.9 GB" in text, path.name
+        assert "11 GB" not in text, path.name
 
 
 def test_gpu_override_reserves_the_gpu_for_exactly_the_model_workers():

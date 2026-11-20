@@ -24,8 +24,9 @@
 #                     the same exact matches, and 0.66 s instead of 1.08 s per structure
 #                     (judges/results/2026-11-17-gpu-session.md).
 #   llama-server      the MARCUS model (Q8_0 GGUF, 9.5 GB) fully on the GPU, 8192-token context,
-#                     one request at a time: about 11 GB (llama.cpp has no cap; the size is the
-#                     model plus its context). tests/deploy counts it on top of the 20 GB above.
+#                     one request at a time: 8.9 GB measured on the jarvis V100 (2026-11-20;
+#                     llama.cpp has no cap; the size is the model plus its context). tests/deploy
+#                     counts it on top of the 20 GB above.
 # The budgets cap the frameworks' allocators; every process's CUDA context (a few hundred MB)
 # comes on top. Each value can be changed from the environment without editing this file.
 #

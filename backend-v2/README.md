@@ -151,7 +151,8 @@ MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf MARCUS_LLM_USER="$(stat 
   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-`worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
+Measured on the jarvis V100 (2026-11-20): 8.9 GB of GPU memory at ctx 8192, about 2 s per short
+paper. `worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
 picked from the text by fixed rules). Without either, the API answers 503 (`annotate_enabled`).
 Real-model smoke test, outside any stack (the sample PDF through docling, then the step's own
 handler against llama-server): `MARCUS_LLM_GGUF=... ops/annotate_smoke.sh` (`--cpu` without a
