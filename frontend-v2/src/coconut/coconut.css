@@ -322,6 +322,12 @@
   grid-column: 1 / 3;
 }
 
+/* Muted on sunken (5.2:1) is the thinnest text pair, and the dialog fades in over 220 ms:
+   mid-fade it dropped to 4.44:1. The heads on this sunken band take text-2 (8.3:1). */
+.coconut-structures__head > .mono-label {
+  color: var(--text-2);
+}
+
 .coconut-rows {
   margin: 0;
   padding: 0;
