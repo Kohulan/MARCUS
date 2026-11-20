@@ -1265,6 +1265,22 @@ def test_fake_coconut_certificate_is_for_the_coconut_name_and_signed_by_the_test
     ]
 
 
+def test_fake_coconut_tls_files_are_tracked_by_git():
+    """A fresh checkout must have them: compose would otherwise mount a directory over nginx's
+    CA bundle (nginx does not start) and the fake would die loading its certificate."""
+    git = shutil.which("git")
+    if git is None or not (ROOT.parent / ".git").exists():
+        pytest.skip("not a git checkout")
+    out = subprocess.run(
+        [git, "-C", str(ROOT.parent), "ls-files", "backend-v2/tests/fake_coconut"],
+        capture_output=True,
+        text=True,
+    )
+    assert out.returncode == 0, out.stderr
+    tracked = {Path(p).name for p in out.stdout.split()}
+    assert {"ca.pem", "cert.pem", "key.pem", "server.py", "gen-certs.sh"} <= tracked, tracked
+
+
 def _relay(url: str, method: str, path: str, body: bytes = b"{}", ctype="application/json",
            **headers: str) -> int | str:  # fmt: skip
     import httpx
