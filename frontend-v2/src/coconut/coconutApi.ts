@@ -1,7 +1,10 @@
-// The COCONUT reports API, called straight from the browser with the curator's own login
-// (CSP connect-src allows only https://coconut.naturalproducts.net for this). The token lives
-// in sessionStorage (memory when storage is blocked), goes only to COCONUT, never to /api/v2,
-// and is never logged. Every reply is third-party data: validated, and shown as text only.
+// The COCONUT reports API with the curator's own login. COCONUT allows no cross-origin calls,
+// so the browser calls the MARCUS server's relay (same origin, /api/v2/coconut/...: nginx
+// passes exactly these calls on to https://coconut.naturalproducts.net and stores or logs
+// neither the password nor the token; backend-v2/docker/nginx.conf). The token lives in
+// sessionStorage (memory when storage is blocked), is sent only with the relay's mutate call,
+// never to the MARCUS API, and is never logged. Every reply is third-party data: validated,
+// and shown as text only.
 import { isRecord } from "../lookup/fetchJson";
 import type {
   OrganismDraft,
@@ -14,7 +17,8 @@ import type {
   SubmitStructure,
 } from "./types";
 
-export const COCONUT_API = "https://coconut.naturalproducts.net/api";
+/** The relay's base path; its three calls map to COCONUT's /api/auth/login, /api/reports/mutate, /api/search. */
+export const COCONUT_API = "/api/v2/coconut";
 export const COCONUT_CHUNK = 50;
 export const TOKEN_KEY = "marcus-coconut-token";
 const SENT_KEY = "marcus-coconut-sent:";
@@ -93,6 +97,10 @@ export async function coconutLogin(email: string, password: string): Promise<str
     throw new CoconutLoginError("Wrong email or password");
   }
   if (res.status === 429) throw new CoconutLoginError(BUSY_ERROR);
+  // The relay's own failure (COCONUT unreachable, or too slow): nginx's 502 / 504; 503 alike.
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    throw new CoconutLoginError("Could not reach COCONUT");
+  }
   const body = res.ok ? await readJson(res) : undefined;
   const token = isRecord(body) ? body.access_token : undefined;
   if (typeof token !== "string" || token === "") {

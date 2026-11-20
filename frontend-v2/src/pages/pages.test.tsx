@@ -339,10 +339,16 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain(
       "Annotate runs a model on MARCUS's own server; no paper text leaves it.",
     );
-    // R-F22: the one request the browser makes to COCONUT without a click
+    // R-F22: the one request to COCONUT without a click (through the MARCUS relay)
     expect(container.textContent).toContain(
-      "Opening a paper with a DOI asks COCONUT how many structures it already has for that DOI.",
+      "Opening a paper with a DOI asks COCONUT, through the MARCUS server, how many structures it already has for that DOI.",
     );
+    // the COCONUT relay (2026-11-20): the login passes through, never stored or logged
+    expect(container.textContent).toContain(
+      "Your COCONUT password and login pass through the MARCUS server to COCONUT and are never stored or logged.",
+    );
+    expect(container.textContent).not.toContain("never sends it to its own server");
+    expect(container.textContent).not.toContain("straight to COCONUT");
   });
 
   it("About and Disclaimer carry v2 facts and nothing about OpenAI", () => {

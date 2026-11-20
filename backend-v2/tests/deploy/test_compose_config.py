@@ -263,7 +263,7 @@ UI_LOCATIONS_IN_IMAGE = "/etc/nginx/marcus/ui-locations.conf"
 # Exact, from Global Constraints (frontend v2 plan).
 APP_CSP = (
     "default-src 'self'; script-src 'self' https://matomo.nfdi4chem.de; "
-    "connect-src 'self' https://coconut.naturalproducts.net https://pubchem.ncbi.nlm.nih.gov "
+    "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov "
     "https://matomo.nfdi4chem.de; img-src 'self' data: blob: https://matomo.nfdi4chem.de; "
     "style-src 'self'; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; "
     "form-action 'self'; frame-ancestors 'none'"
@@ -346,6 +346,8 @@ def test_nginx_includes_the_ui_locations_instead_of_a_404():
 
 def test_ui_locations_carry_both_exact_csps_mime_types_and_gzip():
     conf = UI_LOCATIONS.read_text()
+    # COCONUT only through the relay (same origin): the browser never connects to it
+    assert "coconut" not in _strip_comments(conf)
     csps = set(re.findall(r'add_header Content-Security-Policy "([^"]*)" always;', conf))
     assert csps == {APP_CSP, KETCHER_CSP}
     assert re.search(r"^include /etc/nginx/mime\.types;", conf, re.M)

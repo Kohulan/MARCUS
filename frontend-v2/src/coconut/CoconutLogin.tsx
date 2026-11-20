@@ -1,5 +1,5 @@
-// The curator's own COCONUT login. The password lives only in this form's state and goes
-// only to COCONUT; nothing here is logged.
+// The curator's own COCONUT login. The password lives only in this form's state and goes to
+// COCONUT through the MARCUS server's relay, which neither stores nor logs it.
 import { useRef, useState, type FormEvent } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { CoconutLoginError, coconutLogin } from "./coconutApi";

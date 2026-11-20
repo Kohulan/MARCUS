@@ -89,11 +89,11 @@ afterEach(() => {
 });
 
 describe("coconutLogin", () => {
-  it("posts to /api/auth/login and keeps access_token in sessionStorage", async () => {
+  it("posts to the relay's /auth/login and keeps access_token in sessionStorage", async () => {
     stubFetch(async () => json({ access_token: TOKEN, token_type: "Bearer" }));
     await expect(coconutLogin("a@b.c", "pw")).resolves.toBe(TOKEN);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe("https://coconut.naturalproducts.net/api/auth/login");
+    expect(calls[0]!.url).toBe("/api/v2/coconut/auth/login");
     expect(calls[0]!.init.method).toBe("POST");
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ email: "a@b.c", password: "pw" });
     expect(calls[0]!.init.credentials).toBe("omit");
@@ -122,6 +122,23 @@ describe("coconutLogin", () => {
     await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
     expect(getToken()).toBeNull();
   });
+
+  it("keeps COCONUT's own status through the relay: 403 and 422 wrong login, 429 busy", async () => {
+    for (const status of [403, 422]) {
+      stubFetch(async () => json({ message: "no" }, status));
+      await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
+    }
+    stubFetch(async () => json({ message: "Too Many Attempts." }, 429));
+    await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow("COCONUT is busy. Try again later");
+  });
+
+  it("reads the relay's own failure (502, 503, 504: nginx's HTML page) as unreachable", async () => {
+    for (const status of [502, 503, 504]) {
+      stubFetch(async () => new Response("<html>Bad Gateway</html>", { status }));
+      await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow("Could not reach COCONUT");
+    }
+    expect(getToken()).toBeNull();
+  });
 });
 
 describe("submitReports", () => {
@@ -134,7 +151,7 @@ describe("submitReports", () => {
     );
     const res = await submitReports(TOKEN, [{ segmentId: "s1", report }]);
     expect(res).toEqual([{ segmentId: "s1", ok: true, reportId: "1" }]);
-    expect(calls[0]!.url).toBe("https://coconut.naturalproducts.net/api/reports/mutate");
+    expect(calls[0]!.url).toBe("/api/v2/coconut/reports/mutate");
     expect(calls[0]!.init.method).toBe("POST");
     expect(new Headers(calls[0]!.init.headers).get("Authorization")).toBe(`Bearer ${TOKEN}`);
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
@@ -268,11 +285,11 @@ describe("submitReports", () => {
     expect(res.slice(50).every((r) => !r.ok && r.error === NOT_SENT_ERROR)).toBe(true);
   });
 
-  it("sends only to coconut.naturalproducts.net", async () => {
+  it("sends only to the MARCUS relay for COCONUT (same origin)", async () => {
     stubFetch(okServer());
     await submitReports(TOKEN, items(2));
     expect(calls.every((c) => c.url.startsWith(`${COCONUT_API}/`))).toBe(true);
-    expect(COCONUT_API).toBe("https://coconut.naturalproducts.net/api");
+    expect(COCONUT_API).toBe("/api/v2/coconut");
   });
 });
 
@@ -577,11 +594,11 @@ describe("SubmitForm", () => {
     expect(send).toHaveAccessibleDescription("Fill in title, organism");
   });
 
-  it("never sends the token to /api/v2", async () => {
+  it("sends the token only on the relay's mutate call, never to the MARCUS API", async () => {
     const ok = okServer();
     stubFetch(async (url, init) => {
       if (url.includes("/auth/login")) return json({ access_token: TOKEN });
-      if (url.startsWith("/api/v2")) return json({ papers: [], updated: 0 });
+      if (!url.startsWith(`${COCONUT_API}/`)) return json({ papers: [], updated: 0 });
       return ok(url, init);
     });
     renderForm();
@@ -595,15 +612,18 @@ describe("SubmitForm", () => {
     // The app's own calls, made while the COCONUT token is stored in this tab.
     await api.listPapers();
     await api.putBulkCuration("p1", [{ segment_id: "s1", status: "accepted" }]);
-    const v2 = calls.filter((c) => c.url.startsWith("/api/v2"));
+    const v2 = calls.filter((c) => !c.url.startsWith(`${COCONUT_API}/`));
     expect(v2).toHaveLength(2);
     for (const c of v2) {
       expect(c.url).not.toContain(TOKEN);
       expect(String(c.init.body ?? "")).not.toContain(TOKEN);
       expect(JSON.stringify([...new Headers(c.init.headers).entries()])).not.toContain(TOKEN);
     }
-    const toCoconut = calls.filter((c) => !c.url.startsWith("/api/v2"));
-    expect(toCoconut.every((c) => c.url.startsWith(`${COCONUT_API}/`))).toBe(true);
+    const toCoconut = calls.filter((c) => c.url.startsWith(`${COCONUT_API}/`));
+    const withToken = toCoconut.filter((c) =>
+      JSON.stringify([...new Headers(c.init.headers).entries()]).includes(TOKEN),
+    );
+    expect(withToken.map((c) => c.url)).toEqual([`${COCONUT_API}/reports/mutate`]);
   });
 
   it("keeps Unknown structures out of the next send until Send again is confirmed", async () => {
