@@ -79,13 +79,20 @@ test("annotate the sample: the values, their occurrences, corrections kept and e
 
   await page.goto(`/app/papers/${id}?view=paper`);
   const ann = page.getByRole("region", { name: "Annotation" });
-  await ann.getByRole("button", { name: "Annotate" }).click();
-  await expect(ann.getByText("Annotating…")).toBeVisible();
+  await ann.getByRole("button", { name: "Annotate" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(ann.locator(".state", { hasText: "Annotating…" })).toBeVisible();
+  // the button is gone: the focus stays in the panel, the start is said
+  await expect(ann).toBeFocused();
+  await expect(ann.getByRole("status")).toHaveText("Annotating…");
   // the paper is busy only with its annotation: the status bar says so
   await expect(page.getByRole("region", { name: "Status" }).getByText("Annotating…")).toBeVisible();
 
   await expect(ann.getByText("Model suggestion")).toBeVisible({ timeout: 60_000 });
   await expect(ann.getByText("fake-annotator")).toBeVisible();
+  // the end is said, and Edit takes the focus
+  await expect(ann.getByRole("status")).toHaveText("Annotation ready");
+  await expect(ann.getByRole("button", { name: "Edit" })).toBeFocused();
   await expect(page.getByRole("region", { name: "Status" }).getByText("Done")).toBeVisible({
     timeout: 30_000,
   });
@@ -206,6 +213,8 @@ test("the COCONUT form starts from the annotation's organism, part and place", a
   await expect(form.getByLabel("Organism", { exact: true })).toHaveValue("Taxus brevifolia");
   await expect(form.getByLabel("Parts").first()).toHaveValue("bark");
   await expect(form.getByLabel("Location").first()).toHaveValue("China");
+  // labelled as the model's suggestion (decision 7)
+  await expect(form.getByText("Organisms: model suggestion")).toBeVisible();
   // the curator can still change it
   await form.getByLabel("Organism", { exact: true }).fill("Taxus baccata");
   await expect(form.getByLabel("Organism", { exact: true })).toHaveValue("Taxus baccata");
