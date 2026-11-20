@@ -1,7 +1,7 @@
 // readingProgress: the stages and the overall figure of a paper being read.
 import { describe, expect, it } from "vitest";
 import type { StepOut } from "../api/types";
-import { climb, readingProgress, type Climb } from "./readingProgress";
+import { readingProgress } from "./readingProgress";
 
 let seq = 0;
 function step(over: Partial<StepOut>): StepOut {
@@ -259,35 +259,5 @@ describe("readingProgress", () => {
     expect(readingProgress({ status: "failed", pages: null, ocsr_mode: "auto" }, [])).toBeNull();
     const bad = [step({ kind: "check_pdf", page: null, status: "failed", error_class: "bad_input" })];
     expect(readingProgress({ status: "checking", pages: null, ocsr_mode: "auto" }, bad)).toBeNull();
-  });
-});
-
-describe("climb", () => {
-  const start: Climb = { max: 0, busy: true };
-
-  it("only ever rises during a run", () => {
-    let s = climb(start, 0.2, true);
-    expect(s.max).toBe(0.2);
-    s = climb(s, 0.15, true);
-    expect(s.max).toBe(0.2);
-    s = climb(s, 0.4, true);
-    expect(s.max).toBe(0.4);
-  });
-
-  it("keeps the figure through a moment with none", () => {
-    const s = climb({ max: 0.4, busy: true }, null, true);
-    expect(s.max).toBe(0.4);
-  });
-
-  it("returns the same state when nothing changes (no extra render)", () => {
-    const s = { max: 0.4, busy: true };
-    expect(climb(s, 0.3, true)).toBe(s);
-  });
-
-  it("starts again when a finished paper is busy again (a page retried)", () => {
-    let s = climb({ max: 0, busy: true }, 1, false);
-    expect(s).toEqual({ max: 1, busy: false });
-    s = climb(s, 0.8, true);
-    expect(s).toEqual({ max: 0.8, busy: true });
   });
 });

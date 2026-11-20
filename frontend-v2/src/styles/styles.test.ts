@@ -344,3 +344,40 @@ describe("motion on the landing, the header and the footer", () => {
     }
   });
 });
+
+// The progress bar (ui.css .pb): the fill and the sliding segment against the track, the
+// sheen's lightest point against the track, the printed figure against the page; tokens only.
+describe("progress bar colours", () => {
+  const ui = stripComments(readFileSync(resolve(process.cwd(), "src/ui/ui.css"), "utf8"));
+  const pbRules = ui.match(/\.pb[^{]*\{[^}]*\}/g)!.join("\n");
+
+  it("writes no colour literal (tokens only)", () => {
+    expect(pbRules).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+  });
+
+  it.each([
+    ["--green", "--surface"],
+    ["--green", "--tick"],
+    ["--control-border", "--paper"],
+  ] as const)("shape %s on %s is at least 3:1", (fg, bg) => {
+    expect(contrast(hex(fg), hex(bg))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the sheen's lightest point on the fill is still at least 3:1 on the track", () => {
+    const share = Number(/color-mix\(in srgb, var\(--surface\) (\d+)%, transparent\)/.exec(ui)![1]) / 100;
+    const mix = (a: string, b: string) =>
+      "#" +
+      [1, 3, 5]
+        .map((i) => {
+          const c = parseInt(a.slice(i, i + 2), 16) * (1 - share) + parseInt(b.slice(i, i + 2), 16) * share;
+          return Math.round(c).toString(16).padStart(2, "0");
+        })
+        .join("");
+    expect(contrast(mix(hex("--green"), hex("--surface")), hex("--surface"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the printed figure (text-2) is at least 4.5:1 on paper and surface", () => {
+    expect(pbRules).toMatch(/\.pb__pct\s*\{[^}]*color:\s*var\(--text-2\)/);
+    for (const bg of ["--paper", "--surface"]) expect(contrast(hex("--text-2"), hex(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+});

@@ -1,7 +1,7 @@
 import { faCheck } from "@fortawesome/free-solid-svg-icons";
-import { useState } from "react";
-import { climb, type Climb, type ReadingProgress as Model, type Stage } from "../workspace/readingProgress";
+import type { ReadingProgress as Model, Stage } from "../workspace/readingProgress";
 import Icon from "./Icon";
+import ProgressBar, { useAnnotateEstimate } from "./ProgressBar";
 import "./ui.css";
 
 /** The stage's name, said once when the stage changes (never on a new count). */
@@ -16,14 +16,6 @@ const SAID: Record<Stage, string> = {
   done: "Done",
 };
 
-/** The highest figure so far in this run (readingProgress climb); null stays indeterminate. */
-function useClimbing(fraction: number | null, busy: boolean): number | null {
-  const [state, setState] = useState<Climb>({ max: fraction ?? 0, busy });
-  const next = climb(state, fraction, busy);
-  if (next !== state) setState(next); // during render: no extra frame
-  return fraction === null ? null : next.max;
-}
-
 function shortLine(p: Model): string {
   const current = p.stages.find((s) => s.state === "current");
   if (p.stage === "waiting") return "Waiting";
@@ -32,11 +24,12 @@ function shortLine(p: Model): string {
 }
 
 /**
- * A paper's read as a native <progress> (its value and max are the bar's ARIA value; the
- * fill is drawn by CSS on the element's pseudo-parts, so no style attribute) with the stage
- * in words. The full form lists the stages, done ones ticked, the current one marked;
- * `announce` adds a polite status that changes with the stage only. `compact` is the tool
- * home's row: a thin bar and one short line. The figure never moves back during a run.
+ * A paper's read as the progress bar (ProgressBar: the fill eases, the percentage counts up
+ * beside it, never back during a run) with the stage in words. The full form lists the
+ * stages, done ones ticked, the current one marked; `announce` adds a polite status that
+ * changes with the stage only, never with a count or a percent. `compact` is the tool home's
+ * row: a thin bar and one short line. An annotate run, whose model reports no progress,
+ * shows the time-based estimate (useAnnotateEstimate) unless the model gives a figure.
  */
 export default function ReadingProgress({
   progress,
@@ -53,15 +46,17 @@ export default function ReadingProgress({
   announce?: boolean;
   compact?: boolean;
 }) {
-  const shown = useClimbing(progress.fraction, progress.stage !== "done");
-  const value = shown === null ? undefined : Math.round(shown * 100);
+  const annotating = progress.stage === "annotating";
+  const estimate = useAnnotateEstimate(annotating && progress.fraction === null);
+  const value = annotating ? (progress.fraction ?? estimate ?? 0) : progress.fraction;
   const bar = (
-    <progress
-      className="rp__bar"
-      max={100}
+    <ProgressBar
       value={value}
-      aria-label={label}
-      aria-valuetext={progress.valueText}
+      label={label}
+      valueText={progress.valueText}
+      active={progress.stage !== "done" && value !== 1}
+      size={compact ? "sm" : "md"}
+      estimated={annotating}
     />
   );
 

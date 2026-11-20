@@ -7,6 +7,8 @@ import { isPaperBusy } from "../api/status";
 import type { PaperDetail, StepOut } from "../api/types";
 import type { useLiveEvents } from "../api/useLiveEvents";
 import { GlassButton } from "../ui/GlassButton";
+import { useHeldAfter } from "../ui/ProgressBar";
+import { END_HOLD_MS } from "../ui/progressMotion";
 import ReadingProgress from "../ui/ReadingProgress";
 import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
@@ -56,7 +58,15 @@ export default function StatusBar({ paper, steps, live }: Props) {
   const [seenReading, setSeenReading] = useState(false);
   const readingNow = reading !== null && reading.stage !== "done" && reading.stage !== "annotating";
   if (readingNow && !seenReading) setSeenReading(true);
-  const showBar = reading !== null && (reading.stage !== "done" || seenReading);
+  // An annotate run seen here ends on its full bar for a moment (the estimate never says 100%
+  // before the run ends), then the bar goes: the paper is done, its badge says so.
+  const annotatingHeld = useHeldAfter(reading?.stage === "annotating", END_HOLD_MS);
+  const annotated = reading?.stage === "done" && annotatingHeld && !seenReading;
+  const shown =
+    reading !== null && annotated
+      ? { ...reading, stage: "annotating" as const, fraction: 1, valueText: "Annotating" }
+      : reading;
+  const showBar = reading !== null && (reading.stage !== "done" || seenReading || annotated);
   // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
   // the line while nothing has started, then beside the stages when it is a minute or more.
   const queueNote =
@@ -111,10 +121,10 @@ export default function StatusBar({ paper, steps, live }: Props) {
             {`This PDF could not be read: ${checkFailure}`}
           </p>
         )}
-        {reading !== null && showBar && (
+        {shown !== null && showBar && (
           <div className="ws-status__cell ws-status__progress">
             <ReadingProgress
-              progress={reading}
+              progress={shown}
               label="Reading progress"
               queueNote={queueNote}
               announce

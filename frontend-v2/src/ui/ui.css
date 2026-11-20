@@ -690,13 +690,153 @@
   color: var(--on-charcoal);
 }
 
-/* Reading progress --------------------------------------------------------- */
+/* Progress bar ------------------------------------------------------------- */
 /*
- * A paper's read: the stages in mono, then a native <progress> drawn as a ruled readout
- * (square, control-border edge, surface track, forest-green fill: 3.3:1 edge on paper, the
- * fill about 10:1 on the track). Indeterminate is an empty ruler (a tick every 8px) that
- * drifts slowly; no motion at all under reduced motion.
+ * The one progress bar (ProgressBar): a square track (control-border edge 3.3:1 on paper,
+ * surface ground) with a forest-green fill (about 10:1 on the track) and the percentage
+ * beside it in mono tabular figures. The fill is transform: scaleX(var(--pb)) on the one
+ * curve; --pb is set through the CSSOM (no style attribute). While the work goes on a slow
+ * sheen (surface at 22% over the green, still 5:1 on the track) crosses the filled part,
+ * clipped to it. Unmeasured, the track is an empty ruler (a tick every 8px) with a green
+ * segment sliding calmly across it. Under reduced motion: no sheen, no slide, no easing.
  */
+
+.pb {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pb__track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+}
+
+.pb--sm .pb__track {
+  height: 6px;
+}
+
+.pb__fill,
+.pb__sheen {
+  position: absolute;
+  inset: 0;
+}
+
+.pb__fill {
+  background: var(--green);
+  transform: scaleX(var(--pb, 0));
+  transform-origin: left center;
+  transition: transform 500ms var(--ease);
+}
+
+.pb__sheen {
+  display: none;
+  overflow: hidden;
+  clip-path: inset(0 calc(100% - var(--pb, 0) * 100%) 0 0);
+  transition: clip-path 500ms var(--ease);
+}
+
+.pb__sheen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 22%, transparent) 50%,
+    transparent
+  );
+  transform: translateX(-100%);
+}
+
+.pb--indeterminate .pb__track {
+  background: repeating-linear-gradient(90deg, var(--tick) 0 1px, var(--surface) 1px 8px);
+}
+
+.pb__slide {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: var(--green);
+}
+
+.pb__pct {
+  flex: none;
+  min-width: 4ch;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-2);
+}
+
+.pb--sm .pb__pct {
+  font-size: 11px;
+}
+
+.pb--indeterminate .pb__pct {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pb--active .pb__sheen {
+    display: block;
+  }
+
+  .pb--active .pb__sheen::before {
+    animation: pb-sheen 2.4s linear infinite;
+  }
+
+  .pb__slide {
+    display: block;
+    animation: pb-slide 2s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb__fill,
+  .pb__sheen {
+    transition: none;
+  }
+}
+
+/* The band crosses the filled part, then rests a moment. */
+@keyframes pb-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  70%,
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes pb-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(333.34%);
+  }
+}
+
+/* Reading progress --------------------------------------------------------- */
+/* A paper's read: the stages in mono above the progress bar. */
 
 .rp {
   display: flex;
@@ -768,64 +908,14 @@
   color: var(--muted);
 }
 
-.rp__bar {
-  display: block;
-  width: 100%;
-  height: 10px;
-  margin: 0;
-  border: 1px solid var(--control-border);
-  border-radius: 0;
-  background: var(--surface);
-  color: var(--green);
-  appearance: none;
-}
-
-.rp__bar::-webkit-progress-bar {
-  background: var(--surface);
-}
-
-.rp__bar::-webkit-progress-value {
-  background: var(--green);
-}
-
-.rp__bar::-moz-progress-bar {
-  background: var(--green);
-}
-
-.rp__bar:indeterminate,
-.rp__bar:indeterminate::-webkit-progress-bar {
-  background: repeating-linear-gradient(90deg, var(--tick) 0 1px, var(--surface) 1px 8px);
-}
-
-.rp__bar:indeterminate::-moz-progress-bar {
-  background: transparent;
-}
-
 .rp--compact {
   gap: 4px;
   max-width: 360px;
   margin-top: 8px;
 }
 
-.rp--compact .rp__bar {
-  height: 6px;
-}
-
 .rp--compact .rp__line {
   font-size: 11px;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .rp__bar:indeterminate,
-  .rp__bar:indeterminate::-webkit-progress-bar {
-    animation: rp-drift 1.6s linear infinite;
-  }
-}
-
-@keyframes rp-drift {
-  to {
-    background-position: 8px 0;
-  }
 }
 
 /* Structure drawing -------------------------------------------------------- */
