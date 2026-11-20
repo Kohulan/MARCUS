@@ -185,6 +185,12 @@
   color: var(--ink);
 }
 
+/* An engine reading: the calm indeterminate bar under its word. */
+.cmp-result__bar {
+  max-width: 120px;
+  margin-top: 6px;
+}
+
 .cmp-result--failed {
   color: var(--ink);
 }
@@ -214,6 +220,25 @@
 .cmp-score {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* The last Run all engines: its bar and its count, above the message. */
+.cmp__run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.cmp__run-line {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
 }
 
 .cmp__side {

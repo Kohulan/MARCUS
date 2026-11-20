@@ -84,11 +84,14 @@ export function useRunAll(
   onStarted: () => void,
 ): {
   requested: ReadonlyMap<string, number>;
+  /** The engines the last "Run all engines" started (those refused taken out). */
+  batch: readonly string[];
   sending: boolean;
   error: unknown;
   runAll: (engines: Engine[]) => void;
 } {
   const [requested, setRequested] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [batch, setBatch] = useState<readonly string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -97,6 +100,7 @@ export function useRunAll(
       if (engines.length === 0) return;
       setError(null);
       setSending(true);
+      setBatch(engines);
       setRequested((old) => {
         const next = new Map(old);
         for (const engine of engines) {
@@ -117,6 +121,7 @@ export function useRunAll(
             for (const engine of refused) next.delete(engine);
             return next;
           });
+          setBatch((old) => old.filter((engine) => !refused.includes(engine as Engine)));
           const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
           setError(first.reason);
         }
@@ -126,7 +131,7 @@ export function useRunAll(
     [target.kind, target.id, steps, onStarted],
   );
 
-  return { requested, sending, error, runAll };
+  return { requested, batch, sending, error, runAll };
 }
 
 export type Pair = {

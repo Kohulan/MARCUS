@@ -17,6 +17,7 @@ import { useLiveEvents } from "../api/useLiveEvents";
 import { usePageTitle } from "../pages/meta";
 import { returnFocus } from "../ui/focus";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar from "../ui/ProgressBar";
 import GonePage, { OpenFailed } from "../ui/GonePage";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
@@ -241,12 +242,18 @@ function Result({
           </p>
 
           {status === "waiting" && (
-            <p className="ir-status ir-status--wait">Waiting in the queue</p>
+            <div className="ir-progress">
+              <p className="ir-status ir-status--wait">Waiting in the queue</p>
+              <ProgressBar value={null} label="Image progress" valueText="Waiting in the queue" size="sm" />
+            </div>
           )}
           {status === "reading" && (
-            <p className="ir-status">
-              <StateBadge state="reading" />
-            </p>
+            <div className="ir-progress">
+              <p className="ir-status">
+                <StateBadge state="reading" />
+              </p>
+              <ProgressBar value={null} label="Image progress" valueText="Reading" size="sm" />
+            </div>
           )}
           {failed && (
             <div className="ir-failed hatch">

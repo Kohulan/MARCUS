@@ -461,6 +461,38 @@ describe("Paper view: annotation", () => {
     expect(within(status).queryByText("Reading…")).toBeNull();
   });
 
+  it("while it runs the panel's bar shows the estimate, about n%; a run that ends shows 100% before the values", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    fireEvent.click(within(p).getByRole("button", { name: "Annotate" }));
+    const bar = await within(p).findByRole("progressbar", { name: "Annotation progress" });
+    expect(bar).toHaveAttribute("aria-valuetext", expect.stringMatching(/^Annotating, about \d+%$/));
+    expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThan(100);
+    const done = annStep({ status: "done" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotated({ step: done }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), done] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "100"));
+    expect(within(p).queryByText("Model suggestion")).toBeNull();
+    expect(await within(p).findByText("Model suggestion")).toBeInTheDocument();
+    expect(within(p).queryByRole("progressbar")).toBeNull();
+  });
+
+  it("a run that fails never shows a full bar", async () => {
+    vi.spyOn(api, "startAnnotation").mockResolvedValue({ step_id: "st-ann" });
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC });
+    const p = await panel();
+    fireEvent.click(within(p).getByRole("button", { name: "Annotate" }));
+    await within(p).findByRole("progressbar", { name: "Annotation progress" });
+    const failed = annStep({ status: "failed", error_class: "timeout" });
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotation({ status: "failed", step: failed }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({}), failed] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    await within(p).findByRole("button", { name: "Try again" });
+    expect(within(p).queryByRole("progressbar")).toBeNull();
+  });
+
   it("a start the server refuses says so in a short line (503: not available)", async () => {
     vi.spyOn(api, "startAnnotation").mockRejectedValue(
       new ApiError(503, "Annotation is not available"),

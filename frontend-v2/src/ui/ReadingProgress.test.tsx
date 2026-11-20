@@ -1,8 +1,10 @@
-// The reading progress bar: a native <progress> with its spoken value, the stages in words,
-// one polite announcement per stage (never per count), no style attribute (CSP).
-import { render, screen } from "@testing-library/react";
+// The reading progress bar: the shared progress bar with its percentage and spoken value, the
+// stages in words, one polite announcement per stage (never per count or percent), no style
+// attribute (CSP), and an annotate run's time-based estimate.
+import { act, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ANNOTATE_TYPICAL_MS, FILL_MS } from "./progressMotion";
 import type { ReadingProgress as Model } from "../workspace/readingProgress";
 import ReadingProgress from "./ReadingProgress";
 
@@ -42,13 +44,13 @@ const waiting: Model = {
 };
 
 describe("ReadingProgress", () => {
-  it("is a native progress bar with its value, its name and its spoken value", () => {
+  it("is a progress bar with its value, its name, its spoken value and its percentage", () => {
     render(<ReadingProgress progress={pages(3, 0.32)} label="Reading progress" />);
     const bar = screen.getByRole("progressbar", { name: "Reading progress" });
-    expect(bar.tagName).toBe("PROGRESS");
-    expect(bar).toHaveAttribute("max", "100");
-    expect(bar).toHaveAttribute("value", "32");
-    expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 3 of 5");
+    expect(bar).toHaveAttribute("aria-valuemax", "100");
+    expect(bar).toHaveAttribute("aria-valuenow", "32");
+    expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 3 of 5, 32%");
+    expect(screen.getByText("32%")).toBeInTheDocument();
   });
 
   it("names the stages, marks the current one and prints its count", () => {
@@ -71,8 +73,9 @@ describe("ReadingProgress", () => {
       <ReadingProgress progress={waiting} label="Reading progress" queueNote="About 3 min in the queue" />,
     );
     const bar = screen.getByRole("progressbar");
-    expect(bar).not.toHaveAttribute("value");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
     expect(bar).toHaveAttribute("aria-valuetext", "Waiting");
+    expect(screen.queryByText(/%$/)).toBeNull();
     expect(screen.getByText("About 3 min in the queue")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Stages" })).toBeNull();
   });
@@ -86,9 +89,9 @@ describe("ReadingProgress", () => {
   it("never moves back while the paper is open", () => {
     const { rerender } = render(<ReadingProgress progress={pages(3, 0.4)} label="p" />);
     rerender(<ReadingProgress progress={structures(4, 10, 0.35)} label="p" />);
-    expect(screen.getByRole("progressbar")).toHaveAttribute("value", "40");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
     rerender(<ReadingProgress progress={structures(8, 10, 0.6)} label="p" />);
-    expect(screen.getByRole("progressbar")).toHaveAttribute("value", "60");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60");
   });
 
   it("announces a new stage politely, not a new count", () => {
@@ -100,11 +103,14 @@ describe("ReadingProgress", () => {
     expect(live).toHaveTextContent(/^Reading pages$/);
     rerender(<ReadingProgress progress={structures(1, 4, 0.5)} label="p" announce />);
     expect(live).toHaveTextContent(/^Reading structures$/);
+    rerender(<ReadingProgress progress={structures(2, 4, 0.6)} label="p" announce />);
+    expect(live).toHaveTextContent(/^Reading structures$/); // no percent in the announcement
   });
 
   it("the compact form is a thin bar and one short line, with no announcement", () => {
     render(<ReadingProgress progress={structures(10, 15, 0.7)} label="Progress of a.pdf" compact />);
-    expect(screen.getByRole("progressbar", { name: "Progress of a.pdf" })).toHaveAttribute("value", "70");
+    expect(screen.getByRole("progressbar", { name: "Progress of a.pdf" })).toHaveAttribute("aria-valuenow", "70");
+    expect(screen.getByText("70%")).toBeInTheDocument();
     expect(screen.getByText("Reading structures 10/15")).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
@@ -112,7 +118,45 @@ describe("ReadingProgress", () => {
 
   it("renders on the server with no style attribute", () => {
     const html = renderToString(<ReadingProgress progress={pages(3, 0.32)} label="p" announce />);
-    expect(html).toContain("<progress");
+    expect(html).toContain('role="progressbar"');
     expect(html).not.toMatch(/style=/);
+  });
+
+  describe("an annotate run (no figure from the model)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const annotating: Model = { ...waiting, stage: "annotating", valueText: "Annotating" };
+
+    it("shows the time-based estimate, labelled as one, and never 100% while it runs", () => {
+      vi.useFakeTimers({
+        toFake: [
+          "setInterval",
+          "clearInterval",
+          "setTimeout",
+          "clearTimeout",
+          "Date",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "performance",
+        ],
+      });
+      render(<ReadingProgress progress={annotating} label="Reading progress" />);
+      const bar = screen.getByRole("progressbar");
+      expect(bar).toHaveAttribute("aria-valuenow", "0");
+      act(() => {
+        vi.advanceTimersByTime(ANNOTATE_TYPICAL_MS);
+      });
+      act(() => {
+        vi.advanceTimersByTime(FILL_MS); // the printed figure catches up with the fill
+      });
+      expect(bar).toHaveAttribute("aria-valuetext", "Annotating, about 90%");
+      // the printed figure follows the moving estimate a step behind
+      expect(document.querySelector(".pb__pct")!.textContent).toMatch(/^~(89|90)%$/);
+      act(() => {
+        vi.advanceTimersByTime(30 * 60_000);
+      });
+      expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(95);
+    });
   });
 });

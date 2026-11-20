@@ -114,6 +114,38 @@ describe("Compare", () => {
     expect(screen.getByRole("button", { name: "Run all engines" })).toBeDisabled();
   });
 
+  it("Run all engines shows its progress: engines read of those started, with the percentage; full for a moment, then gone", async () => {
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
+    const bar = await screen.findByRole("progressbar", { name: "Run all engines" });
+    expect(bar).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("Running engines 0/3")).toBeInTheDocument();
+    // an engine reading has the calm indeterminate bar under its word
+    expect(within(cell("Result", "MolNexTR")).getByRole("progressbar", { name: "Reading, MolNexTR" })).not.toHaveAttribute(
+      "aria-valuenow",
+    );
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalled());
+    const again = (predictions: PredictionOut[], steps: ReturnType<typeof step>[]) =>
+      rerender(
+        <QueryClientProvider client={client}>
+          <ToastProvider>
+            <Compare {...props} predictions={predictions} steps={steps} />
+          </ToastProvider>
+        </QueryClientProvider>,
+      );
+    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" })];
+    again(first, [step("molnextr", "done"), step("molscribe", "running"), step("decimer-hand", "running")]);
+    expect(bar).toHaveAttribute("aria-valuenow", "33");
+    expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 3, 33%");
+    again(
+      [...first, prediction({ engine: "molscribe" })],
+      [step("molnextr", "done"), step("molscribe", "done"), step("decimer-hand", "failed", "timeout")],
+    );
+    expect(bar).toHaveAttribute("aria-valuenow", "100");
+    await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Run all engines" })).toBeNull());
+  });
+
   it("does not ask again for an engine with an active step", async () => {
     const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
     const { props } = renderCompare({

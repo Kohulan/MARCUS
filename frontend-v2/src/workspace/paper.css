@@ -398,6 +398,11 @@
   margin: 0;
 }
 
+.pv-text__bar {
+  align-self: stretch;
+  max-width: 240px;
+}
+
 /* Annotation ----------------------------------------------------------------- */
 
 .pv-ann {
@@ -430,6 +435,14 @@
 
 .pv .pv-ann p {
   margin: 0;
+}
+
+/* Annotating: the badge, then the progress bar (the estimate) with its figure. */
+.pv-ann__state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
 }
 
 .pv-ann__start {

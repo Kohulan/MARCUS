@@ -309,6 +309,8 @@ describe("A PDF handed over by the landing's drop zone", () => {
     const reply = deferred();
     renderHome({ at: at(handOff(fileOf("a.pdf", "application/pdf"))), papersReply: reply.promise });
     expect(await screen.findByText("Uploading a.pdf…")).toBeInTheDocument();
+    // fetch reports no upload progress: the indeterminate bar, no number
+    expect(screen.getByRole("progressbar", { name: "Upload" })).not.toHaveAttribute("aria-valuenow");
     expect(api.uploadPaper).not.toHaveBeenCalled();
     reply.resolve({ papers: [] });
     expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
@@ -449,8 +451,10 @@ describe("Papers list", () => {
     const bar = await within(row).findByRole("progressbar", {
       name: "Progress of Alkaloids from Coffea leaves",
     });
-    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 2 of 4"));
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuetext", "Reading pages, 2 of 4, 22%"));
+    expect(bar).toHaveAttribute("aria-valuenow", "22");
     expect(within(row).getByText("Reading pages 2/4")).toBeInTheDocument();
+    expect(within(row).getByText("22%")).toBeInTheDocument();
     expect(api.getSteps).toHaveBeenCalledWith("p1", expect.anything());
     // no announcements from the list: a row's figure changes with every poll
     expect(within(row).queryByRole("status")).toBeNull();

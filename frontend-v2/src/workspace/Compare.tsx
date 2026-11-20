@@ -7,6 +7,8 @@ import { useSaveCuration } from "../api/queries";
 import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
+import ProgressBar, { useHeldAfter } from "../ui/ProgressBar";
+import { END_HOLD_MS } from "../ui/progressMotion";
 import Smiles from "../ui/Smiles";
 import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
@@ -61,11 +63,17 @@ export default function Compare({
 }: CompareProps) {
   const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
-  const { requested, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
+  const { requested, batch, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
   const rows = useMemo(
     () => engineRows(predictions, steps, requested),
     [predictions, steps, requested],
   );
+  // The last "Run all engines": engines read (or failed) of those it started; the bar stays on
+  // its full figure for a moment once every one has answered.
+  const batchRows = rows.filter((r) => batch.includes(r.engine));
+  const batchDone = batchRows.filter((r) => r.state !== "reading").length;
+  const batchRunning = batch.length > 0 && (sending || batchDone < batchRows.length);
+  const showBatch = useHeldAfter(batchRunning, END_HOLD_MS) && batchRows.length > 0;
   const toRun = enginesToRun(rows);
   const pairs = useSimilarity(rows);
   const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
@@ -211,6 +219,18 @@ export default function Compare({
               Show common part
             </GlassButton>
           </div>
+          {showBatch && (
+            <div className="cmp__run">
+              <ProgressBar
+                value={batchDone / batchRows.length}
+                label="Run all engines"
+                valueText={`Engines read, ${batchDone} of ${batchRows.length}`}
+                active={batchRunning}
+                size="sm"
+              />
+              <p className="cmp__run-line">{`Running engines ${batchDone}/${batchRows.length}`}</p>
+            </div>
+          )}
           <p className="cmp__msg" role="status">
             {message}
           </p>
@@ -251,7 +271,14 @@ export default function Compare({
 
 function resultText(r: EngineRow): ReactNode {
   if (r.prediction) return r.prediction.valid ? "Valid" : "Invalid";
-  if (r.state === "reading") return "Reading…";
+  if (r.state === "reading") {
+    return (
+      <>
+        Reading…
+        <ProgressBar value={null} label={`Reading, ${r.label}`} size="sm" className="cmp-result__bar" />
+      </>
+    );
+  }
   if (r.state === "failed") return `Failed: ${r.reason}`;
   return <StateBadge state="not-read" />;
 }

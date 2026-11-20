@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import ProgressBar, { useAnnotateEstimate } from "../ui/ProgressBar";
 import {
   annotateReason,
   annotationError,
@@ -88,15 +89,21 @@ export default function AnnotationPanel(props: Props) {
           ? "failed"
           : "start";
 
+  // The model reports no progress: the bar shows the time-based estimate while the run goes
+  // on (never 100%), then a run that ends with values stays on its full bar for a moment
+  // (END_HOLD_MS) before the values show. A failed run shows its failure at once.
+  const figure = useAnnotateEstimate(phase === "running");
+  const view = phase === "values" && failedStep === null && figure === 1 ? "running" : phase;
+
   // A run that starts or ends is said; the control that was clicked is gone, so the focus
   // (when it was in the panel, or dropped to the page with that control) goes to the panel
   // while it runs, then to Edit or Try again (a refused start: back to Annotate). A run that
   // fails over values already shown is said as failed. A focus elsewhere on the page stays.
-  const before = useRef(phase);
+  const before = useRef(view);
   useEffect(() => {
     const was = before.current;
-    before.current = phase;
-    if (was === phase) return;
+    before.current = view;
+    if (was === view) return;
     const box = section.current;
     const active = document.activeElement;
     const ours = !active || active === document.body || (box !== null && box.contains(active));
@@ -104,29 +111,37 @@ export default function AnnotationPanel(props: Props) {
       if (ours) focusAfter(el);
     };
     const failed = () => say(`Annotation failed: ${annotateReason(failedStep?.error_class ?? null)}`);
-    if (phase === "running") {
+    if (view === "running") {
       say("Annotating…");
       take(box);
-    } else if (was === "running" && phase === "values") {
+    } else if (was === "running" && view === "values") {
       if (failedStep) failed();
       else say("Annotation ready");
       take(box?.querySelector<HTMLElement>(".pv-ann__actions button"));
-    } else if (was === "running" && phase === "failed") {
+    } else if (was === "running" && view === "failed") {
       failed();
       take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
-    } else if (was === "running" && phase === "start") {
+    } else if (was === "running" && view === "start") {
       take(box?.querySelector<HTMLElement>(".pv-ann__start button"));
     }
-  }, [phase, failedStep, say, focusAfter]);
+  }, [view, failedStep, say, focusAfter]);
 
   let body;
-  if (phase === "running") {
+  if (view === "running") {
     body = (
-      <p className="pv-ann__state">
+      <div className="pv-ann__state">
         <span className="state badge badge--dashed">Annotating…</span>
-      </p>
+        <ProgressBar
+          value={figure ?? 0}
+          label="Annotation progress"
+          valueText="Annotating"
+          estimated
+          active={figure !== 1}
+          size="sm"
+        />
+      </div>
     );
-  } else if (phase === "values") {
+  } else if (view === "values") {
     body = <Fields {...props} failedStep={failedStep} say={say} focusAfter={focusAfter} />;
   } else {
     body = (
