@@ -427,6 +427,105 @@ describe("header", () => {
     }
   });
 
+  describe("COCONUT form opened before the annotation answers (B-M1)", () => {
+    const suggested = () =>
+      annotationOut({
+        status: "done",
+        values: { organism_or_species: ["Taxus brevifolia"] },
+        coconut: {
+          organisms: [{ name: "Taxus brevifolia", parts: "bark", location: "China", ecosystems: "" }],
+          kingdom: [],
+        },
+      });
+
+    /** Opens the form while GET .../annotation has not answered; returns its answer. */
+    async function openEarly() {
+      let answer: (a: AnnotationOut) => void = () => undefined;
+      renderWorkspace({ paper: paper({ segments: [seg("s1", { status: "accepted" })] }) });
+      vi.spyOn(api, "getAnnotation").mockReturnValue(new Promise((r) => (answer = r)));
+      await client.invalidateQueries({ queryKey: keys.annotation(ID) }).catch(() => undefined);
+      client.removeQueries({ queryKey: keys.annotation(ID) });
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      return {
+        form,
+        // the answer, then a tick: the query's subscribers re-render on a timer
+        answer: async (a: AnnotationOut) => {
+          await act(async () => answer(a));
+          await act(() => new Promise((r) => setTimeout(r, 20)));
+        },
+      };
+    }
+
+    it("fills the organisms and the model label when it answers, if none were typed", async () => {
+      sessionStorage.setItem("marcus-coconut-token", "t");
+      try {
+        const { form, answer } = await openEarly();
+        expect(within(form).getByLabelText("Organism")).toHaveValue("");
+        expect(within(form).queryByText(/model suggestion/i)).toBeNull();
+        await answer(suggested());
+        await waitFor(() => expect(within(form).getByLabelText("Organism")).toHaveValue("Taxus brevifolia"));
+        expect(within(form).getByLabelText("Parts")).toHaveValue("bark");
+        expect(within(form).getByText("Organisms: model suggestion")).toBeInTheDocument();
+        // filled, not typed: Close does not ask
+        const ask = vi.spyOn(window, "confirm");
+        fireEvent.click(within(form).getByRole("button", { name: "Close" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(ask).not.toHaveBeenCalled();
+      } finally {
+        sessionStorage.removeItem("marcus-coconut-token");
+      }
+    });
+
+    it("keeps typed organisms and shows no model label over them", async () => {
+      sessionStorage.setItem("marcus-coconut-token", "t");
+      try {
+        const { form, answer } = await openEarly();
+        fireEvent.change(within(form).getByLabelText("Organism"), { target: { value: "Quercus robur" } });
+        await answer(suggested());
+        expect(within(form).getByLabelText("Organism")).toHaveValue("Quercus robur");
+        expect(within(form).queryByLabelText("Organism 2")).toBeNull();
+        expect(within(form).queryByText(/model suggestion/i)).toBeNull();
+      } finally {
+        sessionStorage.removeItem("marcus-coconut-token");
+      }
+    });
+  });
+
+  it("the open form keeps its starting organisms and label when the annotation changes (B-rr3)", async () => {
+    sessionStorage.setItem("marcus-coconut-token", "t");
+    try {
+      const values = { organism_or_species: ["Taxus brevifolia"] };
+      const organisms = [{ name: "Taxus brevifolia", parts: "", location: "", ecosystems: "" }];
+      renderWorkspace({
+        paper: paper({ segments: [seg("s1", { status: "accepted" })] }),
+        annotation: annotationOut({ status: "done", values, coconut: { organisms, kingdom: [] } }),
+      });
+      await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+      await act(async () => undefined);
+      fireEvent.click(await screen.findByRole("button", { name: "Send 1 to COCONUT" }));
+      const form = await screen.findByRole("dialog");
+      expect(within(form).getByText("Organisms: model suggestion")).toBeInTheDocument();
+      // corrected meanwhile (another tab): the open form is not rewritten under the curator
+      await act(async () => {
+        client.setQueryData(
+          keys.annotation(ID),
+          annotationOut({
+            status: "done",
+            values: { organism_or_species: [] },
+            curated: { organism_or_species: [] },
+            coconut: { organisms: [], kingdom: [] },
+          }),
+        );
+      });
+      await act(() => new Promise((r) => setTimeout(r, 20))); // the query's subscribers re-render
+      expect(within(form).getByLabelText("Organism")).toHaveValue("Taxus brevifolia");
+      expect(within(form).getByText("Organisms: model suggestion")).toBeInTheDocument();
+    } finally {
+      sessionStorage.removeItem("marcus-coconut-token");
+    }
+  });
+
   it.each([
     ["Rajan", 2025, "MARCUS_Submission Rajan 2025"],
     ["Rajan", null, "MARCUS_Submission Rajan"],
