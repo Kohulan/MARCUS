@@ -358,6 +358,7 @@ function CardActions({
     return (
       <EngineMenu
         label="Try another engine"
+        align="start"
         engines={others(failed)}
         onPick={(engine) => onRun(segmentId, engine)}
         onCompare={compare}
@@ -390,16 +391,22 @@ const others = (engine: Engine) => ENGINES.filter((e) => e.value !== engine);
  */
 function EngineMenu({
   label,
+  align = "end",
   engines,
   onPick,
   onCompare,
 }: {
   label: string;
+  /** First in the row (a Failed card): its panel lines up with the button's left edge. */
+  align?: "start" | "end";
   engines: { value: Engine; label: string }[];
   onPick: (engine: Engine) => void;
   onCompare?: (() => void) | undefined;
 }) {
-  const { open, setOpen, root, button, panelId, close, onKeyDown } = useDisclosure();
+  const { open, setOpen, root, button, panel, panelId, close, onKeyDown } = useDisclosure({
+    prefer: "above",
+    align,
+  });
   return (
     <div className="engine-menu" ref={root} onKeyDown={onKeyDown}>
       <GlassButton
@@ -413,7 +420,13 @@ function EngineMenu({
         {label}
       </GlassButton>
       {open && (
-        <div id={panelId} className="engine-menu__panel" role="group" aria-label="Engines">
+        <div
+          ref={panel}
+          id={panelId}
+          className="engine-menu__panel"
+          role="group"
+          aria-label="Engines"
+        >
           {engines.map((e) => (
             <button
               key={e.value}
@@ -455,7 +468,10 @@ function CardMenu({
   tag,
   ...actions
 }: { tag: string } & StructureActionsProps) {
-  const { open, setOpen, root, button, panelId, close, onKeyDown } = useDisclosure();
+  const { open, setOpen, root, button, panel, panelId, close, onKeyDown } = useDisclosure({
+    prefer: "above",
+    align: "end",
+  });
   const then = (fn: (() => void) | undefined) =>
     fn &&
     (() => {
@@ -476,7 +492,13 @@ function CardMenu({
         More
       </GlassButton>
       {open && (
-        <div id={panelId} className="card-menu__panel" role="group" aria-label={`${tag} actions`}>
+        <div
+          ref={panel}
+          id={panelId}
+          className="card-menu__panel"
+          role="group"
+          aria-label={`${tag} actions`}
+        >
           <StructureActions
             {...actions}
             onEdit={then(actions.onEdit)}

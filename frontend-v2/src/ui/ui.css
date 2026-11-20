@@ -309,6 +309,19 @@
   margin: 0 0 0 0.5em;
 }
 
+/* Menu panels in the top layer ---------------------------------------------- */
+
+/* An open menu panel (ui/anchor: a manual popover the client places in viewport px, next
+   to its button): no column's scroll or sticky caption cuts it off. The UA popover box
+   (canvas colours, centred) gives way to the panel's own look; a panel taller than the
+   room it has scrolls inside. */
+[data-anchored] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  color: var(--ink);
+}
+
 /* Footer ------------------------------------------------------------------- */
 
 .site-footer {
