@@ -85,10 +85,35 @@ def _search(owner, **kw):
     return owner.post(f"{RELAY}/search", json=SEARCH, **kw)
 
 
+# The fake COCONUT's token (tests/fake_coconut/server.py): an empty mutate is a 200.
+FAKE_TOKEN = "fake-coconut-token"  # noqa: S105
+
+
+def _exists(owner):
+    """The existence check, on mutate: its per-client budget (burst 20) is the roomiest, and the
+    searches (burst 10) are kept for what the tests look at."""
+    r = owner.post(f"{RELAY}/reports/mutate", json={"mutate": []},
+                   headers={"Authorization": f"Bearer {FAKE_TOKEN}"})  # fmt: skip
+    return expect_ok(r, f"POST {RELAY}/reports/mutate (the relay to the fake COCONUT)")
+
+
+def _raw(owner, target: str, host: str = "localhost") -> int:
+    """POST `target` exactly as written in the request line (no client-side normalising)."""
+    url = urlsplit(str(owner.http.base_url))
+    raw = (f"POST {target} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n"
+           f"Content-Length: {len(json.dumps(SEARCH))}\r\nConnection: close\r\n\r\n"
+           f"{json.dumps(SEARCH)}")  # fmt: skip
+    with socket.create_connection((url.hostname, url.port or 80), timeout=30) as s:
+        s.sendall(raw.encode())
+        status_line = s.makefile("rb").readline().decode()
+    return int(status_line.split()[1])
+
+
 def test_relay_reaches_only_the_three_fixed_coconut_calls(new_owner, fs_probe):
     owner = new_owner(anonymous=True)
+    _exists(owner)
     before = len(_seen(fs_probe))
-    expect_ok(_search(owner), f"POST {RELAY}/search (the relay to the fake COCONUT)")
+    assert _search(owner).status_code == 200
 
     # every other path under the prefix, and other ways to name a host or path: nginx's 404
     others = ["/", "/auth", "/auth/logout", "/auth/login/", "/auth/login/x", "/reports",
@@ -109,19 +134,20 @@ def test_relay_reaches_only_the_three_fixed_coconut_calls(new_owner, fs_probe):
         assert r.status_code == 415, (path, r.status_code)
 
     # Host from the client (a Host header, an absolute-form request line) changes nothing.
-    url = urlsplit(str(owner.http.base_url))
-    raw = (f"POST http://evil.example{RELAY}/search HTTP/1.1\r\nHost: evil.example\r\n"
-           "Content-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")  # fmt: skip
-    with socket.create_connection((url.hostname, url.port or 80), timeout=30) as s:
-        s.sendall(raw.encode())
-        status_line = s.makefile("rb").readline().decode()
-    assert " 200 " in status_line, status_line
+    assert _raw(owner, f"http://evil.example{RELAY}/search", host="evil.example") == 200
     r = _search(owner, headers={"Host": "evil.example"})
     assert r.status_code == 200, r.status_code
+    # Spellings nginx normalises before it picks a location (dot segments, %-escapes, an
+    # escaped slash) end on the fixed upstream path; path parameters and an escaped "?" are no
+    # relay path at all.
+    for target in (f"{RELAY}/x/../search", f"{RELAY}/se%61rch", f"{RELAY}/x%2F..%2Fsearch"):
+        assert _raw(owner, target) == 200, target
+    for target in (f"{RELAY}/search;a=b", f"{RELAY}/search%3Fa=b", f"{RELAY}/search%2F"):
+        assert _raw(owner, target) == 404, target
 
     new = _seen(fs_probe)[before:]
-    # exactly the three relayed searches reached the upstream, each as the fixed call
-    assert [(e["method"], e["path"], e["query"]) for e in new] == [("POST", "/api/search", "")] * 3
+    # exactly the six relayed searches reached the upstream, each as the fixed call
+    assert [(e["method"], e["path"], e["query"]) for e in new] == [("POST", "/api/search", "")] * 6
     for e in new:
         assert e["headers"]["host"] == COCONUT_HOST, e
         assert e["sni"] == COCONUT_HOST, e
@@ -158,7 +184,7 @@ def test_relay_keeps_coconut_status_and_body(new_owner):
     passes each one and its JSON body through unchanged (mutate: the fake answers the status
     named in the token)."""
     owner = new_owner(anonymous=True)
-    expect_ok(_search(owner), f"POST {RELAY}/search")
+    _exists(owner)
     for status in (401, 403, 413, 422, 429, 500, 503):
         r = owner.post(f"{RELAY}/reports/mutate", json={"mutate": []},
                        headers={"Authorization": f"Bearer status-{status}"})  # fmt: skip
@@ -173,7 +199,7 @@ def test_no_password_or_token_in_any_log(new_owner, fs_probe):
     owner = new_owner(anonymous=True)
     since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 1))
     password, token, query = (f"judge-{k}-{uuid.uuid4().hex}" for k in ("pw", "tok", "q"))
-    expect_ok(_search(owner), f"POST {RELAY}/search")
+    _exists(owner)
     login = owner.post(f"{RELAY}/auth/login",
                        json={"email": "judge@example.org", "password": password})  # fmt: skip
     assert login.status_code in (401, 429), login.status_code  # wrong login (or limited)
@@ -197,7 +223,7 @@ def test_coconut_login_is_rate_limited(new_owner, fs_probe):
     """Credential stuffing through MARCUS: logins are limited per address (3/min, burst 3, then
     429 before anything is relayed). Last in this file: it uses up the login budget."""
     owner = new_owner(anonymous=True)
-    expect_ok(_search(owner), f"POST {RELAY}/search")
+    _exists(owner)
     before = len(_seen(fs_probe))
     answers = []
     for i in range(10):
