@@ -331,6 +331,8 @@ describe("pre-rendered pages", () => {
     expect(container.textContent).toContain(
       "The address is also kept with a paper while it is being processed",
     );
+    // the annotation is stored like the rest of the paper
+    expect(container.textContent).toContain("the annotation and your corrections to it");
     // the annotation model runs on MARCUS's own server: no paper text leaves it
     expect(container.textContent).toContain(
       "Annotate runs a model on MARCUS's own server; no paper text leaves it.",

@@ -15,8 +15,9 @@ export default function Privacy() {
       <InfoSection title="What you upload">
         <p>
           A PDF or one structure image, max 20 MB. To read it, MARCUS stores the file, the page
-          images, the structure crops, the extracted text, the structures it found and your
-          decisions on them, on the servers of Friedrich Schiller University Jena.
+          images, the structure crops, the extracted text, the annotation and your corrections
+          to it, the structures it found and your decisions on them, on the servers of Friedrich
+          Schiller University Jena.
         </p>
         <ul>
           <li>Everything from one upload is deleted 30 days after the upload.</li>
