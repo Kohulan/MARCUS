@@ -1,0 +1,126 @@
+# Weekly version-update PRs, grouped so minor + patch bumps arrive as one PR per ecosystem.
+# Majors come one PR each. Security updates (on in repo settings) are grouped the same way.
+# Dependabot reads this file from the default branch (main) and opens PRs against it.
+version: 2
+
+updates:
+  # frontend-v2: React / Vite / vitest / Playwright (package-lock.json)
+  - package-ecosystem: npm
+    directory: /frontend-v2
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+    commit-message:
+      prefix: "chore(deps-ui)"
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # backend-v2: uv project (pyproject.toml + uv.lock)
+  - package-ecosystem: uv
+    directory: /backend-v2
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, backend]
+    commit-message:
+      prefix: "chore(deps-api)"
+    ignore:
+      # Pinned on purpose: PyMuPDF 1.26.7 is v1's page renderer (ruling R12); jpype1 1.5.2
+      # matches the CDK jars in the tools image.
+      - dependency-name: pymupdf
+      - dependency-name: jpype1
+    groups:
+      uv-minor-patch:
+        update-types: [minor, patch]
+      uv-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # backend-v2 images: Dockerfile.api / cpu / tools / tf / torch / llama
+  - package-ecosystem: docker
+    directory: /backend-v2/docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "chore(deps-docker)"
+    ignore:
+      # The project pins Python 3.11 (requires-python >=3.11,<3.12).
+      - dependency-name: python
+        versions: [">=3.12"]
+      # CUDA / cuDNN bases are pinned to the TF / torch builds and the server's driver.
+      - dependency-name: nvidia/cuda
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+
+  # frontend-v2 image: node build stage + nginx-unprivileged edge
+  - package-ecosystem: docker
+    directory: /frontend-v2
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 2
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "chore(deps-docker)"
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      docker-ui-minor-patch:
+        update-types: [minor, patch]
+
+  # Compose service images (postgres, redis, monitoring)
+  - package-ecosystem: docker-compose
+    directory: /backend-v2
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 2
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "chore(deps-docker)"
+    ignore:
+      # A Postgres or Redis major needs a data migration: never as a bot PR.
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      compose-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
