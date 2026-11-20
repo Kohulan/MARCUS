@@ -86,6 +86,15 @@ describe("Landing", () => {
     ]);
   });
 
+  it("assembles the name once per page load: a second visit shows it at rest", () => {
+    const first = renderAt("/");
+    first.unmount();
+    renderAt("/");
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1).toHaveClass("acro");
+    expect(h1).not.toHaveClass("acro--assemble");
+  });
+
   it("says one sentence under the name, then the mono facts line", () => {
     renderAt("/");
     expect(
