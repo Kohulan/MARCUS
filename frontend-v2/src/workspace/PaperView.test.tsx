@@ -550,7 +550,7 @@ describe("Paper view: annotation", () => {
     expect(current()).toHaveLength(1);
     expect(current()[0]).toBe(text.querySelectorAll("mark")[1]);
     expect(taxus).toHaveAttribute("aria-current", "true");
-    expect(within(p).getByRole("status")).toHaveTextContent("Taxus brevifolia: 1 of 2");
+    expect(within(p).getByRole("status")).toHaveTextContent("Taxus brevifolia: 1 of 2, Organism");
     fireEvent.click(taxus);
     expect(current()[0]).toBe(text.querySelectorAll("mark")[2]);
     expect(within(p).getByRole("status")).toHaveTextContent("Taxus brevifolia: 2 of 2");
@@ -559,6 +559,62 @@ describe("Paper view: annotation", () => {
     fireEvent.click(within(p).getByRole("button", { name: /^bark/ }));
     expect(current()[0]?.textContent).toBe("bark");
     expect(taxus).not.toHaveAttribute("aria-current");
+  });
+
+  it("colours each field by its family: legend swatch, value chips and marks, each mark named", async () => {
+    const values = { ...annotated().values!, geo_location: ["Oregon"] };
+    const positions = { ...annotated().positions!, geo_location: { Oregon: [at("Oregon")] } };
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated({ output: values, values, positions }) });
+    const p = await panel();
+    const term = (name: string) => within(p).getAllByRole("term").find((t) => t.textContent === name)!;
+    // the legend: a decorative swatch of the family before each field's name
+    for (const [label, family] of [
+      ["Organism", "organism"],
+      ["Kingdom", "organism"],
+      ["Organism part", "part"],
+      ["Place", "place"],
+    ] as const) {
+      const swatch = term(label).querySelector(".pv-swatch");
+      expect(swatch).toHaveClass(`pv-fam--${family}`);
+      expect(swatch).toHaveAttribute("aria-hidden", "true");
+    }
+    expect(within(p).getByRole("button", { name: /^Taxus brevifolia/ })).toHaveClass("pv-fam--organism");
+    expect(within(p).getByRole("button", { name: /^bark/ })).toHaveClass("pv-fam--part");
+    expect(within(p).getByRole("button", { name: /^Oregon/ })).toHaveClass("pv-fam--place");
+    expect(within(p).getByText("Plantae").closest(".pv-ann__value")).toHaveClass("pv-fam--organism");
+    const text = screen.getByRole("group", { name: "Paper text" });
+    const marks = [...text.querySelectorAll("mark")];
+    expect(marks.map((m) => [m.textContent, m.className, m.title])).toEqual([
+      ["bark", "pv-mark pv-fam--part", "Organism part"],
+      ["Taxus brevifolia", "pv-mark pv-fam--organism", "Organism"],
+      ["Taxus brevifolia", "pv-mark pv-fam--organism", "Organism"],
+      ["Oregon", "pv-mark pv-fam--place", "Place"],
+    ]);
+    // no style attribute anywhere in the text or the panel (strict CSP)
+    expect(text.querySelector("[style]")).toBeNull();
+    expect(p.querySelector("[style]")).toBeNull();
+    // the occurrence a click went to keeps its family and says its field
+    fireEvent.click(within(p).getByRole("button", { name: /^Oregon/ }));
+    const current = text.querySelector("mark[data-current]")!;
+    expect(current).toHaveClass("pv-mark", "pv-fam--place", "pv-mark--current");
+    expect(within(p).getByRole("status")).toHaveTextContent("Oregon: 1 of 1, Place");
+  });
+
+  it("a span found in two fields is one mark in the first field's colour, named by both", async () => {
+    const values = { ...noValues(), trivial_name: ["bark"], organism_part: ["bark"] };
+    const positions = { trivial_name: { bark: [at("bark")] }, organism_part: { bark: [at("bark")] } };
+    renderAt(paper([segment("s1")]), {
+      doc: ANN_DOC,
+      ann: annotated({ output: values, values, positions }),
+    });
+    await panel();
+    const text = screen.getByRole("group", { name: "Paper text" });
+    await waitFor(() => expect(text.querySelectorAll("mark")).toHaveLength(1));
+    const mark = text.querySelector("mark")!;
+    expect(mark.textContent).toBe("bark");
+    expect(mark.querySelector("mark")).toBeNull();
+    expect(mark).toHaveClass("pv-fam--part");
+    expect(mark.title).toBe("Organism part, Compound names");
   });
 
   it("shows hostile model text as text, and values named __proto__ or constructor like any other", async () => {

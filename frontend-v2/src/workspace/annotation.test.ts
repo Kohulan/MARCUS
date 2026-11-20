@@ -5,10 +5,13 @@ import {
   annotateReason,
   annotationError,
   blockRanges,
+  FAMILIES,
+  familyOf,
   FIELD_MAX,
   fieldMax,
   hitsOf,
   linesOf,
+  markLabel,
   newestAnnotate,
   nextHit,
   onlyAnnotating,
@@ -88,7 +91,7 @@ describe("annotation helpers", () => {
     expect(shownPositions(ann({ positions: null }))).toEqual({});
   });
 
-  it("collects the ranges of every shown value per block, in first-seen order", () => {
+  it("collects the ranges of every shown value per block, with its field, in first-seen order", () => {
     const positions = {
       organism_or_species: { "Taxus brevifolia": [[2, 10, 26], [0, 4, 20]] as [number, number, number][] },
       organism_part: { bark: [[0, 30, 34]] as [number, number, number][], gone: [] },
@@ -98,38 +101,98 @@ describe("annotation helpers", () => {
     const ranges = blockRanges(values, positions);
     // China is in the positions but not a shown value: not highlighted
     expect([...ranges.entries()]).toEqual([
-      [2, [[10, 26]]],
-      [0, [[4, 20], [30, 34]]],
+      [2, [[10, 26, "organism_or_species"]]],
+      [0, [[4, 20, "organism_or_species"], [30, 34, "organism_part"]]],
     ]);
   });
 
-  it("splits a block's text into plain and marked pieces, overlaps merged", () => {
+  it("splits a block's text into plain and marked pieces, each mark with its field", () => {
     const text = "The bark of Taxus brevifolia was used.";
-    expect(splitMarks(text, [[12, 28], [12, 17], [4, 8]], null)).toEqual([
-      { text: "The ", mark: false, current: false },
-      { text: "bark", mark: true, current: false },
-      { text: " of ", mark: false, current: false },
-      { text: "Taxus brevifolia", mark: true, current: false },
-      { text: " was used.", mark: false, current: false },
+    const org = "organism_or_species";
+    expect(splitMarks(text, [[12, 28, org], [12, 28, org], [4, 8, "organism_part"]], null)).toEqual([
+      { text: "The ", fields: [], current: false },
+      { text: "bark", fields: ["organism_part"], current: false },
+      { text: " of ", fields: [], current: false },
+      { text: "Taxus brevifolia", fields: [org], current: false },
+      { text: " was used.", fields: [], current: false },
     ]);
   });
 
   it("marks the current occurrence apart from the others", () => {
     const text = "Taxus brevifolia bark";
-    expect(splitMarks(text, [[0, 16], [17, 21]], [0, 5])).toEqual([
-      { text: "Taxus", mark: true, current: true },
-      { text: " brevifolia", mark: true, current: false },
-      { text: " ", mark: false, current: false },
-      { text: "bark", mark: true, current: false },
+    const org = "organism_or_species";
+    expect(splitMarks(text, [[0, 16, org], [17, 21, "organism_part"]], [0, 16, org])).toEqual([
+      { text: "Taxus brevifolia", fields: [org], current: true },
+      { text: " ", fields: [], current: false },
+      { text: "bark", fields: ["organism_part"], current: false },
+    ]);
+  });
+
+  it("a span two fields share is one mark: the first field leads, both are named", () => {
+    // NMR found as a compound name and as an abbreviation: one flat mark, no nesting
+    expect(splitMarks("By NMR.", [[3, 6, "trivial_name"], [3, 6, "abbreviation"]], null)).toEqual([
+      { text: "By ", fields: [], current: false },
+      { text: "NMR", fields: ["trivial_name", "abbreviation"], current: false },
+      { text: ".", fields: [], current: false },
+    ]);
+  });
+
+  it("overlapping spans of two fields: the most specific (shortest) field leads where they meet", () => {
+    const text = "Taxus brevifolia";
+    const pieces = splitMarks(text, [[0, 16, "organism_or_species"], [0, 5, "trivial_name"]], null);
+    expect(pieces).toEqual([
+      { text: "Taxus", fields: ["trivial_name", "organism_or_species"], current: false },
+      { text: " brevifolia", fields: ["organism_or_species"], current: false },
+    ]);
+    // the pieces only touch: every character is in exactly one mark
+    expect(pieces.map((p) => p.text).join("")).toBe(text);
+  });
+
+  it("the occurrence a click went to leads with the clicked field where fields overlap", () => {
+    const spans: [number, number, string][] = [[0, 16, "organism_or_species"], [0, 5, "trivial_name"]];
+    expect(splitMarks("Taxus brevifolia", spans, [0, 16, "organism_or_species"])).toEqual([
+      { text: "Taxus", fields: ["organism_or_species", "trivial_name"], current: true },
+      { text: " brevifolia", fields: ["organism_or_species"], current: true },
     ]);
   });
 
   it("ignores ranges outside the text (a stale position never throws)", () => {
-    expect(splitMarks("abc", [[1, 99], [7, 9], [2, 1]], null)).toEqual([
-      { text: "a", mark: false, current: false },
-      { text: "bc", mark: true, current: false },
+    expect(splitMarks("abc", [[1, 99, "Kingdom"], [7, 9, "Kingdom"], [2, 1, "Kingdom"]], null)).toEqual([
+      { text: "a", fields: [], current: false },
+      { text: "bc", fields: ["Kingdom"], current: false },
     ]);
     expect(splitMarks("", [], null)).toEqual([]);
+  });
+
+  it("groups the 11 fields into 6 colour families a curator reads together", () => {
+    expect(Object.keys(FAMILIES)).toEqual(["organism", "part", "place", "name", "class", "systematic"]);
+    expect(Object.values(FAMILIES).flat().sort()).toEqual([...FIELDS].sort());
+    expect(familyOf("organism_or_species")).toBe("organism");
+    expect(familyOf("Kingdom")).toBe("organism");
+    expect(familyOf("organism_part")).toBe("part");
+    expect(familyOf("geo_location")).toBe("place");
+    expect(familyOf("location")).toBe("place");
+    expect(familyOf("trivial_name")).toBe("name");
+    expect(familyOf("abbreviation")).toBe("name");
+    expect(familyOf("compound_class")).toBe("class");
+    expect(familyOf("compound_group")).toBe("class");
+    expect(familyOf("iupac_name")).toBe("systematic");
+    expect(familyOf("iupac_like_name")).toBe("systematic");
+  });
+
+  it("gives a field it does not know (or a prototype name) the plain family", () => {
+    expect(familyOf("new_field")).toBe("other");
+    expect(familyOf("__proto__")).toBe("other");
+    expect(familyOf("constructor")).toBe("other");
+    expect(familyOf("toString")).toBe("other");
+  });
+
+  it("names a mark by its fields' labels, the leading field first", () => {
+    const label = (key: string) =>
+      ({ trivial_name: "Compound names", abbreviation: "Abbreviations" })[key] ?? key;
+    expect(markLabel(["abbreviation"], label)).toBe("Abbreviations");
+    expect(markLabel(["trivial_name", "abbreviation"], label)).toBe("Compound names, Abbreviations");
+    expect(markLabel([], label)).toBe("");
   });
 
   it("walks a value's occurrences: the first, then the next, around to the first", () => {
@@ -221,8 +284,8 @@ describe("annotation helpers", () => {
     expect(hitsOf(positions, "constructor", "name")).toEqual([]);
     const values = { trivial_name: ["__proto__", "constructor", "hasOwnProperty"] };
     expect([...blockRanges(values, positions).entries()]).toEqual([
-      [0, [[0, 9]]],
-      [1, [[2, 13]]],
+      [0, [[0, 9, "trivial_name"]]],
+      [1, [[2, 13, "trivial_name"]]],
     ]);
     expect(valuesIn(values, "trivial_name")).toEqual(values.trivial_name);
     expect(valuesIn(values, "constructor")).toEqual([]);

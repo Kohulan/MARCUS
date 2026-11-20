@@ -68,38 +68,47 @@ export function valuesIn(values: AnnotationValues | null, field: string): string
 
 export type Span = [start: number, end: number];
 
+/** An occurrence in a block's text and the field whose value it is. */
+export type FieldSpan = [start: number, end: number, field: string];
+
 /** Every occurrence of every shown value, per block (blocks and spans in first-seen order). */
 export function blockRanges(
   values: AnnotationValues,
   positions: AnnotationPositions,
-): Map<number, Span[]> {
-  const out = new Map<number, Span[]>();
+): Map<number, FieldSpan[]> {
+  const out = new Map<number, FieldSpan[]>();
   for (const [field, list] of Object.entries(values)) {
     for (const value of list) {
       for (const [block, start, end] of hitsOf(positions, field, value)) {
         const spans = out.get(block);
-        if (spans) spans.push([start, end]);
-        else out.set(block, [[start, end]]);
+        if (spans) spans.push([start, end, field]);
+        else out.set(block, [[start, end, field]]);
       }
     }
   }
   return out;
 }
 
-export type Piece = { text: string; mark: boolean; current: boolean };
+/**
+ * A run of a block's text. `fields`: the fields whose values cover it ([] for plain text), the
+ * one whose colour it takes first. `current`: it is in the occurrence a click went to.
+ */
+export type Piece = { text: string; fields: string[]; current: boolean };
 
 /**
- * A block's text cut where marks begin and end: overlapping marks merge, the current
- * occurrence's pieces say so. Spans outside the text are clipped (or dropped when empty).
+ * A block's text cut where marks begin and end, into flat pieces (marks never nest). Where
+ * two fields cover the same text, the clicked occurrence's field leads, else the most
+ * specific (the shortest span; on a tie, the first): its colour, both names. Spans outside
+ * the text are clipped (or dropped when empty).
  */
-export function splitMarks(text: string, spans: Span[], current: Span | null): Piece[] {
+export function splitMarks(text: string, spans: FieldSpan[], current: FieldSpan | null): Piece[] {
   const len = text.length;
-  const clip = ([s, e]: Span): Span | null => {
+  const clip = ([s, e, field]: FieldSpan): FieldSpan | null => {
     const a = Math.max(0, Math.min(s, len));
     const b = Math.max(0, Math.min(e, len));
-    return a < b ? [a, b] : null;
+    return a < b ? [a, b, field] : null;
   };
-  const marks = spans.map(clip).filter((s): s is Span => s !== null);
+  const marks = spans.map(clip).filter((s): s is FieldSpan => s !== null);
   const cur = current ? clip(current) : null;
   const cuts = new Set<number>([0, len]);
   for (const [s, e] of cur ? [...marks, cur] : marks) {
@@ -112,12 +121,56 @@ export function splitMarks(text: string, spans: Span[], current: Span | null): P
     const a = points[i]!;
     const b = points[i + 1]!;
     const isCurrent = cur !== null && cur[0] <= a && b <= cur[1];
-    const mark = isCurrent || marks.some(([s, e]) => s <= a && b <= e);
+    const over = marks.filter(([s, e]) => s <= a && b <= e);
+    let lead: string | undefined = isCurrent ? cur[2] : undefined;
+    if (lead === undefined && over.length > 0) {
+      lead = over.reduce((best, m) => (m[1] - m[0] < best[1] - best[0] ? m : best))[2];
+    }
+    const fields = lead === undefined ? [] : [lead];
+    for (const [, , f] of over) if (!fields.includes(f)) fields.push(f);
     const last = pieces[pieces.length - 1];
-    if (last && last.mark === mark && last.current === isCurrent) last.text += text.slice(a, b);
-    else pieces.push({ text: text.slice(a, b), mark, current: isCurrent });
+    if (last && last.current === isCurrent && sameList(last.fields, fields)) last.text += text.slice(a, b);
+    else pieces.push({ text: text.slice(a, b), fields, current: isCurrent });
   }
   return pieces;
+}
+
+const sameList = (x: string[], y: string[]) => x.length === y.length && x.every((v, i) => v === y[i]);
+
+/**
+ * The colour families of the highlights (DESIGN.md Annotation): the 11 fields in 6 groups a
+ * curator reads together. Each family is a tint, a deep colour and an underline style
+ * (tokens.css --ann-*, paper.css .pv-fam--*).
+ */
+export const FAMILIES = {
+  organism: ["organism_or_species", "Kingdom"],
+  part: ["organism_part"],
+  place: ["geo_location", "location"],
+  name: ["trivial_name", "abbreviation"],
+  class: ["compound_class", "compound_group"],
+  systematic: ["iupac_name", "iupac_like_name"],
+} as const satisfies Record<string, readonly string[]>;
+
+/** A family, or `other` for a field the client does not know (a plain tint). */
+export type Family = keyof typeof FAMILIES | "other";
+
+const FAMILY_OF = new Map<string, Family>(
+  Object.entries(FAMILIES).flatMap(([family, fields]) =>
+    fields.map((f) => [f, family as Family] as const),
+  ),
+);
+
+/** The colour family of a field. */
+export function familyOf(field: string): Family {
+  return FAMILY_OF.get(field) ?? "other";
+}
+
+/** The class that gives an element its field's colours. */
+export const familyClass = (field: string): string => `pv-fam--${familyOf(field)}`;
+
+/** A mark's name: its fields' labels, the leading one first ("Compound names, Abbreviations"). */
+export function markLabel(fields: readonly string[], label: (field: string) => string): string {
+  return fields.map(label).join(", ");
 }
 
 /** The occurrence a click shows: where the value's walk stands. */

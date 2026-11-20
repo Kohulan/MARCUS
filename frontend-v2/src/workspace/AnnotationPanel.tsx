@@ -8,6 +8,7 @@ import { GlassButton } from "../ui/GlassButton";
 import {
   annotateReason,
   annotationError,
+  familyClass,
   hitsOf,
   linesOf,
   sameValues,
@@ -219,10 +220,10 @@ function Fields({
     wasEditing.current = editing;
   }, [editing, focusAfter]);
 
-  /** Shows the next occurrence and says where the walk stands ("Taxus brevifolia: 2 of 5"). */
+  /** Shows the next occurrence and says where the walk stands ("Taxus brevifolia: 2 of 5, Organism"). */
   function show(field: string, value: string, count: number) {
     const index = onShow(field, value);
-    say(`${value}: ${index + 1} of ${count}`);
+    say(`${value}: ${index + 1} of ${count}, ${labelOf(field)}`);
   }
 
   function edit() {
@@ -306,6 +307,7 @@ function Fields({
             return (
               <div key={f.key} className="pv-ann__field">
                 <label className="mono-label pv-ann__field-label" htmlFor={id}>
+                  <Swatch field={f.key} />
                   {f.label}
                 </label>
                 <textarea
@@ -352,13 +354,16 @@ function Fields({
           <dl className="pv-ann__list">
             {filled.map((f) => (
               <div key={f.key} className="pv-ann__row">
-                <dt className="pv-ann__key">{f.label}</dt>
+                <dt className="pv-ann__key">
+                  <Swatch field={f.key} />
+                  {f.label}
+                </dt>
                 <dd className="pv-ann__values">
                   {valuesIn(values, f.key).map((v) => {
                     const count = hitsOf(positions, f.key, v).length;
                     if (count === 0) {
                       return (
-                        <span key={v} className="pv-ann__value pv-ann__value--absent">
+                        <span key={v} className={`pv-ann__value pv-ann__value--absent ${familyClass(f.key)}`}>
                           {v}
                           <span className="pv-ann__count" aria-hidden="true">
                             0
@@ -372,7 +377,7 @@ function Fields({
                       <button
                         key={v}
                         type="button"
-                        className={shown ? "pv-ann__value pv-ann__value--shown" : "pv-ann__value"}
+                        className={`pv-ann__value ${familyClass(f.key)}${shown ? " pv-ann__value--shown" : ""}`}
                         aria-current={shown || undefined}
                         onClick={() => show(f.key, v, count)}
                       >
@@ -412,4 +417,9 @@ function Fields({
       </div>
     </>
   );
+}
+
+/** The field's colour beside its name (the legend of the marks in the text): decorative. */
+function Swatch({ field }: { field: string }) {
+  return <span className={`pv-swatch ${familyClass(field)}`} aria-hidden="true" />;
 }

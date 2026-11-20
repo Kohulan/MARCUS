@@ -203,6 +203,16 @@ describe("annotation colours", () => {
       expect(contrast(hex(`--ann-${f}`), hex(bg))).toBeGreaterThanOrEqual(3);
     },
   );
+
+  it("no stylesheet writes a colour literal for the annotation (tokens only)", () => {
+    const paper = stripComments(
+      readFileSync(resolve(process.cwd(), "src/workspace/paper.css"), "utf8"),
+    );
+    expect(paper).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+    for (const f of families) {
+      expect(paper).toMatch(new RegExp(`\\.pv-fam--${f}\\s*\\{[^}]*--fam-tint:\\s*var\\(--ann-${f}-tint\\)`));
+    }
+  });
 });
 
 describe("fonts.css", () => {
