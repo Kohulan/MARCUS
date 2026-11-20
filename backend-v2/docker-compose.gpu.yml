@@ -78,6 +78,8 @@ services:
     <<: [*gpu, *tf-cuda]
     environment:
       MARCUS_GPU_MEM_MB: ${MARCUS_DECIMER_GPU_MEM_MB:-4096}
+      # Hand-drawn model at start too: its first request then answers in seconds, not ~28 s.
+      MARCUS_PRELOAD_DECIMER_HAND: ${MARCUS_PRELOAD_DECIMER_HAND:-1}
 
   worker-molnextr:
     <<: [*gpu, *torch-cuda]

@@ -24,5 +24,5 @@ export function asEngine(engine: string | null | undefined): Engine | null {
  * ~25 s on the GPU before the prediction), while the others answer in a few seconds.
  */
 export function firstRunNote(engine: string | null | undefined): string | null {
-  return engine === "decimer-hand" ? "First run loads the model, about 30 s" : null;
+  return engine === "decimer-hand" ? "The first run can take about 30 s" : null;
 }

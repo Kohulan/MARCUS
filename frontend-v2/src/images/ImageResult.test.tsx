@@ -221,7 +221,7 @@ describe("ImageResult", () => {
       renderPage();
       expect(await screen.findByText("Reading…")).toBeInTheDocument();
       expect(screen.queryByText("Waiting in the queue")).toBeNull();
-      expect(screen.queryByText("First run loads the model, about 30 s")).toBeNull();
+      expect(screen.queryByText("The first run can take about 30 s")).toBeNull();
     });
 
     it("a DECIMER hand-drawn job says its first run loads the model while it reads", async () => {
@@ -235,7 +235,7 @@ describe("ImageResult", () => {
       );
       renderPage();
       expect(await screen.findByText("Reading…")).toBeInTheDocument();
-      expect(screen.getByText("First run loads the model, about 30 s")).toBeInTheDocument();
+      expect(screen.getByText("The first run can take about 30 s")).toBeInTheDocument();
     });
   });
 
