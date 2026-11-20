@@ -626,6 +626,20 @@ describe("Paper view: annotation", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
+  it("Save checks each field against the limit the API sends with it", async () => {
+    const save = vi.spyOn(api, "saveAnnotation");
+    const fields = FIELDS.map(([key, label]) => ({ key, label, max_length: key === "Kingdom" ? 12 : 500 }));
+    renderAt(paper([segment("s1")]), { doc: ANN_DOC, ann: annotated({ fields }) });
+    const p = await panel();
+    fireEvent.click(await within(p).findByRole("button", { name: "Edit" }));
+    fireEvent.change(within(p).getByLabelText("Kingdom"), { target: { value: "x".repeat(13) } });
+    fireEvent.click(within(p).getByRole("button", { name: "Save" }));
+    expect(await within(p).findByRole("alert")).toHaveTextContent(
+      "A value in Kingdom is longer than 12 characters.",
+    );
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it.each([
     [new ApiError(429, "rate limited", 30), "Not saved: Too many changes, try again in a minute"],
     [new ApiError(503, "The server is busy, try again in a moment."), "Not saved: The server is busy, try again in a moment."],

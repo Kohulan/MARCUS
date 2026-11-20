@@ -5,6 +5,7 @@ import { ApiError, errorText } from "../api/client";
 import { isStepActive } from "../api/status";
 import type {
   AnnotationHit,
+  AnnotationField,
   AnnotationOut,
   AnnotationPositions,
   AnnotationValues,
@@ -14,7 +15,8 @@ import { newestFirst } from "./pageFailures";
 
 /**
  * The longest value the server takes per field (backend-v2 core/annotation.py MAX_LENGTH: the
- * model's own maxLength); longer values get a 422.
+ * model's own maxLength); longer values get a 422. The API sends each field's limit
+ * (`fields[].max_length`, which fieldMax prefers); this copy is only the fallback.
  */
 export const FIELD_MAX: Readonly<Record<string, number>> = {
   compound_group: 435,
@@ -165,10 +167,18 @@ export function valuesOf(lines: string): string[] {
   return out;
 }
 
+/** The longest value a field takes: the API's `max_length`, else the client's FIELD_MAX. */
+export function fieldMax(fields: readonly AnnotationField[], key: string): number | undefined {
+  const served = fields.find((f) => f.key === key)?.max_length;
+  if (typeof served === "number" && Number.isInteger(served) && served > 0) return served;
+  return Object.hasOwn(FIELD_MAX, key) ? FIELD_MAX[key] : undefined;
+}
+
 /** Why the server would refuse these values (422), in words; null when it takes them. */
 export function valuesProblem(
   values: AnnotationValues,
   label: (field: string) => string,
+  fields: readonly AnnotationField[] = [],
 ): string | null {
   const total = Object.values(values).reduce((n, list) => n + list.length, 0);
   if (total > TOTAL_MAX_VALUES) return `At most ${TOTAL_MAX_VALUES} values in all (${total} now).`;
@@ -176,7 +186,7 @@ export function valuesProblem(
     if (list.length > FIELD_MAX_VALUES) {
       return `${label(field)} has more than ${FIELD_MAX_VALUES} values.`;
     }
-    const max = Object.hasOwn(FIELD_MAX, field) ? FIELD_MAX[field] : undefined;
+    const max = fieldMax(fields, field);
     if (max !== undefined && list.some((v) => v.length > max)) {
       return `A value in ${label(field)} is longer than ${max.toLocaleString("en")} characters.`;
     }

@@ -255,6 +255,7 @@ StepState = Literal["none", "pending", "queued", "running", "done", "failed", "c
 class AnnotationField(BaseModel):
     key: str
     label: str
+    max_length: int  # the longest value a curation may hold in this field (the model's maxLength)
 
 
 class CoconutOrganism(BaseModel):

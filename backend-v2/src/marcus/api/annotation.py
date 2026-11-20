@@ -18,7 +18,9 @@ from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
 
-FIELD_LIST = [AnnotationField(key=f, label=ann.LABELS[f]) for f in ann.FIELDS]
+FIELD_LIST = [
+    AnnotationField(key=f, label=ann.LABELS[f], max_length=ann.MAX_LENGTH[f]) for f in ann.FIELDS
+]
 
 
 def shown(row: Annotation | None) -> dict[str, list[str]] | None:

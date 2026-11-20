@@ -6,6 +6,7 @@ import {
   annotationError,
   blockRanges,
   FIELD_MAX,
+  fieldMax,
   hitsOf,
   linesOf,
   newestAnnotate,
@@ -179,6 +180,25 @@ describe("annotation helpers", () => {
     );
     expect(valuesProblem({ iupac_name: Array.from({ length: 201 }, (_, i) => `v${i}`) }, label)).toBe(
       "iupac_name has more than 200 values.",
+    );
+  });
+
+  it("takes each field's limit from the API's fields, the client table only as a fallback", () => {
+    const label = (key: string) => key;
+    const fields = [
+      { key: "Kingdom", label: "Kingdom", max_length: 10 },
+      { key: "geo_location", label: "Place" },
+    ];
+    expect(fieldMax(fields, "Kingdom")).toBe(10);
+    expect(fieldMax(fields, "geo_location")).toBe(348); // no max_length: the client table
+    expect(fieldMax([{ key: "Kingdom", label: "K", max_length: 0 }], "Kingdom")).toBe(60);
+    expect(fieldMax([], "constructor")).toBeUndefined();
+    expect(valuesProblem({ Kingdom: ["x".repeat(11)] }, label, fields)).toBe(
+      "A value in Kingdom is longer than 10 characters.",
+    );
+    expect(valuesProblem({ Kingdom: ["x".repeat(10)] }, label, fields)).toBeNull();
+    expect(valuesProblem({ geo_location: ["x".repeat(349)] }, label, fields)).toBe(
+      "A value in geo_location is longer than 348 characters.",
     );
   });
 

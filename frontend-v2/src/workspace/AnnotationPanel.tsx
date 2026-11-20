@@ -203,7 +203,7 @@ function Fields({
     const next: AnnotationValues = Object.fromEntries(
       annotation.fields.map((f) => [f.key, valuesOf(Object.hasOwn(draft, f.key) ? draft[f.key]! : "")]),
     );
-    const why = valuesProblem(next, labelOf);
+    const why = valuesProblem(next, labelOf, annotation.fields);
     if (why) {
       setProblem(why);
       return;

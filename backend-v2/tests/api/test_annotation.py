@@ -91,7 +91,11 @@ async def test_a_paper_without_annotation(app, async_db_session):
     body = r.json()
     assert body["available"] is False and body["status"] == "none" and body["step"] is None
     assert [f["key"] for f in body["fields"]] == list(ann.FIELDS)
-    assert body["fields"][3] == {"key": "organism_or_species", "label": "Organism"}
+    assert body["fields"][3] == {
+        "key": "organism_or_species", "label": "Organism", "max_length": 676
+    }  # fmt: skip
+    # the editor's per-value limit comes from here (B-M7): the model's maxLength per field
+    assert {f["key"]: f["max_length"] for f in body["fields"]} == ann.MAX_LENGTH
     for key in ("output", "positions", "curated", "curated_positions", "values", "coconut"):
         assert body[key] is None
 

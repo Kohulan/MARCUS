@@ -224,6 +224,8 @@ export type AnnotationValues = Record<string, string[]>;
 export interface AnnotationField {
   key: string;
   label: string;
+  /** The longest value a curation may hold in this field (the model's maxLength). */
+  max_length?: number;
 }
 
 /** The COCONUT form's organisms (coconut OrganismDraft); COCONUT has no kingdom field. */
