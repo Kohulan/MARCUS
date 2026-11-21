@@ -11,6 +11,7 @@ v1's file with the ENGINE INPUT (the stored crop with channels 0 and 2 swapped) 
 """
 import json
 import sys
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -18,7 +19,7 @@ from PIL import Image
 v1_dir, v2_dir, map_csv, out = sys.argv[1:5]
 stored_is_input = "--stored-is-engine-input" in sys.argv[5:]
 rows, same = [], 0
-for line in open(map_csv):
+for line in Path(map_csv).read_text().splitlines():
     p, i, sha = line.strip().split(",")
     a = np.asarray(Image.open(f"{v1_dir}/page_{p}_{i}_segmented.png").convert("RGB")).astype(int)
     stored = np.asarray(Image.open(f"{v2_dir}/{sha}.png").convert("RGB")).astype(int)
@@ -32,5 +33,5 @@ for line in open(map_csv):
     rows.append(row)
 res = {"compared": "stored crop" if stored_is_input else "engine input (stored crop, red/blue swapped)",
        "crops": same + len(rows), "pixel_identical": same, "differ": rows}
-json.dump(res, open(out, "w"), indent=1)
+Path(out).write_text(json.dumps(res, indent=1))
 print(json.dumps(res))

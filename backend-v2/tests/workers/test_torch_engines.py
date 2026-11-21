@@ -48,7 +48,6 @@ def stubs(monkeypatch, tmp_path):
 
     def mn_convert(coords, symbols, edges, images=None, num_workers=16):
         raise AssertionError("the multiprocessing.Pool version must not run")
-        return [f"smiles-{c}" for c in coords], [f"molblock-{c}" for c in coords], 1.0
 
     chemical.convert_graph_to_smiles = mn_convert
     chemical._convert_graph_to_smiles = convert_one
