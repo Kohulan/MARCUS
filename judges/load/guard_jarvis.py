@@ -114,7 +114,7 @@ class Guard:
         if not self.enabled:
             return True
         sample, err = None, None
-        for _attempt in (1, 2):  # one quick retry for an ssh hiccup; still fail closed afterwards
+        for _ in (1, 2):  # one quick retry for an ssh hiccup; still fail closed afterwards
             try:
                 sample = self.checker()
                 err = None
