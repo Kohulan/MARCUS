@@ -47,6 +47,7 @@ def _compose_config(*files: str) -> dict:
         out = subprocess.run(args, env=env, capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired) as exc:
         pytest.skip(f"docker compose not usable: {exc}")
+        raise  # not reached: skip() raises
     if out.returncode != 0 and "is not a docker command" in out.stderr:
         pytest.skip("docker compose plugin not available")
     assert out.returncode == 0, out.stderr

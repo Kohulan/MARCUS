@@ -328,15 +328,15 @@ def _ci(ci, pct=True):
 
 def to_markdown(res: dict) -> str:
     L = ["# MARCUS gold-set score", "",
-         "Recall in %, macro (mean over papers) with paper-level bootstrap 95% CI. "
-         "Full = full InChIKey; skeleton = InChIKey first block (stereo-agnostic).", "",
+         ("Recall in %, macro (mean over papers) with paper-level bootstrap 95% CI. "
+          "Full = full InChIKey; skeleton = InChIKey first block (stereo-agnostic)."), "",
          f"> {res['precision']}", ""]
     for w in res["warnings"]:
         L.append(f"- warning: {w}")
     if res["warnings"]:
         L.append("")
-    L += ["| split | system | papers run/total | recall full | recall skeleton | micro recall full | "
-          "recall full grouped | mean best Tanimoto | invalid SMILES % | papers w/ page errors | segments/paper median (max) |",
+    L += [("| split | system | papers run/total | recall full | recall skeleton | micro recall full | "
+           "recall full grouped | mean best Tanimoto | invalid SMILES % | papers w/ page errors | segments/paper median (max) |"),
           "|---|---|---|---|---|---|---|---|---|---|---|"]
     for system, by_split in res["systems"].items():
         for split, s in by_split.items():
@@ -352,8 +352,8 @@ def to_markdown(res: dict) -> str:
                 f"{(str(seg['median']) + ' (' + str(seg['max']) + ')') if seg else 'n/a'} |")
     if any(res["paired"].values()):
         L += ["", "## Paired comparison (same papers; diff = B - A, recall in points)", "",
-              "| split | A vs B | papers | diff recall full [CI] | B better / A better / tie | sign p | "
-              "diff recall skeleton [CI] |", "|---|---|---|---|---|---|---|"]
+              ("| split | A vs B | papers | diff recall full [CI] | B better / A better / tie | sign p | "
+               "diff recall skeleton [CI] |"), "|---|---|---|---|---|---|---|"]
         for split, pairs in res["paired"].items():
             for name, p in pairs.items():
                 f, s1 = p["recall_full"], p["recall_first"]

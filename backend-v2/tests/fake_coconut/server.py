@@ -146,6 +146,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2  # as the relay (TLSv1.2 TLSv1.3)
     tls = Path(os.environ.get("MARCUS_FAKE_TLS_DIR", "/data"))
     ctx.load_cert_chain(tls / "cert.pem", tls / "key.pem")
 

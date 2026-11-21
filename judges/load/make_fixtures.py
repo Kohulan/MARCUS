@@ -54,7 +54,7 @@ TEXT = [
 
 
 def pool() -> list[dict]:
-    rows = [json.loads(l) for l in open(ROOT / "goldset" / "manifest.jsonl")]
+    rows = [json.loads(l) for l in (ROOT / "goldset" / "manifest.jsonl").read_text().splitlines()]
     seen, out = set(), []
     for r in rows:
         for e in r["expected"]:

@@ -43,13 +43,13 @@ ENGINES = ["decimer", "molnextr", "molscribe"]
 
 
 def load_manifest() -> list[dict]:
-    return [json.loads(l) for l in open(ROOT / "goldset" / "manifest.jsonl")]
+    return [json.loads(l) for l in (ROOT / "goldset" / "manifest.jsonl").read_text().splitlines()]
 
 
 def done_pairs(path: Path, retry_failed: bool) -> set[tuple[str, str]]:
     done = set()
     if path.exists():
-        for line in open(path):
+        for line in path.read_text().splitlines():
             try:
                 r = json.loads(line)
             except Exception:

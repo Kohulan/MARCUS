@@ -45,7 +45,8 @@ def test_a_paper_whose_annotate_step_cannot_be_served_returns_to_done(db_session
     limit = get_settings().annotate_max_wait_s
     paper, step = _annotating_paper(s, limit + 30, status)
     asked = []
-    assert watchdog_once(s, live_queues=lambda: asked.append(1) or LIVE_WITHOUT_LLM) == 1
+    failed = watchdog_once(s, live_queues=lambda: asked.append(1) or LIVE_WITHOUT_LLM)
+    assert failed == 1
     assert asked == [1]
     paper_status, row = _state(s, paper, step)
     assert row.status == "failed" and row.error_class == "engine_error"

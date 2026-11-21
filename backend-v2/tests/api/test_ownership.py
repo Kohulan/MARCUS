@@ -97,7 +97,8 @@ async def test_deleted_paper_gets_same_404(app, async_db_session, method, templa
     seeded = await seed_paper(db, alice)
     job_id = await seed_image_job(db, alice)
     async with make_client(app, token) as c:
-        assert (await c.delete(f"/api/v2/papers/{seeded.paper_id}")).status_code == 204
+        gone = await c.delete(f"/api/v2/papers/{seeded.paper_id}")
+        assert gone.status_code == 204
         await set_image_job(db, job_id, status="deleted")
         r = await call(c, method, template, body, seeded.paper_id, seeded.segment_ids[0], job_id)
     assert r.status_code == 404 and r.json() == NOT_FOUND

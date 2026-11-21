@@ -242,7 +242,8 @@ async def test_curation_save_and_reset(app, async_db_session, ready):
         body = reset.json()
         assert body["curated"] is None and body["curated_positions"] is None
         assert body["values"] == body["output"] and body["curated_at"] is None
-        assert (await c.delete(url)).status_code == 200  # idempotent
+        again = await c.delete(url)
+        assert again.status_code == 200  # idempotent
 
 
 @pytest.mark.parametrize(
@@ -313,7 +314,8 @@ async def test_deleted_paper_is_404_and_its_annotation_is_gone(app, async_db_ses
     async with make_client(app, token) as c:
         await c.post(f"/api/v2/papers/{paper_id}/annotation")
         await run_annotate(db, paper_id, model_result(Kingdom=["Plant"]))
-        assert (await c.delete(f"/api/v2/papers/{paper_id}")).status_code == 204
+        gone = await c.delete(f"/api/v2/papers/{paper_id}")
+        assert gone.status_code == 204
         for method in ("GET", "POST"):
             r = await c.request(method, f"/api/v2/papers/{paper_id}/annotation")
             assert r.status_code == 404
