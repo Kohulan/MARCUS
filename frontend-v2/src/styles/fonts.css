@@ -1,0 +1,53 @@
+/*
+ * Self-hosted fonts (no Google Fonts at run time; CSP font-src 'self').
+ * Latin subset only, at most two weights per family (spec §7 decision 6):
+ *   Geist 400 (text) and 700 (headings, titles, the h1; with
+ *     font-synthesis-weight: none the board's 800 resolves to this face)
+ *   Geist Mono 400 (labels, tags, SMILES) and 500 (buttons, keys)
+ *   Gmarket Sans Light 300, subset to the letters of "MARCUS" (wordmark only)
+ * The files come from @fontsource/geist and @fontsource/geist-mono (5.3.0, OFL-1.1);
+ * Vite hashes and emits them. Importing the fontsource CSS instead would also emit
+ * the latin-ext, cyrillic and other subsets.
+ */
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/geist/files/geist-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/geist/files/geist-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2") format("woff2");
+}
+
+/* Wordmark: the subset holds only A C M R S U, so it never claims other text. */
+@font-face {
+  font-family: "Gmarket Sans";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/gmarket-mark.woff2") format("woff2");
+  unicode-range: U+0041, U+0043, U+004D, U+0052, U+0053, U+0055;
+}

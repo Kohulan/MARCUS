@@ -1,0 +1,297 @@
+{
+ "kind": "fixture_accuracy",
+ "client": "v1",
+ "target": "jarvis",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T14:53:43+00:00",
+ "config": {
+  "client": "v1",
+  "target": "jarvis",
+  "base_url": "http://127.0.0.1:19000",
+  "sizes": [
+   15
+  ],
+  "engines": [
+   "decimer"
+  ],
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "tag": "v1-asshipped-r1-15-decimer"
+ },
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "runs": [
+  {
+   "fixture": "synth_015",
+   "engine": "decimer",
+   "wall_s": 97.6,
+   "duration_s": 97.7,
+   "fatal_error": null,
+   "aborted": false,
+   "backend_crash": false,
+   "page_errors": [],
+   "failed_steps": null,
+   "ocsr_cache_hits": null,
+   "cache_cleared_rows": null,
+   "segments_listed": 15,
+   "v2_paper_id": null,
+   "engine_versions": [],
+   "n_seg_errors": 0,
+   "expected": 15,
+   "segments": 15,
+   "valid_smiles": 15,
+   "exact": 9,
+   "exact_rate": 0.6,
+   "skeleton": 13,
+   "skeleton_rate": 0.8667,
+   "lost_pages": [],
+   "exact_slots": [
+    0,
+    1,
+    2,
+    5,
+    7,
+    10,
+    12,
+    13,
+    14
+   ],
+   "seg_rows": [
+    {
+     "segment_id": "page_4_1",
+     "page": 4,
+     "smiles": "CC(=CCC[C@]1(C)[C@@H](CC=C(C)C)C[C@]2(CC=C(C)C)C(=C(CC=C(C)C)C(=O)[C@@]1(C(=O)C(C)C)C2=O)O)C",
+     "inchikey": "KGSZHKRKHXOAMG-HQKKAZOISA-N",
+     "error": null,
+     "ocsr_ms": 25640.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_0",
+     "page": 1,
+     "smiles": "CC[C@@H]1[C@H](C)C[C@H]2[C@H]1C=C[C@H]3[C@H]4/C=C\\CC(=O)NCCC[C@H]5C(=O)/C(=C(\\C=C/[C@@H]4C[C@@H]32)/O)/C(=O)N5",
+     "inchikey": "SKDZCWQTNXDRSN-CPTBYIMSSA-N",
+     "error": null,
+     "ocsr_ms": 6881.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_2",
+     "page": 2,
+     "smiles": "C/C=C(\\C=C(/C)\\C=C\\C=C\\C=C(/C)\\C(=O)O)/C(=O)OC",
+     "inchikey": "YCGXXOLNDOWFSI-ODWWTDRDSA-N",
+     "error": null,
+     "ocsr_ms": 1319.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_0",
+     "page": 2,
+     "smiles": "CC1(C)[C@@H]2CC[C@]1(C)[C@H](C2)O",
+     "inchikey": "DTGKSKDOIYIVQL-KHQFGBGNSA-N",
+     "error": null,
+     "ocsr_ms": 3027.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_1",
+     "page": 0,
+     "smiles": "CC(C)C1=CC=C(C)C=C1",
+     "inchikey": "HFPZCAJZSCWRBC-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 624.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_1",
+     "page": 3,
+     "smiles": "C1=C(C=C(C(=C1)O)O)[C@@H]2[C@H](C(=O)C3=C(C=C(C=C3O2)O)O)O",
+     "inchikey": "CXQWRCVTCMQVQX-LSDHHAIUSA-N",
+     "error": null,
+     "ocsr_ms": 3664.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_1",
+     "page": 2,
+     "smiles": "CCC(C)C1OCCO1",
+     "inchikey": "FRBNVSJPLIGZIP-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 529.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_0",
+     "page": 4,
+     "smiles": "C[C@]1(CC[C@H]2[C@@H](C=C[C@@]3(C)[C@@H]2C(=O)CCO3)C1)O",
+     "inchikey": "YBLKAJOTCRDLGS-RCZQDCHWSA-N",
+     "error": null,
+     "ocsr_ms": 1596.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_2",
+     "page": 0,
+     "smiles": "CC(C)(C(=O)O)C(=O)O",
+     "inchikey": "OREAFAJWWJHCOT-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 2618.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_2",
+     "page": 4,
+     "smiles": "C(=C\\C1=C(C=C(C=C1)O)O[C@H]2[C@@H]([C@H]([C@@H]([C@@H](CO)O2)O)O)O)/C3=CC(=CC(=C3)O)O",
+     "inchikey": "UPUMEBJDZQEUFC-CUYWLFDKSA-N",
+     "error": null,
+     "ocsr_ms": 2532.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_1",
+     "page": 1,
+     "smiles": "C1=C(C=CC(=C1)O)C=CC(=O)C2=C(C=C(C=C2O)O)O",
+     "inchikey": "YQHMWTPYORBCMF-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 3148.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_2",
+     "page": 1,
+     "smiles": "C1=CC=C(C=C1)C(=O)O",
+     "inchikey": "WPYMKLBDIGXBTP-UHFFFAOYSA-N",
+     "error": null,
+     "ocsr_ms": 656.4,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_2",
+     "page": 3,
+     "smiles": "C[C@H]1C(=O)C[C@H]2[C@@]3(C[C@]4([C@@H](C)O[C@H](C[C@H]4O2)C5=CC=C6C(=C5O)C(=O)C7=C(C8=C(C=C7)C[C@](C)(CC8=O)O)C6=O)O3)O1",
+     "inchikey": "HWZCTPAEJAKLFF-FCIJZBRSSA-N",
+     "error": null,
+     "ocsr_ms": 7121.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_0",
+     "page": 0,
+     "smiles": "C[C@H](/C=C/[C@H](C)C(C)(C)O)[C@H]1CC[C@@H]2C3=C[C@@H]([C@@]4(C)C[C@H](CC[C@]4(C)[C@@]3(C)CC[C@]12C)O)O",
+     "inchikey": "LZFZMPOWEXIVGE-VIWBBUQHSA-N",
+     "error": null,
+     "ocsr_ms": 4673.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_0",
+     "page": 3,
+     "smiles": "C[C@@H]1C/C=C/C(=O)NC/C=C\\C=C/[C@H](C[C@H](CC2=NC(=CO2)C(=O)N[C@H](CSC)C(=O)O1)O)O",
+     "inchikey": "BIXTUKPKNZQVOS-WQINOTKOSA-N",
+     "error": null,
+     "ocsr_ms": 4050.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    }
+   ],
+   "timing_valid": true
+  }
+ ],
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 4,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16799,
+  "max_gpu_used_mib": 15696,
+  "events": [
+   {
+    "t": "2026-11-17T14:53:43+00:00",
+    "scenario": "ACC",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:54:13+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:54:43+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:55:13+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 14,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:55:21+00:00",
+    "scenario": "ACC",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T14:55:21+00:00",
+ "summary": {
+  "synth_015/decimer": {
+   "exact": 9,
+   "expected": 15,
+   "skeleton": 13,
+   "segments": 15,
+   "lost_pages": [],
+   "fatal": null
+  }
+ }
+}

@@ -1,0 +1,1 @@
+[2026-11-17T15:27:41Z] OPERATOR: v1 judge copy wedged during synth_190 decimer (event loop blocked, /health no answer, 0 OCSR answers since 15:10Z, container unhealthy); restarted so the run records a failure

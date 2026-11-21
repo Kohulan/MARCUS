@@ -1,0 +1,17 @@
+[project]
+name = "marcus-judges"
+version = "0.1.0"
+description = "Outside judges (security, load, gold set) for the MARCUS rebuild"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "pytest>=8",
+  "rdkit>=2024.3",
+  "pypdf>=4",
+  "pymupdf<2",
+  "reportlab>=5.1.0",
+  "playwright>=1.65.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["security"]

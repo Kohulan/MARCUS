@@ -1,0 +1,2279 @@
+{
+ "kind": "fixture_accuracy",
+ "client": "v1",
+ "target": "jarvis",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T15:06:22+00:00",
+ "config": {
+  "client": "v1",
+  "target": "jarvis",
+  "base_url": "http://127.0.0.1:19000",
+  "sizes": [
+   190
+  ],
+  "engines": [
+   "decimer"
+  ],
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "tag": "v1-asshipped-r1-190-decimer"
+ },
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "runs": [
+  {
+   "fixture": "synth_190",
+   "engine": "decimer",
+   "wall_s": 1281.5,
+   "duration_s": 1282.3,
+   "fatal_error": null,
+   "aborted": false,
+   "backend_crash": false,
+   "page_errors": [
+    {
+     "page": 0,
+     "error": "(empty message; per-page 30 s timeout)",
+     "kind": "timeout_30s"
+    },
+    {
+     "page": 16,
+     "error": "(empty message; per-page 30 s timeout)",
+     "kind": "timeout_30s"
+    },
+    {
+     "page": 17,
+     "error": "(empty message; per-page 30 s timeout)",
+     "kind": "timeout_30s"
+    },
+    {
+     "page": 20,
+     "error": "(empty message; per-page 30 s timeout)",
+     "kind": "timeout_30s"
+    },
+    {
+     "page": 23,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 22,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 20,
+     "error": "Exception encountered when calling layer 'roi_align_mask' (type PyramidROIAlign).",
+     "kind": "exception"
+    }
+   ],
+   "failed_steps": null,
+   "ocsr_cache_hits": null,
+   "cache_cleared_rows": null,
+   "segments_listed": 163,
+   "v2_paper_id": null,
+   "engine_versions": [],
+   "n_seg_errors": 163,
+   "expected": 190,
+   "segments": 163,
+   "valid_smiles": 0,
+   "exact": 0,
+   "exact_rate": 0.0,
+   "skeleton": 0,
+   "skeleton_rate": 0.0,
+   "lost_pages": [
+    20,
+    22,
+    23
+   ],
+   "exact_slots": [],
+   "seg_rows": [
+    {
+     "segment_id": "page_12_1",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ReadTimeout: timed out",
+     "ocsr_ms": 1027050.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_1",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_4",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.4,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_0",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_7",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_2",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_5",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_7",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_2",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_4",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_0",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_1",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_6",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_7",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_4",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_4",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_2",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_4",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_1",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_6",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_7",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_6",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 3.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_5",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_4",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 2.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_2",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_16_0",
+     "page": 16,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 24.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_6",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_1",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_6",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_4",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_7",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_3",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_7",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_3",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_0",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_0",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_16_1",
+     "page": 16,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_5",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_4",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_3",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_2",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_2",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_2",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_6",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "RemoteProtocolError: Server disconnected without sending a response.",
+     "ocsr_ms": 1.4,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_6",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_7",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_16_2",
+     "page": 16,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_5",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_0",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_7",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_7",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_2",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_1",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_7",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_0",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_6",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_0",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_7",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_4",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_6",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_1",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_1",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_7",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_5",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_1",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_4",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_6",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_5",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_0",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_4",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_2",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_5",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_1",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_5",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_3",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_3",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_6",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_3",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_5",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_6",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_1",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_2",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_3",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_7",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_2",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_0",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_5",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_5",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_0",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_4",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_2",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_1",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_0",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_2_3",
+     "page": 2,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_3",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_6",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_3",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_2",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_2",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_2",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_1",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_6",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_3",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_7",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_7",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_1",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_11_4",
+     "page": 11,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_2",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_5",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_5",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_7",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_1",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_4",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_4",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_6",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_16_3",
+     "page": 16,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_4",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_2",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_2",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_7",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_1",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_5",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_5",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_3",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_3",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_6",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_2",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_3",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_1",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_5",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_4",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_15_0",
+     "page": 15,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_1",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_4",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_12_3",
+     "page": 12,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_4",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.0,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_5",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_5_3",
+     "page": 5,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_1",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_0",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_0",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 1.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_6_6",
+     "page": 6,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_18_0",
+     "page": 18,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_14_1",
+     "page": 14,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.8,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_9_0",
+     "page": 9,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.9,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_5",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_6",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_5",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_2",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_21_3",
+     "page": 21,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_0",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_3",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_13_7",
+     "page": 13,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_3",
+     "page": 3,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_7_0",
+     "page": 7,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_3",
+     "page": 4,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_17_6",
+     "page": 17,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_0_6",
+     "page": 0,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.6,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_5",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_1_4",
+     "page": 1,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_8_7",
+     "page": 8,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_10_0",
+     "page": 10,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_19_0",
+     "page": 19,
+     "smiles": "",
+     "inchikey": null,
+     "error": "ConnectError: [Errno 111] Connection refused",
+     "ocsr_ms": 0.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    }
+   ],
+   "timing_valid": true
+  }
+ ],
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 43,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16799,
+  "max_gpu_used_mib": 15696,
+  "events": [
+   {
+    "t": "2026-11-17T15:06:22+00:00",
+    "scenario": "ACC",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:06:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:07:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:07:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:08:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:08:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:09:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:09:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 7,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:10:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:10:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:11:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:11:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:12:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:12:52+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:13:22+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:13:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:14:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:14:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:15:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:15:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:16:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:16:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:17:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:17:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:18:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:18:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:19:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:19:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:20:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:20:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:21:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:21:53+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:22:23+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:22:54+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:23:24+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:23:54+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:24:24+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:24:54+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:25:24+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:25:54+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:26:24+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:26:54+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:27:24+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T15:27:44+00:00",
+    "scenario": "ACC",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 32495,
+    "gpu_used_mib": 0,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T15:27:44+00:00",
+ "summary": {
+  "synth_190/decimer": {
+   "exact": 0,
+   "expected": 190,
+   "skeleton": 0,
+   "segments": 163,
+   "lost_pages": [
+    20,
+    22,
+    23
+   ],
+   "fatal": null
+  }
+ }
+}

@@ -1,0 +1,145 @@
+[2026-11-17T14:52:21Z] RESTART before synth_15 decimer
+page threads: 4
+[2026-11-17T14:53:43+00:00] synth_015 decimer ...
+    exact 9/15  skeleton 13  segments 15  lost pages []  seg errors 0  wall 97.6 s  
+container: running exit=0
+[2026-11-17T14:55:21Z] RESTART before synth_15 decimer-hand
+page threads: 4
+[2026-11-17T14:56:29+00:00] synth_015 decimer-hand ...
+    exact 4/15  skeleton 5  segments 6  lost pages [0, 1, 2]  seg errors 0  wall 49.3 s  
+container: running exit=0
+[2026-11-17T14:57:18Z] RESTART before synth_15 molnextr
+page threads: 4
+[2026-11-17T14:58:26+00:00] synth_015 molnextr ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 148.7 s  
+container: running exit=0
+[2026-11-17T15:00:55Z] RESTART before synth_15 molscribe
+page threads: 4
+[2026-11-17T15:02:03+00:00] synth_015 molscribe ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 190.8 s  
+container: running exit=0
+[2026-11-17T15:05:14Z] RESTART before synth_190 decimer
+page threads: 4
+[2026-11-17T15:06:22+00:00] synth_190 decimer ...
+    exact 0/190  skeleton 0  segments 163  lost pages [20, 22, 23]  seg errors 163  wall 1281.5 s  
+container: running exit=0
+[2026-11-17T15:27:44Z] RESTART before synth_190 decimer-hand
+page threads: 4
+[2026-11-17T15:29:06+00:00] synth_190 decimer-hand ...
+    exact 0/190  skeleton 0  segments 0  lost pages [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]  seg errors 0  wall 64.1 s  RemoteProtocolError: Server disconnected without sending a response.
+container: exited exit=127
+[2026-11-17T15:30:11Z] RESTART before synth_190 molnextr
+page threads: 4
+[2026-11-17T15:31:17+00:00] synth_190 molnextr ...
+    exact 0/190  skeleton 0  segments 0  lost pages [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]  seg errors 0  wall 81.6 s  RemoteProtocolError: Server disconnected without sending a response.
+container: exited exit=127
+[2026-11-17T15:32:39Z] RESTART before synth_190 molscribe
+page threads: 4
+[2026-11-17T15:33:45+00:00] synth_190 molscribe ...
+    exact 128/190  skeleton 136  segments 145  lost pages [3, 4, 7, 16, 19]  seg errors 0  wall 680.5 s  
+container: running exit=0
+ALL DONE 2026-11-17T15:45:08Z
+[2026-11-17T17:00:30Z] GPU mode up (shipping config)
+[2026-11-17T17:00:50Z] ready after 1x5s
+[2026-11-17T17:01:06+00:00] S1 on jarvis (v2) ...
+[2026-11-17T17:02:50+00:00] S1 done in 103.7 s -> jarvis_v2_S1_20261117T180250_d4r1b.json
+[2026-11-17T17:02:50+00:00] S2 on jarvis (v2) ...
+[2026-11-17T17:06:52+00:00] S2 done in 241.9 s -> jarvis_v2_S2_20261117T180652_d4r1b.json
+[2026-11-17T17:06:53+00:00] S3 on jarvis (v2) ...
+[2026-11-17T17:09:37+00:00] S3 done in 164.4 s -> jarvis_v2_S3_20261117T180937_d4r1b.json
+[2026-11-17T17:09:38+00:00] S4 on jarvis (v2) ...
+[2026-11-17T17:31:44+00:00] S4 done in 1326.4 s -> jarvis_v2_S4_20261117T183144_d4r1b.json
+[2026-11-17T17:31:45+00:00] S5 on jarvis (v2) ...
+[2026-11-17T17:37:34+00:00] S5 done in 349.6 s -> jarvis_v2_S5_20261117T183734_d4r1b.json
+[2026-11-17T17:37:34Z] fixture accuracy
+[2026-11-17T17:37:35+00:00] synth_015 decimer ...
+    exact 9/15  skeleton 13  segments 15  lost pages []  seg errors 0  wall 30.9 s  
+[2026-11-17T17:38:06+00:00] synth_015 decimer-hand ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 50.4 s  
+[2026-11-17T17:38:56+00:00] synth_015 molnextr ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 29.6 s  
+[2026-11-17T17:39:26+00:00] synth_015 molscribe ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 28.9 s  
+[2026-11-17T17:39:55+00:00] synth_190 decimer ...
+    exact 148/190  skeleton 176  segments 190  lost pages []  seg errors 0  wall 222.5 s  
+[2026-11-17T17:43:38+00:00] synth_190 decimer-hand ...
+    exact 160/190  skeleton 185  segments 190  lost pages []  seg errors 0  wall 224.2 s  
+[2026-11-17T17:47:22+00:00] synth_190 molnextr ...
+    exact 154/190  skeleton 161  segments 190  lost pages []  seg errors 0  wall 165.1 s  
+[2026-11-17T17:50:08+00:00] synth_190 molscribe ...
+    exact 169/190  skeleton 178  segments 190  lost pages []  seg errors 0  wall 156.9 s  
+  "exact": 9,
+  "exact": 12,
+  "exact": 12,
+  "exact": 12,
+  "exact": 148,
+  "exact": 160,
+  "exact": 154,
+  "exact": 169,
+[2026-11-17T17:52:45Z] crop parity vs v1
+{"crops": 190, "pixel_identical": 190, "differ": []}
+[2026-11-17T17:52:46Z] gold set
+[1/8] PMC7689812 decimer   wall    43.9s  seg    8.8s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[2/8] PMC7689812 decimer-hand wall    39.4s  seg    8.6s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[3/8] PMC7689812 molnextr  wall    37.3s  seg    8.0s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[4/8] PMC7689812 molscribe wall    42.1s  seg    8.1s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[5/8] PMC6273634 decimer   wall    28.2s  seg    7.6s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[6/8] PMC6273634 decimer-hand wall    28.3s  seg    7.6s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[7/8] PMC6273634 molnextr  wall    27.0s  seg    7.6s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[8/8] PMC6273634 molscribe wall    27.8s  seg   22.9s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[2026-11-17T17:57:20Z] robustness
+  "exact": 9,
+  "no_container_restart": true
+ROBUST_RC=0
+[2026-11-17T17:58:17Z] 2 slots
+[2026-11-17T17:58:30Z] ready after 1x5s
+[2026-11-17T17:58:51+00:00] S4 on jarvis (v2) ...
+[2026-11-17T18:17:39+00:00] S4 done in 1127.8 s -> jarvis_v2_S4_20261117T191739_d4r1b-2slot.json
+ALL DONE 2026-11-17T18:17:40Z
+[2026-11-17T15:46:18Z] GPU mode up (shipping config)
+[2026-11-17T15:46:38Z] ready after 1x5s
+[2026-11-17T15:46:54+00:00] S1 on jarvis (v2) ...
+[2026-11-17T15:48:37+00:00] S1 done in 103.5 s -> jarvis_v2_S1_20261117T164837_d4r1.json
+[2026-11-17T15:48:38+00:00] S2 on jarvis (v2) ...
+[2026-11-17T15:52:43+00:00] S2 done in 245.5 s -> jarvis_v2_S2_20261117T165243_d4r1.json
+[2026-11-17T15:52:44+00:00] S3 on jarvis (v2) ...
+[2026-11-17T15:55:26+00:00] S3 done in 162.1 s -> jarvis_v2_S3_20261117T165526_d4r1.json
+[2026-11-17T15:55:26+00:00] S4 on jarvis (v2) ...
+[2026-11-17T16:17:36+00:00] S4 done in 1329.2 s -> jarvis_v2_S4_20261117T171736_d4r1.json
+[2026-11-17T16:17:36+00:00] S5 on jarvis (v2) ...
+[2026-11-17T16:23:27+00:00] S5 done in 351.1 s -> jarvis_v2_S5_20261117T172327_d4r1.json
+[2026-11-17T16:23:27Z] fixture accuracy
+[2026-11-17T16:23:28+00:00] synth_015 decimer ...
+    exact 9/15  skeleton 13  segments 15  lost pages []  seg errors 0  wall 31.4 s  
+[2026-11-17T16:23:59+00:00] synth_015 decimer-hand ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 49.5 s  
+[2026-11-17T16:24:49+00:00] synth_015 molnextr ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 29.8 s  
+[2026-11-17T16:25:19+00:00] synth_015 molscribe ...
+    exact 12/15  skeleton 14  segments 15  lost pages []  seg errors 0  wall 29.9 s  
+[2026-11-17T16:25:49+00:00] synth_190 decimer ...
+    exact 148/190  skeleton 176  segments 190  lost pages []  seg errors 0  wall 222.8 s  
+[2026-11-17T16:29:32+00:00] synth_190 decimer-hand ...
+    exact 160/190  skeleton 185  segments 190  lost pages []  seg errors 0  wall 224.3 s  
+[2026-11-17T16:33:17+00:00] synth_190 molnextr ...
+    exact 154/190  skeleton 161  segments 190  lost pages []  seg errors 0  wall 159.7 s  
+[2026-11-17T16:35:57+00:00] synth_190 molscribe ...
+    exact 169/190  skeleton 178  segments 190  lost pages []  seg errors 0  wall 158.2 s  
+  "exact": 9,
+  "exact": 12,
+  "exact": 12,
+  "exact": 12,
+  "exact": 148,
+  "exact": 160,
+  "exact": 154,
+  "exact": 169,
+[2026-11-17T16:38:35Z] crop parity vs v1
+{"crops": 190, "pixel_identical": 190, "differ": []}
+[2026-11-17T16:38:37Z] gold set
+[1/8] PMC7689812 decimer   wall    44.3s  seg    8.2s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[2/8] PMC7689812 decimer-hand wall    40.2s  seg    8.3s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[3/8] PMC7689812 molnextr  wall    37.6s  seg    7.7s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[4/8] PMC7689812 molscribe wall    41.5s  seg    7.8s  segments  16/16  seg_errors 0  page_errors 0  429s 0  
+[5/8] PMC6273634 decimer   wall    27.8s  seg    7.7s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[6/8] PMC6273634 decimer-hand wall    27.9s  seg    7.5s  segments  14/14  seg_errors 0  page_errors 0  429s 0  
+[7/8] PMC6273634 molnextr  wall    47.9s  seg   47.8s  segments  14/14  seg_errors 0  page_errors 2  429s 0  

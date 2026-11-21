@@ -1,0 +1,26 @@
+# Why v2 MolNexTR has 153/190 exact on synth_190 and the v1 single-thread copy 154/190 (D4, 2026-11-17)
+
+Only slot 154 differs (page 19, slot 2; expected InChIKey ARXHRTZAVQOQEU-BRVLHLJYSA-N). All other
+engines and slots: the same exact-match slot sets in v1 (single-thread copy) and v2.
+
+1. Crops (synth_190, page 19 segment 2):
+   v1  uploads/segments/synth_190__*/all_segments/page_19_2_segmented.png  (RGBA, 542x442, alpha all 255)
+       md5 c8f0e1fee82b3d4a577b5aa10afe4820 in all 7 v1 runs (as-shipped and single-thread): deterministic
+   v2  /data/papers/<paper>/segments/by-sha/d33492e6...129c.png (RGB, 542x442), bbox {416,1295,958,1737}
+       the same sha256 in all 8 v2 papers of this fixture (every engine): deterministic
+   pixels: 316 channel values differ (158 pixels, max abs difference 255)
+
+2. All 190 crops of the fixture, v1 single-thread run vs v2 molnextr paper, same (page, idx):
+   186 pixel-identical, 4 differ: (page 1, idx 3) 158 px, (7, 0) 158 px, (17, 3) 314 px, (19, 2) 158 px.
+   Same shapes in all 4 cases; v1 crops have no transparent pixel.
+
+3. Same model, both crops, v2 MolNexTR on the GPU as image jobs (POST /api/v2/images, OCSR cache emptied first),
+   twice each:
+   v1 crop -> ARXHRTZAVQOQEU-BRVLHLJYSA-N (expected, = v1's answer)   2 of 2
+   v2 crop -> MXFPUPDYVVGVNQ-RUULELRFSA-N (v2's answer)               2 of 2
+
+Conclusion: the model and device give the same answer for the same pixels; the difference is in the crop (segmentation
+mask / crop pre-processing), for 4 of 190 crops. Cause not found in this session (candidates: GPU Mask R-CNN mask
+differences between v1's process and v2's segment worker, which ran WITHOUT its memory budget here, or the crop
+masking/expansion step). It costs 1 exact match for MolNexTR on synth_190; the other engines read those 4 crops the
+same either way.

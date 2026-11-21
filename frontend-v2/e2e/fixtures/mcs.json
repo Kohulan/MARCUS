@@ -1,0 +1,16 @@
+{
+ "mcs_smarts": "[#6]1:&@[#6]:&@[#6]:&@[#6]:&@[#6]:&@[#6]:&@1",
+ "atom_count": 6,
+ "bond_count": 6,
+ "original_molecules": [
+  {
+   "atom_count": 6,
+   "bond_count": 6
+  },
+  {
+   "atom_count": 6,
+   "bond_count": 6
+  }
+ ],
+ "highlight_token": "mocked-token"
+}

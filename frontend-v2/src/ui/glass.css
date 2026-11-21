@@ -1,0 +1,169 @@
+/*
+ * Liquid-glass pill buttons (spec §7 decision 4; values from the board's .lg, .lg-orange,
+ * .lg-green, .lg-clear). CSS only. The refraction is the SVG filter #marcus-glass that
+ * <GlassFilter/> mounts once in the app frame.
+ *
+ * Contrast (WCAG, each gradient stop blended over paper and surface; pinned in
+ * glass.test.tsx): on-orange on the orange glass >= 5.2:1 (solid 4.9:1), on-green on the
+ * green glass >= 5.4:1 (solid 9.7:1), ink on the clear glass >= 15:1.
+ * Glass sits on light grounds only (paper, surface, sunken, .glassbed); never on charcoal
+ * or a picture (the clear tint over charcoal is 2.3:1).
+ */
+
+/* The one filter's <svg>: in the document, takes no room. */
+.glass-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.glass {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(3px) saturate(1.8);
+  backdrop-filter: blur(3px) saturate(1.8);
+  /* Refraction where supported (Chromium); a browser that rejects it keeps the line above. */
+  backdrop-filter: url(#marcus-glass) blur(3px) saturate(1.8);
+  box-shadow: var(--glass-shine), var(--lift-glass);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Small pills on a structure card or in focus mode sit on flat white or paper, where the
+ * refraction has nothing to bend: they keep the blur only, so scrolling a long grid does not
+ * run the SVG filter for every pill. Only where the refraction runs at all (Chromium, glass
+ * not reduced, no forced colours); elsewhere the rules below hold.
+ */
+@media (not (prefers-reduced-transparency: reduce)) and (forced-colors: none) {
+  .card .glass:not(:disabled),
+  .fm .glass--sm:not(:disabled) {
+    backdrop-filter: blur(3px) saturate(1.8);
+  }
+}
+
+.glass--sm {
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.glass--orange {
+  background: linear-gradient(180deg, rgba(255, 118, 72, 0.95), rgba(250, 54, 0, 0.9));
+  color: var(--on-orange);
+}
+
+.glass--green {
+  background: linear-gradient(180deg, rgba(46, 110, 74, 0.95), rgba(30, 77, 51, 0.92));
+  color: var(--on-green);
+}
+
+.glass--clear {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.25));
+  color: var(--ink);
+}
+
+/* A link styled as glass keeps the tint's text colour (base a:hover turns links ink). */
+.glass--orange:hover {
+  color: var(--on-orange);
+}
+
+.glass--green:hover {
+  color: var(--on-green);
+}
+
+.glass--clear:hover {
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glass:hover:not(:disabled) {
+    transform: scale(1.03);
+  }
+}
+
+.glass:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.glass:disabled {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--hair);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Solid fallback: no backdrop filter, no gradient. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: var(--lift-pill-solid);
+  }
+
+  .glass--orange:not(:disabled) {
+    background: var(--orange);
+  }
+
+  .glass--green:not(:disabled) {
+    background: var(--green);
+  }
+
+  .glass--clear:not(:disabled) {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    box-shadow: var(--lift-pill-solid);
+  }
+
+  .glass--orange:not(:disabled) {
+    background: var(--orange);
+  }
+
+  .glass--green:not(:disabled) {
+    background: var(--green);
+  }
+
+  .glass--clear:not(:disabled) {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border);
+  }
+}
+
+/* Windows high contrast and other forced palettes: a system button edge. */
+@media (forced-colors: active) {
+  .glass {
+    border: 1px solid ButtonBorder;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .glass:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+}

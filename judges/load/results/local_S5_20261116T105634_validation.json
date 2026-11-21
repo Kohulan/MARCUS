@@ -1,0 +1,104 @@
+{
+ "scenario": "S5",
+ "target": "local",
+ "base_url": "http://localhost:19101",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T10:56:09+00:00",
+ "config": {
+  "target": "local",
+  "base_url": "http://localhost:19101",
+  "scenarios": [
+   "S1",
+   "S3",
+   "S5"
+  ],
+  "engines": [
+   "decimer"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": 2,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "small_gap_s": 10.0,
+  "s3_size": 15,
+  "s3_idle_s": 10.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 20.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": true,
+  "tag": "validation"
+ },
+ "stopped_early": false,
+ "results": {
+  "engine": "decimer",
+  "period_s": 3.5,
+  "alone": {
+   "n": 3,
+   "n_ok": 3,
+   "n_error": 0,
+   "n_429": 0,
+   "ms_ok": {
+    "n": 3,
+    "min": 5656.2,
+    "p50": 5951.2,
+    "p95": 6706.3,
+    "max": 6790.2,
+    "mean": 6132.5
+   },
+   "all_ms": {
+    "n": 3,
+    "min": 5656.2,
+    "p50": 5951.2,
+    "p95": 6706.3,
+    "max": 6790.2,
+    "mean": 6132.5
+   },
+   "share_over_200ms": 1.0,
+   "samples": [
+    {
+     "t_ms": 0.5,
+     "ms": 5656.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 9157.5,
+     "ms": 6790.2,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 19448.4,
+     "ms": 5951.2,
+     "status": 200,
+     "error": null
+    }
+   ]
+  }
+ },
+ "summary": {
+  "alone_ms_ok": {
+   "n": 3,
+   "min": 5656.2,
+   "p50": 5951.2,
+   "p95": 6706.3,
+   "max": 6790.2,
+   "mean": 6132.5
+  },
+  "n_429": 0
+ },
+ "guard": {
+  "enabled": false,
+  "checks": 0,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-16T10:56:34+00:00",
+ "duration_s": 25.5
+}

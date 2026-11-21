@@ -1,0 +1,196 @@
+/*
+ * The single image result (F14): one ruled sheet of three cells, the uploaded image |
+ * the structure | the actions on the glass bed, then Compare below when it is open.
+ * Light grounds only; every size is a class (no style props on this page either).
+ */
+
+.ir {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 24px 40px;
+}
+
+.ir-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* A file name keeps its own case (the tool header's rule). */
+.ir .ir-title {
+  min-width: 0;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+/* The sheet: three cells under one hairline frame ------------------------------------ */
+
+.ir-sheet {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(248px, 3fr);
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+.ir-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 18px;
+}
+
+.ir-cell + .ir-cell {
+  border-left: 1px solid var(--line);
+}
+
+.ir-cap {
+  margin: 0;
+}
+
+.ir-cell--actions {
+  background-color: var(--paper);
+}
+
+/* A narrow column: the actions as a list, one pill per line. */
+.ir-cell--actions .structure-actions__row {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* The uploaded image: on white, never cropped. */
+.ir-image {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 16px;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+}
+
+.ir-image__img {
+  max-height: 520px;
+  object-fit: contain;
+}
+
+/* The structure ---------------------------------------------------------------------- */
+
+.ir-drawing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  padding: 12px;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+}
+
+.ir-drawing__empty {
+  font-size: 20px;
+  color: var(--tick);
+}
+
+.ir-drawing__none {
+  margin: 0;
+}
+
+.ir-smiles {
+  padding: 10px 12px;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+}
+
+.ir-status {
+  margin: 0;
+}
+
+/* Waiting or reading: the word, then the indeterminate bar (the engine reports no figure). */
+.ir-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.ir-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.ir-status--wait {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.ir-live {
+  margin: 0;
+}
+
+/* Failed: the charcoal tag on the hatched ground, the reason, a retry. */
+.ir-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+}
+
+.ir-failed__why {
+  flex: 1 1 16ch;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+/* An edit or pick that lives on this page only. */
+.ir-local {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.ir-local__note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--orange-ink);
+}
+
+/* Compare (F10) below the sheet ----------------------------------------------------- */
+
+/* Compare engines (F10) as a section below the sheet; it draws its own frame and head. */
+.ir-compare {
+  scroll-margin-top: 16px;
+}
+
+/* Loading: one quiet bar where the title goes. */
+.ir-skeleton {
+  display: block;
+  width: min(360px, 60%);
+  height: 28px;
+  background-color: var(--sunken);
+}

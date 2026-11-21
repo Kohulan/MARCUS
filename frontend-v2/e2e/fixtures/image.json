@@ -1,0 +1,38 @@
+{
+ "id": "f5882bb3-c71b-47f3-abc5-099b9c61bbf4",
+ "status": "done",
+ "engine": "decimer",
+ "display_name": "Figure 2b.png",
+ "created_at": "2026-11-18T11:50:40.929003Z",
+ "expires_at": "2026-12-18T11:50:41.350137Z",
+ "prediction": {
+  "smiles": "c1ccccc1",
+  "molfile": null,
+  "valid": true,
+  "engine": "decimer",
+  "engine_version": "2.7.1",
+  "ms": 1000
+ },
+ "predictions": [
+  {
+   "id": "a7d9d026-9feb-4b77-a79c-6812dfea8bf0",
+   "engine": "decimer",
+   "engine_version": "2.7.1",
+   "smiles": "c1ccccc1",
+   "molfile": null,
+   "valid": true,
+   "ms": 1000,
+   "cached": false,
+   "created_at": "2026-11-18T11:50:42.549451Z"
+  }
+ ],
+ "error_class": null,
+ "steps": [
+  {
+   "engine": "decimer",
+   "status": "done",
+   "error_class": null
+  }
+ ],
+ "error": null
+}

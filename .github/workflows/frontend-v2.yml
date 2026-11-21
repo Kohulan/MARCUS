@@ -1,0 +1,73 @@
+name: frontend-v2
+
+# The v2 web UI: lint, types, unit tests, the production build (with its check-dist), and the
+# @mocked e2e (axe on every tool screen) behind the same nginx and ui-locations.conf as the
+# stack, so /app/... gets the dist/app/index.html shell and every page carries the real CSP.
+# The API is mocked by page.route: nothing behind nginx's /api/v2/ proxy is ever reached.
+# The stack-based e2e (live updates, the 200-structure paper, Lighthouse) stays the local gate.
+
+on:
+  pull_request:
+    paths:
+      - "frontend-v2/**"
+      - ".github/workflows/frontend-v2.yml"
+  push:
+    branches: [main, v2-backend]
+    paths:
+      - "frontend-v2/**"
+      - ".github/workflows/frontend-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend-v2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-v2/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run build
+      # Browsers cached per Playwright version; the OS packages they need are not in the cache.
+      - id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run serve:local
+      - run: npm run e2e -- --grep @mocked
+        env:
+          CI: "true"
+          MARCUS_UI_URL: http://localhost:18091
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: frontend-v2/test-results
+          retention-days: 7
+      - if: always()
+        run: npm run serve:stop

@@ -1,0 +1,459 @@
+# MARCUS v2 local stack (CPU only, fake engines off).
+#
+#   cp .env.example .env    # set POSTGRES_PASSWORD and REDIS_PASSWORD
+#   docker compose -p marcus-v2 up -d --build
+#
+# With fake segment/OCSR workers (fast end-to-end and fairness tests):
+#   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
+#
+# Only nginx publishes a port (127.0.0.1:18090). Networks: `internal` (internal: true, no route
+# out) carries everything; only nginx (its published port needs a non-internal network) and
+# worker-cpu (the DOI lookups, spec: the only internet access) also join `egress`. API, Postgres,
+# Redis, metrics and the model workers have no internet access at all.
+# nginx has a fixed address outside the dynamic pool (ip_range); MARCUS_TRUSTED_PROXIES
+# is exactly that address (never the bridge CIDR), so only nginx may name the client IP and
+# request id.
+#
+# GPU (production): add -f docker-compose.gpu.yml (CUDA images, GPU reservations, memory budgets,
+# dcgm-exporter).
+#
+# Migrations: the one-shot `api-migrate` service runs `alembic upgrade head` once; api,
+# dispatcher and workers start only after it completed successfully.
+#
+# Images: api (api, api-migrate, dispatcher), cpu (worker-cpu), tools (worker-tools), tf
+# (worker-segment: DECIMER Segmentation; worker-decimer: DECIMER OCSR, normal and hand-drawn),
+# torch (worker-molnextr: MolNexTR; worker-molscribe: MolScribe); all weights baked into the
+# images. Every app container runs as uid 10001 with a read-only root filesystem, /tmp on tmpfs
+# and the shared named volume `data` at /data.
+#
+# ML tests in the model images (profile "test", no network, nothing else needed):
+#   docker compose -p marcus-v2 run --rm worker-segment-test
+#   (= pytest -m ml tests/workers/test_decimer_segmenter.py -q)
+#   docker compose -p marcus-v2 run --rm worker-decimer-test
+#   (= pytest -m ml tests/workers/test_decimer_ocsr.py -q -s)
+#   docker compose -p marcus-v2 run --rm worker-torch-test
+#   (= pytest -m ml tests/workers/test_torch_ocsr.py -q -s)
+
+name: marcus-v2
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+  volumes:
+    - data:/data
+  depends_on: &app-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    api-migrate:
+      condition: service_completed_successfully
+
+x-env: &env
+  MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+  MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  MARCUS_DATA_ROOT: /data
+
+# Segmentation cache version (marcus.core.pipeline, seg_cache): the decimer_segmentation commit
+# pinned in docker/Dockerfile.tf (docker/MODEL_PINS.md). Set where the planner runs: api,
+# worker-cpu (pages rendered -> cached segments used) and worker-segment. Change it together
+# with the Dockerfile pin (tests/deploy/test_compose_config.py checks they match).
+x-seg-version: &seg-version
+  MARCUS_SEG_VERSION: d0045d9ef4b29a2a8d865eae55399ba1b14481bf
+
+x-api-image: &api-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.api
+  image: marcus-v2-api:local
+
+x-tf-image: &tf-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.tf
+    target: runtime
+    args:
+      VARIANT: cpu  # cuda: docker-compose.gpu.yml (marcus-v2-tf:cuda)
+  image: marcus-v2-tf:local
+
+# TF workers' CPU threads. OpenMP / OpenBLAS (numpy, OpenCV, scikit-image in the segmentation
+# post-processing) read their variables when numpy is first imported, before TF's own pools are
+# set (marcus.workers.gpu.limit_tf_threads), so compose sets them.
+x-tf-threads: &tf-threads
+  MARCUS_TF_INTRA_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+  MARCUS_TF_INTER_THREADS: ${MARCUS_TF_INTER_THREADS:-2}
+  OMP_NUM_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+  OPENBLAS_NUM_THREADS: ${MARCUS_TF_INTRA_THREADS:-4}
+
+# Test-only services of the TF image's `test` target (profile "test"). No network at all:
+# proves the weights are baked in and nothing is fetched at runtime.
+x-tf-test: &tf-test
+  profiles: ["test"]
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.tf
+    target: test
+    args:
+      VARIANT: cpu
+  image: marcus-v2-tf-test:local
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  network_mode: none
+  environment:
+    <<: *tf-threads
+  mem_limit: 8g
+
+x-torch-image: &torch-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.torch
+    target: runtime
+    args:
+      VARIANT: cpu  # cuda (the CUDA 12.8 build v1 runs): docker-compose.gpu.yml
+  image: marcus-v2-torch:local
+
+# torch CPU threads, set before the model loads (marcus.workers.gpu.limit_torch_threads). The
+# OpenMP / MKL / OpenBLAS variables must be in the environment before numpy or torch is first
+# imported (the worker's main process imports numpy through RDKit), so compose sets them too.
+x-torch-threads: &torch-threads
+  MARCUS_TORCH_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  OMP_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  MKL_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+  OPENBLAS_NUM_THREADS: ${MARCUS_TORCH_THREADS:-4}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: marcus
+      POSTGRES_DB: marcus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marcus -d marcus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # Broker + results + rate limits + events. noeviction: a broker message is never dropped.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --maxmemory-policy noeviction"]
+    volumes:
+      - redisdata:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api-migrate:
+    <<: [*app, *api-image]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: [*app, *api-image]
+    # Client IP and request id are resolved by the app (marcus.api.deps.client_ip, trusted
+    # proxies = nginx). --forwarded-allow-ips= (empty) means uvicorn trusts no peer and never
+    # rewrites the socket peer from X-Forwarded-For: gunicorn's default 127.0.0.1,::1 would let
+    # an in-container loopback peer pick its client IP (R19). The app must see the real peer.
+    # Starlette spools uploads over 1 MB to /tmp (tmpfs = memory): sized, and inside mem_limit
+    # (with 2 workers, their chem processes and image decodes), so a flood of slow uploads
+    # fails those uploads instead of filling the host's memory (review I7).
+    tmpfs:
+      - /tmp:size=1g
+    mem_limit: 6g
+    command:
+      - gunicorn
+      - marcus.api.main:create_app(json_logs=True)
+      - --worker-class=uvicorn.workers.UvicornWorker
+      - --workers=${GUNICORN_WORKERS:-2}
+      - --bind=0.0.0.0:8000
+      - --forwarded-allow-ips=
+      - --worker-tmp-dir=/tmp
+      - --graceful-timeout=30
+      - --access-logfile=-
+    environment:
+      <<: [*env, *seg-version]
+      MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe}
+      MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
+      MARCUS_EXPOSE_DOCS: ${MARCUS_EXPOSE_DOCS:-false}
+      MARCUS_CORS_ORIGINS: ${MARCUS_CORS_ORIGINS:-[]}
+      MARCUS_ENABLE_FAKE_ENGINES: ${MARCUS_ENABLE_FAKE_ENGINES:-0}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v2/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  # Exactly ONE replica: slot accounting is not atomic across dispatchers (never scale this).
+  dispatcher:
+    <<: [*app, *api-image]
+    command: ["python", "-m", "marcus.dispatcher"]
+    environment:
+      <<: *env
+    # The loop writes a Redis heartbeat every iteration; unhealthy when it is older than 30 s.
+    healthcheck:
+      test: ["CMD", "python", "-m", "marcus.dispatcher.health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Prometheus /metrics on 9100 for the internal network only: no published port, not behind
+  # nginx (the public API has no metrics route). It reads Postgres (one read-only transaction
+  # per scrape, cached 10 s), Redis (dispatcher heartbeat) and the data volume (read-only).
+  metrics:
+    <<: [*app, *api-image]
+    command: ["python", "-m", "marcus.api.metrics"]
+    environment:
+      <<: *env
+    volumes:
+      - data:/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:9100/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  worker-cpu:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    image: marcus-v2-cpu:local
+    # egress: pdf2doi's DOI lookups (5 s per call, 15 s per paper) are the stack's only internet
+    # access.
+    networks:
+      - internal
+      - egress
+    # Exactly ONE replica: it runs Celery beat (-B), and a second beat would schedule every
+    # task twice (never scale this; no other service passes -B).
+    # 5 processes = SLOTS["q.cpu"] (4: check_pdf, render_page, docling, doi, filled by the
+    # dispatcher) + 1 for the daily retention purge, a plain task the dispatcher does not count;
+    # without it a 4th step could wait behind the purge until the watchdog fails it.
+    # tests/deploy/test_compose_config.py pins both.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.cpu",
+              "-c", "5", "--pool", "prefork", "--include", "marcus.workers.cpu",
+              "-B", "--schedule", "/tmp/celerybeat-schedule", "-n", "cpu@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *seg-version]
+    # PDF parsing children have RLIMIT_AS 32 GiB (address space, not memory: docling/torch
+    # reserve ~24 GiB virtual). This limit is what bounds their real memory (RSS).
+    mem_limit: 12g
+
+  worker-tools:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tools
+    image: marcus-v2-tools:local
+    # Prefork (soft time limits need it), 2 processes, each with its own JVM (-Xmx1g).
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.tools",
+              "-c", "2", "--pool", "prefork", "--include", "marcus.workers.tools",
+              "-n", "tools@%h", "--loglevel", "INFO"]
+    environment:
+      <<: *env
+    volumes: []  # tools work on request data only, never on /data
+    mem_limit: 4g
+
+  worker-segment:
+    <<: [*app, *tf-image]
+    # segment_page with DECIMER Segmentation (Mask R-CNN, TensorFlow). ONE prefork process
+    # (= q.segment slots): one model per process, loaded when the pool process starts (after the
+    # fork; ~32 s on CPU, hence the long proc-alive timeout). A failed load stops the container
+    # (exit 1) and compose restarts it.
+    # --max-tasks-per-child 200: the segmentation library leaks GPU memory, about 3 MiB per page
+    # (TensorFlow allocator in use grew 281 -> 684 MiB over 131 pages on the jarvis V100, D4), so a
+    # budgeted process ran out after ~390 pages and then failed every page. A fresh pool process
+    # (model reload ~10 s on the GPU) every 200 pages keeps it under ~1.4 GB of its 2048 MiB budget.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.segment",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.segment",
+              "--max-tasks-per-child", "200", "-n", "segment@%h", "--loglevel", "INFO"]
+    environment:
+      # TF CPU thread pools (x-tf-threads): one worker must not take every core next to docling.
+      <<: [*env, *seg-version, *tf-threads]
+      # GPU budget in MiB for TensorFlow (marcus.workers.gpu), set per service; empty = no
+      # limit / CPU only (docker-compose.gpu.yml sets 2048).
+      MARCUS_GPU_MEM_MB: ${MARCUS_SEGMENT_GPU_MEM_MB:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 8g
+
+  worker-decimer:
+    <<: [*app, *tf-image]
+    # ocsr steps of the engines decimer and decimer-hand (q.decimer), same TF image. ONE prefork
+    # process (= q.decimer slots). Only the engines in MARCUS_OCSR_ENGINES are registered. The
+    # normal model loads when the pool process starts (hence the long proc-alive timeout; a
+    # failed load stops the container with exit 1); the hand-drawn model loads on its first
+    # request (~76 s on CPU), so decimer-hand steps have their own longer time limit
+    # (marcus.core.queues.ENGINE_TIME_LIMITS).
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.decimer",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "decimer@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *tf-threads]
+      MARCUS_OCSR_ENGINES: decimer,decimer-hand
+      # GPU budget in MiB for TensorFlow, this service only; empty = no limit / CPU only
+      # (docker-compose.gpu.yml sets 4096).
+      MARCUS_GPU_MEM_MB: ${MARCUS_DECIMER_GPU_MEM_MB:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 8g
+
+  worker-molnextr:
+    <<: [*app, *torch-image]
+    # ocsr steps of the engine molnextr (q.molnextr). ONE prefork process (= q.molnextr slots).
+    # The model loads when the pool process starts (hence the long proc-alive timeout); a
+    # failed load stops the container (exit 1) and compose restarts it. Device as v1: CUDA when
+    # torch sees a GPU, else CPU.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molnextr",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "molnextr@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *torch-threads]
+      MARCUS_OCSR_ENGINES: molnextr
+      # Share of the GPU's memory for this process (torch); empty = no limit / CPU only.
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLNEXTR_TORCH_MEM_FRACTION:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 4g
+
+  worker-molscribe:
+    <<: [*app, *torch-image]
+    # ocsr steps of the engine molscribe (q.molscribe), same torch image. ONE prefork process
+    # (= q.molscribe slots), model loaded at pool process start like worker-molnextr. Device:
+    # MARCUS_MOLSCRIBE_DEVICE, cpu by default (v1 forces CPU); docker-compose.gpu.yml sets cuda.
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molscribe",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
+              "-n", "molscribe@%h", "--loglevel", "INFO"]
+    environment:
+      <<: [*env, *torch-threads]
+      MARCUS_OCSR_ENGINES: molscribe
+      MARCUS_MOLSCRIBE_DEVICE: ${MARCUS_MOLSCRIBE_DEVICE:-cpu}
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION:-}
+      MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
+    mem_limit: 4g
+
+  worker-segment-test:
+    <<: *tf-test
+    command: ["pytest", "-m", "ml", "tests/workers/test_decimer_segmenter.py", "-q"]
+
+  worker-decimer-test:
+    <<: *tf-test
+    command: ["pytest", "-m", "ml", "tests/workers/test_decimer_ocsr.py", "-q", "-s"]
+
+  # Test-only service of the torch image's `test` target (profile "test"), no network at all.
+  worker-torch-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.torch
+      target: test
+      args:
+        VARIANT: cpu
+    image: marcus-v2-torch-test:local
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    environment:
+      <<: *torch-threads
+    mem_limit: 8g
+    command: ["pytest", "-m", "ml", "tests/workers/test_torch_ocsr.py", "-q", "-s"]
+
+  nginx:
+    # The edge image with the web UI baked in (frontend-v2/Dockerfile: dist/ and
+    # deploy/ui-locations.conf); the context is frontend-v2/ only, not the repo root.
+    build:
+      context: ../frontend-v2
+      dockerfile: Dockerfile
+    image: marcus-v2-nginx:local
+    restart: unless-stopped
+    read_only: true
+    # Request bodies over 1 MB spool to /tmp/client_temp (tmpfs = memory): sized and inside
+    # mem_limit; nginx.conf also caps connections and concurrent uploads per address.
+    tmpfs:
+      - /tmp:size=1g
+    mem_limit: 1536m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx-edge.sh:/docker-entrypoint.d/25-marcus-edge.sh:ro
+      # The COCONUT relay's answer filter (njs, docker/nginx.conf).
+      - ./docker/coconut-relay.js:/etc/nginx/marcus/coconut-relay.js:ro
+    # Read by docker/nginx-edge.sh at start: per-address caps on requests and uploads in progress.
+    environment:
+      MARCUS_NGINX_CONN_PER_IP: ${MARCUS_NGINX_CONN_PER_IP:-64}
+      MARCUS_NGINX_UPLOADS_PER_IP: ${MARCUS_NGINX_UPLOADS_PER_IP:-4}
+      # Switch day: the outer proxy's address(es); empty = off (README, docker/nginx-edge.sh).
+      MARCUS_REAL_IP_FROM: ${MARCUS_REAL_IP_FROM:-}
+    ports:
+      - "127.0.0.1:18090:8080"
+    # egress: a published port needs a non-internal network.
+    networks:
+      internal:
+        ipv4_address: 172.30.0.10
+      egress: {}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/v2/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  internal:
+    # No route out of the host: only nginx and worker-cpu also join `egress`
+    # (tests/deploy/test_compose_config.py).
+    internal: true
+    ipam:
+      config:
+        # Docker hands containers the lowest free address of ip_range only; nginx's fixed
+        # 172.30.0.10 lies outside it, so no other container can ever take it (and become
+        # the trusted proxy, or keep nginx from starting).
+        - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.128/25
+  egress: {}
+
+volumes:
+  data:
+  pgdata:
+  redisdata:

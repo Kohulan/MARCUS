@@ -1,0 +1,63 @@
+{
+  "description": "DECIMER (normal model) SMILES from v1 for three crops that v2's DecimerSegmenter produced from tests/fixtures/pdfs/synth_015.pdf (index = position in the segmenter output; it equals the top-to-bottom order, which is the slot order of judges/load/data/fixtures/synth_015.json). Recorded once from the local v1 copy (marcus-judge-backend, never production); the test suite never calls v1.",
+  "crops_command": "docker run --rm --network none -v $PWD/tests/fixtures/ocsr/make_crops.py:/w/make_crops.py:ro -v OUT:/out marcus-v2-tf-test:local python /w/make_crops.py /app/tests/fixtures/pdfs/synth_015.pdf /out  (tests/fixtures/ocsr/make_crops.py: renders each page with marcus.workers.pdfsafe.render_page_png, segments with marcus.workers.segment.DecimerSegmenter, saves each crop as RGB PNG exactly as segment._write_crop does; 15 crops, 3 kept)",
+  "v1_command": "curl -sS -X POST http://127.0.0.1:19000/latest/ocsr/generate_smiles -F 'image_file=@<crop>.png;type=image/png' -F engine=decimer -F hand_drawn=false",
+  "v1_image": "marcus-backend:latest sha256:9272328402d1 (decimer 2.8.0, tensorflow 2.15.1)",
+  "recorded": "2026-11-16",
+  "crops": [
+    {
+      "file": "ocsr/synth015_p0_i0.png",
+      "page": 0,
+      "index": 0,
+      "bbox": [
+        967,
+        671,
+        1513,
+        1120
+      ],
+      "sha256": "0146a50d4405a13d20565c316328fe809ed5a7c81366f57064b0d2ffc35808ad",
+      "v1_smiles": "C[C@H](/C=C/[C@H](C)C(C)(C)O)[C@H]1CC[C@@H]2C3=C[C@@H]([C@@]4(C)C[C@H](CC[C@]4(C)[C@@]3(C)CC[C@]12C)O)O",
+      "truth": {
+        "slot": 0,
+        "std_smiles": "C[C@H](/C=C/[C@H](C)C(C)(C)O)[C@H]1CC[C@@H]2C3=C[C@H](O)[C@@]4(C)C[C@@H](O)CC[C@]4(C)[C@@]3(C)CC[C@@]21C",
+        "inchikey": "LZFZMPOWEXIVGE-VIWBBUQHSA-N"
+      }
+    },
+    {
+      "file": "ocsr/synth015_p1_i1.png",
+      "page": 1,
+      "index": 1,
+      "bbox": [
+        987,
+        1736,
+        1492,
+        1921
+      ],
+      "sha256": "0ce74dadd9a2f2545f8fc2a5f6c0ab5199ffa297e27df8eeafc07ece302caee8",
+      "v1_smiles": "C1=C(C=CC(=C1)O)C=CC(=O)C2=C(C=C(C=C2O)O)O",
+      "truth": {
+        "slot": 1,
+        "std_smiles": "O=C(/C=C/c1ccc(O)cc1)c1c(O)cc(O)cc1O",
+        "inchikey": "YQHMWTPYORBCMF-ZZXKWVIFSA-N"
+      }
+    },
+    {
+      "file": "ocsr/synth015_p2_i0.png",
+      "page": 2,
+      "index": 0,
+      "bbox": [
+        1147,
+        800,
+        1333,
+        990
+      ],
+      "sha256": "db66d441cc97f41a62df1b0e2e14a2ca2fcdb9248bc8fcdafe88a2b1645d35cc",
+      "v1_smiles": "CC1(C)[C@@H]2CC[C@]1(C)[C@H](C2)O",
+      "truth": {
+        "slot": 0,
+        "std_smiles": "CC1(C)[C@H]2CC[C@]1(C)[C@@H](O)C2",
+        "inchikey": "DTGKSKDOIYIVQL-OYNCUSHFSA-N"
+      }
+    }
+  ]
+}

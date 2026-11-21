@@ -1,0 +1,315 @@
+{
+ "scenario": "S1",
+ "target": "local",
+ "client": "v2",
+ "base_url": "http://localhost:18090",
+ "build": "v2-5934c50",
+ "started_at": "2026-11-17T09:06:26+00:00",
+ "config": {
+  "target": "local",
+  "client": "v2",
+  "base_url": null,
+  "scenarios": [
+   "S1"
+  ],
+  "engines": [
+   "fake"
+  ],
+  "engine": "fake",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "depict_period_s": 2.0,
+  "tag": "fake"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   9.52,
+   4.83,
+   4.97
+  ],
+  "end": [
+   13.31,
+   7.41,
+   5.88
+  ]
+ },
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected": 15,
+  "engines": {
+   "fake": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "fake",
+      "wall_ms": 88960.7,
+      "segment_ms": 14908.1,
+      "segments_reported": 10,
+      "segments_listed": 10,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "backend_crash": null,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [],
+      "n_segments": 10,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 10,
+       "min": 1320.6,
+       "p50": 2394.8,
+       "p95": 3802.7,
+       "max": 4216.8,
+       "mean": 2475.5
+      },
+      "segment_compute_ms": 12425.2,
+      "ocsr_cache_hits": 0,
+      "ocsr_compute_ms": {
+       "n": 10,
+       "min": 1000,
+       "p50": 1000.0,
+       "p95": 1002.1,
+       "max": 1003,
+       "mean": 1000.4
+      },
+      "v2_paper_id": "08514375-5760-40d2-9922-45a43a83bebd",
+      "events_mode": "sse",
+      "timings_ms": {
+       "upload": 82.1,
+       "render_pages": 2945.7
+      },
+      "first_segment_start_s": 2.5,
+      "first_smiles_s": 6.0,
+      "ocsr_done_s": 19.1,
+      "fixture_recall_skeleton": 0.0,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_0_0",
+        "page": 0,
+        "ocsr_ms": 1320.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1001,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 4849.8
+       },
+       {
+        "segment_id": "page_0_1",
+        "page": 0,
+        "ocsr_ms": 3253.2,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 6103.5
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 2090.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 7974.6
+       },
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 3296.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 9166.1
+       },
+       {
+        "segment_id": "page_2_0",
+        "page": 2,
+        "ocsr_ms": 1347.0,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1003,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 10327.5
+       },
+       {
+        "segment_id": "page_2_1",
+        "page": 2,
+        "ocsr_ms": 2699.6,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 11612.7
+       },
+       {
+        "segment_id": "page_3_0",
+        "page": 3,
+        "ocsr_ms": 1564.9,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 12891.7
+       },
+       {
+        "segment_id": "page_3_1",
+        "page": 3,
+        "ocsr_ms": 3030.5,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 14353.4
+       },
+       {
+        "segment_id": "page_4_0",
+        "page": 4,
+        "ocsr_ms": 1936.2,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 15672.8
+       },
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 4216.8,
+        "error": null,
+        "fallback": false,
+        "ocsr_compute_ms": 1000,
+        "ocsr_attempts": 1,
+        "cached": false,
+        "t_start_ms": 17960.6
+       }
+      ],
+      "http_log": [
+       {
+        "step": "upload",
+        "method": "POST",
+        "path": "/api/v2/papers",
+        "status": 202,
+        "t_ms": 183.5,
+        "ms": 82.0
+       },
+       {
+        "step": "paper",
+        "method": "GET",
+        "path": "/api/v2/papers/08514375-5760-40d2-9922-45a43a83bebd",
+        "status": 200,
+        "t_ms": 88865.4,
+        "ms": 62.0
+       },
+       {
+        "step": "steps",
+        "method": "GET",
+        "path": "/api/v2/papers/08514375-5760-40d2-9922-45a43a83bebd/steps",
+        "status": 200,
+        "t_ms": 88927.7,
+        "ms": 32.2
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 1535.1,
+     "status": 200
+    }
+   }
+  }
+ },
+ "summary": {
+  "fake": [
+   {
+    "wall_s": 89.0,
+    "segment_s": 14.9,
+    "ocsr_p50_ms": 2394.8,
+    "ocsr_p95_ms": 3802.7,
+    "segments": 10,
+    "recall_skel": 0.0,
+    "page_errors": 0,
+    "lost_pages": [],
+    "listed": 10,
+    "backend_crash": null,
+    "segment_compute_s": 12.4,
+    "ocsr_compute_p50_ms": 1000.0,
+    "ocsr_cache_hits": 0,
+    "first_segment_start_s": 2.5,
+    "first_smiles_s": 6.0,
+    "ocsr_done_s": 19.1,
+    "fatal_error": null
+   }
+  ],
+  "v2_breaker_503": 0,
+  "host_load": {
+   "start": [
+    9.52,
+    4.83,
+    4.97
+   ],
+   "end": [
+    13.31,
+    7.41,
+    5.88
+   ]
+  }
+ },
+ "guard": {
+  "enabled": false,
+  "checks": 0,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-17T09:07:56+00:00",
+ "duration_s": 90.7,
+ "v2_http_errors": {
+  "n": 0,
+  "by_status": {},
+  "events": []
+ },
+ "v2_breaker_503": {
+  "adapter_calls": 0,
+  "paper_runs_503": 0,
+  "paper_runs_503_detail": []
+ }
+}

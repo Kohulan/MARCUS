@@ -1,0 +1,202 @@
+{
+ "kind": "fixture_accuracy",
+ "client": "v1",
+ "target": "jarvis",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T14:56:29+00:00",
+ "config": {
+  "client": "v1",
+  "target": "jarvis",
+  "base_url": "http://127.0.0.1:19000",
+  "sizes": [
+   15
+  ],
+  "engines": [
+   "decimer-hand"
+  ],
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "tag": "v1-asshipped-r1-15-decimer-hand"
+ },
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "runs": [
+  {
+   "fixture": "synth_015",
+   "engine": "decimer-hand",
+   "wall_s": 49.3,
+   "duration_s": 49.3,
+   "fatal_error": null,
+   "aborted": false,
+   "backend_crash": false,
+   "page_errors": [
+    {
+     "page": 0,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 1,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    },
+    {
+     "page": 2,
+     "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+     "kind": "exception"
+    }
+   ],
+   "failed_steps": null,
+   "ocsr_cache_hits": null,
+   "cache_cleared_rows": null,
+   "segments_listed": 6,
+   "v2_paper_id": null,
+   "engine_versions": [],
+   "n_seg_errors": 0,
+   "expected": 15,
+   "segments": 6,
+   "valid_smiles": 6,
+   "exact": 4,
+   "exact_rate": 0.2667,
+   "skeleton": 5,
+   "skeleton_rate": 0.3333,
+   "lost_pages": [
+    0,
+    1,
+    2
+   ],
+   "exact_slots": [
+    9,
+    10,
+    12,
+    14
+   ],
+   "seg_rows": [
+    {
+     "segment_id": "page_4_1",
+     "page": 4,
+     "smiles": "CC(=CCC[C@]1(C)[C@@H](CC=C(C)C)C[C@@]2(CC=C(C)C)C(=C(CC=C(C)C)C(=O)[C@@]1(C(=O)C(C)C)C2=O)O)C",
+     "inchikey": "KGSZHKRKHXOAMG-KPKSYUIQSA-N",
+     "error": null,
+     "ocsr_ms": 19482.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_1",
+     "page": 3,
+     "smiles": "C1=CC(=C(C=C1[C@@H]2[C@H](C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O",
+     "inchikey": "CXQWRCVTCMQVQX-LSDHHAIUSA-N",
+     "error": null,
+     "ocsr_ms": 1537.7,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_0",
+     "page": 4,
+     "smiles": "C[C@]1(CC[C@H]2[C@@H](C=C[C@@]3(C)[C@@H]2C(=O)CCO3)C1)O",
+     "inchikey": "YBLKAJOTCRDLGS-RCZQDCHWSA-N",
+     "error": null,
+     "ocsr_ms": 1500.2,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_4_2",
+     "page": 4,
+     "smiles": "C(=C\\C1=C(C=C(C=C1)O)O[C@H]2[C@@H]([C@H]([C@@H]([C@@H](CO)O2)O)O)O)/C3=CC(=CC(=C3)O)O",
+     "inchikey": "UPUMEBJDZQEUFC-CUYWLFDKSA-N",
+     "error": null,
+     "ocsr_ms": 4149.5,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_2",
+     "page": 3,
+     "smiles": "C[C@H]1C(=O)C[C@H]2[C@@](C)(O1)O[C@@]3(C)[C@@H](C)O[C@H](C[C@H]3O2)C4=C(C5=C(C=C4)C(=O)C6=C(C=CC7=C6C(=O)C[C@@](C)(C7)O)C5=O)O",
+     "inchikey": "ROXLSQRDEZKHON-POLGVLBLSA-N",
+     "error": null,
+     "ocsr_ms": 3300.1,
+     "ocsr_compute_ms": null,
+     "cached": null
+    },
+    {
+     "segment_id": "page_3_0",
+     "page": 3,
+     "smiles": "C[C@@H]1C/C=C\\2/C(=O)NC/C=C\\C=C/[C@H](C[C@H](CC3=NC(=CO3)C(=O)N[C@@H](CS2)C(=O)O1)O)O",
+     "inchikey": "UXWOXTQWVMFRSE-SMUSVWHUSA-N",
+     "error": null,
+     "ocsr_ms": 5960.3,
+     "ocsr_compute_ms": null,
+     "cached": null
+    }
+   ],
+   "timing_valid": true
+  }
+ ],
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 2,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16799,
+  "max_gpu_used_mib": 15696,
+  "events": [
+   {
+    "t": "2026-11-17T14:56:29+00:00",
+    "scenario": "ACC",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16801,
+    "gpu_used_mib": 15694,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:56:59+00:00",
+    "scenario": "ACC",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T14:57:18+00:00",
+    "scenario": "ACC",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 16799,
+    "gpu_used_mib": 15696,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T14:57:18+00:00",
+ "summary": {
+  "synth_015/decimer-hand": {
+   "exact": 4,
+   "expected": 15,
+   "skeleton": 5,
+   "segments": 6,
+   "lost_pages": [
+    0,
+    1,
+    2
+   ],
+   "fatal": null
+  }
+ }
+}

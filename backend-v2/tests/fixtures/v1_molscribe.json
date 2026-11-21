@@ -1,0 +1,72 @@
+{
+  "description": "molscribe SMILES and molfile from v1 for the three crops of tests/fixtures/v1_decimer.json (v2 DecimerSegmenter output on tests/fixtures/pdfs/synth_015.pdf). Recorded once from the local v1 copy (marcus-judge-backend, CPU, never production); the test suite never calls v1. generate_both is the v1 route that returns SMILES and molfile in one call (v1's generate_smiles computes the SMILES with the same library call and returns no molfile). v1_seconds include v1's first-call model load (crop 1) and v1 running the prediction twice per generate_both call for molnextr.",
+  "crops_command": "docker run --rm --network none -v $PWD/tests/fixtures/ocsr/make_crops.py:/w/make_crops.py:ro -v OUT:/out marcus-v2-tf-test:local python /w/make_crops.py /app/tests/fixtures/pdfs/synth_015.pdf /out  (tests/fixtures/ocsr/make_crops.py: renders each page with marcus.workers.pdfsafe.render_page_png, segments with marcus.workers.segment.DecimerSegmenter, saves each crop as RGB PNG exactly as segment._write_crop does; 15 crops, 3 kept)",
+  "v1_command": "curl -sS -X POST http://127.0.0.1:19000/latest/ocsr/generate_both -F 'image_file=@<crop>.png;type=image/png' -F engine=molscribe",
+  "v1_image": "marcus-backend:latest sha256:9272328402d1 (torch 2.10.0+cu128 on CPU, MolScribe @ 250f683f52f5050eb624870ccfd04bccbcaa27e1, checkpoint swin_base_char_aux_1m.pth sha256 6f0df56f...)",
+  "recorded": "2026-11-17",
+  "crops": [
+    {
+      "file": "ocsr/synth015_p0_i0.png",
+      "page": 0,
+      "index": 0,
+      "bbox": [
+        967,
+        671,
+        1513,
+        1120
+      ],
+      "sha256": "0146a50d4405a13d20565c316328fe809ed5a7c81366f57064b0d2ffc35808ad",
+      "v1_smiles": "[H][C@]12CC[C@H]([C@H](C)/C=C/[C@H](C)C(C)(C)O)[C@@]1(C)CC[C@@]1(C)C2=C[C@H](O)[C@@]2(C)C[C@@H](O)CC[C@]12C",
+      "v1_molfile": "\n     RDKit          2D\n\n 34 37  0  0  0  0  0  0  0  0999 V2000\n    7.2771   -1.9921    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    8.0431   -2.7795    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    7.6601   -3.8031    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.6068   -4.1969    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.7983   -3.0945    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    5.6493   -3.6457    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.6918   -4.1969    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.6918   -5.2992    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.1173   -4.6693    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.7343   -5.8504    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.5428   -4.7480    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.7768   -5.2992    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.8193   -5.8504    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.8193   -6.9528    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.7660   -7.5039    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    2.7768   -7.5039    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.7343   -6.9528    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.7343   -8.0551    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.6918   -7.5039    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.6918   -8.6063    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    5.6493   -6.9528    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    5.6493   -5.8504    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.6068   -5.2992    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.7026   -6.4016    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n    7.6601   -5.6142    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    8.3303   -4.7480    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    9.0963   -2.5433    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    9.4793   -1.5197    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   10.6283   -1.2835    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   10.9156   -0.2598    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    9.8623    0.1339    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   12.0646   -0.0236    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   10.7241    0.8425    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   11.2986   -2.1496    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  2  3  1  0\n  2 27  1  0\n  3  4  1  0\n  4  6  1  0\n  4 23  1  0\n  6  7  1  0\n  7  8  1  0\n  8 10  1  0\n  8 22  1  0\n 10 12  1  0\n 10 17  1  0\n 12 13  1  0\n 13 14  1  0\n 14 16  1  0\n 16 17  1  0\n 17 19  1  0\n 19 21  1  0\n 21 22  2  0\n 22 23  1  0\n 23 25  1  0\n 25 26  1  0\n 27 28  2  0\n 28 29  1  0\n 29 30  1  0\n 30 31  1  0\n 30 32  1  0\n 30 33  1  0\n  2  1  1  6\n  3 26  1  1\n  4  5  1  1\n  8  9  1  6\n 10 11  1  1\n 14 15  1  1\n 17 18  1  6\n 19 20  1  6\n 23 24  1  1\n 29 34  1  1\nM  END\n",
+      "v1_hardware": "CPU (PyTorch)",
+      "v1_seconds": 410.32,
+      "truth": {
+        "slot": 0,
+        "std_smiles": "C[C@H](/C=C/[C@H](C)C(C)(C)O)[C@H]1CC[C@@H]2C3=C[C@H](O)[C@@]4(C)C[C@@H](O)CC[C@]4(C)[C@@]3(C)CC[C@@]21C",
+        "inchikey": "LZFZMPOWEXIVGE-VIWBBUQHSA-N"
+      }
+    },
+    {
+      "file": "ocsr/synth015_p1_i1.png",
+      "page": 1,
+      "index": 1,
+      "bbox": [
+        987,
+        1736,
+        1492,
+        1921
+      ],
+      "sha256": "0ce74dadd9a2f2545f8fc2a5f6c0ab5199ffa297e27df8eeafc07ece302caee8",
+      "v1_smiles": "O=C(/C=C/c1ccc(O)cc1)c1c(O)cc(O)cc1O",
+      "v1_molfile": "\n     RDKit          2D\n\n 20 21  0  0  0  0  0  0  0  0999 V2000\n    6.6631   -7.9764    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    4.2988   -6.6378    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9345   -7.9764    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    4.2988   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.6631   -2.5433    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    9.0275   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   11.3918   -2.5433    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   13.7561   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   16.1205   -2.6220    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   18.2698   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   18.2698   -6.7165    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   15.9055   -8.0551    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   20.6342   -8.0551    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   22.9985   -6.7165    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   25.3628   -8.0551    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   22.9985   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   20.6342   -2.6220    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   20.6342    0.1339    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   16.1205    0.1339    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    9.0275   -6.6378    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  2  0\n  1 20  1  0\n  2  3  1  0\n  2  4  1  0\n  4  5  2  0\n  5  6  1  0\n  6  7  1  0\n  6 20  2  0\n  7  8  2  0\n  8  9  1  0\n  9 10  1  0\n  9 19  2  0\n 10 11  2  0\n 10 17  1  0\n 11 12  1  0\n 11 13  1  0\n 13 14  2  0\n 14 15  1  0\n 14 16  1  0\n 16 17  2  0\n 17 18  1  0\nM  END\n",
+      "v1_hardware": "CPU (PyTorch)",
+      "v1_seconds": 17.24,
+      "truth": {
+        "slot": 1,
+        "std_smiles": "O=C(/C=C/c1ccc(O)cc1)c1c(O)cc(O)cc1O",
+        "inchikey": "YQHMWTPYORBCMF-ZZXKWVIFSA-N"
+      }
+    },
+    {
+      "file": "ocsr/synth015_p2_i0.png",
+      "page": 2,
+      "index": 0,
+      "bbox": [
+        1147,
+        800,
+        1333,
+        990
+      ],
+      "sha256": "db66d441cc97f41a62df1b0e2e14a2ca2fcdb9248bc8fcdafe88a2b1645d35cc",
+      "v1_smiles": "[H][C@]12CC[C@](C)([C@@H](O)C1)C2(C)C",
+      "v1_molfile": "\n     RDKit          2D\n\n 12 13  0  0  0  0  0  0  0  0999 V2000\n    6.3978    0.6850    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.5520   -1.9921    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.9312   -2.3858    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.9271   -0.6535    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    3.9312   -5.1417    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.5520   -5.5354    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    6.3978   -8.2126    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n    9.4811   -5.5354    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    9.4041   -1.9921    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    7.0916   -3.8031    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    8.0166   -3.5669    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    8.0166   -3.9606    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  2  3  1  0\n  2  9  1  0\n  2 10  1  0\n  3  5  1  0\n  5  6  1  0\n  6  8  1  0\n  6 10  1  0\n  8  9  1  0\n 10 11  1  0\n 10 12  1  0\n  2  1  1  6\n  3  4  1  6\n  6  7  1  6\nM  END\n",
+      "v1_hardware": "CPU (PyTorch)",
+      "v1_seconds": 15.96,
+      "truth": {
+        "slot": 0,
+        "std_smiles": "CC1(C)[C@H]2CC[C@]1(C)[C@@H](O)C2",
+        "inchikey": "DTGKSKDOIYIVQL-OYNCUSHFSA-N"
+      }
+    }
+  ]
+}

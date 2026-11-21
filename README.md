@@ -1,15 +1,15 @@
 <div align="center">
 
 <p align="center">
-  <img src="https://github.com/Kohulan/MARCUS/blob/main/frontend/public/logo_full.png" alt="MARCUS Logo" width="600">
+  <img src="docs/assets/logo_full.png" alt="MARCUS Logo" width="600">
 </p>
 
 ### **M**olecular **A**nnotation and **R**ecognition for **C**urating **U**nravelled **S**tructures
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0-blue.svg?style=for-the-badge)](https://github.com/Kohulan/MARCUS/releases/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.95+-009688.svg?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
-[![Vue.js](https://img.shields.io/badge/Vue.js-3.0+-4FC08D.svg?style=for-the-badge&logo=vue.js)](https://vuejs.org/)
+[![Version](https://img.shields.io/badge/version-2.0-blue.svg?style=for-the-badge)](https://github.com/Kohulan/MARCUS/releases/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?style=for-the-badge&logo=docker)](https://www.docker.com/)
 
 </div>
@@ -22,7 +22,6 @@
 - [Key Features](#-key-features)
 - [Architecture](#-architecture)
 - [Getting Started](#-getting-started)
-- [API Reference](#-api-reference)
 - [Development](#-development)
 - [License](#-license)
 - [Contact](#-contact)
@@ -32,11 +31,12 @@
 
 ## 🔬 Overview
 
-<div style="background-color: #f0f0f0; padding: 15px; border-radius: 10px;">
+<div style="## 🔬 Overview
 
-Project MARCUS is a comprehensive platform for extracting, recognizing, and processing molecular structures from scientific literature. The system integrates multiple advanced technologies to create an end-to-end pipeline from PDF processing to molecular structure recognition and visualization.
-
-</div>
+MARCUS extracts, recognises and curates molecular structures from scientific literature: from a
+PDF to segmented structure images, SMILES and molfiles, a curated annotation of the paper, and a
+submission to [COCONUT](https://coconut.naturalproducts.net). It runs at
+[marcus.decimer.ai](https://marcus.decimer.ai).
 
 ---
 
@@ -47,35 +47,35 @@ Project MARCUS is a comprehensive platform for extracting, recognizing, and proc
     <td width="50%">
       <h3>📄 PDF Processing</h3>
       <ul>
-        <li>Extract DOIs from scientific PDFs</li>
-        <li>Segment PDFs to identify chemical structures</li>
-        <li>Organize segments hierarchically</li>
+        <li>Paper text and layout with Docling, DOI lookup</li>
+        <li>DECIMER Segmentation finds every structure on every page</li>
+        <li>Pages, segments and results kept per paper</li>
       </ul>
     </td>
     <td width="50%">
       <h3>🔬 OCSR Engines</h3>
       <ul>
-        <li><b>DECIMER</b>: SMILES generation with hand-drawn support</li>
+        <li><b>DECIMER</b>, with a model for hand-drawn structures</li>
         <li><b>MolNexTR</b>: SMILES and molfiles with coordinates</li>
-        <li><b>MolScribe</b>: Advanced structure recognition</li>
+        <li><b>MolScribe</b>: structure recognition with atom positions</li>
       </ul>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <h3>🎨 Chemical Depiction</h3>
+      <h3>✏️ Review and Curation</h3>
       <ul>
-        <li>Convert SMILES/molfiles to visualizations</li>
-        <li>CDK-powered high-quality rendering</li>
-        <li>Multiple formats (SVG, PNG, Base64)</li>
+        <li>Compare engines side by side, edit in the Ketcher editor</li>
+        <li>CDK depictions, structure lookups</li>
+        <li>Submit curated structures to COCONUT</li>
       </ul>
     </td>
     <td width="50%">
-      <h3>🤖 Text Analysis</h3>
+      <h3>🤖 Paper Annotation</h3>
       <ul>
-        <li>Fine-tuned OpenAI model integration</li>
-        <li>Extract structured chemical data from text</li>
-        <li>Maintain extraction result archives</li>
+        <li>The local MARCUS model (llama.cpp on the server's GPU)</li>
+        <li>No paper text leaves the server</li>
+        <li>Every value located in the paper's text</li>
       </ul>
     </td>
   </tr>
@@ -85,150 +85,54 @@ Project MARCUS is a comprehensive platform for extracting, recognizing, and proc
 
 ## 🏗️ Architecture
 
-<div style="background-color: #e6f7ff; padding: 15px; border-radius: 10px;">
-
-Project MARCUS follows a modern microservices architecture:
-
-- **Backend**: FastAPI application with versioned API endpoints
-- **Frontend**: Vue.js application for user interaction
-- **Containerization**: Docker for consistent deployment
-
-</div>
+- **Web UI** (`frontend-v2/`): React 18, TypeScript and Vite, served by nginx.
+- **API** (`backend-v2/`): FastAPI on Postgres, with the OpenAPI schema at `/api/v2/openapi.json`.
+- **Workers**: Celery queues on Redis, one per kind of work (CPU, tools, TensorFlow, PyTorch,
+  the MARCUS model), so a slow engine never blocks the others.
+- **Containers**: Docker Compose; nginx is the only published port.
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+**Requirements:** Docker Engine with Docker Compose. For the real engines: an NVIDIA GPU with
+about 20 GB of memory (production uses a V100) and the NVIDIA Container Toolkit.
 
-**Software Requirements:**
-- Docker Engine 20.10+ with NVIDIA Container Toolkit
-- Docker Compose
-- Python 3.10+ (for development)
-- Node.js and npm (for frontend development)
-- OpenAI API key (required for AI features)
-- Stable internet connectivity for OpenAI API integration
-
-**Hardware Requirements:**
-
-- **GPU**: NVIDIA GPU with ~20GB VRAM (development used V100)
-- **CPU**: Minimum 8-core (16-core recommended)
-- **RAM**: 32GB recommended (minimum requirements may vary)
-- **Storage**: ~50GB for container images and processing files
-- **Concurrent Users**: Up to 3 users (GPU memory limited, scalable with additional hardware)
-- **Container Runtime**: Docker Engine 20.10+ with NVIDIA Container Toolkit
-
-### Environment Configuration
-
-Before running the application, copy the example environment file and configure your settings:
-
-```bash
-cp .env.example .env
-```
-
-**Required Environment Variables:**
-- `OPENAI_API_KEY`: Your OpenAI API key for AI-powered text analysis
-- `OPENAI_MODEL_ID`: OpenAI model to use (e.g., `gpt-4`, `gpt-3.5-turbo`)
-
-**Optional Configuration:**
-- `MARCUS_MAX_CONCURRENT_USERS`: Maximum concurrent users (default: 3)
-- `VUE_APP_BACKEND_URL`: Backend URL for frontend (default: `http://localhost:9000`)
-
-See `.env.example` for all available configuration options.
-
-### Installation
-
-**Step 1: Clone the repository**
 ```bash
 git clone https://github.com/Kohulan/MARCUS.git
-cd MARCUS
-docker-compose up -d
+cd MARCUS/backend-v2
+cp .env.example .env    # set POSTGRES_PASSWORD and REDIS_PASSWORD
+
+# CPU stack with fake engines (fast, no GPU)
+docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
+
+# or the real engines on a GPU host (the MARCUS model file: MARCUS_LLM_GGUF=/path/to/model.gguf)
+docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-**For Apple Silicon (M1/M2/M3) Mac users:**
-```bash
-docker-compose -f docker-compose.mac.yml up -d
-```
-
-- Access the application
-- Frontend: http://localhost:8080
-- API documentation: http://localhost:8000/v1/docs
-
-
-### System Architecture Considerations
-
-- **x86/x64 Systems**: Use the standard `docker-compose.yml` file which includes CUDA dependencies for optimal performance.
-- **Apple Silicon Macs**: Use the Mac-specific `docker-compose.mac.yml` file which resolves TensorFlow and CUDA compatibility issues on ARM architecture.
-
----
-
-## 🔌 API Reference
-
-The API is versioned and provides the following main endpoints:
-
-<table>
-  <tr>
-    <th>Category</th>
-    <th>Endpoints</th>
-  </tr>
-  <tr>
-    <td><b>PDF Processing</b></td>
-    <td>
-      <code>POST /v1/decimer/extract_doi</code>: Extract DOI from uploaded PDF<br>
-      <code>POST /v1/decimer/extract_segments</code>: Extract chemical structure segments
-    </td>
-  </tr>
-  <tr>
-    <td><b>OCSR</b></td>
-    <td>
-      <code>POST /v1/ocsr/generate_smiles</code>: Generate SMILES from structure image<br>
-      <code>POST /v1/ocsr/generate_molfile</code>: Generate molfile from structure image<br>
-      <code>POST /v1/ocsr/generate_both</code>: Generate both SMILES and molfile
-    </td>
-  </tr>
-  <tr>
-    <td><b>Depiction</b></td>
-    <td>
-      <code>POST /v1/depiction/generate</code>: Generate molecular depiction<br>
-      <code>POST /v1/depiction/visualize</code>: Visualize a molecular structure
-    </td>
-  </tr>
-  <tr>
-    <td><b>Text Annotation</b></td>
-    <td>
-      <code>POST /v1/openai/extract_json</code>: Extract structured JSON data from text<br>
-      <code>POST /v1/openai/extract_positions</code>: Extract entity positions from text
-    </td>
-  </tr>
-</table>
-
-For complete API documentation, refer to the Swagger UI at `/v1/docs`.
+The app is at http://localhost:18090/. [`backend-v2/README.md`](backend-v2/README.md) has the
+details: the GPU stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
 
 ---
 
 ## 💻 Development
 
-### Backend Development
-
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+# Backend: tests need the test Postgres and Redis
+cd backend-v2
+docker compose -f docker-compose.test.yml up -d
+uv sync --extra api --extra tools --extra dev
+uv run pytest tests -m "not ml and not e2e"
 
-### Frontend Development
-
-```bash
-cd frontend
-npm install
-npm run serve
+# Web UI
+cd frontend-v2
+npm ci
+npm run dev
 ```
 
 ---
 
-## 📜 License
-
-<div style="background-color: #f9f9f9; padding: 15px; border-radius: 10px;">
+ackground-color: #f9f9f9; padding: 15px; border-radius: 10px;">
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
@@ -250,6 +154,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 This project utilizes several open-source cheminformatics tools:
 - [Chemistry Development Kit (CDK)](https://cdk.github.io/)
+- [Docling](https://github.com/docling-project/docling)
+- [DECIMER Segmentation](https://github.com/Kohulan/DECIMER-Image-Segmentation)
+- [Ketcher](https://github.com/epam/ketcher)
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)
 - [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer)
 - [MolNexTR](https://github.com/CYF2000127/MolNexTR)
 - [MolScribe](https://github.com/thomas0809/MolScribe)

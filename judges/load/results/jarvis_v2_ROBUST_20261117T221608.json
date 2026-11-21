@@ -1,0 +1,404 @@
+{
+ "kind": "robustness_v2",
+ "base_url": "http://127.0.0.1:18090",
+ "target": "jarvis",
+ "started_at": "2026-11-17T21:15:03+00:00",
+ "engine": "decimer",
+ "build": "v2-d5-bdcc6c5",
+ "containers_before": {
+  "marcus-v2-test-nginx-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:13.071766105Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-cpu-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.545944196Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-decimer-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.238183908Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-metrics-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.367355609Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.627912188Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-segment-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.128378316Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molscribe-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.893078848Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molnextr-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.03643602Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dispatcher-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.33424174Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-tools-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.756724082Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-migrate-1": {
+   "restart_count": 0,
+   "status": "exited",
+   "started_at": "2026-11-17T21:06:04.106698083Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dcgm-exporter-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:58.039772833Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-postgres-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:58.023071244Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-redis-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:57.99119658Z",
+   "oom_killed": "false"
+  }
+ },
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 3,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 23923,
+  "max_gpu_used_mib": 8572,
+  "events": [
+   {
+    "t": "2026-11-17T21:15:04+00:00",
+    "scenario": "ROBUST",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 23923,
+    "gpu_used_mib": 8572,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T21:15:34+00:00",
+    "scenario": "ROBUST",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 23923,
+    "gpu_used_mib": 8572,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T21:16:04+00:00",
+    "scenario": "ROBUST",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 23923,
+    "gpu_used_mib": 8572,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T21:16:08+00:00",
+    "scenario": "ROBUST",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 23923,
+    "gpu_used_mib": 8572,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "stopped_early": false,
+ "finished_at": "2026-11-17T21:16:08+00:00",
+ "good_paper": {
+  "done": true,
+  "wall_s": 31.2,
+  "fatal_error": null,
+  "failed_steps": [],
+  "page_errors": [],
+  "segments": 15,
+  "exact": 9,
+  "skeleton": 13,
+  "lost_pages": [],
+  "ocsr_cache_hits": 15,
+  "v2_paper_id": "028e4f52-95da-494b-8d60-1279b73ab7e3"
+ },
+ "bad_papers": {
+  "png_as_pdf": {
+   "bytes": 69,
+   "upload_status": 415,
+   "upload_body": "{\"detail\":\"Not a PDF file\"}"
+  },
+  "judge_garbage": {
+   "bytes": 47,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"f094b250-55af-4127-b145-01aa4415a216\",\"status\":\"checking\"}",
+   "paper_id": "f094b250-55af-4127-b145-01aa4415a216",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "zero_page": {
+   "bytes": 132,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"a1cc1b06-8eee-4f80-9097-cd85415db75b\",\"status\":\"checking\"}",
+   "paper_id": "a1cc1b06-8eee-4f80-9097-cd85415db75b",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "encrypted": {
+   "bytes": 1425,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"bbb3f12e-c2cb-4568-bd4d-c3cbcbad18f1\",\"status\":\"checking\"}",
+   "paper_id": "bbb3f12e-c2cb-4568-bd4d-c3cbcbad18f1",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "judge_xss_text": {
+   "bytes": 1422,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"76598a0b-714a-449c-b8bf-386fa92611f9\",\"status\":\"checking\"}",
+   "paper_id": "76598a0b-714a-449c-b8bf-386fa92611f9",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 5
+   }
+  },
+  "flate_bomb_1gib": {
+   "bytes": 1044057,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"88590ab6-38d6-4e7e-9123-a296e21790e4\",\"status\":\"checking\"}",
+   "paper_id": "88590ab6-38d6-4e7e-9123-a296e21790e4",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 5
+   }
+  },
+  "huge_page": {
+   "bytes": 804,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"e2392c42-e77b-4959-9128-e71c3608d9fb\",\"status\":\"checking\"}",
+   "paper_id": "e2392c42-e77b-4959-9128-e71c3608d9fb",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "render_page",
+     "page": 0,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    },
+    {
+     "kind": "docling",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "done": 2,
+    "failed": 2
+   }
+  },
+  "truncated_synth015": {
+   "bytes": 22684,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"5cbf8444-fd44-47b2-8232-fd3f18b3576e\",\"status\":\"checking\"}",
+   "paper_id": "5cbf8444-fd44-47b2-8232-fd3f18b3576e",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 22
+   }
+  }
+ },
+ "health": {
+  "n": 128,
+  "non_200": 0,
+  "non_200_samples": [],
+  "max_ms": 8.0
+ },
+ "containers_after": {
+  "marcus-v2-test-nginx-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:13.071766105Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-cpu-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.545944196Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-decimer-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.238183908Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-metrics-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.367355609Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.627912188Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-segment-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.128378316Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molscribe-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.893078848Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molnextr-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.03643602Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dispatcher-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:07.33424174Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-tools-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:06:06.756724082Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-migrate-1": {
+   "restart_count": 0,
+   "status": "exited",
+   "started_at": "2026-11-17T21:06:04.106698083Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dcgm-exporter-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:58.039772833Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-postgres-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:58.023071244Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-redis-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T21:05:57.99119658Z",
+   "oom_killed": "false"
+  }
+ },
+ "restarts": {},
+ "verdict": {
+  "good_paper_done_all_15": true,
+  "every_bad_paper_failed_or_rejected_alone": true,
+  "api_health_always_200": true,
+  "no_container_restart": true
+ }
+}

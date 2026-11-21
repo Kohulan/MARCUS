@@ -1,0 +1,1017 @@
+/*
+ * The landing. First screen: the name spelled out and one sentence on the left; the
+ * benzene-ring drop zone and the sample paper on the right; soft beams behind. It is the whole
+ * page and fills the frame between header and footer. Light only; every size is a class here (no
+ * style attributes: CSP style-src 'self'). base.css loads after this file: where a rule here
+ * refines a base rule (.mono-label, h1), it is written with one more class.
+ *
+ * On the landing-page-design skill: every font size on its type scale with the step's own
+ * line height (named text styles in the comments), every gap on the spacing tokens
+ * (tokens.css --s-*), one motion curve (--ease), transform and opacity only. The exceptions:
+ * the ring's running dashes on drag keep a linear loop (a constant speed), and the falling
+ * initials of the first screen fall on gravity's curve (flight.ts).
+ */
+
+.home {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.landing {
+  position: relative;
+  display: grid;
+  flex: 1 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 40%);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Beams (ui/Beams.tsx): drawn small on the canvas, blurred here; behind everything, fainter
+   under the words. The pre-rendered page shows plain paper until the canvas draws. */
+.beams {
+  position: absolute;
+  top: -40px;
+  left: -40px;
+  z-index: -1;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  max-width: none;
+  pointer-events: none;
+  filter: blur(22px);
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.45), #000 66%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.45), #000 66%);
+}
+
+/* The lead: the acrostic, then the sentence and the facts ------------------ */
+
+.lead {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.lead__title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  padding: var(--s-500) var(--s-300) var(--s-600);
+}
+
+/* The h1 spells the name: bold green initials (Display, 700), the rest Geist 400 in ink,
+   "and" and "for" in muted (an approved exception to Display = 700, DESIGN.md). On the
+   scale: 72 / 72, then 60, 48 and 36 / 40 as the window narrows or shortens. */
+.landing .acro {
+  font-size: 72px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+@media (max-width: 1279.98px), (max-height: 799.98px) {
+  .landing .acro {
+    font-size: 60px;
+  }
+}
+
+.acro__line {
+  --acro-i: 0;
+  display: block;
+  white-space: nowrap;
+}
+
+.acro b {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.acro__link {
+  color: var(--muted);
+}
+
+/* Each line's place in the name, for the first screen at the end of this file. */
+.acro__line--2 {
+  --acro-i: 1;
+}
+
+.acro__line--3 {
+  --acro-i: 2;
+}
+
+.acro__line--4 {
+  --acro-i: 3;
+}
+
+.acro__line--5 {
+  --acro-i: 4;
+}
+
+.acro__line--6 {
+  --acro-i: 5;
+}
+
+.lead__text {
+  padding: var(--s-300) var(--s-300) var(--s-400);
+  border-top: 1px solid var(--line);
+}
+
+/* Title 2: Geist 400, 18 / 28 */
+.lead__text > p:first-child {
+  max-width: min(680px, 46ch);
+  font: 400 18px/28px var(--font-text);
+}
+
+/* Caption 5: Geist Mono 400, 12 / 16 */
+.lead .lead__facts {
+  margin-top: var(--s-100);
+  font: 400 12px/16px var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+/* The actions: the drop zone, then the sample paper ------------------------ */
+
+.act {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-200);
+  min-width: 0;
+  padding: var(--s-500) var(--s-400);
+}
+
+.act__corner {
+  position: absolute;
+}
+
+.act__corner:nth-child(1) {
+  top: var(--s-300);
+  left: var(--s-300);
+}
+
+.act__corner:nth-child(2) {
+  top: var(--s-300);
+  right: var(--s-300);
+}
+
+.act__corner:nth-child(3) {
+  bottom: var(--s-300);
+  left: var(--s-300);
+}
+
+.act__corner:nth-child(4) {
+  bottom: var(--s-300);
+  right: var(--s-300);
+}
+
+/*
+ * The empty ring: a benzene ring drawn in dashes, waiting for a structure. Hover or focus
+ * draws its double bonds; drag-over turns it orange and the dashes run (the Reading mark);
+ * while a PDF goes to the tool the double bonds alternate (resonance); a refused file strikes
+ * it through like a rejected structure. Printed flat on the sheet: no glass, no lift.
+ */
+.dz {
+  --dz-ink: var(--control-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-50);
+  max-width: 100%;
+  padding: var(--s-100) var(--s-300) var(--s-200);
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+}
+
+.dz:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dz__ring {
+  width: 124px;
+  height: 136px;
+  margin-bottom: var(--s-100);
+  overflow: visible;
+  transition: transform 500ms var(--ease);
+}
+
+.dz__hex {
+  fill: var(--surface);
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-dasharray: 6 5;
+  transition: stroke 300ms var(--ease);
+}
+
+/* A double bond grows into place from its middle: opacity and scale, no drawn stroke. */
+.dz__bond {
+  fill: none;
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-linecap: butt;
+  opacity: 0;
+  transform: scale(0.4);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 300ms var(--ease),
+    transform 500ms var(--ease),
+    stroke 300ms var(--ease);
+}
+
+.dz__bonds--b .dz__bond {
+  opacity: 1;
+  transform: none;
+}
+
+.dz__bonds--b {
+  opacity: 0;
+}
+
+.dz__mark path,
+.dz__mark rect {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dz__strike {
+  display: none;
+  stroke: var(--charcoal);
+  stroke-width: 2;
+}
+
+/* Body 1: Geist 700, 16 / 24 */
+.dz__title {
+  max-width: 28ch;
+  font: 700 16px/24px var(--font-text);
+  overflow-wrap: anywhere;
+}
+
+.dz__browse {
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* Caption 5: Geist Mono 400, 12 / 16 */
+.dz__hint {
+  font: 400 12px/16px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.dz__mark--desk,
+.dz__title--desk,
+.dz.is-done .dz__title--idle,
+.dz.is-error .dz__title--idle {
+  display: none;
+}
+
+/* Hover and focus: the ring becomes aromatic. */
+.dz:hover,
+.dz:focus-visible {
+  --dz-ink: var(--green);
+}
+
+.dz:hover .dz__bonds--a .dz__bond,
+.dz:focus-visible .dz__bonds--a .dz__bond,
+.dz.is-drag .dz__bonds--a .dz__bond,
+.dz.is-done .dz__bonds--a .dz__bond {
+  opacity: 1;
+  transform: none;
+}
+
+.dz:active:not([aria-disabled="true"]) .dz__ring {
+  transform: scale(0.98);
+}
+
+/* Drag-over: the moment that needs you, so orange (DESIGN.md: orange also means drag-over). */
+.dz.is-drag {
+  --dz-ink: var(--orange);
+}
+
+.dz.is-drag .dz__ring {
+  transform: scale(1.06);
+}
+
+.dz.is-drag .dz__hex {
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+}
+
+/* Uploading: a closed green ring. */
+.dz.is-done {
+  --dz-ink: var(--accepted);
+  cursor: progress;
+}
+
+.dz.is-done .dz__hex {
+  stroke-dasharray: none;
+}
+
+/* Refused: struck through, as a rejected structure is. */
+.dz.is-error {
+  --dz-ink: var(--charcoal);
+}
+
+.dz.is-error .dz__hex {
+  stroke-dasharray: none;
+}
+
+.dz.is-error .dz__strike {
+  display: block;
+}
+
+.dz.is-error .dz__mark {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dz__arrow {
+    animation: dz-bob 1.6s var(--ease) infinite alternate;
+  }
+
+  /* the one linear loop: the dashes run at a constant speed */
+  .dz.is-drag .dz__hex {
+    animation: dz-run 1.2s linear infinite;
+  }
+
+  .dz.is-done .dz__bonds--a {
+    animation: dz-resonance 1.6s var(--ease) infinite;
+  }
+
+  .dz.is-done .dz__bonds--b {
+    animation: dz-resonance 1.6s var(--ease) -0.8s infinite;
+  }
+}
+
+@keyframes dz-bob {
+  from {
+    transform: translateY(2px);
+  }
+
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes dz-run {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes dz-resonance {
+  0%,
+  40% {
+    opacity: 1;
+  }
+
+  50%,
+  90% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .dz__hex,
+  .dz__bond,
+  .dz__strike {
+    stroke: ButtonText;
+  }
+
+  .dz__mark path,
+  .dz__mark rect {
+    stroke: ButtonText;
+  }
+}
+
+.act__sample {
+  display: flex;
+  align-items: center;
+}
+
+/* The main button, Button-sm (Geist Mono 500, 14 / 20) with 12 / 24 padding: a 44 px
+   target with room for the pill's round ends. Presses in on click. */
+.act__sample .glass {
+  gap: var(--s-75);
+  padding: var(--s-100) var(--s-300);
+  font-size: 14px;
+  line-height: 20px;
+  transition: transform 300ms var(--ease);
+}
+
+.act__sample .glass:active {
+  transform: scale(0.98);
+}
+
+.act__sample .fa {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+@media (max-width: 1199.98px) {
+  .landing {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 38%);
+  }
+
+  .act {
+    padding: var(--s-500) var(--s-300);
+  }
+}
+
+/* Below the tool's width: one column, and the zone only says what /app needs. The sample
+   pill still works: it leads to the tool's desktop note. */
+@media (max-width: 1023.98px) {
+  .landing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing .acro {
+    font-size: 60px;
+  }
+
+  .lead {
+    border-right: 0;
+  }
+
+  .lead__title {
+    padding: var(--s-400) var(--s-300);
+  }
+
+  .act {
+    padding: var(--s-400) var(--s-300) var(--s-600);
+    border-top: 1px solid var(--line);
+  }
+
+  /* the one live action first, in the first screen */
+  .act__sample {
+    order: -1;
+  }
+
+  .dz {
+    cursor: default;
+  }
+
+  .dz:hover {
+    --dz-ink: var(--control-border);
+  }
+
+  .dz:hover .dz__bonds--a .dz__bond {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  .dz__mark--up,
+  .dz__title--idle,
+  .dz__hint--size {
+    display: none;
+  }
+
+  .dz__mark--desk,
+  .dz__title--desk {
+    display: block;
+  }
+
+  .beams {
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), #000 60%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), #000 60%);
+  }
+}
+
+@media (max-width: 719.98px) {
+  .landing .acro {
+    font-size: 48px;
+  }
+
+  .lead__title {
+    padding: var(--s-300) var(--s-200);
+  }
+
+  .lead__text {
+    padding: var(--s-200) var(--s-200) var(--s-300);
+  }
+
+  .act {
+    padding: var(--s-300) var(--s-200) var(--s-500);
+  }
+}
+
+@media (max-width: 559.98px) {
+  .landing .acro {
+    font-size: 36px;
+    line-height: 40px;
+  }
+}
+
+/*
+ * The first screen, once per page load (Landing.tsx adds .landing--intro, and .landing--entry
+ * when the load opened on the landing). About 2 s, from the first paint:
+ *
+ *   0       the header drops in and the footer's bubbles rise (entry only)
+ *   0–900   the sheet's lines draw themselves, each from its own end, in no order
+ *   480     the initials lift off the header's MARCUS and fall into place (flight.ts)
+ *   450     the ring's six bonds fly in and snap into the hexagon
+ *   1300    the ring closes: a ripple, and the double bonds flash once (aromatic)
+ *   1350    the upload mark, the words, the sample paper and the sentence settle in
+ *
+ * Every element's resting place is its layout; the animations only fill backwards, so when
+ * one ends nothing moves, and a page without the animations reads the same. Reduced motion:
+ * no drawing, no flight, no flying bonds; the page fades in.
+ */
+
+.home {
+  position: relative;
+}
+
+/* The sheet's frame: four lines over its border (Landing.tsx .rules), which steps aside. */
+.rules {
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rule {
+  position: absolute;
+  background: var(--line);
+}
+
+.rule--top,
+.rule--bottom {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.rule--left,
+.rule--right {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.rule--top {
+  top: 0;
+  transform-origin: right;
+}
+
+.rule--right {
+  right: 0;
+  transform-origin: bottom;
+}
+
+.rule--bottom {
+  bottom: 0;
+  transform-origin: left;
+}
+
+.rule--left {
+  left: 0;
+  transform-origin: top;
+}
+
+.sheet__page:has(> .home > .landing--intro) {
+  border-color: transparent;
+}
+
+/* The two lines inside: the lead's right edge and the sentence's top edge (below 1024 px the
+   action's top edge instead), drawn as lines over their own border. */
+.landing--intro .lead {
+  position: relative;
+  border-right-color: transparent;
+}
+
+.landing--intro .lead::after,
+.landing--intro .lead__text::before,
+.landing--intro .act::before {
+  content: "";
+  position: absolute;
+  background: var(--line);
+  pointer-events: none;
+}
+
+.landing--intro .lead::after {
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 1px;
+  transform-origin: bottom;
+}
+
+.landing--intro .lead__text {
+  position: relative;
+  border-top-color: transparent;
+}
+
+.landing--intro .lead__text::before {
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform-origin: left;
+}
+
+.landing--intro .act::before {
+  display: none;
+}
+
+@media (max-width: 1023.98px) {
+  .landing--intro .lead::after {
+    display: none;
+  }
+
+  .landing--intro .act {
+    border-top-color: transparent;
+  }
+
+  .landing--intro .act::before {
+    display: block;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    transform-origin: right;
+  }
+}
+
+/* The ring's bonds and its ripple exist only for the first screen. */
+.dz__build,
+.dz__pulse {
+  display: none;
+}
+
+.dz__edge {
+  fill: none;
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dz__pulse {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* The copies of the initials in flight (flight.ts): over everything, never in the way. */
+.acro-flight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.acro-fly {
+  position: absolute;
+  color: var(--green);
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+.acro-fly__fall,
+.acro-fly__glyphs {
+  display: block;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.acro-fly__glyphs {
+  position: relative;
+}
+
+/* the header's letter, centred on the initial's box (out of the flow: it is wider than the
+   bold initial and must not push it): Gmarket Sans Light, as the wordmark */
+.acro-fly__mark {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mark);
+  font-weight: 300;
+  letter-spacing: 0;
+}
+
+/* the initial itself, where the h1 sets it: Geist 700 */
+.acro-fly__bold {
+  display: block;
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The header and the footer arrive (entry only). */
+  .sheet:has(.landing--entry) > .site-header > * {
+    animation: intro-drop 450ms var(--ease) backwards;
+  }
+
+  .sheet:has(.landing--entry) > .site-header > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > * {
+    animation: intro-rise 500ms var(--ease) 160ms backwards;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > :nth-child(2) {
+    animation-delay: 230ms;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > :nth-child(3) {
+    animation-delay: 300ms;
+  }
+
+  /* The lines draw themselves: each its own end, its own pace, in no order. */
+  .rule--top {
+    animation: rule-x 760ms var(--ease) 120ms backwards;
+  }
+
+  .rule--right {
+    animation: rule-y 640ms var(--ease) 420ms backwards;
+  }
+
+  .rule--bottom {
+    animation: rule-x 820ms var(--ease) 230ms backwards;
+  }
+
+  .rule--left {
+    animation: rule-y 600ms var(--ease) 300ms backwards;
+  }
+
+  .landing--intro .lead::after {
+    animation: rule-y 700ms var(--ease) 0ms backwards;
+  }
+
+  .landing--intro .lead__text::before {
+    animation: rule-x 560ms var(--ease) 360ms backwards;
+  }
+
+  .landing--intro .act::before {
+    animation: rule-x 600ms var(--ease) 80ms backwards;
+  }
+
+  /* the four registration crosses turn into place as the lines meet them */
+  .landing--intro .act__corner {
+    animation: corner-in 520ms var(--ease) 560ms backwards;
+  }
+
+  .landing--intro .act__corner:nth-child(2) {
+    animation-delay: 700ms;
+  }
+
+  .landing--intro .act__corner:nth-child(3) {
+    animation-delay: 480ms;
+  }
+
+  .landing--intro .act__corner:nth-child(4) {
+    animation-delay: 780ms;
+  }
+
+  /*
+   * The name. The script (flight.ts) adds .acro--flying, hides the initials and flies them in
+   * from the header. Without it, at 1.6 s the CSS shows the name itself: each initial fades
+   * in and its rest slides out from behind it.
+   */
+  .acro--assemble b,
+  .acro--assemble .acro__rest {
+    display: inline-block;
+  }
+
+  .acro--assemble b {
+    transform-origin: 50% 85%;
+    animation: acro-show 400ms var(--ease) calc(1600ms + var(--acro-i) * 40ms) backwards;
+  }
+
+  .acro--assemble .acro__rest {
+    --acro-at: calc(1700ms + var(--acro-i) * 60ms);
+
+    animation:
+      acro-slide 500ms var(--ease) var(--acro-at) backwards,
+      acro-show 400ms var(--ease) calc(var(--acro-at) + 100ms) backwards;
+  }
+
+  .acro--flying b,
+  .acro--flying .acro__rest {
+    opacity: 0;
+    animation: none;
+  }
+
+  /* The ring is built: six bonds fly in from all sides and snap together. The ring itself
+     takes over the frame they close (1300 ms); then a ripple, and one aromatic flash. */
+  .landing--intro .dz__build {
+    display: inline;
+    animation: dz-handover 0s 1300ms forwards;
+  }
+
+  .landing--intro .dz__hex {
+    animation:
+      dz-stroke-in 0s 1300ms backwards,
+      dz-fill-in 500ms var(--ease) 1000ms backwards;
+  }
+
+  .landing--intro .dz__edge {
+    animation: dz-edge 700ms var(--ease) calc(450ms + var(--dz-i) * 70ms) backwards;
+  }
+
+  .dz__edge--1 {
+    --dz-i: 2;
+    --dz-from: translate(18px, -31px) rotate(28deg);
+  }
+
+  .dz__edge--2 {
+    --dz-i: 5;
+    --dz-from: translate(36px, 0) rotate(-24deg);
+  }
+
+  .dz__edge--3 {
+    --dz-i: 0;
+    --dz-from: translate(18px, 31px) rotate(-32deg);
+  }
+
+  .dz__edge--4 {
+    --dz-i: 3;
+    --dz-from: translate(-18px, 31px) rotate(22deg);
+  }
+
+  .dz__edge--5 {
+    --dz-i: 1;
+    --dz-from: translate(-36px, 0) rotate(30deg);
+  }
+
+  .dz__edge--6 {
+    --dz-i: 4;
+    --dz-from: translate(-18px, -31px) rotate(-26deg);
+  }
+
+  .landing--intro .dz__pulse {
+    display: inline;
+    animation: dz-pulse 800ms var(--ease) 1300ms;
+  }
+
+  .landing--intro .dz__bonds--a .dz__bond {
+    animation: dz-aromatic 900ms var(--ease) 1360ms;
+  }
+
+  /* then the zone's words and the sample paper settle in */
+  .landing--intro .dz__mark {
+    animation: acro-show 500ms var(--ease) 1350ms backwards;
+  }
+
+  .landing--intro .dz__title {
+    animation: intro-rise 500ms var(--ease) 1420ms backwards;
+  }
+
+  .landing--intro .dz__hint {
+    animation: intro-rise 500ms var(--ease) 1480ms backwards;
+  }
+
+  .landing--intro .act__sample {
+    animation: intro-rise 500ms var(--ease) 1560ms backwards;
+  }
+
+  .landing--intro .lead__text > * {
+    animation: intro-rise 600ms var(--ease) 1500ms backwards;
+  }
+
+  .landing--intro .lead__text > :nth-child(2) {
+    animation-delay: 1600ms;
+  }
+}
+
+/* Reduced motion: nothing draws, flies or builds; the page fades in. */
+@media (prefers-reduced-motion: reduce) {
+  .landing--intro > .lead,
+  .landing--intro > .act {
+    animation: acro-show 500ms var(--ease) backwards;
+  }
+}
+
+@keyframes acro-show {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes acro-slide {
+  from {
+    transform: translateX(-0.25em);
+  }
+}
+
+@keyframes intro-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes rule-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes rule-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes corner-in {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.4);
+  }
+}
+
+@keyframes dz-edge {
+  from {
+    opacity: 0;
+    transform: var(--dz-from);
+  }
+
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes dz-handover {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dz-stroke-in {
+  from {
+    stroke-opacity: 0;
+  }
+}
+
+@keyframes dz-fill-in {
+  from {
+    fill-opacity: 0;
+  }
+}
+
+@keyframes dz-pulse {
+  from {
+    opacity: 0.85;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes dz-aromatic {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  35%,
+  60% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}

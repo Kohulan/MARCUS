@@ -1,0 +1,33 @@
+# MARCUS v2 alert rules (spec section 12: disk-use alarm). Loaded by ops/prometheus.yml and
+# mounted by docker-compose.monitoring.yml. No Alertmanager is configured: firing alerts show on
+# Prometheus /alerts and in Grafana (Alerting > Alert rules, Prometheus data source); add an
+# Alertmanager (or Grafana contact point) to page someone.
+groups:
+  - name: marcus-disk
+    rules:
+      - alert: MarcusDiskLow
+        # 20 GiB: a few hours of heavy uploads (a 100-page paper renders to ~0.5 GB of PNGs)
+        expr: marcus_disk_free_bytes{path="/data"} < 21474836480
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MARCUS data volume below 20 GiB free"
+          description: "Free: {{ $value | humanize1024 }}B. Below 5 GiB the API refuses new uploads (503)."
+      - alert: MarcusDiskUploadsRefused
+        # = Settings.min_free_disk_bytes default (MARCUS_MIN_FREE_DISK_BYTES): uploads get 503
+        expr: marcus_disk_free_bytes{path="/data"} < 5368709120
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MARCUS data volume below 5 GiB free: uploads are refused"
+          description: "Free: {{ $value | humanize1024 }}B. Free space (retention purge: marcus purge --expired) or grow the volume."
+      - alert: MarcusMetricsDown
+        # no scrape, no disk gauge: the alarms above would stay silent
+        expr: up{job="marcus"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MARCUS metrics service not scraped for 5 minutes (disk alarms are blind)"

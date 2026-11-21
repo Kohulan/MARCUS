@@ -1,0 +1,117 @@
+// Fails the build when dist/ breaks the design contract or the CSP rules.
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// CHECK_DIST_DIR: another tree to check (src/test/checkDist.test.ts); default ../dist.
+const dist =
+  process.env.CHECK_DIST_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
+const failures = [];
+const fail = (message) => failures.push(message);
+const read = (file) => readFileSync(join(dist, file), "utf8");
+
+const isKetcher = (rel) => rel === "ketcher" || rel.startsWith(`ketcher${sep}`);
+
+function htmlFiles(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const rel = relative(dist, path);
+    if (statSync(path).isDirectory()) out.push(...htmlFiles(path));
+    else if (name.endsWith(".html")) out.push(rel);
+  }
+  return out;
+}
+
+// An inline event handler (onclick=, onerror=, ...) in a tag: script-src without
+// 'unsafe-inline' blocks it under both CSPs. Text that only mentions one is escaped (&lt;).
+const HANDLER = /<[a-zA-Z][^>]*?\s(on[a-zA-Z]+)\s*=/g;
+
+const required = [
+  "index.html",
+  "app/index.html",
+  "about/index.html",
+  "privacy/index.html",
+  "disclaimer/index.html",
+  "404.html",
+  "ketcher/index.html",
+];
+for (const file of required) {
+  if (!existsSync(join(dist, file))) fail(`missing dist/${file}`);
+}
+
+// Each content check runs on whatever exists, so one missing file does not
+// hide other problems.
+const has = (file) => existsSync(join(dist, file));
+for (const file of ["index.html", "app/index.html"]) {
+  if (has(file) && !read(file).includes("6b4eb402")) {
+    fail(`dist/${file}: design contract (6b4eb402) missing`);
+  }
+}
+if (has("index.html") && !read("index.html").includes("FORM: Survey Sheet")) {
+  fail("dist/index.html: Survey Sheet contract (FORM: Survey Sheet) missing");
+}
+// The landing's h1 spells the name as an acrostic (bold initials M A R C U S) and is read
+// as the plain name (a visually hidden span).
+const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
+if (has("index.html")) {
+  const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(read("index.html"))?.[1] ?? "";
+  const initials = [...h1.matchAll(/<b>([^<]*)<\/b>/g)].map((m) => m[1]).join("");
+  if (!h1.includes(`<span class="visually-hidden">${HEADLINE}</span>`) || initials !== "MARCUS") {
+    fail("dist/index.html: landing headline not pre-rendered");
+  }
+}
+if (has("app/index.html") && !read("app/index.html").includes('<div id="root"></div>')) {
+  fail("dist/app/index.html: #root is not empty");
+}
+
+for (const file of existsSync(dist) ? htmlFiles(dist) : []) {
+  const html = read(file);
+  // Scripts: no inline code under either CSP (the Ketcher page included).
+  for (const tag of html.match(/<script\b[^>]*>/gi) ?? []) {
+    if (!/\ssrc=/i.test(tag)) fail(`dist/${file}: inline <script> (CSP script-src 'self'): ${tag}`);
+  }
+  for (const m of html.matchAll(HANDLER)) {
+    fail(`dist/${file}: inline event handler ${m[1]}= (CSP script-src 'self')`);
+  }
+  // Styles: the Ketcher CSP allows 'unsafe-inline' styles (F1b); the app CSP does not.
+  if (isKetcher(file)) continue;
+  if (html.includes(" style=")) fail(`dist/${file}: inline style attribute (CSP style-src 'self')`);
+  if (/<style\b/i.test(html)) fail(`dist/${file}: inline <style> block (CSP style-src 'self')`);
+  // Light mode only (spec §7 decision 5): no theme script, no theme switch.
+  if (html.includes("theme.js")) fail(`dist/${file}: references theme.js (light mode only)`);
+  if (html.includes("data-theme")) fail(`dist/${file}: data-theme (light mode only)`);
+}
+
+if (has("theme.js")) fail("dist/theme.js exists (light mode only)");
+
+// Matomo from its file on every app page; each pre-rendered page its own <title>.
+const titles = new Map();
+for (const file of required.filter((f) => f !== "ketcher/index.html" && has(f))) {
+  const html = read(file);
+  if (!html.includes('<script src="/matomo.js" defer></script>')) {
+    fail(`dist/${file}: no <script src="/matomo.js" defer>`);
+  }
+  const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? "";
+  if (titles.has(title)) fail(`dist/${file}: same <title> as dist/${titles.get(title)} (${title})`);
+  titles.set(title, file);
+}
+if (!has("matomo.js")) fail("dist/matomo.js missing");
+
+// Survey Sheet fonts only (Geist, Geist Mono, Gmarket mark) and no dark rules.
+const dropped = /bricolage|hanken|jetbrains/i;
+const assets = join(dist, "assets");
+for (const name of existsSync(assets) ? readdirSync(assets) : []) {
+  if (dropped.test(name)) fail(`dist/assets/${name}: a dropped font (Bricolage, Hanken, JetBrains)`);
+  if (!name.endsWith(".css")) continue;
+  const css = read(join("assets", name));
+  if (dropped.test(css)) fail(`dist/assets/${name}: names a dropped font (Bricolage, Hanken, JetBrains)`);
+  if (css.includes("prefers-color-scheme")) fail(`dist/assets/${name}: prefers-color-scheme (light mode only)`);
+}
+
+if (failures.length > 0) {
+  console.error(`check-dist: ${failures.length} problem(s)`);
+  for (const message of failures) console.error(`  - ${message}`);
+  process.exit(1);
+}
+console.log("check-dist: ok");

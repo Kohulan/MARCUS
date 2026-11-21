@@ -1,0 +1,341 @@
+{
+ "kind": "robustness_v2",
+ "base_url": "http://127.0.0.1:18090",
+ "started_at": "2026-11-17T14:13:09+00:00",
+ "engine": "decimer",
+ "containers_before": {
+  "marcus-v2-test-nginx-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:09.757042894Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-segment-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.09366391Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-decimer-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.321647558Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molnextr-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.274572574Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-tools-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.987949733Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dispatcher-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.649390417Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molscribe-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.86882575Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-cpu-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.175623207Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-metrics-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.20892138Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.554379992Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-migrate-1": {
+   "restart_count": 0,
+   "status": "exited",
+   "started_at": "2026-11-17T13:15:00.855971191Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dcgm-exporter-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.710544655Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-redis-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.743790902Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-postgres-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.764745024Z",
+   "oom_killed": "false"
+  }
+ },
+ "finished_at": "2026-11-17T14:14:04+00:00",
+ "good_paper": {
+  "status": null,
+  "wall_s": 33.6,
+  "fatal_error": null,
+  "failed_steps": [],
+  "page_errors": [],
+  "segments": 15,
+  "exact": 9,
+  "skeleton": 13,
+  "lost_pages": [],
+  "ocsr_cache_hits": 0,
+  "v2_paper_id": "9c5d9d89-89d1-4a31-b350-e8b9915a2e30"
+ },
+ "bad_papers": {
+  "png_as_pdf": {
+   "bytes": 69,
+   "upload_status": 415,
+   "upload_body": "{\"detail\":\"Not a PDF file\"}"
+  },
+  "judge_garbage": {
+   "bytes": 47,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"e71a3d95-eb12-4ed0-ae01-48e9e3410430\",\"status\":\"checking\"}",
+   "paper_id": "e71a3d95-eb12-4ed0-ae01-48e9e3410430",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "encrypted": {
+   "bytes": 1425,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"6c703e34-45de-4525-a40e-837bbd340b8a\",\"status\":\"checking\"}",
+   "paper_id": "6c703e34-45de-4525-a40e-837bbd340b8a",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "zero_page": {
+   "bytes": 132,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"ee01b6f2-ae27-48ba-814f-d4a30a70b68d\",\"status\":\"checking\"}",
+   "paper_id": "ee01b6f2-ae27-48ba-814f-d4a30a70b68d",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "check_pdf",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "failed": 1
+   }
+  },
+  "judge_xss_text": {
+   "bytes": 1422,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"ffc487f9-de9c-4e4c-be4b-58e132f11ccd\",\"status\":\"checking\"}",
+   "paper_id": "ffc487f9-de9c-4e4c-be4b-58e132f11ccd",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 5
+   }
+  },
+  "huge_page": {
+   "bytes": 804,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"f458966f-2865-49d0-a59a-a566d32960cf\",\"status\":\"checking\"}",
+   "paper_id": "f458966f-2865-49d0-a59a-a566d32960cf",
+   "status": "failed",
+   "error": null,
+   "failed_steps": [
+    {
+     "kind": "render_page",
+     "page": 0,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    },
+    {
+     "kind": "docling",
+     "page": null,
+     "status": "failed",
+     "attempts": 1,
+     "error_class": "bad_input",
+     "error": null
+    }
+   ],
+   "steps_by_status": {
+    "done": 2,
+    "failed": 2
+   }
+  },
+  "flate_bomb_1gib": {
+   "bytes": 1044057,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"b2aa3e44-7445-45c7-b112-ffe134ab5021\",\"status\":\"checking\"}",
+   "paper_id": "b2aa3e44-7445-45c7-b112-ffe134ab5021",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 5
+   }
+  },
+  "truncated_synth015": {
+   "bytes": 22684,
+   "upload_status": 202,
+   "upload_body": "{\"paper_id\":\"abdbfe1e-427f-4ba4-8986-87f353046701\",\"status\":\"checking\"}",
+   "paper_id": "abdbfe1e-427f-4ba4-8986-87f353046701",
+   "status": "done",
+   "error": null,
+   "failed_steps": [],
+   "steps_by_status": {
+    "done": 22
+   }
+  }
+ },
+ "health": {
+  "n": 110,
+  "non_200": 0,
+  "non_200_samples": [],
+  "max_ms": 27.5
+ },
+ "containers_after": {
+  "marcus-v2-test-nginx-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:09.757042894Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-segment-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.09366391Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-decimer-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.321647558Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molnextr-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.274572574Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-tools-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.987949733Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dispatcher-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.649390417Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-molscribe-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.86882575Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-worker-cpu-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.175623207Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-metrics-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:04.20892138Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:15:03.554379992Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-api-migrate-1": {
+   "restart_count": 0,
+   "status": "exited",
+   "started_at": "2026-11-17T13:15:00.855971191Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-dcgm-exporter-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.710544655Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-redis-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.743790902Z",
+   "oom_killed": "false"
+  },
+  "marcus-v2-test-postgres-1": {
+   "restart_count": 0,
+   "status": "running",
+   "started_at": "2026-11-17T13:14:54.764745024Z",
+   "oom_killed": "false"
+  }
+ },
+ "restarts": {},
+ "verdict": {
+  "good_paper_done_all_15": true,
+  "every_bad_paper_failed_or_rejected_alone": true,
+  "api_health_always_200": true,
+  "no_container_restart": true
+ }
+}

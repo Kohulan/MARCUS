@@ -1,0 +1,199 @@
+{
+  "available": true,
+  "status": "done",
+  "step": null,
+  "fields": [
+    {
+      "key": "compound_group",
+      "label": "Compound series"
+    },
+    {
+      "key": "compound_class",
+      "label": "Compound class"
+    },
+    {
+      "key": "organism_part",
+      "label": "Organism part"
+    },
+    {
+      "key": "organism_or_species",
+      "label": "Organism"
+    },
+    {
+      "key": "geo_location",
+      "label": "Place"
+    },
+    {
+      "key": "Kingdom",
+      "label": "Kingdom"
+    },
+    {
+      "key": "trivial_name",
+      "label": "Compound names"
+    },
+    {
+      "key": "location",
+      "label": "Habitat or host"
+    },
+    {
+      "key": "iupac_name",
+      "label": "IUPAC names"
+    },
+    {
+      "key": "abbreviation",
+      "label": "Abbreviations"
+    },
+    {
+      "key": "iupac_like_name",
+      "label": "Semi-systematic names"
+    }
+  ],
+  "model": "qwen3.5-9b-marcus-v1",
+  "model_version": "Q8_0 llama.cpp b12554",
+  "output": {
+    "compound_group": [],
+    "compound_class": [],
+    "organism_part": [],
+    "organism_or_species": [],
+    "geo_location": [],
+    "Kingdom": [
+      "Plantae"
+    ],
+    "trivial_name": [],
+    "location": [],
+    "iupac_name": [],
+    "abbreviation": [
+      "HPLC",
+      "NMR",
+      "HRMS"
+    ],
+    "iupac_like_name": []
+  },
+  "positions": {
+    "compound_group": {},
+    "compound_class": {},
+    "organism_part": {},
+    "organism_or_species": {},
+    "geo_location": {},
+    "Kingdom": {
+      "Plantae": []
+    },
+    "trivial_name": {},
+    "location": {},
+    "iupac_name": {},
+    "abbreviation": {
+      "HPLC": [
+        [
+          1,
+          142,
+          146
+        ],
+        [
+          8,
+          142,
+          146
+        ],
+        [
+          13,
+          142,
+          146
+        ],
+        [
+          18,
+          142,
+          146
+        ],
+        [
+          21,
+          142,
+          146
+        ]
+      ],
+      "NMR": [
+        [
+          1,
+          220,
+          223
+        ],
+        [
+          8,
+          220,
+          223
+        ],
+        [
+          13,
+          220,
+          223
+        ],
+        [
+          18,
+          220,
+          223
+        ],
+        [
+          21,
+          220,
+          223
+        ]
+      ],
+      "HRMS": [
+        [
+          1,
+          228,
+          232
+        ],
+        [
+          8,
+          228,
+          232
+        ],
+        [
+          13,
+          228,
+          232
+        ],
+        [
+          18,
+          228,
+          232
+        ],
+        [
+          21,
+          228,
+          232
+        ]
+      ]
+    },
+    "iupac_like_name": {}
+  },
+  "curated": null,
+  "curated_positions": null,
+  "values": {
+    "compound_group": [],
+    "compound_class": [],
+    "organism_part": [],
+    "organism_or_species": [],
+    "geo_location": [],
+    "Kingdom": [
+      "Plantae"
+    ],
+    "trivial_name": [],
+    "location": [],
+    "iupac_name": [],
+    "abbreviation": [
+      "HPLC",
+      "NMR",
+      "HRMS"
+    ],
+    "iupac_like_name": []
+  },
+  "coconut": {
+    "organisms": [],
+    "kingdom": [
+      "Plantae"
+    ]
+  },
+  "created_at": "2026-11-20T10:00:00Z",
+  "updated_at": "2026-11-20T10:00:00Z",
+  "curated_at": null
+}
