@@ -29,6 +29,8 @@ import {
   STATE_WORD,
   type CardState,
 } from "./cardState";
+import RgroupTag from "./RgroupTag";
+import { rgroupTag } from "./rgroups";
 import StructureActions, { type StructureActionsProps } from "./StructureActions";
 import "./grid.css";
 
@@ -152,7 +154,7 @@ function StructureCard({
   const where = `${tag} · Page ${segment.page + 1}`;
   const curation = segment.curation;
   const shown = shownStructure(segment, paperEngine);
-  const { smiles, edited } = shown;
+  const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
   const note = curation?.note?.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const rejected = state === "rejected";
@@ -190,7 +192,9 @@ function StructureCard({
       ref={ref}
       className={classes.join(" ")}
       tabIndex={0}
-      aria-label={`${where}, ${STATE_WORD[state]}`}
+      aria-label={[where, STATE_WORD[state], rgroups.length > 0 && rgroupTag(rgroups)]
+        .filter(Boolean)
+        .join(", ")}
       aria-describedby={CARD_OPEN_HINT}
       aria-current={current ? "true" : undefined}
       data-segment-id={segment.id}
@@ -219,7 +223,10 @@ function StructureCard({
             <span className="card__tag">{where}</span>
           </label>
         )}
-        <StateBadge state={state} />
+        <span className="card__states">
+          <StateBadge state={state} />
+          <RgroupTag labels={rgroups} />
+        </span>
       </div>
 
       <div className="card__figure">

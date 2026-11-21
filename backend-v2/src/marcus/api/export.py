@@ -5,6 +5,11 @@ curated molfile when none was given); else the newest valid prediction
 of the paper's engine; else the newest valid prediction of any engine. Segments without any
 structure are left out; rejected ones too, unless `include_rejected`.
 
+A structure with R-group placeholders (marcus.core.rgroups) stands for several compounds. It is
+exported as what it is, a scaffold, never as a finished compound: every format names its labels
+(JSON `rgroups`, CSV column `rgroups`, SDF property MARCUS_RGROUPS), [] / empty for none. It is
+kept rather than left out, so an export still holds every structure the curator accepted.
+
 The paper's annotation (owner decision 6), when it has one, goes with every format: the JSON
 file has a paper-level `annotation` object (the values shown: the curator's, else the model's;
 plus the model's own), CSV rows get the organism/source fields as columns and SDF records as
@@ -22,6 +27,7 @@ from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
 from marcus.core.models import Curation, Paper, Prediction, Segment
+from marcus.core.rgroups import rgroup_labels
 
 ExportFormat = Literal["json", "csv", "sdf"]
 ExportStatus = Literal["accepted", "all"]
@@ -46,6 +52,14 @@ class Chosen:
     engine: str | None = None  # engine of the chosen prediction; None for a curated structure
     note: str | None = None
     edited: bool = False  # the curation has its own SMILES or molfile
+    rgroups: tuple[str, ...] = ()  # R-group labels: a scaffold, not a finished compound
+
+
+def _labels(row: Curation | Prediction) -> tuple[str, ...]:
+    """The row's stored labels; computed for a row without (export runs in the chem process)."""
+    if row.rgroups is not None:
+        return tuple(row.rgroups)
+    return tuple(rgroup_labels(row.smiles, row.molfile))
 
 
 def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
@@ -79,7 +93,14 @@ def choose(
         if cur is not None and (cur.smiles or cur.molfile):
             smiles = cur.smiles or smiles_from_molfile(cur.molfile)
             out.append(
-                Chosen(**row, smiles=smiles, molfile=cur.molfile, source="curated", edited=True)
+                Chosen(
+                    **row,
+                    smiles=smiles,
+                    molfile=cur.molfile,
+                    source="curated",
+                    edited=True,
+                    rgroups=_labels(cur),
+                )
             )
             continue
         valid = [p for p in predictions.get(seg.id, []) if p.valid]
@@ -92,6 +113,7 @@ def choose(
                     molfile=pick.molfile,
                     source="predicted",
                     engine=pick.engine,
+                    rgroups=_labels(pick),
                 )
             )
     return out
@@ -135,6 +157,7 @@ def to_json(paper: Paper, chosen: list[Chosen], annotation: dict | None = None) 
                 "engine": c.engine,
                 "note": c.note,
                 "edited": c.edited,
+                "rgroups": list(c.rgroups),
             }
             for c in chosen
         ],
@@ -154,7 +177,7 @@ def csv_cell(value: object) -> str:
 
 CSV_HEADER = [
     "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
-    *(column for column, _, _ in SOURCE_FIELDS),
+    *(column for column, _, _ in SOURCE_FIELDS), "rgroups",
 ]  # fmt: skip
 
 
@@ -166,7 +189,7 @@ def to_csv(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
     for c in chosen:
         row = [
             c.segment_id, c.page, c.idx, c.smiles, c.status, c.engine, c.note,
-            "true" if c.edited else "false", c.source, *source,
+            "true" if c.edited else "false", c.source, *source, VALUE_SEPARATOR.join(c.rgroups),
         ]  # fmt: skip
         writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue().encode("utf-8")
@@ -202,6 +225,8 @@ def to_sdf(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
         if c.note is not None:
             mol.SetProp("MARCUS_NOTE", sdf_text(c.note))
         mol.SetProp("MARCUS_EDITED", "true" if c.edited else "false")
+        if c.rgroups:
+            mol.SetProp("MARCUS_RGROUPS", sdf_text(VALUE_SEPARATOR.join(c.rgroups)))
         for prop, value in source:
             mol.SetProp(prop, sdf_text(value))
         writer.write(mol)

@@ -8,6 +8,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.rdBase import BlockLogs
 
+from marcus.core.rgroups import rgroup_labels
+
 
 def parse_smiles(smiles: str) -> Chem.Mol | None:
     """A sanitized molecule, or None when the SMILES does not parse."""
@@ -41,6 +43,15 @@ def curation_error(smiles: str | None, molfile: str | None) -> tuple[str, str] |
             if raw is None or parse_molfile(molfile) is None:
                 return "molfile", "molfile could not be parsed"
     return None
+
+
+def check_curation(
+    smiles: str | None, molfile: str | None
+) -> tuple[tuple[str, str] | None, list[str]]:
+    """(curation_error, the R-group labels of the curated structure): one trip to
+    marcus.api.chempool for the curation route. No labels for a structure RDKit refuses."""
+    error = curation_error(smiles, molfile)
+    return error, ([] if error is not None else rgroup_labels(smiles, molfile))
 
 
 def mol_for_sdf(smiles: str | None, molfile: str | None) -> Chem.Mol | None:

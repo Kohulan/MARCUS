@@ -181,6 +181,19 @@
   min-height: 22px;
 }
 
+/* The state badge at the right end, the R-groups tag to its left; where both do not fit,
+   the tag drops below the badge, still right-aligned (row-reverse: the badge comes first in
+   the DOM, so a screen reader hears the state, then the tag). */
+.card__states {
+  display: flex;
+  flex: 1 1 auto;
+  flex-flow: row-reverse wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
 .card__pick {
   display: inline-flex;
   align-items: center;

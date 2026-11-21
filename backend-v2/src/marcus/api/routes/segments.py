@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.chem import curation_error
+from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
 from marcus.api.depiction import draw_or_read, shown_structure
 from marcus.api.deps import (
@@ -111,8 +111,9 @@ async def put_curation(
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
     segment, _ = await get_owned_segment(db, owner, segment_id)
+    rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:
-        error = await CHEM.run(curation_error, body.smiles, body.molfile)
+        error, rgroups = await CHEM.run(check_curation, body.smiles, body.molfile)
         if error is not None:
             field, msg = error
             raise HTTPException(
@@ -127,6 +128,7 @@ async def put_curation(
     curation.smiles = body.smiles
     curation.molfile = body.molfile
     curation.note = body.note
+    curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)
     await db.commit()
     return CurationOut.model_validate(curation)

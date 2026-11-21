@@ -26,6 +26,7 @@ import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
 import Compare from "../workspace/Compare";
 import Editor, { type EditorStructure } from "../workspace/Editor";
+import { labelList, rgroupsOf } from "../workspace/rgroups";
 import StructureActions from "../workspace/StructureActions";
 import "./imageResult.css";
 
@@ -214,7 +215,10 @@ function Result({
   }
   if (edit) rows.push(["Structure", "Edited"]);
   else if (prediction) {
-    rows.push(["Valid", prediction.valid ? "Yes" : "No"], ["Time", duration(prediction.ms)]);
+    rows.push(["Valid", prediction.valid ? "Yes" : "No"]);
+    const labels = rgroupsOf(prediction);
+    if (labels.length > 0) rows.push(["R-groups", labelList(labels)]);
+    rows.push(["Time", duration(prediction.ms)]);
   }
   const localNote = edit ? "Edited here, not saved" : picked ? "Picked here, not saved" : null;
 

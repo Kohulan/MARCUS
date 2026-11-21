@@ -80,7 +80,7 @@ async def test_get_paper_shape(app, async_db_session):
     assert [(s["page"], s["idx"]) for s in segs] == [(0, 0), (0, 1)]
     assert segs[0]["id"] == str(seg0) and segs[0]["bbox"] == [0, 0, 10, 10]
     assert segs[0]["curation"] == {
-        "status": "unchecked", "smiles": None, "molfile": None, "note": None,
+        "status": "unchecked", "smiles": None, "molfile": None, "note": None, "rgroups": [],
     }  # fmt: skip
     preds = segs[0]["predictions"]
     assert [p["smiles"] for p in preds] == ["CCN", "CCO"]  # newest first
@@ -209,7 +209,7 @@ async def test_curation_saves_valid_values(app, async_db_session):
     body = {"status": "accepted", "smiles": "c1ccccc1", "note": "checked by hand"}
     r = await _curate(app, token, seg, body)
     assert r.status_code == 200
-    assert r.json() == {**body, "molfile": None}
+    assert r.json() == {**body, "molfile": None, "rgroups": []}
     cur = await _curation_row(db, seg)
     assert (cur.status, cur.smiles, cur.note) == ("accepted", "c1ccccc1", "checked by hand")
     # status only: the other fields are cleared (PUT replaces)
@@ -336,6 +336,71 @@ async def test_curation_parse_runs_off_the_event_loop(app, async_db_session, mon
         t.cancel()
     assert r.status_code == 200
     assert ticks >= 20  # ~60 ticks of 10 ms while the 0.6 s job ran in the other process
+
+
+RGP_MOLFILE = (
+    "\n  Ketcher\n\n  3  2  0  0  0  0  0  0  0  0999 V2000\n"
+    "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+    "    1.0000    0.0000    0.0000 R#  0  0  0  0  0  0  0  0  0  0  0  0\n"
+    "    2.0000    0.0000    0.0000 R#  0  0  0  0  0  0  0  0  0  0  0  0\n"
+    "  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\nM  RGP  2   2   1   3   2\nM  END\n"
+)
+
+
+async def test_curation_stores_and_returns_rgroups(app, async_db_session):
+    """A curated structure with R-group atoms (Ketcher's R#) carries its labels; one without,
+    [] ; a curation without its own structure, [] in the API (NULL in the row)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg = seeded.segment_ids[0]
+    r = await _curate(app, token, seg, {"status": "accepted", "molfile": RGP_MOLFILE})
+    assert r.status_code == 200 and r.json()["rgroups"] == ["R1", "R2"]
+    assert (await _curation_row(db, seg)).rgroups == ["R1", "R2"]
+    r = await _curate(app, token, seg, {"status": "accepted", "smiles": "[1*]c1ccccc1"})
+    assert r.json()["rgroups"] == ["R1"]
+    r = await _curate(app, token, seg, {"status": "accepted"})
+    assert r.json()["rgroups"] == []
+    assert (await _curation_row(db, seg)).rgroups is None
+    async with make_client(app, token) as c:
+        got = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+    assert got["segments"][0]["curation"]["rgroups"] == []
+
+
+async def test_predictions_expose_rgroups(app, async_db_session):
+    """Each prediction says its R-group labels: the stored ones, [] for none, and [] for a row
+    stored without (NULL)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg0, seg1 = seeded.segment_ids
+
+    def add(s):
+        s.add(
+            Prediction(
+                segment_id=seg0, engine="decimer", engine_version="d", smiles="[R1]c1ccccc1[R2]",
+                valid=False, ms=3, rgroups=["R1", "R2"],
+                created_at=datetime.now(UTC) + timedelta(seconds=5),
+            )
+        )  # fmt: skip
+
+    await db.run_sync(add)
+    await db.execute(update(Prediction).where(Prediction.segment_id == seg1).values(rgroups=[]))
+    await db.commit()
+    async with make_client(app, token) as c:
+        r = await c.get(f"/api/v2/papers/{seeded.paper_id}/segments")
+    segs = {s["id"]: s for s in r.json()["segments"]}
+    assert [p["rgroups"] for p in segs[str(seg0)]["predictions"]] == [["R1", "R2"], []]
+    assert [p["rgroups"] for p in segs[str(seg1)]["predictions"]] == [[]]
+
+
+def test_check_curation_in_the_worker_process():
+    from marcus.api.chem import check_curation
+
+    assert check_curation("CCO", None) == (None, [])
+    assert check_curation("*CC", None) == (None, ["*"])
+    assert check_curation(None, RGP_MOLFILE) == (None, ["R1", "R2"])
+    assert check_curation("C1CC((", None) == (("smiles", "SMILES could not be parsed"), [])
 
 
 def test_curation_check_in_the_worker_process():

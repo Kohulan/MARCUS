@@ -5,6 +5,7 @@ import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { CardState } from "./cardState";
 import { boxStyle } from "./pageBox";
+import { rgroupTag } from "./rgroups";
 
 export type PageMarker = {
   segmentId: string;
@@ -12,6 +13,8 @@ export type PageMarker = {
   n: number;
   state: CardState;
   bbox: SegmentOut["bbox"];
+  /** R-group labels of the structure shown ([] for none): the marker carries the tag. */
+  rgroups: string[];
 };
 
 /** Whether the page image can be shown: rendered, still to come, or failed with a reason. */
@@ -97,7 +100,10 @@ function PageWithBoxes({
                   className={cls.join(" ")}
                   style={boxStyle(m.bbox, natural.w, natural.h)}
                   data-marker={m.segmentId}
-                  aria-label={`Structure ${structureTag(m.n)} on page ${page0 + 1}`}
+                  aria-label={
+                    `Structure ${structureTag(m.n)} on page ${page0 + 1}` +
+                    (m.rgroups.length > 0 ? `, ${rgroupTag(m.rgroups)}` : "")
+                  }
                   aria-current={m.segmentId === selected ? "true" : undefined}
                   onClick={() => onPick(m.segmentId)}
                   onMouseEnter={() => onHover(m.segmentId)}
@@ -108,6 +114,11 @@ function PageWithBoxes({
                   <span className="pv-marker__tag" aria-hidden="true">
                     {structureTag(m.n)}
                   </span>
+                  {m.rgroups.length > 0 && (
+                    <span className="pv-marker__rgroups" aria-hidden="true">
+                      {rgroupTag(m.rgroups)}
+                    </span>
+                  )}
                 </button>
               );
             })}

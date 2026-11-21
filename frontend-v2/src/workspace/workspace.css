@@ -85,6 +85,8 @@
 }
 
 .ws-send__why {
+  max-width: 360px;
+  text-align: right;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.05em;

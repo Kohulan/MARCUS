@@ -7,6 +7,7 @@ import { engineName } from "../api/engines";
 import { STATE_WORD, type CardState } from "../ui/StateBadge";
 import { isPaperReading } from "./annotation";
 import { newestFirst } from "./pageFailures";
+import { labelList, resultWord, rgroupsOf } from "./rgroups";
 
 export { STATE_WORD, type CardState };
 
@@ -62,27 +63,45 @@ export type ShownStructure = {
   smiles: string | null;
   /** The curated molfile when edited, else the prediction's. */
   molfile: string | null;
+  /**
+   * R-group labels of the structure shown ([] for none): the curation's when edited, else
+   * the prediction's. With labels it is a scaffold, not one compound.
+   */
+  rgroups: string[];
 };
 
 export function shownStructure(segment: SegmentOut, paperEngine: string): ShownStructure {
   const c = segment.curation;
   const prediction = shownPrediction(segment, paperEngine);
   if (c?.smiles || c?.molfile) {
-    return { prediction, edited: true, smiles: c.smiles || null, molfile: c.molfile ?? null };
+    return {
+      prediction,
+      edited: true,
+      smiles: c.smiles || null,
+      molfile: c.molfile ?? null,
+      rgroups: rgroupsOf(c),
+    };
   }
   return {
     prediction,
     edited: false,
     smiles: prediction?.smiles || null,
     molfile: prediction?.molfile ?? null,
+    rgroups: rgroupsOf(prediction),
   };
 }
 
-/** "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. */
-export function metaText({ edited, prediction }: ShownStructure): string | null {
-  if (edited) return "Edited";
+/**
+ * "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. A
+ * scaffold says so instead, with its labels ("DECIMER · R-group scaffold (R1, R2)"), never a
+ * bare "Invalid" (DECIMER's R tokens) or "Valid" (a dummy atom).
+ */
+export function metaText({ edited, prediction, rgroups }: ShownStructure): string | null {
+  if (edited) {
+    return rgroups.length > 0 ? `Edited · R-group scaffold (${labelList(rgroups)})` : "Edited";
+  }
   if (!prediction) return null;
-  return `${engineName(prediction.engine)} · ${prediction.valid ? "Valid" : "Invalid"}`;
+  return `${engineName(prediction.engine)} · ${resultWord(prediction)}`;
 }
 
 /** A reason as a sentence: "it took too long" → "It took too long." */
@@ -106,7 +125,8 @@ export function enginesDiffer(segment: SegmentOut): boolean {
   return new Set(byEngine.values()).size > 1;
 }
 
-export type GridFilter = "all" | "to-check" | "accepted" | "rejected" | "failed";
+/** The state filters, and "rgroups": structures with R-groups, whatever their state. */
+export type GridFilter = "all" | "to-check" | "accepted" | "rejected" | "failed" | "rgroups";
 
 export const FILTERS: { filter: GridFilter; label: string }[] = [
   { filter: "all", label: "All" },
@@ -114,27 +134,54 @@ export const FILTERS: { filter: GridFilter; label: string }[] = [
     filter,
     label: STATE_WORD[filter],
   })),
+  { filter: "rgroups", label: "R-groups" },
 ];
 
-/** The filter a state counts under ("Reading…" and "Not read yet" count as To check). */
-export function filterOf(state: CardState): Exclude<GridFilter, "all"> {
+/** The state filter a state counts under ("Reading…" and "Not read yet" count as To check). */
+export function filterOf(state: CardState): Exclude<GridFilter, "all" | "rgroups"> {
   if (state === "reading" || state === "not-read") return "to-check";
   return state;
 }
 
 /**
+ * The filter strip shows `f`: the state filters always; "R-groups" only on a paper that has
+ * such structures, or while it is pressed (a pressed filter never vanishes under the pointer).
+ */
+export function shownFilter(
+  f: GridFilter,
+  pressed: GridFilter,
+  counts: Record<GridFilter, number>,
+): boolean {
+  return f !== "rgroups" || counts.rgroups > 0 || pressed === "rgroups";
+}
+
+type FilterRow = { state: CardState; rgroups?: readonly string[] };
+
+/** The row is shown under `filter`. */
+export function inFilter(row: FilterRow, filter: GridFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "rgroups") return (row.rgroups?.length ?? 0) > 0;
+  return filterOf(row.state) === filter;
+}
+
+/**
  * How many structures each filter holds: the grid's filter strip and the workspace header
  * both count with this, so "N to check" means the same in both (a Failed one is not To check).
+ * A structure with R-groups also counts under its state.
  */
-export function filterCounts(rows: readonly { state: CardState }[]): Record<GridFilter, number> {
+export function filterCounts(rows: readonly FilterRow[]): Record<GridFilter, number> {
   const c: Record<GridFilter, number> = {
     all: rows.length,
     "to-check": 0,
     accepted: 0,
     rejected: 0,
     failed: 0,
+    rgroups: 0,
   };
-  for (const r of rows) c[filterOf(r.state)] += 1;
+  for (const r of rows) {
+    c[filterOf(r.state)] += 1;
+    if (inFilter(r, "rgroups")) c.rgroups += 1;
+  }
   return c;
 }
 
