@@ -12,7 +12,8 @@ from marcus.core.queues import SLOTS, TOOLS_QUEUE
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MARCUS_", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://marcus:marcus@postgres:5432/marcus"
+    # No password here: every compose file sets MARCUS_DATABASE_URL with the real one.
+    database_url: str = "postgresql+asyncpg://marcus@postgres:5432/marcus"
     redis_url: str = "redis://redis:6379/0"
     data_root: Path = Path("/data")
     max_upload_bytes: int = 20 * 1024 * 1024
