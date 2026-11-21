@@ -10,7 +10,7 @@
 # DOCLING_ARTIFACTS_PATH, so a worker never fetches models at runtime.
 # Build context: backend-v2/.
 
-FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
 
 FROM python:3.11-slim-bookworm AS builder
 COPY --from=uv /uv /usr/local/bin/uv

@@ -83,7 +83,7 @@ def _kill_group(proc: subprocess.Popen) -> None:
     try:
         os.killpg(proc.pid, signal.SIGKILL)  # stragglers in the group
     except (ProcessLookupError, PermissionError):
-        pass
+        pass  # the group is already gone (or not ours): nothing to kill
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -124,12 +124,12 @@ def run_op(
             proc.stdin.write(json.dumps({"args": args}).encode())
             proc.stdin.close()
         except BrokenPipeError:
-            pass
+            pass  # the child exited early: its reply (or failure) is read below
         data = _read_capped(proc, time.monotonic() + timeout_s)
         try:
             proc.wait(timeout=5)  # the reply is complete; a slow exit is cleaned up below
         except subprocess.TimeoutExpired:
-            pass
+            pass  # cleaned up in the finally below
     except ChildTimeout:
         raise ChildTimeout() from None
     finally:

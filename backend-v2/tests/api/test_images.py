@@ -12,22 +12,11 @@ from marcus.core import storage
 from marcus.core.models import ImageJob, Prediction, Step
 from marcus.core.pipeline import complete_step
 from marcus.core.settings import get_settings
+from tests.api._upload_helpers import image_bytes, pdf_bytes, upload_image
+from tests.api._upload_helpers import upload as upload_paper
 from tests.api.conftest import make_client, new_owner, ocsr_result
-from tests.api.test_upload_paper import pdf_bytes
-from tests.api.test_upload_paper import upload as upload_paper
 
 MB = 1024 * 1024
-
-
-def image_bytes(fmt: str = "PNG", size=(20, 20), mode: str = "RGB") -> bytes:
-    buf = io.BytesIO()
-    Image.new(mode, size, "white").save(buf, fmt)
-    return buf.getvalue()
-
-
-async def upload_image(c, data=None, name="mol.png", **form):
-    data = image_bytes() if data is None else data
-    return await c.post("/api/v2/images", files={"file": (name, data, "image/png")}, data=form)
 
 
 async def test_upload_creates_job_and_step(app, async_db_session):

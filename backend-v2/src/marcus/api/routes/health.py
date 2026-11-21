@@ -87,8 +87,11 @@ class LiveQueues:
             from marcus.core.celery_app import LiveQueuesProbe
 
             self._lock = asyncio.Lock()
-            # late-bound: tests replace inspect_live_queues
-            self._probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "ready", lambda: inspect_live_queues())
+
+            def current_inspect():  # late-bound: tests replace inspect_live_queues
+                return inspect_live_queues()
+
+            self._probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "ready", current_inspect)
         result: frozenset[str] | None = None  # stays None when the budget runs out
         with anyio.move_on_after(INSPECT_BUDGET_S):
             async with self._lock:

@@ -77,7 +77,7 @@ def test_adversarial_pdf_times_out_without_hanging_worker(name):
     try:
         assert pdfsafe.page_count(pdf_path(pid), timeout_s=5) >= 1
     except (BadInput, StepTimeout):
-        pass
+        pass  # either verdict is fine: the point is that it returned in time
     assert time.monotonic() - start < 10
 
 

@@ -1,102 +1,89 @@
-<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
+  <img src="docs/assets/readme/hero-light.svg" width="100%" alt="MARCUS: Molecular Annotation and Recognition for Curating Unravelled Structures. A page's structure drawing, boxed in orange, becomes a SMILES string and is accepted.">
+</picture>
 
 <p align="center">
-  <img src="docs/assets/logo_full.png" alt="MARCUS Logo" width="600">
+  <a href="https://marcus.decimer.ai"><b>Open MARCUS</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://doi.org/10.1039/d5dd00313j">Read the paper</a>
+  &nbsp;·&nbsp;
+  <a href="#run-it-yourself">Run it yourself</a>
+  &nbsp;·&nbsp;
+  <a href="#cite">Cite</a>
 </p>
 
-### **M**olecular **A**nnotation and **R**ecognition for **C**urating **U**nravelled **S**tructures
+<p align="center">
+  <a href="https://doi.org/10.1039/d5dd00313j"><img alt="DOI 10.1039/d5dd00313j" src="https://img.shields.io/badge/DOI-10.1039%2Fd5dd00313j-1E4D33?style=flat-square&labelColor=1C211D"></a>
+  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-1E4D33?style=flat-square&labelColor=1C211D"></a>
+  <a href="https://marcus.decimer.ai"><img alt="Live at marcus.decimer.ai" src="https://img.shields.io/badge/live-marcus.decimer.ai-FA3600?style=flat-square&labelColor=1C211D"></a>
+  <img alt="Version 2.0" src="https://img.shields.io/badge/version-2.0-1E4D33?style=flat-square&labelColor=1C211D">
+</p>
 
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.0-blue.svg?style=for-the-badge)](https://github.com/Kohulan/MARCUS/releases/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-18-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?style=for-the-badge&logo=docker)](https://www.docker.com/)
+<br>
 
-</div>
+MARCUS turns a journal article into checked chemical structures for
+[COCONUT](https://coconut.naturalproducts.net). It finds every structure drawing in the PDF,
+reads each one with several recognition engines, and puts a person in charge of the result:
+accept, fix or reject, then submit. It is open source, free, needs no login, and runs on the
+group's own GPU. No paper data goes to an outside AI service.
 
----
+## How it works
 
-## 📚 Table of Contents
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/pipeline-dark.svg">
+  <img src="docs/assets/readme/pipeline-light.svg" width="100%" alt="PDF, then Segment (DECIMER Segmentation finds every structure drawing), Recognise (four engines turn each drawing into SMILES), Curate (you accept, fix or reject), and Submit (accepted structures go to COCONUT).">
+</picture>
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Architecture](#-architecture)
-- [Getting Started](#-getting-started)
-- [Development](#-development)
-- [License](#-license)
-- [Contact](#-contact)
-- [Acknowledgements](#-acknowledgements)
+Results arrive one by one while the paper is still being read. A failed page or engine is
+shown with its reason, never as "no structures".
 
----
+## See it
 
-## 🔬 Overview
+<img src="docs/assets/readme/screens/review.webp" width="100%" alt="The review grid: fifteen structure cards from the sample paper, each with its drawing, its SMILES and its state (to check, accepted or rejected).">
 
-<div style="## 🔬 Overview
-
-MARCUS extracts, recognises and curates molecular structures from scientific literature: from a
-PDF to segmented structure images, SMILES and molfiles, a curated annotation of the paper, and a
-submission to [COCONUT](https://coconut.naturalproducts.net). It runs at
-[marcus.decimer.ai](https://marcus.decimer.ai).
-
----
-
-## 🧠 Key Features
+<p align="center"><sub>THE REVIEW GRID · every structure with its SMILES, its engine and its state; bulk accept and reject</sub></p>
 
 <table>
   <tr>
-    <td width="50%">
-      <h3>📄 PDF Processing</h3>
-      <ul>
-        <li>Paper text and layout with Docling, DOI lookup</li>
-        <li>DECIMER Segmentation finds every structure on every page</li>
-        <li>Pages, segments and results kept per paper</li>
-      </ul>
+    <td width="50%" valign="top">
+      <img src="docs/assets/readme/screens/focus.webp" width="100%" alt="Focus mode: one structure large, its crop from the page, the page itself with the structure boxed, and the accept, reject, edit and compare actions with their keys.">
+      <p align="center"><sub>FOCUS MODE · one structure, its crop and its page, a key for every action</sub></p>
     </td>
-    <td width="50%">
-      <h3>🔬 OCSR Engines</h3>
-      <ul>
-        <li><b>DECIMER</b>, with a model for hand-drawn structures</li>
-        <li><b>MolNexTR</b>: SMILES and molfiles with coordinates</li>
-        <li><b>MolScribe</b>: structure recognition with atom positions</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>✏️ Review and Curation</h3>
-      <ul>
-        <li>Compare engines side by side, edit in the Ketcher editor</li>
-        <li>CDK depictions, structure lookups</li>
-        <li>Submit curated structures to COCONUT</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>🤖 Paper Annotation</h3>
-      <ul>
-        <li>The local MARCUS model (llama.cpp on the server's GPU)</li>
-        <li>No paper text leaves the server</li>
-        <li>Every value located in the paper's text</li>
-      </ul>
+    <td width="50%" valign="top">
+      <img src="docs/assets/readme/screens/paper.webp" width="100%" alt="Paper view: the page images with every structure boxed, the extracted text, and the structure list side by side.">
+      <p align="center"><sub>PAPER VIEW · the pages, the extracted text and the structures side by side</sub></p>
     </td>
   </tr>
 </table>
 
----
+<sub>Screenshots of [marcus.decimer.ai](https://marcus.decimer.ai) on the built-in sample paper,
+a synthetic article made for MARCUS (no copyrighted content).</sub>
 
-## 🏗️ Architecture
+## What is inside
 
-- **Web UI** (`frontend-v2/`): React 18, TypeScript and Vite, served by nginx.
-- **API** (`backend-v2/`): FastAPI on Postgres, with the OpenAPI schema at `/api/v2/openapi.json`.
-- **Workers**: Celery queues on Redis, one per kind of work (CPU, tools, TensorFlow, PyTorch,
-  the MARCUS model), so a slow engine never blocks the others.
-- **Containers**: Docker Compose; nginx is the only published port.
+| Step | What does it | What you get |
+| :--- | :--- | :--- |
+| Find the structures | [DECIMER Segmentation](https://github.com/Kohulan/DECIMER-Image-Segmentation) | a crop of every structure drawing, with its page and box |
+| Read them | [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer) (default), DECIMER hand-drawn, [MolNexTR](https://github.com/CYF2000127/MolNexTR), [MolScribe](https://github.com/thomas0809/MolScribe) | SMILES and molfiles; run all four and compare them side by side |
+| Read the text | [Docling](https://github.com/docling-project/docling) | the paper's text and layout, and its DOI |
+| Annotate | the MARCUS model, on [llama.cpp](https://github.com/ggml-org/llama.cpp) on the server's GPU | organism, part, place and compound names, each found in the text |
+| Check and fix | [Ketcher](https://github.com/epam/ketcher), [CDK](https://cdk.github.io/) depictions, PubChem and COCONUT lookups | a structure you have looked at, edited where it was wrong |
+| Hand over | JSON, CSV and SDF export; COCONUT batch submission with your own COCONUT login | the accepted structures, where they belong |
 
----
+## Your data
 
-## 🚀 Getting Started
+- **No account.** Each browser owns its papers through a secret cookie.
+- **Kept 30 days.** Papers and their results are deleted after that.
+- **Stays on our servers.** Recognition and annotation run on the group's own GPU; no paper
+  text or image goes to an outside AI service.
+- **Your COCONUT login stays yours.** It goes to COCONUT through the MARCUS relay; the
+  server never stores it.
 
-**Requirements:** Docker Engine with Docker Compose. For the real engines: an NVIDIA GPU with
-about 20 GB of memory (production uses a V100) and the NVIDIA Container Toolkit.
+## Run it yourself
+
+You need Docker Engine with Docker Compose. For the real engines, you also need an NVIDIA GPU
+with about 20 GB of memory (production uses a V100) and the NVIDIA Container Toolkit.
 
 ```bash
 git clone https://github.com/Kohulan/MARCUS.git
@@ -110,15 +97,27 @@ docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up 
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-The app is at http://localhost:18090/. [`backend-v2/README.md`](backend-v2/README.md) has the
-details: the GPU stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
+Then open http://localhost:18090/. [`backend-v2/README.md`](backend-v2/README.md) covers the GPU
+stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
 
----
+## Architecture
 
-## 💻 Development
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/architecture-dark.svg">
+  <img src="docs/assets/readme/architecture-light.svg" width="100%" alt="The browser talks to nginx, which serves the web UI and passes /api/v2 to FastAPI on Postgres and Redis. Celery workers, one queue per kind of work, run the engines: segmentation, DECIMER, MolNexTR, MolScribe and the MARCUS model on the GPU.">
+</picture>
+
+- **Web UI** ([`frontend-v2/`](frontend-v2)): React 18, TypeScript and Vite; the static pages are
+  pre-rendered, and nginx serves it all on the same domain as the API.
+- **API** ([`backend-v2/`](backend-v2)): FastAPI on Postgres, with the OpenAPI schema at
+  `/api/v2/openapi.json`. Scripts can use it with an API key.
+- **Workers:** one Celery queue on Redis per kind of work, so a slow engine never holds up the
+  others.
+
+## Development
 
 ```bash
-# Backend: tests need the test Postgres and Redis
+# Backend: the tests need the test Postgres and Redis
 cd backend-v2
 docker compose -f docker-compose.test.yml up -d
 uv sync --extra api --extra tools --extra dev
@@ -130,48 +129,62 @@ npm ci
 npm run dev
 ```
 
----
+The README graphics are drawn by [`docs/assets/readme/build.py`](docs/assets/readme/build.py).
 
-ackground-color: #f9f9f9; padding: 15px; border-radius: 10px;">
+## Cite
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+If MARCUS helps your work, please cite:
 
-</div>
+> Rajan K., Weißenborn V., Lederer L., Zielesny A., Steinbeck C.
+> **MARCUS: molecular annotation and recognition for curating unravelled structures.**
+> *Digital Discovery* 2025, 4(11), 3137–3148.
+> [doi:10.1039/d5dd00313j](https://doi.org/10.1039/d5dd00313j)
 
----
+<details>
+<summary>BibTeX</summary>
 
-## 📧 Contact
+```bibtex
+@article{rajan2025marcus,
+  title   = {{MARCUS}: molecular annotation and recognition for curating unravelled structures},
+  author  = {Rajan, Kohulan and Wei{\ss}enborn, Viktor and Lederer, Laurin and Zielesny, Achim and Steinbeck, Christoph},
+  journal = {Digital Discovery},
+  year    = {2025},
+  volume  = {4},
+  number  = {11},
+  pages   = {3137--3148},
+  doi     = {10.1039/d5dd00313j}
+}
+```
 
-- **Kohulan Rajan** - [kohulan.rajan@uni-jena.de](mailto:kohulan.rajan@uni-jena.de)
-- **Website**: [https://decimer.ai](https://decimer.ai)
-- **Institution**: [Cheminformatics and Computational Metabolomics](https://cheminf.uni-jena.de/)
+</details>
 
----
+## Thanks
 
-## 🙏 Acknowledgements
+MARCUS stands on open tools:
+[CDK](https://cdk.github.io/) ·
+[DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer) ·
+[DECIMER Segmentation](https://github.com/Kohulan/DECIMER-Image-Segmentation) ·
+[Docling](https://github.com/docling-project/docling) ·
+[Ketcher](https://github.com/epam/ketcher) ·
+[llama.cpp](https://github.com/ggml-org/llama.cpp) ·
+[MolNexTR](https://github.com/CYF2000127/MolNexTR) ·
+[MolScribe](https://github.com/thomas0809/MolScribe) ·
+[RDKit](https://www.rdkit.org/)
 
-<div style="background-color: #f0f0f0; padding: 15px; border-radius: 10px;">
+Part of the [DECIMER](https://decimer.ai) project, connected to
+[COCONUT](https://coconut.naturalproducts.net) and [NFDI4Chem](https://www.nfdi4chem.de).
 
-This project utilizes several open-source cheminformatics tools:
-- [Chemistry Development Kit (CDK)](https://cdk.github.io/)
-- [Docling](https://github.com/docling-project/docling)
-- [DECIMER Segmentation](https://github.com/Kohulan/DECIMER-Image-Segmentation)
-- [Ketcher](https://github.com/epam/ketcher)
-- [llama.cpp](https://github.com/ggml-org/llama.cpp)
-- [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer)
-- [MolNexTR](https://github.com/CYF2000127/MolNexTR)
-- [MolScribe](https://github.com/thomas0809/MolScribe)
+## Licence and contact
 
-</div>
+MIT, see [LICENSE](LICENSE). Questions:
+[Kohulan Rajan](mailto:kohulan.rajan@uni-jena.de) ·
+[decimer.ai](https://decimer.ai) ·
+[Cheminformatics and Computational Metabolomics](https://cheminf.uni-jena.de/)
 
----
-
-<div align="center">
+<br>
 
 <p align="center">
   <a href="https://cheminf.uni-jena.de">
-    <img src="https://github.com/Kohulan/DECIMER-Image-to-SMILES/blob/master/assets/CheminfGit.png" width="300">
+    <img src="https://github.com/Kohulan/DECIMER-Image-to-SMILES/blob/master/assets/CheminfGit.png?raw=true" width="260" alt="Cheminformatics and Computational Metabolomics, Friedrich Schiller University Jena">
   </a>
 </p>
-
-</div>

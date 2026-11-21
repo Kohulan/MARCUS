@@ -41,7 +41,7 @@ for p in pages:
     try:
         tf.config.experimental.reset_memory_stats(dev)
     except Exception:
-        pass
+        pass  # the memory-stats reset is optional: not every TF build has it
     t = time.time()
     err = None
     try:

@@ -9,7 +9,6 @@ from PIL import Image
 from marcus.core.enums import Engine, StepKind
 from marcus.core.settings import get_settings
 from marcus.core.storage import image_job_path, segment_crop_path
-from marcus.workers import ocsr as ocsr_pkg  # noqa: F401
 from marcus.workers.ocsr import base
 from marcus.workers.ocsr.base import OcsrResult
 from marcus.workers.runtime import HANDLERS
@@ -81,10 +80,9 @@ def use_engine(monkeypatch, smiles):
 
 
 def test_handler_registered():
-    import marcus.workers.ocsr.handler  # noqa: F401
-    from marcus.workers import ocsr as _  # noqa: F401
+    from marcus.workers.ocsr.handler import ocsr  # importing it registers the handler
 
-    assert StepKind.OCSR in HANDLERS
+    assert HANDLERS[StepKind.OCSR] is ocsr
 
 
 def test_ocsr_handler_marks_invalid_smiles(monkeypatch):

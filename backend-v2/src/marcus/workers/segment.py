@@ -33,9 +33,11 @@ Crop = tuple[np.ndarray, tuple[int, int, int, int]]  # image, bbox x0,y0,x1,y1
 class Segmenter(Protocol):
     version: str
 
-    def load(self) -> None: ...
+    def load(self) -> None:
+        """Load the model."""
 
-    def segment(self, page_png: Path) -> list[Crop]: ...
+    def segment(self, page_png: Path) -> list[Crop]:
+        """The crops of one rendered page."""
 
 
 class FakeSegmenter:

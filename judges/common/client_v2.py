@@ -406,7 +406,7 @@ def run_paper(
         try:
             client.close()
         except Exception:
-            pass
+            pass  # best-effort close: the client may already be closed
         _ACTIVE.discard(client)
         if pid is not None:
             live = live_papers().get(pid)

@@ -588,7 +588,7 @@ describe("Icon", () => {
     const { default: Icon } = await import("./Icon");
     const html = renderToString(<Icon icon={faMugHot} className="fa-mug" />);
     expect(html).toBe(
-      `<svg class="fa fa-mug" viewBox="0 0 512 512" aria-hidden="true" focusable="false">` +
+      `<svg class="fa fa-mug" viewBox="0 0 ${faMugHot.icon[0]} ${faMugHot.icon[1]}" aria-hidden="true" focusable="false">` +
         `<path d="${faMugHot.icon[4] as string}"></path></svg>`,
     );
   });

@@ -122,17 +122,16 @@ def decimer_version() -> str:
     return package_version("decimer")
 
 
-_warmed_up = False
+_warm = {"done": False}  # set once the first prediction has run
 
 
 def _warm_up() -> None:
     """One prediction on a small drawn structure: the model's first call costs ~10 s more
     than later ones (measured on CPU), which the first ocsr step would otherwise pay."""
-    global _warmed_up
-    if _warmed_up:
+    if _warm["done"]:
         return
     warm_up("decimer", lambda path: _predict(path, confidence=False, hand_drawn=False))
-    _warmed_up = True
+    _warm["done"] = True
 
 
 class DecimerEngine:

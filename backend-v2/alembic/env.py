@@ -1,10 +1,12 @@
+import importlib
+
 from sqlalchemy import create_engine
 
 from alembic import context
-from marcus.core import models  # noqa: F401  (registers tables on Base.metadata)
 from marcus.core.db import Base, sync_db_url
 from marcus.core.settings import get_settings
 
+importlib.import_module("marcus.core.models")  # registers the tables on Base.metadata
 target_metadata = Base.metadata
 
 
