@@ -338,7 +338,7 @@ def test_frontend_image_serves_the_build_with_its_locations_file():
     dockerfile = (FRONTEND / "Dockerfile").read_text()
     froms = re.findall(r"^FROM\s+(\S+)", dockerfile, re.M)
     assert froms[0] == "node:22-alpine"
-    assert froms[-1] == "nginxinc/nginx-unprivileged:1.27-alpine"
+    assert re.fullmatch(r"nginxinc/nginx-unprivileged:\d+\.\d+-alpine", froms[-1]), froms[-1]
     assert re.search(r"^RUN npm ci && npm run build$", dockerfile, re.M)
     assert re.search(r"^COPY --from=\S+ /\S+/dist /usr/share/nginx/marcus-ui$", dockerfile, re.M)
     assert re.search(
@@ -760,7 +760,7 @@ def test_nginx_edge_script_is_mounted_executable_into_the_entrypoint(compose):
 
 # --- the nginx container itself (docker; skipped without it) ----------------------------------
 
-NGINX_IMAGE = "nginxinc/nginx-unprivileged:1.27-alpine"
+NGINX_IMAGE = "nginxinc/nginx-unprivileged:1.31-alpine"  # as frontend-v2/Dockerfile
 # The files compose mounts into the production nginx (the UI locations are baked into its image).
 _NGINX_MOUNTS = [
     "-v", f"{ROOT / 'docker' / 'nginx.conf'}:/etc/nginx/nginx.conf:ro",
