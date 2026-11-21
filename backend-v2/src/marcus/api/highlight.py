@@ -55,8 +55,8 @@ def _key_of(mol) -> str | None:
 def binding_key_of_smiles(smiles: str) -> str | None:
     """The binding key of a SMILES to draw, or None when RDKit cannot read it. CPU-bound: run
     it in marcus.api.chempool."""
-    _block = BlockLogs()  # noqa: F841
-    return _key_of(Chem.MolFromSmiles(smiles))
+    with BlockLogs():
+        return _key_of(Chem.MolFromSmiles(smiles))
 
 
 def _mol_from_molfile(molfile: str):
@@ -76,9 +76,9 @@ def _mol_from_molfile(molfile: str):
 def binding_keys_of_molfiles(molfiles: list[str]) -> list[str]:
     """The binding keys of the molfiles an MCS was computed from (unreadable ones are left out,
     as the worker leaves them out). CPU-bound: run it in marcus.api.chempool."""
-    _block = BlockLogs()  # noqa: F841
-    keys = (_key_of(_mol_from_molfile(m)) for m in molfiles)
-    return sorted({k for k in keys if k})
+    with BlockLogs():
+        keys = (_key_of(_mol_from_molfile(m)) for m in molfiles)
+        return sorted({k for k in keys if k})
 
 
 def _b64(data: bytes) -> str:

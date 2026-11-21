@@ -9,7 +9,7 @@ WORKDIR /src
 COPY . .
 RUN npm ci && npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 COPY --from=build /src/dist /usr/share/nginx/marcus-ui
 COPY deploy/ui-locations.conf /etc/nginx/marcus/ui-locations.conf
 COPY deploy/headers-app.conf /etc/nginx/marcus/headers-app.conf

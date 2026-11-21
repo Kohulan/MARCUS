@@ -207,7 +207,7 @@ def remove_session(base_url: str, sid: str | None):
         try:
             httpx.delete(f"{base_url}/session/remove/{sid}", timeout=15)
         except Exception:
-            pass
+            pass  # best-effort cleanup of the session
 
 
 class Probe:
@@ -266,7 +266,7 @@ class Probe:
             try:
                 f.result(timeout=max(0.1, end - time.time()))
             except Exception:
-                pass
+                pass  # a failed sample is already recorded by the sampler
         self._pool.shutdown(wait=False)
         return self.samples
 
@@ -921,7 +921,7 @@ def load_s1_reference(target_name, results_dir, client="v1") -> dict:
                     if done:
                         ref[eng]["ocsr_done_s"] = min(done)
         except Exception:
-            pass
+            pass  # an unreadable reference file just means no reference value
     return ref
 
 

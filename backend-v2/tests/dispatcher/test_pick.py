@@ -187,7 +187,7 @@ def test_dispatch_marks_queued_and_sends_kind(db_session, monkeypatch):
 def test_dispatch_commits_before_send(db_session, one_slot):
     s = db_session
     paper = paper_at(s, make_owner(s), minutes_ago=1)
-    (step,) = add_steps(s, paper, 1)
+    add_steps(s, paper, 1)
     s.commit()
     seen: list[str] = []
 
@@ -236,7 +236,7 @@ def test_two_dispatchers_never_send_same_step(db_session, one_slot, pending):
                 # Hold this transaction (and its row lock) open until the other one has picked.
                 both_picked.wait()
                 ds.rollback()
-        except BaseException as exc:
+        except Exception as exc:
             errors.append(exc)
 
     threads = [threading.Thread(target=dispatcher) for _ in range(2)]
@@ -312,8 +312,10 @@ def test_dispatch_sends_docling_pages_and_scaled_limits(db_session):
 
 
 def test_celery_send_uses_scaled_limits(monkeypatch):
+    import marcus.dispatcher.__main__ as main_mod
     from marcus.core import celery_app as ca
-    from marcus.dispatcher.__main__ import celery_send
+
+    celery_send = main_mod.celery_send
 
     seen = {}
     monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))
@@ -336,8 +338,10 @@ def test_dispatch_sends_the_ocsr_engine(db_session, one_slot):
 
 
 def test_celery_send_uses_decimer_hand_limits(monkeypatch):
+    import marcus.dispatcher.__main__ as main_mod
     from marcus.core import celery_app as ca
-    from marcus.dispatcher.__main__ import celery_send
+
+    celery_send = main_mod.celery_send
 
     seen = {}
     monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))
@@ -350,9 +354,11 @@ def test_celery_send_uses_decimer_hand_limits(monkeypatch):
 def test_celery_send_expires_after_the_queue_wait(monkeypatch):
     """An unserved message expires when the watchdog gives up on it, so a worker that comes
     back does not work through a backlog of deliveries the watchdog already replaced."""
+    import marcus.dispatcher.__main__ as main_mod
     from marcus.core import celery_app as ca
     from marcus.core.queues import QUEUE_WAIT_S
-    from marcus.dispatcher.__main__ import celery_send
+
+    celery_send = main_mod.celery_send
 
     seen = {}
     monkeypatch.setattr(ca.celery_app, "send_task", lambda name, **kw: seen.update(kw))

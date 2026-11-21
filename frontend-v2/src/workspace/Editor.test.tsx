@@ -148,6 +148,27 @@ describe("Editor", () => {
     expect(screen.queryByText("Loading editor…")).toBeNull();
   });
 
+  it("takes the focus back when Ketcher grabs it, but not after the curator tabbed in", () => {
+    renderEditor();
+    const field = screen.getByLabelText("SMILES");
+    field.focus();
+    // Ketcher focused itself while starting: the focus goes back to the field.
+    frame().focus();
+    expect(frame()).toHaveFocus();
+    fromKetcher({ type: "marcus:unfocus" });
+    expect(field).toHaveFocus();
+    // From another window: ignored.
+    frame().focus();
+    fromKetcher({ type: "marcus:unfocus" }, window);
+    expect(frame()).toHaveFocus();
+    // The curator tabbed into the frame: it stays there.
+    field.focus();
+    fireEvent.keyDown(field, { key: "Tab" });
+    frame().focus();
+    fromKetcher({ type: "marcus:unfocus" });
+    expect(frame()).toHaveFocus();
+  });
+
   it("a drawing saved in the frame goes to onSave with its SMILES and molfile, then closes", async () => {
     const { onSave, onClose } = renderEditor();
     fromKetcher({ type: "marcus:save", molfile: "M2", smiles: "CCO" });

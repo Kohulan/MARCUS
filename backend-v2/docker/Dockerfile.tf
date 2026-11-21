@@ -45,7 +45,7 @@
 
 ARG VARIANT=cpu
 
-FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9 AS uv
 
 # Python 3.11 base per variant; MARCUS_PYTHON is the interpreter the venv is built on.
 FROM python:3.11-slim-bookworm AS base-cpu

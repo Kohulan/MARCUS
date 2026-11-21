@@ -30,13 +30,16 @@ afterEach(() => {
 });
 
 describe("fromFrame (the app reads the frame)", () => {
-  it("reads the three frame messages", () => {
+  it("reads the four frame messages", () => {
     const frame = frameWindow();
     expect(fromFrame(message({ type: "marcus:ready" }, frame), frame)).toEqual({
       type: "marcus:ready",
     });
     expect(fromFrame(message({ type: "marcus:cancel" }, frame), frame)).toEqual({
       type: "marcus:cancel",
+    });
+    expect(fromFrame(message({ type: "marcus:unfocus" }, frame), frame)).toEqual({
+      type: "marcus:unfocus",
     });
     expect(
       fromFrame(message({ type: "marcus:save", molfile: "M", smiles: "CCO" }, frame), frame),

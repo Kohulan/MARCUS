@@ -1,5 +1,5 @@
 // The Ketcher editor page, served at /ketcher/ under its own CSP and framed by the tool's
-// structure editor (src/workspace/Editor.tsx). Ketcher 3.18.0 with the standalone
+// structure editor (src/workspace/Editor.tsx). Ketcher 3.21.0 with the standalone
 // (in-browser Indigo) struct service: the binaryWasm entry starts the Indigo worker from its
 // own file and loads a separate .wasm (no base64 WebAssembly, no Blob worker), both served
 // from /ketcher/assets/.
@@ -37,6 +37,24 @@ function onInit(ketcher: Ketcher) {
   window.ketcher = ketcher; // for e2e checks
   for (const listener of listeners) listener();
 }
+
+// Ketcher moves the focus into its own page while it starts (3.21 focuses one of its text
+// boxes), which would take it away from the tool's SMILES field mid-typing. Until the
+// curator clicks or types in here, a focus that lands in this page is reported, and the tool
+// puts it back (unless the curator tabbed in on purpose: src/workspace/Editor.tsx).
+let touched = false;
+const touch = () => {
+  touched = true;
+};
+document.addEventListener("pointerdown", touch, { capture: true });
+document.addEventListener("keydown", touch, { capture: true });
+document.addEventListener(
+  "focusin",
+  () => {
+    if (!touched) postToParent({ type: "marcus:unfocus" });
+  },
+  { capture: true },
+);
 
 // One element, created once: the bar's state changes never re-render Ketcher.
 const structServiceProvider = new StandaloneStructServiceProvider();

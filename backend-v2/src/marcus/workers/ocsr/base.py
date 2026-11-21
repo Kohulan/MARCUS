@@ -37,9 +37,11 @@ class OcsrEngine(Protocol):
     name: Engine
     version: str
 
-    def load(self) -> None: ...
+    def load(self) -> None:
+        """Load the model (never at construction)."""
 
-    def predict(self, image: Path) -> OcsrResult: ...
+    def predict(self, image: Path) -> OcsrResult:
+        """The structure drawn in the image."""
 
 
 ENGINES_ENV = "MARCUS_OCSR_ENGINES"
