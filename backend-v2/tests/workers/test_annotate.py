@@ -11,7 +11,6 @@ import pytest
 from marcus.core import annotation as ann
 from marcus.core.pipeline import BadResult
 from marcus.core.storage import paper_dir
-from marcus.workers import annotate as annotate_pkg  # noqa: F401  (registers the handler)
 from marcus.workers.annotate.fake import FakeAnnotator, fake_values
 from marcus.workers.annotate.handler import annotate, get_annotator
 from marcus.workers.annotate.llama import AnnotatorUnavailable, LlamaAnnotator

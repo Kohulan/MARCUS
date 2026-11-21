@@ -7,13 +7,9 @@ from marcus.api.uploads import sanitize_display_name
 from marcus.core.db import get_db
 from marcus.core.models import Paper, Step
 from marcus.core.settings import get_settings
+from tests.api._upload_helpers import pdf_bytes, upload, upload_image
 
 MB = 1024 * 1024
-
-
-def pdf_bytes(size: int = 2048) -> bytes:
-    head = b"%PDF-1.4\n"
-    return head + b"0" * (size - len(head))
 
 
 @pytest.fixture
@@ -29,13 +25,6 @@ def app(async_db_session):
 
 def make_client(app):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
-
-
-async def upload(c, data=None, name="paper.pdf", **form):
-    data = pdf_bytes() if data is None else data
-    return await c.post(
-        "/api/v2/papers", files={"file": (name, data, "application/pdf")}, data=form
-    )
 
 
 async def test_upload_returns_202_and_one_check_pdf_step(app, async_db_session):
@@ -129,8 +118,6 @@ async def _expire_everything(db) -> None:
 async def test_expired_active_work_does_not_count_for_the_owner(app, async_db_session):
     """Expired papers/jobs are gone for the client (404) even before the purge: they must not
     keep holding the owner's active slots either."""
-    from tests.api.test_images import upload_image
-
     async with make_client(app) as c:
         for _ in range(2):
             assert (await upload(c)).status_code == 202

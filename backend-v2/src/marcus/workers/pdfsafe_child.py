@@ -201,7 +201,7 @@ def main(argv: list[str]) -> int:
         reply = {"ok": True, "result": op(*args)}
     except MemoryError:
         reply = {"ok": False, "error": "out of memory"}
-    except BaseException as exc:  # noqa: BLE001 - everything becomes a short message
+    except (Exception, SystemExit, KeyboardInterrupt) as exc:  # everything becomes a short message
         reply = {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
     with os.fdopen(reply_fd, "w") as out:
         out.write(json.dumps(reply))

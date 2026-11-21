@@ -297,14 +297,14 @@ class Owner:
                 try:
                     old.close()
                 except Exception:
-                    pass
+                    pass  # best-effort close of the replaced client
             self.uploads += 1
 
     def close(self) -> None:
         try:
             self.client.close()
         except Exception:
-            pass
+            pass  # best-effort close: the client may already be closed
 
 
 # ------------------------------------------------------------------ the V1Api interface, v2 form

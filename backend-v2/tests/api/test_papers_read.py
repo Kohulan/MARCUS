@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 from rdkit import Chem
 from sqlalchemy import delete, event, select, update
 
-import marcus.api.routes
 from marcus.core import storage
 from marcus.core.models import Curation, Paper, Prediction, Step
 from marcus.core.settings import get_settings
@@ -394,7 +393,7 @@ def test_routes_share_read_helpers_through_read_module():
     from marcus.api import read
     from marcus.api.routes import events, papers, segments
 
-    for path in pathlib.Path(marcus.api.routes.__path__[0]).glob("*.py"):
+    for path in pathlib.Path(events.__file__).parent.glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom) and node.module:
                 assert not node.module.startswith("marcus.api.routes"), (path.name, node.module)

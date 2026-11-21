@@ -63,7 +63,7 @@ def close_all(clients) -> int:
             c.close()
             n += 1
         except Exception:
-            pass
+            pass  # best-effort close: the client may already be closed
     return n
 
 
@@ -347,7 +347,7 @@ def run_paper(
                 except Aborted:
                     raise
                 except Exception:
-                    pass
+                    pass  # a failed UI-extra request is only load: the call is recorded by call()
             rec["timings_ms"]["segment_images"] = round((time.perf_counter() - ts) * 1000, 1)
 
         # ---------------------------------------------------------------- OCSR loop (sequential)
@@ -407,10 +407,10 @@ def run_paper(
                     except Aborted:
                         raise
                     except Exception:
-                        pass
+                        pass  # a failed depiction request is only load: the call is recorded by call()
             rec["timings_ms"]["depictions"] = round((time.perf_counter() - ts) * 1000, 1)
     except _Stop:
-        pass
+        pass  # stopped on purpose: the record keeps what was measured so far
     except Aborted as e:
         rec["aborted"] = True
         rec["fatal_error"] = str(e)
@@ -422,7 +422,7 @@ def run_paper(
         try:
             client.close()
         except Exception:
-            pass
+            pass  # best-effort close: the client may already be closed
         _ACTIVE.discard(client)
 
     rec["wall_ms"] = round((time.perf_counter() - t0) * 1000, 1)

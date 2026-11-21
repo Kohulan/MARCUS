@@ -79,6 +79,7 @@ def fs_probe():
     """The pluggable filesystem probe. Errors (does not skip) if unset or
     unreachable -- see fs_probe.get_probe."""
     try:
-        return get_probe()
+        probe = get_probe()
     except ProbeError as exc:
         pytest.fail(str(exc), pytrace=False)
+    return probe
