@@ -4,7 +4,6 @@ version: 2
 secret:
   ignored_paths:
     - "backend-v2/tests/**"             # fake COCONUT TLS key, throwaway test DB URLs
-    - "backend/tests/**"                # v1 tests: sk-1234567890abcdef... fake keys
     - "judges/**"                       # sk-judgeDUMMY... and local-only judge secrets
     - "**/.env.example"
     - ".env.security.example"

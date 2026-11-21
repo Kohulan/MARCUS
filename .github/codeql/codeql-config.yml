@@ -1,6 +1,0 @@
-# CodeQL scans the code that runs: v2 (backend-v2, frontend-v2) and the judges.
-# backend/ and frontend/ are MARCUS v1: retired (port 9000 answers 410), kept only for
-# reference until it is removed, so its alerts are not acted on.
-paths-ignore:
-  - backend/**
-  - frontend/**
