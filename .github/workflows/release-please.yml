@@ -9,9 +9,10 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/release-please-action@v3
+      # v4 reads its settings from release-please-config.json and the last released version
+      # from .release-please-manifest.json (v3 took them as inputs).
+      - uses: googleapis/release-please-action@v4
         with:
-          release-type: python
-          package-name: MARCUS
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          prerelease: true
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
