@@ -27,7 +27,10 @@ export default defineConfig(
     rules: {
       ...react.configs.recommended.rules,
       ...react.configs["jsx-runtime"].rules,
-      ...reactHooks.configs.recommended.rules,
+      // the two classic hook rules, as in v5's recommended set; v7's React Compiler rules
+      // are not taken on (the code does not use the compiler)
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react/no-danger": "error",
     },
   },
