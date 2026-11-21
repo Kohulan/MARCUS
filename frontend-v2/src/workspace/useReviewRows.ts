@@ -3,7 +3,7 @@ import { firstRunNote } from "../api/engines";
 import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
-import { stateOf, type CardState } from "./cardState";
+import { shownStructure, stateOf, type CardState } from "./cardState";
 import { newestFirst } from "./pageFailures";
 
 /** One structure of the paper as the review views show it. */
@@ -17,6 +17,8 @@ export type ReviewRow = {
   failedEngine: string | null;
   /** For a structure being read: firstRunNote of the engine reading it. */
   readingNote: string | null;
+  /** R-group labels of the structure shown ([] for none): the R-groups filter, the tags. */
+  rgroups: string[];
 };
 
 const NO_STEPS: StepOut[] = [];
@@ -57,6 +59,7 @@ export function useReviewRows(
           failedEngine: newest?.engine ?? null,
           readingNote:
             state === "reading" ? firstRunNote(own.find((s) => isStepActive(s.status))?.engine) : null,
+          rgroups: shownStructure(segment, paper.engine).rgroups,
         };
       }),
     [segments, stepsBySegment, paper],

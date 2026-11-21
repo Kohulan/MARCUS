@@ -918,3 +918,72 @@ describe("useWorkspace closeFocus", () => {
     expect(result.current.focus).toBe(false);
   });
 });
+
+describe("R-group scaffolds", () => {
+  const scaffold = () =>
+    segment("s1", {
+      predictions: [
+        prediction({ smiles: "[R1]c1ccccc1[R2]", valid: false, rgroups: ["R1", "R2"] }),
+      ],
+    });
+  const docWith = (text: string) => ({
+    texts: [{ self_ref: "#/texts/0", text, label: "caption", prov: [{ page_no: 1 }] }],
+  });
+
+  it("the card carries the tag, the meta line says why, and the filter counts it", async () => {
+    renderAt(paper([scaffold(), segment("s2")]));
+    const card = await waitFor(() => {
+      const found = screen.getAllByRole("article").find((c) => c.dataset.segmentId === "s1");
+      if (!found) throw new Error("no card");
+      return found;
+    });
+    // (no OCSR step in this fixture, so the state word is "Not read yet")
+    expect(card).toHaveAccessibleName(/^\[01\] · Page 1, [^,]+, R-groups: R1, R2$/);
+    expect(within(card).getByText("R-groups: R1, R2")).toBeInTheDocument();
+    expect(within(card).getByText("DECIMER · R-group scaffold (R1, R2)")).toBeInTheDocument();
+    const filters = screen.getByRole("group", { name: "Filter" });
+    fireEvent.click(within(filters).getByRole("button", { name: /^R-groups/ }));
+    expect(within(filters).getByRole("button", { name: /^R-groups/ })).toHaveTextContent(
+      "R-groups1",
+    );
+    expect(screen.getAllByRole("article").map((c) => c.dataset.segmentId)).toEqual(["s1"]);
+  });
+
+  it("a paper without scaffolds has no R-groups filter", async () => {
+    renderAt(paper([segment("s1")]));
+    const filters = await screen.findByRole("group", { name: "Filter" });
+    expect(within(filters).queryByRole("button", { name: /^R-groups/ })).toBeNull();
+  });
+
+  it("focus mode says the drawing stands for several compounds, and when the page defines them", async () => {
+    const getText = vi.spyOn(api, "getText").mockResolvedValue(docWith("1a: R1 = OMe, R2 = H"));
+    renderAt(paper([scaffold()]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    expect(
+      await within(region).findByText(
+        "This drawing has R-groups (R1, R2): it stands for several compounds. Definitions found on this page.",
+      ),
+    ).toBeInTheDocument();
+    expect(getText).toHaveBeenCalledTimes(1);
+    expect(within(region).getByText(/R-group scaffold \(R1, R2\) · 2\.7/)).toBeInTheDocument();
+  });
+
+  it("without definitions on the page the line says only what the drawing is", async () => {
+    vi.spyOn(api, "getText").mockResolvedValue(docWith("No substituents named here."));
+    renderAt(paper([scaffold()]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    const line = await within(region).findByText(/^This drawing has R-groups/);
+    await waitFor(() => expect(api.getText).toHaveBeenCalled());
+    expect(line).toHaveTextContent(
+      /^This drawing has R-groups \(R1, R2\): it stands for several compounds\.$/,
+    );
+  });
+
+  it("a plain structure never asks for the text", async () => {
+    const getText = vi.spyOn(api, "getText").mockResolvedValue(docWith("R1 = OMe"));
+    renderAt(paper([segment("s1")]), "?s=s1&focus=1");
+    const region = await focusRegion();
+    expect(within(region).queryByText(/This drawing has R-groups/)).toBeNull();
+    expect(getText).not.toHaveBeenCalled();
+  });
+});

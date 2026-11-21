@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
 import { usePaper, useSteps } from "../api/queries";
 import type { AnnotationOut, PaperDetail } from "../api/types";
+import { heldOnlyReason } from "../coconut/held";
 import SubmitForm from "../coconut/SubmitForm";
 import type { OrganismDraft } from "../coconut/types";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
@@ -154,7 +155,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   // does not rewrite them); `waiting`: the annotation had not answered yet, so its first answer
   // still starts them (the form takes them only if the curator has not typed organisms).
   const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
-  const sendCount = toCoconut.length;
+  const sendCount = toCoconut.send.length;
   const annotateStep = useMemo(() => newestAnnotate(ws.steps), [ws.steps]);
   const annotation = useAnnotation(paper.id, annotateStep).data;
   if (sending?.waiting && annotation !== undefined) {
@@ -204,7 +205,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             </GlassButton>
             {sendCount === 0 && (
               <span id={reasonId} className="ws-send__why">
-                Accept a structure first
+                {toCoconut.held.length > 0
+                  ? heldOnlyReason(toCoconut.held)
+                  : "Accept a structure first"}
               </span>
             )}
           </div>
@@ -268,7 +271,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       {sending && (
         <SubmitForm
           paper={{ id: paper.id, title: paper.title, doi: paper.doi }}
-          structures={toCoconut}
+          structures={toCoconut.send}
+          held={toCoconut.held}
           initial={{
             title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
             ...(sending.organisms.length > 0 ? { organisms: sending.organisms } : {}),

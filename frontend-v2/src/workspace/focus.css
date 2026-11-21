@@ -212,6 +212,14 @@
   color: var(--text-2);
 }
 
+/* A scaffold with R-groups: one sentence in ink, under the meta line that names the labels. */
+.fm-rgroups {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
 .fm-pred {
   display: flex;
   flex-wrap: wrap;

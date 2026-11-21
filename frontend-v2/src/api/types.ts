@@ -72,6 +72,11 @@ export interface CurationOut {
   smiles: string | null;
   molfile: string | null;
   note: string | null;
+  /**
+   * R-group labels of the curated structure (R1, X, Ar…), [] for none. Optional: absent in an
+   * optimistic update until the server answers, and from an older server.
+   */
+  rgroups?: string[];
 }
 
 /** PUT /segments/{id}/curation replaces the whole record: all four keys, always. */
@@ -92,6 +97,8 @@ export interface PredictionOut {
   ms: number;
   cached: boolean;
   created_at: string;
+  /** R-group labels (R1, X, Ar…): a scaffold that stands for several compounds. [] for none. */
+  rgroups?: string[];
 }
 
 export interface SegmentOut {
@@ -221,8 +228,17 @@ export type McsReply = {
 /** Only the fields the UI reads of Docling's export_to_dict() (GET /papers/{id}/text). */
 export type DoclingDoc = {
   body?: { children: { $ref: string }[] };
-  texts: { self_ref: string; text: string; label: string; children?: { $ref: string }[] }[];
+  texts: {
+    self_ref: string;
+    text: string;
+    label: string;
+    children?: { $ref: string }[];
+    /** Where the item is: `page_no` counts from 1 (read defensively, rgroups.ts). */
+    prov?: unknown;
+  }[];
   groups?: { self_ref: string; children: { $ref: string }[] }[];
+  /** Tables (skipped by the Paper view's text; read for R-group definitions, rgroups.ts). */
+  tables?: { prov?: unknown; data?: { table_cells?: { text?: unknown }[] } }[];
 };
 
 // Paper annotation (GET /papers/{id}/annotation, backend-v2 api/schemas.py AnnotationOut).

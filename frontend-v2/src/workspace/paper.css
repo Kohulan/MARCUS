@@ -262,11 +262,35 @@
 
 /* The tag hangs above the box, over the page's own text: the pointer on the marker or its
    tag fades it, so the words under it can be read. */
-.pv-marker:hover .pv-marker__tag {
+/* R-groups: the card's tag (words in a square ink outline), hung under the box. */
+.pv-marker__rgroups {
+  position: absolute;
+  top: 100%;
+  left: -4px;
+  margin-top: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--ink);
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pv-marker--lit .pv-marker__rgroups {
+  margin-top: 8px;
+}
+
+.pv-marker:hover .pv-marker__tag,
+.pv-marker:hover .pv-marker__rgroups {
   opacity: 0.15;
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .pv-marker__rgroups,
   .pv-marker__tag {
     transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
