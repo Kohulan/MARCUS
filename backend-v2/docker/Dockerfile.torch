@@ -1,0 +1,156 @@
+# syntax=docker/dockerfile:1.7
+# MARCUS v2 PyTorch worker image (extra "torch"), one image for both torch OCSR workers:
+# MolNexTR (worker-molnextr, q.molnextr) and MolScribe (worker-molscribe, q.molscribe). Which
+# engine a container serves is set by MARCUS_OCSR_ENGINES (compose).
+#
+# Model stack = what the shipped v1 image runs (its `pip freeze`, controller ruling R10; table
+# in docker/MODEL_PINS.md): torch 2.10.0 / torchvision 0.25.0, MolNexTR and MolScribe at the
+# commits v1 installed, both --no-deps as in v1 (backend/Dockerfile). Installed besides them:
+# exactly the packages the two libraries import at runtime (measured in the v1 image), with
+# their transitive closure resolved for Python 3.11 against the v1 freeze; every version is the
+# v1 one. Declared-but-never-imported requirements are not installed (OpenNMT-py and SmilesPE
+# are therefore --no-deps too); the dependency check below allows exactly those.
+#
+# VARIANT (build arg) selects the torch wheel build of the same version:
+#   cpu  (default) torch==2.10.0+cpu from download.pytorch.org/whl/cpu; no CUDA libraries.
+#   cuda torch==2.10.0 / torchvision==0.25.0 from PyPI: the default PyPI wheel is the CUDA 12.8
+#        build, and it is what v1 installed (torch.version.cuda 12.8; no direct_url, i.e. PyPI).
+#        The nvidia-* CUDA 12.8 wheels, triton and cuda-bindings are pinned at the v1 versions
+#        and checked by the dependency check. Image marcus-v2-torch:cuda (docker-compose.gpu.yml).
+#        Same python:3.11-slim-bookworm base, no system CUDA: torch's libraries carry a DT_RPATH
+#        to site-packages/nvidia/*/lib, searched before LD_LIBRARY_PATH, so in v1 too every CUDA
+#        library torch loads (cuDNN 9.10.2, cuBLAS 12.8.4, cuSOLVER 11.7.3, ...) comes from those
+#        wheels, never from v1's CUDA 11.8 base image (loader probe, docker/MODEL_PINS.md).
+#
+# Weights are downloaded at BUILD time with a pinned sha256, at a pinned Hugging Face revision;
+# runtime needs no network and the root filesystem stays read-only.
+# - MolNexTR molnextr_best.pth (1.13 GB) into /opt/pystow/molnextr/, where
+#   MolNexTRSingleton looks (pystow.join("molnextr")) before it would download.
+# - MolScribe swin_base_char_aux_1m.pth (1.13 GB) into /opt/pystow/molscribe/ (v1 used
+#   hf_hub_download("yujieq/MolScribe", ...); the engine opens this path directly).
+# Both files are byte-identical to v1's runtime-downloaded copies.
+#
+# Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
+# `pytest -m ml` in this image). Build context: backend-v2/.
+
+ARG VARIANT=cpu
+
+FROM ghcr.io/astral-sh/uv:0.10.0 AS uv
+
+FROM python:3.11-slim-bookworm AS builder
+ARG VARIANT
+COPY --from=uv /uv /usr/local/bin/uv
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+ENV UV_COMPILE_BYTECODE=1 UV_COMPILE_BYTECODE_TIMEOUT=600 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-editable --extra torch
+# torch and torchvision: the CPU build from the PyTorch CPU index, or the CUDA 12.8 build from
+# PyPI (as v1). --no-deps: their dependencies are pinned here and below.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    case "$VARIANT" in \
+      cpu) uv pip install --python /app/.venv/bin/python --no-deps \
+             --index-url https://download.pytorch.org/whl/cpu \
+             torch==2.10.0+cpu torchvision==0.25.0+cpu ;; \
+      cuda) uv pip install --python /app/.venv/bin/python --no-deps \
+             torch==2.10.0 torchvision==0.25.0 \
+           && uv pip install --python /app/.venv/bin/python \
+             nvidia-cublas-cu12==12.8.4.1 nvidia-cuda-cupti-cu12==12.8.90 \
+             nvidia-cuda-nvrtc-cu12==12.8.93 nvidia-cuda-runtime-cu12==12.8.90 \
+             nvidia-cudnn-cu12==9.10.2.21 nvidia-cufft-cu12==11.3.3.83 nvidia-cufile-cu12==1.13.1.3 \
+             nvidia-curand-cu12==10.3.9.90 nvidia-cusolver-cu12==11.7.3.90 \
+             nvidia-cusparse-cu12==12.5.8.93 nvidia-cusparselt-cu12==0.7.1 nvidia-nccl-cu12==2.27.5 \
+             nvidia-nvjitlink-cu12==12.8.93 nvidia-nvshmem-cu12==3.4.5 nvidia-nvtx-cu12==12.8.90 \
+             triton==3.6.0 cuda-bindings==12.9.4 cuda-pathfinder==1.3.3 ;; \
+      *) echo "VARIANT must be cpu or cuda" >&2; exit 1 ;; \
+    esac
+# Model stack, pinned from the v1 image freeze (closure resolved for Python 3.11).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python /app/.venv/bin/python \
+      timm==0.4.12 albumentations==1.1.0 qudida==0.0.4 torchtext==0.5.0 sentencepiece==0.2.1 \
+      rdkit==2024.9.5 opencv-python-headless==4.11.0.86 numpy==1.24.3 pillow==11.3.0 \
+      scipy==1.13.1 scikit-image==0.24.0 imageio==2.37.2 tifffile==2025.5.10 lazy-loader==0.4 \
+      scikit-learn==1.7.2 joblib==1.5.3 threadpoolctl==3.6.0 \
+      pandas==2.2.3 pytz==2025.2 tzdata==2025.3 python-dateutil==2.9.0.post0 \
+      matplotlib==3.9.0 contourpy==1.3.2 cycler==0.12.1 fonttools==4.61.1 kiwisolver==1.4.9 \
+      pyparsing==3.2.1 packaging==26.0 six==1.17.0 pyyaml==6.0.2 \
+      pystow==0.7.0 click==8.3.1 tqdm==4.67.1 \
+      requests==2.32.5 urllib3==1.26.13 idna==3.4 certifi==2026.1.4 charset-normalizer==2.1.1 \
+      filelock==3.20.0 fsspec==2025.12.0 jinja2==3.1.5 markupsafe==2.1.5 networkx==3.4.2 \
+      sympy==1.14.0 mpmath==1.3.0 opt-einsum==3.4.0 \
+    && uv pip install --python /app/.venv/bin/python --no-deps \
+      OpenNMT-py==2.2.0 SmilesPE==0.0.3 \
+      "MolNexTR @ git+https://github.com/Kohulan/MolNexTR.git@fb7505bed4774d13e8feae2aafbb57da22114512" \
+      "MolScribe @ git+https://github.com/CrystalEye42/MolScribe.git@250f683f52f5050eb624870ccfd04bccbcaa27e1" \
+    && { uv pip check --python /app/.venv/bin/python > /tmp/pip-check.txt 2>&1 || true; } \
+    && cat /tmp/pip-check.txt \
+    && ! grep -E "requires|not installed|incompatib" /tmp/pip-check.txt \
+         | grep -vE "^Found [0-9]+ incompatibilit" \
+         | grep -vE "molnextr\` requires \`(pytorch-lightning|opencv-python|pyonmttok)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
+         | grep -vE "molscribe\` requires \`(opencv-python|rdkit-pypi)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
+         | grep -vE "molscribe\` requires \`torch>=1\.11\.0,<2\.0\`, but \`2\.10\.0(\+cpu)?\` is installed" \
+         | grep -vE "opennmt-py\` requires \`(configargparse|tensorboard|flask|waitress|pyonmttok)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
+         | grep -vE "smilespe\` requires \`(fastprogress|gensim)([<>=!~ ;][^\`]*)?\`, but it's not installed"
+
+# Checkpoints in their own stage: a change to the runtime stage's packages does not fetch 2.3 GB
+# again.
+FROM python:3.11-slim-bookworm AS weights
+ADD --checksum=sha256:5990bc19aaafa5cf44e9d04e06fb8e2b5aea50c66e1e925f662bdff7d2a6422c --chmod=644 \
+    https://huggingface.co/datasets/CYF200127/MolNexTR/resolve/9ac2da6fa553e1d053af3d8d534b8a6c74b79749/molnextr_best.pth \
+    /opt/pystow/molnextr/molnextr_best.pth
+ADD --checksum=sha256:6f0df56fa32b5ffc21f8c7f311ef333da522f590bf5622e966c6bcb1f2d9ea1d --chmod=644 \
+    https://huggingface.co/yujieq/MolScribe/resolve/a0189776b7415b82795c7ee81eed311bf5c8724b/swin_base_char_aux_1m.pth \
+    /opt/pystow/molscribe/swin_base_char_aux_1m.pth
+# ADD creates the parent directories root-only. Fixed here: a chmod in the runtime stage would
+# copy both files into a new layer (2.3 GB more).
+RUN chmod -R a+rX /opt/pystow
+
+FROM python:3.11-slim-bookworm AS runtime
+# libgomp1: OpenMP; libxrender1 / libxext6 / libx11-6 / libexpat1: RDKit 2024.9.5's drawing
+# module (rdMolDraw2D, Cairo), which the warm-up imports.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 libxrender1 libxext6 libx11-6 libexpat1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 marcus \
+    && useradd --system --uid 10001 --gid marcus --home-dir /nonexistent --shell /usr/sbin/nologin marcus \
+    && mkdir -p /data && chown marcus:marcus /data
+COPY --from=weights /opt/pystow /opt/pystow
+COPY --from=builder /app/.venv /app/.venv
+# pystow writes /opt/pystow/README.md on first import: create it now (read-only root at runtime).
+RUN PYSTOW_HOME=/opt/pystow /app/.venv/bin/python -c "import pystow" \
+    && test -f /opt/pystow/README.md && chmod a+r /opt/pystow/README.md
+# The project is not copied into the venv: a .pth file puts /app/src on sys.path (like an
+# editable install), so a code change rebuilds only this small layer, never the dependency
+# layer above.
+COPY src /app/src
+RUN echo /app/src > /app/.venv/lib/python3.11/site-packages/marcus.pth \
+    && /app/.venv/bin/python -m compileall -q /app/src
+WORKDIR /app
+ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    MARCUS_DATA_ROOT=/data HOME=/tmp MPLCONFIGDIR=/tmp/matplotlib \
+    PYSTOW_HOME=/opt/pystow MARCUS_WORKER_PROC_ALIVE_TIMEOUT=300
+USER marcus
+# ONE prefork process per container (= the queue's slots): one model per process, loaded when
+# the pool process starts (after the fork), never in the parent; a failed load stops the worker.
+CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molnextr", "-c", "1", \
+     "--pool", "prefork", "--include", "marcus.workers.ocsr", "-n", "molnextr@%h", \
+     "--loglevel", "INFO"]
+
+FROM runtime AS test
+USER root
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv pip install --python /app/.venv/bin/python --no-cache \
+      pytest==9.2.0 pytest-asyncio==1.5.0 iniconfig==2.3.1 pluggy==1.7.0 pygments==2.21.0
+COPY pyproject.toml /app/pyproject.toml
+COPY tests /app/tests
+USER marcus
+# The root filesystem is read-only: no pytest cache, no bytecode.
+ENV PYTEST_ADDOPTS="-p no:cacheprovider"
+CMD ["pytest", "-m", "ml", "tests/workers/test_torch_ocsr.py", "-q", "-s"]
+
+FROM runtime

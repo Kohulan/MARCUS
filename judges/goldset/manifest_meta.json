@@ -1,0 +1,249 @@
+{
+ "built_with": "goldset/build.py",
+ "seed": 20261116,
+ "bins": [
+  "1-1",
+  "2-5",
+  "6-15",
+  "16-60"
+ ],
+ "per_bin": 25,
+ "query_chunk": 1000,
+ "min_query_per_bin": 3000,
+ "standardisation": "RDKit 2026.09.2: MolFromSmiles(sanitize) -> Normalizer -> LargestFragmentChooser(preferOrganic=True) -> Uncharger; no metal disconnection; no tautomer canonicalisation; standard InChIKey",
+ "coconut": {
+  "url": "https://coconut.s3.uni-jena.de/prod/downloads/2026-11/coconut_csv-11-2026.zip",
+  "download_page": "https://coconut.naturalproducts.net/download",
+  "release": "2026-11",
+  "zip_sha256": "74582c17f34ce33ea8ff27ba721a7bcfb654e2521aa94d6d3caf53f19159187a",
+  "zip_bytes": 247958739,
+  "csv_name": "coconut_csv-11-2026.csv",
+  "columns": [
+   "identifier",
+   "canonical_smiles",
+   "standard_inchi",
+   "standard_inchi_key",
+   "name",
+   "iupac_name",
+   "annotation_level",
+   "total_atom_count",
+   "heavy_atom_count",
+   "molecular_weight",
+   "exact_molecular_weight",
+   "molecular_formula",
+   "alogp",
+   "topological_polar_surface_area",
+   "rotatable_bond_count",
+   "hydrogen_bond_acceptors",
+   "hydrogen_bond_donors",
+   "hydrogen_bond_acceptors_lipinski",
+   "hydrogen_bond_donors_lipinski",
+   "lipinski_rule_of_five_violations",
+   "aromatic_rings_count",
+   "qed_drug_likeliness",
+   "formal_charge",
+   "fractioncsp3",
+   "number_of_minimal_rings",
+   "van_der_walls_volume",
+   "contains_sugar",
+   "contains_ring_sugars",
+   "contains_linear_sugars",
+   "murcko_framework",
+   "np_likeness",
+   "chemical_class",
+   "chemical_sub_class",
+   "chemical_super_class",
+   "direct_parent_classification",
+   "np_classifier_pathway",
+   "np_classifier_superclass",
+   "np_classifier_class",
+   "np_classifier_is_glycoside",
+   "organisms",
+   "collections",
+   "dois",
+   "synonyms",
+   "cas"
+  ],
+  "doi_column": "dois (pipe-separated; split on '|' only, lower-cased, doi.org prefix stripped)",
+  "n_molecules": 738793,
+  "n_molecules_with_doi": 241765,
+  "n_distinct_dois": 96735
+ },
+ "europe_pmc": {
+  "search_api": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+  "pdf_source": "https://ftp.ebi.ac.uk/pub/databases/pmc/pdf/OA/PMCxxxx<bucket>/<PMCID>.zip",
+  "pdf_source_note": "europepmc.org ?pdf=render is behind a Cloudflare JS challenge; the FTP bundle is Europe PMC's own OA PDF distribution",
+  "open_access_rule": "isOpenAccess == 'Y' and pmcid present and PDF zip present on FTP",
+  "reviews_excluded": true
+ },
+ "candidate_dois_1_to_60": 96518,
+ "selection": {
+  "bins": [
+   {
+    "stratum": "1-1",
+    "candidate_dois": 27585,
+    "queried_in_epmc": 3000,
+    "found_in_epmc": 1606,
+    "open_access_with_pmcid": 119,
+    "oa_reviews_excluded": 6,
+    "oa_research_with_ftp_pdf": 112,
+    "selected": 25,
+    "rejected": []
+   },
+   {
+    "stratum": "2-5",
+    "candidate_dois": 40966,
+    "queried_in_epmc": 3000,
+    "found_in_epmc": 1552,
+    "open_access_with_pmcid": 106,
+    "oa_reviews_excluded": 7,
+    "oa_research_with_ftp_pdf": 98,
+    "selected": 25,
+    "rejected": []
+   },
+   {
+    "stratum": "6-15",
+    "candidate_dois": 22410,
+    "queried_in_epmc": 3000,
+    "found_in_epmc": 1571,
+    "open_access_with_pmcid": 76,
+    "oa_reviews_excluded": 8,
+    "oa_research_with_ftp_pdf": 68,
+    "selected": 25,
+    "rejected": []
+   },
+   {
+    "stratum": "16-60",
+    "candidate_dois": 5557,
+    "queried_in_epmc": 3000,
+    "found_in_epmc": 1809,
+    "open_access_with_pmcid": 66,
+    "oa_reviews_excluded": 9,
+    "oa_research_with_ftp_pdf": 56,
+    "selected": 25,
+    "rejected": []
+   }
+  ]
+ },
+ "counts": {
+  "papers": 100,
+  "dev": 50,
+  "test": 50,
+  "per_split_stratum": {
+   "dev": {
+    "1-1": 13,
+    "2-5": 12,
+    "6-15": 13,
+    "16-60": 12
+   },
+   "test": {
+    "1-1": 12,
+    "2-5": 13,
+    "6-15": 12,
+    "16-60": 13
+   }
+  },
+  "expected_structures_coconut_ids": 865,
+  "rdkit_unparsable": 0,
+  "doi_found_in_first_pages": 94
+ },
+ "distributions": {
+  "n_coconut_ids": {
+   "n": 100,
+   "min": 1,
+   "p25": 2,
+   "median": 6,
+   "p75": 15,
+   "p95": 28,
+   "max": 40,
+   "sum": 865
+  },
+  "n_expected_full_keys": {
+   "n": 100,
+   "min": 1,
+   "p25": 2,
+   "median": 6,
+   "p75": 15,
+   "p95": 28,
+   "max": 40,
+   "sum": 861
+  },
+  "pages": {
+   "n": 100,
+   "min": 3,
+   "p25": 10,
+   "median": 12,
+   "p75": 15,
+   "p95": 19,
+   "max": 33,
+   "sum": 1234
+  },
+  "bytes": {
+   "n": 100,
+   "min": 120633,
+   "p25": 699802,
+   "median": 1468914,
+   "p75": 2474667,
+   "p95": 8741841,
+   "max": 48676837,
+   "sum": 275623596
+  }
+ },
+ "load_test_candidates": [
+  {
+   "paper_id": "PMC9259500",
+   "bytes": 48676837,
+   "pages": 33,
+   "split": "test"
+  },
+  {
+   "paper_id": "PMC6017977",
+   "bytes": 21267027,
+   "pages": 15,
+   "split": "dev"
+  },
+  {
+   "paper_id": "PMC6100211",
+   "bytes": 19242815,
+   "pages": 16,
+   "split": "test"
+  },
+  {
+   "paper_id": "PMC3933326",
+   "bytes": 11036910,
+   "pages": 18,
+   "split": "dev"
+  },
+  {
+   "paper_id": "PMC7912134",
+   "bytes": 10722602,
+   "pages": 10,
+   "split": "dev"
+  },
+  {
+   "paper_id": "PMC7111291",
+   "bytes": 3681256,
+   "pages": 20,
+   "split": "test"
+  },
+  {
+   "paper_id": "PMC4519256",
+   "bytes": 3011512,
+   "pages": 23,
+   "split": "dev"
+  },
+  {
+   "paper_id": "PMC6290568",
+   "bytes": 764095,
+   "pages": 22,
+   "split": "dev"
+  },
+  {
+   "paper_id": "PMC6269966",
+   "bytes": 478313,
+   "pages": 20,
+   "split": "dev"
+  }
+ ],
+ "rdkit_unparsable": []
+}

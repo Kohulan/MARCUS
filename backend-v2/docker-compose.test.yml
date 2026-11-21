@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    # TEST DATABASE ONLY (throwaway data): no fsync, async commit, no full-page writes, so the
+    # suite's many small commits do not wait on the disk. Never copy these to docker-compose.yml.
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off",
+              "-c", "full_page_writes=off"]
+    environment:
+      POSTGRES_USER: marcus
+      POSTGRES_PASSWORD: marcus
+      POSTGRES_DB: marcus_test
+    ports:
+      - "127.0.0.1:55432:5432"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:56379:6379"

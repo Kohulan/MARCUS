@@ -1,0 +1,41 @@
+== [2026-11-17T15:46:53Z] 1 slot
+marcus-v2-test-api-1 marcus-v2-api:local Up 23 seconds (healthy)
+marcus-v2-test-api-migrate-1 marcus-v2-api:local Exited (0) 24 seconds ago
+marcus-v2-test-dcgm-exporter-1 nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubuntu22.04 Up 32 seconds
+marcus-v2-test-dispatcher-1 marcus-v2-api:local Up 23 seconds (healthy)
+marcus-v2-test-metrics-1 marcus-v2-api:local Up 22 seconds (healthy)
+marcus-v2-test-nginx-1 nginxinc/nginx-unprivileged:1.27-alpine Up 16 seconds (healthy)
+marcus-v2-test-postgres-1 postgres:16-alpine Up 32 seconds (healthy)
+marcus-v2-test-redis-1 redis:7-alpine Up 32 seconds (healthy)
+marcus-v2-test-worker-cpu-1 marcus-v2-cpu:local Up 23 seconds
+marcus-v2-test-worker-decimer-1 marcus-v2-tf:cuda Up 22 seconds
+marcus-v2-test-worker-molnextr-1 marcus-v2-torch:cuda Up 22 seconds
+marcus-v2-test-worker-molscribe-1 marcus-v2-torch:cuda Up 23 seconds
+marcus-v2-test-worker-segment-1 marcus-v2-tf:cuda Up 22 seconds
+marcus-v2-test-worker-tools-1 marcus-v2-tools:local Up 23 seconds
+pid, used_gpu_memory [MiB]
+3276050, 880 MiB
+3276071, 880 MiB
+3276059, 308 MiB
+3276075, 2380 MiB
+-- marcus-v2-test-worker-segment-1 pids: 3275562 3276075 
+{"ts": "2026-11-17T15:46:35.731Z", "level": "INFO", "service": "worker-segment", "logger": "marcus.workers.gpu", "msg": "TensorFlow limited to 2048 MiB on /physical_device:GPU:0"}
+{"ts": "2026-11-17T15:46:35.992Z", "level": "INFO", "service": "worker-segment", "logger": "marcus.workers.segment", "msg": "GPU memory budget set: skipping decimer_segmentation's set_memory_growth(True)"}
+{"ts": "2026-11-17T15:46:45.826Z", "level": "INFO", "service": "worker-segment", "logger": "marcus.workers.segment", "msg": "segmenter d0045d9ef4b29a2a8d865eae55399ba1b14481bf loaded"}
+-- marcus-v2-test-worker-decimer-1 pids: 3275536 3276059 
+{"ts": "2026-11-17T15:46:35.514Z", "level": "INFO", "service": "worker-decimer", "logger": "marcus.workers.gpu", "msg": "TensorFlow limited to 4096 MiB on /physical_device:GPU:0"}
+{"ts": "2026-11-17T15:46:35.731Z", "level": "INFO", "service": "worker-decimer", "logger": "marcus.workers.ocsr.decimer", "msg": "GPU memory budget set: skipping decimer's set_memory_growth(True)"}
+-- marcus-v2-test-worker-molscribe-1 pids: 3275160 3276050 
+{"ts": "2026-11-17T15:46:34.741Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.gpu", "msg": "torch limited to 9% of GPU memory"}
+{"ts": "2026-11-17T15:46:39.758Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.ocsr.molscribe", "msg": "MolScribe loaded on cuda in 5.0 s"}
+{"ts": "2026-11-17T15:46:40.457Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.ocsr.base", "msg": "loaded OCSR engine molscribe 250f683"}
+{"ts": "2026-11-17T15:46:40.457Z", "level": "INFO", "service": "worker-molscribe", "logger": "marcus.workers.ocsr.base", "msg": "preloaded OCSR engine molscribe 250f683"}
+-- marcus-v2-test-worker-molnextr-1 pids: 3275517 3276071 
+{"ts": "2026-11-17T15:46:35.121Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.gpu", "msg": "torch limited to 9% of GPU memory"}
+2026-11-17 15:46:37,960 - molnextr_singleton - INFO - Running CUDA device test...
+{"ts": "2026-11-17T15:46:37.960Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "Running CUDA device test..."}
+2026-11-17 15:46:38,048 - molnextr_singleton - INFO - Creating MolNexTR model with device cuda...
+{"ts": "2026-11-17T15:46:38.048Z", "level": "INFO", "service": "worker-molnextr", "logger": "molnextr_singleton", "msg": "Creating MolNexTR model with device cuda..."}
+{"ts": "2026-11-17T15:46:40.228Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.ocsr.molnextr", "msg": "MolNexTR loaded on NVIDIA GPU (Tesla V100-PCIE-32GB) (cuda) in 5.1 s"}
+{"ts": "2026-11-17T15:46:40.896Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.ocsr.base", "msg": "loaded OCSR engine molnextr fb7505b"}
+{"ts": "2026-11-17T15:46:40.896Z", "level": "INFO", "service": "worker-molnextr", "logger": "marcus.workers.ocsr.base", "msg": "preloaded OCSR engine molnextr fb7505b"}

@@ -1,0 +1,194 @@
+{
+ "scenario": "S1",
+ "target": "jarvis",
+ "base_url": "http://localhost:29000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T10:50:09+00:00",
+ "config": {
+  "target": "jarvis",
+  "base_url": null,
+  "scenarios": [
+   "S1"
+  ],
+  "engines": [
+   "decimer"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": 2,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "tag": "validation"
+ },
+ "stopped_early": false,
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected": 15,
+  "engines": {
+   "decimer": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "decimer",
+      "wall_ms": 31241.4,
+      "segment_ms": 21798.7,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [
+       21.78
+      ],
+      "n_segments": 2,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 2,
+       "min": 2535.7,
+       "p50": 4612.8,
+       "p95": 6482.1,
+       "max": 6689.8,
+       "mean": 4612.8
+      },
+      "fixture_recall_skeleton": 0.133,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_4_1",
+        "page": 4,
+        "ocsr_ms": 2535.7,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 6689.8,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 213.1,
+        "ms": 21798.5,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__72fb07098ca9/all_segments",
+        "status": 200,
+        "t_ms": 22011.7,
+        "ms": 3.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 22015.7,
+        "ms": 2535.5,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 24551.4,
+        "ms": 6689.5,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 890.6,
+     "status": 200
+    }
+   }
+  }
+ },
+ "summary": {
+  "decimer": [
+   {
+    "wall_s": 31.2,
+    "segment_s": 21.8,
+    "ocsr_p50_ms": 4612.8,
+    "ocsr_p95_ms": 6482.1,
+    "segments": 2,
+    "recall_skel": 0.133,
+    "page_errors": 0
+   }
+  ]
+ },
+ "guard": {
+  "enabled": true,
+  "checks": 2,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 5345,
+  "max_gpu_used_mib": 27150,
+  "events": [
+   {
+    "t": "2026-11-16T10:50:09+00:00",
+    "scenario": "S1",
+    "when": "before",
+    "prod_health": "healthy",
+    "gpu_free_mib": 5345,
+    "gpu_used_mib": 27150,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-16T10:50:39+00:00",
+    "scenario": "S1",
+    "when": "during",
+    "prod_health": "healthy",
+    "gpu_free_mib": 5345,
+    "gpu_used_mib": 27150,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-16T10:50:41+00:00",
+    "scenario": "S1",
+    "when": "after",
+    "prod_health": "healthy",
+    "gpu_free_mib": 5345,
+    "gpu_used_mib": 27150,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-16T10:50:41+00:00",
+ "duration_s": 32.6
+}

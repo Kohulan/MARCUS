@@ -1,0 +1,51 @@
+[2026-11-17T12:58:29Z] security mode up
+ Container marcus-v2-test-api-1  Healthy
+ Container marcus-v2-test-nginx-1  Starting
+ Container marcus-v2-test-nginx-1  Started
+[2026-11-17T12:58:59Z] ready after 1x5s
+marcus-v2-test-api-1 marcus-v2-api:local Up 8 seconds (healthy)
+marcus-v2-test-dispatcher-1 marcus-v2-api:local Up 8 seconds (healthy)
+marcus-v2-test-metrics-1 marcus-v2-api:local Up 8 seconds (healthy)
+marcus-v2-test-nginx-1 nginxinc/nginx-unprivileged:1.27-alpine Up 1 second (health: starting)
+marcus-v2-test-postgres-1 postgres:16-alpine Up 17 seconds (healthy)
+marcus-v2-test-redis-1 redis:7-alpine Up 17 seconds (healthy)
+marcus-v2-test-worker-cpu-1 marcus-v2-cpu:local Up 8 seconds
+marcus-v2-test-worker-fake-ocsr-1 marcus-v2-api:local Up 8 seconds
+marcus-v2-test-worker-fake-segment-1 marcus-v2-api:local Up 8 seconds
+marcus-v2-test-worker-tools-1 marcus-v2-tools:local Up 8 seconds
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.2.0, pluggy-1.7.0 -- /home/kohulan/Project_MARCUS/v2-test/judges/.venv/bin/python
+rootdir: /home/kohulan/Project_MARCUS/v2-test/judges
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 20 items
+
+security/v2/test_highlighted_page_traversal.py::test_highlighted_page_pdf_filename_is_not_an_existence_oracle PASSED [  5%]
+security/v2/test_no_auth_session_and_listings.py::test_session_cannot_be_removed_by_an_unrelated_caller PASSED [ 10%]
+security/v2/test_no_auth_session_and_listings.py::test_global_session_reset_requires_a_credential PASSED [ 15%]
+security/v2/test_no_auth_session_and_listings.py::test_uploaded_pdf_is_not_listed_to_an_unrelated_caller PASSED [ 20%]
+security/v2/test_ocsr_image_path_oracle.py::test_ocsr_image_path_is_not_an_existence_oracle PASSED [ 25%]
+security/v2/test_path_traversal_read.py::test_get_segment_image_does_not_leak_etc_passwd PASSED [ 30%]
+security/v2/test_path_traversal_read.py::test_get_segment_image_cannot_reach_arbitrary_container_file PASSED [ 35%]
+security/v2/test_rate_limit_and_session_bypass.py::test_burst_requests_eventually_get_rate_limited PASSED [ 40%]
+security/v2/test_rate_limit_and_session_bypass.py::test_api_calls_without_any_session_are_rejected PASSED [ 45%]
+security/v2/test_rate_limit_and_session_bypass.py::test_xff_spoof_cannot_escape_rate_limit[via-nginx] PASSED [ 50%]
+security/v2/test_rate_limit_and_session_bypass.py::test_xff_spoof_cannot_escape_rate_limit[direct-to-api] PASSED [ 55%]
+security/v2/test_security_headers.py::test_frontend_sends_content_security_policy PASSED [ 60%]
+security/v2/test_security_headers.py::test_frontend_sends_nosniff PASSED [ 65%]
+security/v2/test_security_headers.py::test_frontend_restricts_framing PASSED [ 70%]
+security/v2/test_stored_xss_frontend.py::test_extracted_text_html_does_not_execute_in_browser SKIPPED [ 75%]
+security/v2/test_stored_xss_frontend.py::test_display_name_is_returned_only_as_json PASSED [ 80%]
+security/v2/test_upload_filename_traversal.py::test_pdf_upload_filename_cannot_escape_pdf_dir[store-upload] PASSED [ 85%]
+security/v2/test_upload_filename_traversal.py::test_pdf_upload_filename_cannot_escape_pdf_dir[doi-pipeline] PASSED [ 90%]
+security/v2/test_upload_filename_traversal.py::test_ocsr_upload_filename_cannot_escape_images_dir PASSED [ 95%]
+security/v2/test_upload_size_limit.py::test_oversized_image_upload_is_rejected_by_the_backend_directly PASSED [100%]
+
+- generated xml file: /home/kohulan/Project_MARCUS/v2-test/judges/load/results/jarvis_v2_SECURITY_20261117T135859.xml -
+=========================== short test summary info ============================
+SKIPPED [1] security/v2/test_stored_xss_frontend.py:28: needs_frontend: the v2 React UI does not exist yet; this test drives the real upload -> text view flow in a browser once it does
+================== 19 passed, 1 skipped in 271.83s (0:04:31) ===================
+PYTEST_RC=0
+ Network marcus-v2-test_egress  Removed
+ Network marcus-v2-test_internal  Removed
+ALL DONE 2026-11-17T13:03:45Z

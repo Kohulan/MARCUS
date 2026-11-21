@@ -1,0 +1,197 @@
+{
+ "scenario": "S5",
+ "target": "local",
+ "client": "v2",
+ "base_url": "http://localhost:18090",
+ "build": "v2-3b47246",
+ "started_at": "2026-11-17T10:12:27+00:00",
+ "config": {
+  "target": "local",
+  "client": "v2",
+  "base_url": null,
+  "scenarios": [
+   "S5"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "fake",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 10.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": true,
+  "depict_period_s": 2.0,
+  "prod_stopped": false,
+  "cache_pg_container": null,
+  "allow_warm_cache": false,
+  "tag": "fixround1-smoke"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   7.71,
+   5.95,
+   10.64
+  ],
+  "end": [
+   7.42,
+   5.95,
+   10.59
+  ]
+ },
+ "results": {
+  "engine": "fake",
+  "client": "v2",
+  "period_s": 3.5,
+  "alone": {
+   "n": 2,
+   "n_ok": 2,
+   "n_error": 0,
+   "n_429": 0,
+   "n_503": 0,
+   "n_other": 0,
+   "ms_ok": {
+    "n": 2,
+    "min": 1523.7,
+    "p50": 1547.7,
+    "p95": 1569.3,
+    "max": 1571.7,
+    "mean": 1547.7
+   },
+   "all_ms": {
+    "n": 2,
+    "min": 1523.7,
+    "p50": 1547.7,
+    "p95": 1569.3,
+    "max": 1571.7,
+    "mean": 1547.7
+   },
+   "share_over_200ms": 1.0,
+   "samples": [
+    {
+     "t_ms": 0.9,
+     "ms": 1523.7,
+     "status": 200,
+     "error": null
+    },
+    {
+     "t_ms": 5024.9,
+     "ms": 1571.7,
+     "status": 200,
+     "error": null
+    }
+   ],
+   "owners_used": 1,
+   "image_jobs": [
+    {
+     "image_job_id": "e2f150d0-1b4d-4717-8000-d5786923932a",
+     "status": "done",
+     "ms": 1000,
+     "cache_hit": false
+    },
+    {
+     "image_job_id": "c30dd073-11f5-4c97-a79c-9566a20e3564",
+     "status": "done",
+     "ms": 1000,
+     "cache_hit": false
+    }
+   ],
+   "timing": {
+    "valid": true,
+    "ocsr_cache_hits": 0,
+    "failed_steps": 0,
+    "reasons": []
+   }
+  }
+ },
+ "summary": {
+  "alone_ms_ok": {
+   "n": 2,
+   "min": 1523.7,
+   "p50": 1547.7,
+   "p95": 1569.3,
+   "max": 1571.7,
+   "mean": 1547.7
+  },
+  "n_429": 0,
+  "n_503": 0,
+  "alone_n_not_ok": 0,
+  "alone_ocsr_cache_hits": 0,
+  "alone_timing_valid": true,
+  "timing_valid_all": true,
+  "ocsr_cache_hits_total": 0,
+  "failed_steps_by_kind": {},
+  "v2_breaker_503": 0,
+  "host_load": {
+   "start": [
+    7.71,
+    5.95,
+    10.64
+   ],
+   "end": [
+    7.42,
+    5.95,
+    10.59
+   ]
+  }
+ },
+ "guard": {
+  "enabled": false,
+  "prod_expected": "running",
+  "checks": 0,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-17T10:12:38+00:00",
+ "duration_s": 10.4,
+ "v2_http_errors": {
+  "n": 0,
+  "by_status": {},
+  "events": []
+ },
+ "v2_breaker_503": {
+  "adapter_calls": 0,
+  "paper_runs_503": 0,
+  "paper_runs_503_detail": []
+ },
+ "v2_created": {
+  "papers": [],
+  "image_jobs": [
+   "e2f150d0-1b4d-4717-8000-d5786923932a",
+   "c30dd073-11f5-4c97-a79c-9566a20e3564"
+  ]
+ },
+ "ocsr_cache": {
+  "cleared": [
+   {
+    "label": "before S5",
+    "deleted": 0,
+    "t": 1794910348.1560137
+   }
+  ],
+  "allow_warm_cache": false,
+  "container": "marcus-v2-postgres-1"
+ },
+ "validity": {
+  "timings": 1,
+  "all_valid": true,
+  "ocsr_cache_hits": 0,
+  "failed_steps_by_kind": {}
+ }
+}

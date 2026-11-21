@@ -1,0 +1,19 @@
+# OPTIONAL override for the jarvis judge copy (owner/lead decides; the load judge never touches containers).
+#
+# Why: v1 segmentation renders pages in 4 threads that share one fitz document and one Keras model. On the jarvis
+# GPU copy this lost pages ("PyramidROIAlign" errors, 2 of 3 runs on a 5-page paper) and then crashed the whole
+# backend process (SIGSEGV, heap corruption) after 36 s on a 24-page paper. The judge copy has no restart policy, so
+# it stays down. With this override v1 takes its own low-memory path (1 worker thread), which is stable, so the
+# fairness and responsiveness scenarios (S2, S3, S5) can finish. Keep the as-shipped copy for the gold-set run and S4.
+#
+# Use (from the folder of stack/docker-compose.yml on jarvis; copy judges/load/shim there first):
+#   JUDGE_SHIM_DIR=/path/to/shim docker compose -p marcus-judge \
+#       -f docker-compose.yml -f docker-compose.jarvis.yml -f docker-compose.jarvis-single-thread.yml up -d
+services:
+  backend:
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/shim:/app
+      - JUDGE_FAKE_RAM_GIB=1
+    volumes:
+      - ${JUDGE_SHIM_DIR:-./shim}:/shim:ro

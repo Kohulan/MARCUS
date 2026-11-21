@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-70 -80 250 170" width="105" height="71" role="img">
+<title>2H-Chromene</title>
+<!-- Our own drawing for the MARCUS landing (no data from a paper). Static; shown with an img element. -->
+<g stroke="#1C211D" stroke-width="5" stroke-linecap="round">
+<line x1="0" y1="-60" x2="52" y2="-30"/>
+<line x1="52" y1="-30" x2="52" y2="30"/>
+<line x1="52" y1="30" x2="0" y2="60"/>
+<line x1="0" y1="60" x2="-52" y2="30"/>
+<line x1="-52" y1="30" x2="-52" y2="-30"/>
+<line x1="-52" y1="-30" x2="0" y2="-60"/>
+<line x1="52" y1="-30" x2="104" y2="-60"/>
+<line x1="104" y1="-60" x2="156" y2="-30"/>
+<line x1="156" y1="-30" x2="156" y2="30"/>
+<line x1="156" y1="30" x2="104" y2="60"/>
+<line x1="104" y1="60" x2="52" y2="30"/>
+<line x1="-3.8" y1="-48.6" x2="-40.2" y2="-27.6"/>
+<line x1="-3.8" y1="48.6" x2="-40.2" y2="27.6"/>
+<line x1="44" y1="-21" x2="44" y2="21"/>
+<line x1="144.2" y1="-27.6" x2="107.8" y2="-48.6"/>
+</g>
+<g font-family="Geist, Arial, Helvetica, sans-serif" font-size="34" font-weight="600" fill="#1C211D" text-anchor="middle" dominant-baseline="central" paint-order="stroke" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round">
+<text x="104" y="60">O</text>
+</g>
+</svg>

@@ -1,0 +1,762 @@
+/*
+ * Paper view (Field Sheet board's "paper view" layout in the Survey Sheet look): three
+ * ruled columns under the status bar, each scrolling on its own: pages with the
+ * found-structure markers on sunken ground | the paper's text on paper | the structure list.
+ * The view fills the window under the chrome above it (--pv-top, measured by PaperView),
+ * so every column ends inside the window; at a column's end the wheel scrolls the page.
+ * Light only; tokens only. Marker boxes come in as left/top/width/height from the
+ * client-only PageWithBoxes (the bbox scaled to the shown image).
+ */
+
+.pv {
+  --pv-caption-h: 44px; /* a column's sticky caption (.pv-cap) */
+  --pv-tag-room: 28px; /* a marker's tag above its box (scrollWithin's margin) */
+  --pv-focus-room: 8px; /* clear space around a control scrolled into view */
+  display: grid;
+  grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
+  height: calc(100vh - var(--pv-top, 0px));
+  height: calc(100dvh - var(--pv-top, 0px));
+  min-height: 480px;
+  border-top: 1px solid var(--line);
+}
+
+/* A control the keyboard reaches is scrolled clear of the sticky caption, and on the pages a
+   marker's tag too (WCAG 2.4.11). */
+.pv-col {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scroll-padding: calc(var(--pv-caption-h) + var(--pv-focus-room)) 0 var(--pv-focus-room);
+}
+
+.pv-col--pages {
+  scroll-padding-top: calc(var(--pv-caption-h) + var(--pv-tag-room));
+}
+
+.pv-col + .pv-col {
+  border-left: 1px solid var(--line);
+}
+
+.pv-col--pages {
+  background-color: var(--sunken);
+}
+
+.pv-col--text,
+.pv-col--list {
+  background-color: var(--paper);
+}
+
+/* Column caption: a mono label row that stays at the top of its column. */
+.pv-cap {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--pv-caption-h);
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  background-color: inherit;
+}
+
+.pv-col--pages > .pv-cap {
+  background-color: var(--sunken);
+}
+
+.pv-col--text > .pv-cap,
+.pv-col--list > .pv-cap {
+  background-color: var(--paper);
+}
+
+.pv .pv-cap__title {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.pv-cap__count {
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pv-empty {
+  margin: 0;
+  padding: 32px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Pages ---------------------------------------------------------------------- */
+
+.pv-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 16px 20px 40px;
+}
+
+.pv-page {
+  margin: 0;
+}
+
+.pv-page__cap {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pv-page__cap > [aria-hidden="true"] {
+  color: var(--ink);
+}
+
+.pv-page__sheet {
+  position: relative;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+  box-shadow: 0 1px 0 var(--hair); /* a drawing sheet lies flat */
+}
+
+/* Until it loads, a lazy page holds an A4 page's room (2480 × 3508 px at 300 DPI). */
+.pv-page__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 2480 / 3508;
+}
+
+.pv-page__sheet--empty,
+.pv-page__sheet--failed {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2480 / 3508;
+  padding: 24px;
+  box-shadow: none;
+}
+
+.pv-page__sheet--empty {
+  border-style: dashed;
+  border-color: var(--control-border);
+  background-color: var(--paper);
+}
+
+.pv-page__sheet--failed {
+  border-color: var(--charcoal);
+  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
+}
+
+.pv-page__retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.pv-page__why {
+  margin: 0;
+  max-width: 24ch;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-page__sheet--failed .pv-page__why {
+  padding: 4px 8px;
+  background-color: var(--charcoal);
+  color: var(--on-charcoal);
+}
+
+/* Markers: the state's shape on the page (spec §7 state table). The box is the bbox; the
+   outline sits just outside it, so the drawing stays uncovered. */
+.pv-marker {
+  --mark: var(--orange);
+  position: absolute;
+  top: var(--t);
+  left: var(--l);
+  width: var(--w);
+  height: var(--h);
+  padding: 0;
+  border: 0;
+  background: none;
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+  cursor: pointer;
+  transition:
+    outline-offset 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pv-marker--reading {
+  outline-style: dashed;
+}
+
+.pv-marker--accepted {
+  --mark: var(--accepted);
+}
+
+.pv-marker--rejected,
+.pv-marker--failed {
+  --mark: var(--charcoal);
+}
+
+.pv-marker--not-read {
+  --mark: var(--muted);
+  outline-style: dashed;
+}
+
+.pv-marker__tag {
+  position: absolute;
+  bottom: 100%;
+  left: -4px;
+  margin-bottom: 4px;
+  padding: 1px 5px;
+  background-color: var(--mark);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--on-orange);
+}
+
+.pv-marker--accepted .pv-marker__tag {
+  color: var(--on-green);
+}
+
+.pv-marker--rejected .pv-marker__tag,
+.pv-marker--failed .pv-marker__tag {
+  color: var(--on-charcoal);
+}
+
+/* Reading… and Not read yet: an outlined tag, the word's ink on paper. */
+.pv-marker--reading .pv-marker__tag,
+.pv-marker--not-read .pv-marker__tag {
+  outline: 1px dashed var(--mark);
+  outline-offset: -1px;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+/* The tag hangs above the box, over the page's own text: the pointer on the marker or its
+   tag fades it, so the words under it can be read. */
+.pv-marker:hover .pv-marker__tag {
+  opacity: 0.15;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pv-marker__tag {
+    transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+.pv-marker:hover {
+  background-color: color-mix(in srgb, var(--orange) 8%, transparent);
+}
+
+/* Lit: the card is hovered or selected, or this marker is. Thicker, with the board's
+   corner square, above its neighbours. */
+.pv-marker--lit {
+  z-index: 2;
+  outline-width: 3px;
+  outline-offset: 4px;
+}
+
+.pv-marker--lit::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--mark);
+}
+
+.pv-marker--lit .pv-marker__tag {
+  margin-bottom: 8px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.pv-marker:focus-visible {
+  z-index: 2;
+  box-shadow:
+    0 0 0 8px var(--surface),
+    0 0 0 10px var(--focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-marker {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .pv-marker {
+    outline-color: Highlight;
+  }
+
+  .pv-marker__tag {
+    border: 1px solid CanvasText;
+  }
+
+  /* The box-shadow ring is dropped in forced colours: the focused marker gets a double edge. */
+  .pv-marker:focus-visible {
+    outline: 4px double CanvasText;
+    outline-offset: 4px;
+  }
+}
+
+/* Text ----------------------------------------------------------------------- */
+
+/* The text column holds its caption, the annotation (its own scroll, at most 45% of the
+   column; 70% while it is being corrected) and the text, which scrolls on its own: a value
+   can be clicked again while the text shows its last occurrence. */
+.pv-col--text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pv-col--text > .pv-cap {
+  flex: none;
+}
+
+.pv-text {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 18px 28px 48px;
+}
+
+.pv-text:focus-visible {
+  outline-offset: -3px;
+}
+
+.pv-text__body {
+  max-width: 68ch;
+}
+
+.pv .pv-text__heading {
+  margin: 26px 0 8px;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  text-wrap: balance;
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+
+.pv .pv-text__heading:first-child {
+  margin-top: 0;
+}
+
+.pv .pv-text__para {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.pv-text__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-text__state > p {
+  margin: 0;
+}
+
+.pv-text__bar {
+  align-self: stretch;
+  max-width: 240px;
+}
+
+/* Annotation ----------------------------------------------------------------- */
+
+.pv-ann {
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Focused by the panel itself while a run goes (its button is gone): an inset outline. */
+.pv-ann:focus-visible {
+  outline-offset: -3px;
+}
+
+/* A focus the panel moved itself after a mouse click (AnnotationPanel focusAfter): no keyboard
+   ring until a key is pressed or the focus leaves. */
+.pv-ann[data-quiet-focus]:focus-visible,
+.pv-ann [data-quiet-focus]:focus-visible {
+  outline: none;
+}
+
+.pv-ann:has(.pv-ann__form) {
+  max-height: 70%;
+}
+
+.pv .pv-ann p {
+  margin: 0;
+}
+
+/* Annotating: the badge, then the progress bar (the estimate) with its figure. */
+.pv-ann__state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.pv-ann__start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pv .pv-ann__hint,
+.pv .pv-ann__none {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pv .pv-ann__none {
+  padding: 8px 10px;
+}
+
+.pv .pv-ann__problem {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* The values: a specimen label (charcoal head, surface rows ruled by hair). */
+.pv-ann__label {
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+}
+
+.pv .pv-ann__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 10px;
+  background-color: var(--charcoal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-charcoal);
+}
+
+.pv-ann__model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.pv-ann__list {
+  margin: 0;
+}
+
+.pv-ann__row {
+  display: grid;
+  grid-template-columns: minmax(88px, 28%) 1fr;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--hair);
+}
+
+.pv-ann__row:first-child {
+  border-top: 0;
+}
+
+.pv-ann__key {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pv-ann__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.pv-ann__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px 8px;
+  border: 1px solid var(--fam-deep);
+  border-radius: 2px;
+  background-color: var(--fam-tint);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+button.pv-ann__value {
+  cursor: pointer;
+}
+
+/* Hover: the family's edge thickens to 3px. */
+button.pv-ann__value:hover {
+  box-shadow: inset 0 0 0 2px var(--fam-deep);
+}
+
+/* The value whose occurrence the text shows: filled with its family's deep colour, as the
+   occurrence itself is in the text. */
+.pv-ann__value--shown,
+button.pv-ann__value--shown:hover {
+  background-color: var(--fam-deep);
+  color: var(--on-green);
+}
+
+/* Not in the text (an inferred kingdom): no button, a dashed edge and the count 0. */
+.pv-ann__value--absent {
+  border-style: dashed;
+  color: var(--text-2);
+}
+
+.pv-ann__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.pv-ann__value--shown .pv-ann__count {
+  color: var(--on-green);
+}
+
+.pv-ann__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Correcting: one labelled box per field, one value a line. */
+.pv-ann__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pv-ann__fields {
+  display: grid;
+  gap: 8px;
+}
+
+.pv-ann__field {
+  display: grid;
+  gap: 4px;
+}
+
+.pv-ann__field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.pv-ann__input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background-color: var(--surface);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.pv-ann__input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Annotation families (DESIGN.md Annotation): the 11 fields in six colour families, each a
+   tint, a deep colour (tokens.css --ann-*) and its own underline style, so a family is told
+   apart without its hue too. Marks, value chips and legend swatches all read these three. */
+.pv-fam--organism {
+  --fam-tint: var(--ann-organism-tint);
+  --fam-deep: var(--ann-organism);
+  --fam-line: double;
+}
+
+.pv-fam--part {
+  --fam-tint: var(--ann-part-tint);
+  --fam-deep: var(--ann-part);
+  --fam-line: solid;
+}
+
+.pv-fam--place {
+  --fam-tint: var(--ann-place-tint);
+  --fam-deep: var(--ann-place);
+  --fam-line: solid;
+}
+
+.pv-fam--name {
+  --fam-tint: var(--ann-name-tint);
+  --fam-deep: var(--ann-name);
+  --fam-line: dotted;
+}
+
+.pv-fam--class {
+  --fam-tint: var(--ann-class-tint);
+  --fam-deep: var(--ann-class);
+  --fam-line: dashed;
+}
+
+.pv-fam--systematic {
+  --fam-tint: var(--ann-systematic-tint);
+  --fam-deep: var(--ann-systematic);
+  --fam-line: wavy;
+}
+
+/* A field the client does not know: the sunken ground, a text-2 line. */
+.pv-fam--other {
+  --fam-tint: var(--sunken);
+  --fam-deep: var(--text-2);
+  --fam-line: solid;
+}
+
+/* Marks in the text: every occurrence of a shown value on its family's tint, underlined in
+   its family's style; the one a click went to is filled with the family's deep colour. */
+.pv-mark {
+  padding: 0 1px;
+  background-color: var(--fam-tint);
+  color: inherit;
+  text-decoration: underline var(--fam-line) var(--fam-deep) 1.5px;
+  text-underline-offset: 3px;
+}
+
+.pv-mark--current {
+  background-color: var(--fam-deep);
+  color: var(--on-green);
+  text-decoration: none;
+}
+
+/* The legend: a small block of the family's tint over its line (a bottom border in the line
+   style; borders have no wavy, so the systematic family draws its wave as an underline). */
+.pv-swatch {
+  flex: none;
+  display: inline-block;
+  width: 22px;
+  height: 11px;
+  border-bottom: 2px var(--fam-line) var(--fam-deep);
+  background-color: var(--fam-tint);
+}
+
+.pv-swatch.pv-fam--organism {
+  border-bottom-width: 3px;
+}
+
+.pv-swatch.pv-fam--systematic {
+  border-bottom: 0;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 11px;
+  vertical-align: top;
+}
+
+.pv-swatch.pv-fam--systematic::before {
+  content: "\00a0\00a0\00a0\00a0\00a0";
+  text-decoration: underline wavy var(--fam-deep) 1.5px;
+  text-underline-offset: 1px;
+}
+
+@media (forced-colors: active) {
+  .pv-mark {
+    background-color: Mark;
+    color: MarkText;
+  }
+
+  .pv-mark--current,
+  .pv-ann__value--shown {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* Structures ----------------------------------------------------------------- */
+
+.pv-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Without the Popover API (ui/anchor's fallback) an open engine menu opens downwards in the
+   list, above the cards below and the caption. With it, the menu lives in the top layer and
+   is placed by the client, so the column never clips it. */
+.pv-list .card:has(.engine-menu__panel) {
+  z-index: 4;
+}
+
+.pv-list .engine-menu__panel {
+  top: calc(100% + 6px);
+  bottom: auto;
+}

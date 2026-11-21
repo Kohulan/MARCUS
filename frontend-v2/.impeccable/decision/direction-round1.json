@@ -1,0 +1,121 @@
+{
+  "title": "Choose the look of the new MARCUS",
+  "question": "Pick the design direction for the new MARCUS (landing page and curation tool). You can also ask for a fresh set, safer or bolder.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Loupe",
+      "kicker": "THE ROLL",
+      "lineage": "the hexagonal lens in the MARCUS logo, made into the one optical instrument of the whole interface",
+      "thesis": "A green hexagonal lens moves over real paper pages, and whatever it passes turns into a recognised, checkable structure.",
+      "palette": ["#0F2B4C", "#F3F6F8", "#3E9B43", "#0F5E2C", "#C8402F"],
+      "materials": ["ink-navy desk", "stacked white paper sheets", "solid green lens ring", "printed structure line art"],
+      "viewport": "Landing: a full-height navy desk with one real page at large scale; the lens sweeps across it and each drawing it crosses lifts out as a structure with its SMILES; headline and Start button sit left. Tool: focus mode shows the crop inside the lens, its page around it.",
+      "risk": "Built on the logo's own idea, so it can read obvious if the lens is just decoration instead of the real review instrument.",
+      "raised": [
+        { "from": "Rhythm machine step row", "raise": "Review is one unbroken row of toggle keys per page with a running cursor; A/R arm a structure like stepping a pattern." },
+        { "from": "Depot destination blind", "raise": "A failure never disappears: a failed page stays in place as a stalled sheet with its reason printed on it." },
+        { "from": "Akari light sculpture", "raise": "Light is state: accepted structures are lit, unreviewed ones wait unlit, rejected ones fold flat." }
+      ]
+    },
+    {
+      "id": "model-pick",
+      "label": "Atom Colours",
+      "kicker": "MY PICK",
+      "lineage": "the CPK atom colour convention every chemist reads at a glance (carbon black, nitrogen blue, oxygen red, sulfur yellow)",
+      "thesis": "The whole interface is coloured like a molecule model: big fields of nitrogen blue and oxygen red, carbon-black type, with the logo's green as the 'accepted' colour.",
+      "palette": ["#1B1D21", "#2F4FD8", "#E2392B", "#F2C42E", "#FFFFFF", "#2E9E48"],
+      "materials": ["flat colour fields", "ball-and-stick geometry", "bold sans type"],
+      "viewport": "Landing: a split field, nitrogen-blue left with the headline in white, a large structure drawn in CPK colours right; engines shown as atom-coloured tiles. Tool: white workspace, colour only on states and engine tags.",
+      "risk": "Familiar to chemists and strong, but red means oxygen here, so error states need another signal (shape and icon, not only red)."
+    },
+    {
+      "id": "challenger-ledger",
+      "label": "Curation Ledger",
+      "verdict": "competitive",
+      "lineage": "Japanese high-density web pages: tiny type, ruled boxed modules, one utility accent",
+      "thesis": "Everything a curator needs on one screen: a dense ruled mosaic of structure modules, each with a small green tab, nothing wasted.",
+      "palette": ["#FFFFFF", "#111418", "#1F7A3A", "#D7DDE3", "#0F2B4C"],
+      "materials": ["hairline rules", "boxed modules", "small header tabs"],
+      "viewport": "Tool-first: the paper's structures as a tight grid of ruled modules with SMILES, engine and state visible at once; landing is a dense one-screen overview.",
+      "case": "Fuses well for power curators (hundreds of structures per screen); weaker for first-time visitors who need one clear story.",
+      "risk": "Can feel cramped and unfriendly to students trying one paper."
+    },
+    {
+      "id": "challenger-step",
+      "label": "Rhythm machine step row",
+      "verdict": "declined",
+      "lineage": "early-80s drum machine step rows",
+      "thesis": "Review as a sequencer: structures as step keys under a chase light.",
+      "palette": ["#2A2A2E", "#E2392B", "#F28C28", "#F2C42E", "#F5F5F0"],
+      "materials": ["silkscreen panel", "lit step keys"],
+      "viewport": "A row of sixteen keys per page.",
+      "case": "Chemists do not identify with music hardware; the metaphor hides the structures.",
+      "kept": "One unbroken review row with keyboard-armed states.",
+      "risk": "Novelty over clarity."
+    },
+    {
+      "id": "challenger-blind",
+      "label": "Depot destination blind",
+      "verdict": "declined",
+      "lineage": "bus destination roller blinds",
+      "thesis": "Status as cloth courses stepping under a window.",
+      "palette": ["#1E4D2B", "#F2C200", "#F1ECE0"],
+      "materials": ["dyed duck cloth", "stitched legends"],
+      "viewport": "A stepping status roll.",
+      "case": "Strong status grammar, but no link to chemistry or papers.",
+      "kept": "A fault is a visible stalled state, never an absence.",
+      "risk": "Reads as transport, not science."
+    },
+    {
+      "id": "challenger-akari",
+      "label": "Akari light sculpture",
+      "verdict": "declined",
+      "lineage": "washi paper lamps",
+      "thesis": "Results as lit paper volumes in a dim room.",
+      "palette": ["#F2E6CC", "#B89B6A", "#2B2B2B", "#D2452E"],
+      "materials": ["washi", "bamboo ribs"],
+      "viewport": "Glowing paper forms.",
+      "case": "Calm and beautiful, but too soft for a bold modern tool.",
+      "kept": "Light as state: lit means accepted.",
+      "risk": "Feels decorative and quiet."
+    },
+    {
+      "id": "challenger-sand",
+      "label": "Kinetic sand glyphs",
+      "verdict": "declined",
+      "lineage": "Afrofuturist control surfaces",
+      "thesis": "Commands as rings of glyphs in raised sand.",
+      "palette": ["#C68B3E", "#3B2A1E", "#111111", "#D9B45A"],
+      "materials": ["black sand", "antique gold"],
+      "viewport": "Rotating glyph rings.",
+      "case": "No link to the curator's task; radial controls slow review.",
+      "kept": "One central focus with everything else in rings around it (focus mode).",
+      "risk": "Hard to use for list work."
+    },
+    {
+      "id": "challenger-storm",
+      "label": "Alphabet storm",
+      "verdict": "declined",
+      "lineage": "surreal typographic worlds",
+      "thesis": "Letters condense into words and weather.",
+      "palette": ["#FFFFFF", "#111111", "#B8C0C8"],
+      "materials": ["monumental grotesk", "particles"],
+      "viewport": "Words as weather.",
+      "case": "Spectacle without the product's truth.",
+      "kept": "Type as material: the MARCUS wordmark at monumental scale.",
+      "risk": "Distracts from structures."
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "A clean science-tool website: white pages, navy text, green accent, a molecule picture up top, done very well.",
+    "palette": ["#FFFFFF", "#0F172A", "#16A34A", "#E2E8F0"],
+    "materials": ["clean grid", "product screenshots"],
+    "viewport": "Headline and Start button left, a screenshot of the tool right; three feature blocks below.",
+    "risk": "Looks like many other science tools by design."
+  },
+  "steer": true
+}

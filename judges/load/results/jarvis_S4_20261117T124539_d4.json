@@ -1,0 +1,273 @@
+{
+ "scenario": "S4",
+ "target": "jarvis",
+ "client": "v1",
+ "base_url": "http://127.0.0.1:19000",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-17T11:45:28+00:00",
+ "config": {
+  "target": "jarvis",
+  "client": "v1",
+  "base_url": "http://127.0.0.1:19000",
+  "scenarios": [
+   "S4"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "depict_period_s": 2.0,
+  "prod_stopped": true,
+  "cache_pg_container": null,
+  "allow_warm_cache": false,
+  "tag": "d4"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   2.56,
+   1.86,
+   1.77
+  ],
+  "end": [
+   2.21,
+   1.82,
+   1.76
+  ]
+ },
+ "results": {
+  "fixture": "synth_190.pdf",
+  "expected_each": 190,
+  "arms": [
+   {
+    "kind": "two_papers",
+    "mode": "sequential",
+    "repeat": 0,
+    "wall_s": 10.3,
+    "expected_each": 190,
+    "papers": [
+     {
+      "file": "synth_190.pdf",
+      "segments_listed": null,
+      "segments_reported": null,
+      "segment_ms": null,
+      "wall_ms": 10256.3,
+      "fatal_error": "RemoteProtocolError: Server disconnected without sending a response.",
+      "pages_total": 24,
+      "listed_pages": null,
+      "segments_with_smiles": 0,
+      "ocsr_errors": 0,
+      "segment_compute_ms": null,
+      "ocsr_done_ms": null,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": null,
+      "lost_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23
+      ]
+     },
+     {
+      "file": "synth_190.pdf",
+      "segments_listed": null,
+      "segments_reported": null,
+      "segment_ms": null,
+      "wall_ms": 34.6,
+      "fatal_error": "ReadError: [Errno 104] Connection reset by peer",
+      "pages_total": 24,
+      "listed_pages": null,
+      "segments_with_smiles": 0,
+      "ocsr_errors": 0,
+      "segment_compute_ms": null,
+      "ocsr_done_ms": null,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": null,
+      "lost_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       19,
+       20,
+       21,
+       22,
+       23
+      ]
+     }
+    ],
+    "page_errors": [
+     {
+      "page": 0,
+      "error": "Exception encountered when calling layer 'ROI' (type ProposalLayer).",
+      "layer_type": "ProposalLayer",
+      "kind": "exception"
+     },
+     {
+      "page": 4,
+      "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+      "layer_type": "PyramidROIAlign",
+      "kind": "exception"
+     },
+     {
+      "page": 5,
+      "error": "Exception encountered when calling layer 'roi_align_classifier' (type PyramidROIAlign).",
+      "layer_type": "PyramidROIAlign",
+      "kind": "exception"
+     }
+    ],
+    "page_error_count": 3,
+    "server_segment_s": [],
+    "log_keywords": {
+     "PyramidROIAlign": 8,
+     "ProposalLayer": 2,
+     "Lambda": 1,
+     "A fatal error has been detected": 2,
+     "SIGSEGV": 6
+    },
+    "backend_crash": true,
+    "error_pages_by_batch4": {
+     "0": [
+      0
+     ],
+     "1": [
+      4,
+      5
+     ]
+    }
+   }
+  ],
+  "note": "page errors come from backend docker logs in the arm's time window (all papers of the arm together)",
+  "engine": "decimer",
+  "ocsr": "segmentation only",
+  "two_papers": [
+   "synth_190.pdf",
+   "synth_190.pdf"
+  ],
+  "stopped": "backend not answering /health"
+ },
+ "summary": {
+  "two_papers/sequential": {
+   "arms": 1,
+   "papers": 2,
+   "page_errors": 3,
+   "segments_found": [
+    null,
+    null
+   ],
+   "wall_s": [
+    10.3
+   ],
+   "layers": {
+    "ProposalLayer": 1,
+    "PyramidROIAlign": 2
+   },
+   "crashes": 1,
+   "lost_pages": 48,
+   "all_segment_counts_equal": true,
+   "segments_with_smiles": [
+    0,
+    0
+   ],
+   "ocsr_errors": 0,
+   "fatal_errors": 2
+  },
+  "errors_in_batches_with_2plus_errors": {
+   "errors": 3,
+   "in_multi_error_batches": 2
+  },
+  "expected_segments_two_papers_each": 190,
+  "pages_each": 24
+ },
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 1,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 16245,
+  "max_gpu_used_mib": 16250,
+  "events": [
+   {
+    "t": "2026-11-17T11:45:28+00:00",
+    "scenario": "S4",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 16245,
+    "gpu_used_mib": 16250,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T11:45:39+00:00",
+    "scenario": "S4",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 32495,
+    "gpu_used_mib": 0,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T11:45:39+00:00",
+ "duration_s": 11.2
+}

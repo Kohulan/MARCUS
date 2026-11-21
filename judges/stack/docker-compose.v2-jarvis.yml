@@ -1,0 +1,65 @@
+# Override for the v2 TEST stack on jarvis (Task D4 GPU session). Not production.
+#
+# Built and run from a copy of branch v2-backend in ~/Project_MARCUS/v2-test/ (never from the production clone
+# ~/Project_MARCUS/MARCUS). Compose project `marcus-v2-test`: its own containers (marcus-v2-test-*), volumes and
+# networks, so nothing is shared with production (`marcus`, ports 8080/9000) or with the v1 judge copy
+# (`marcus-judge`, 127.0.0.1:19000).
+#
+#   cd ~/Project_MARCUS/v2-test/backend-v2
+#   # GPU mode (load, accuracy, robustness): real engines on the V100
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.gpu.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml up -d
+#   # security mode (the security v2 suite uploads with engine "fake"): fake segment/OCSR workers, no GPU
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.fake.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml up -d
+#   # stop and remove (keeps the images)
+#   docker compose -p marcus-v2-test -f docker-compose.yml -f docker-compose.gpu.yml \
+#       -f ../judges/stack/docker-compose.v2-jarvis.yml down -v
+#
+# Ports: the only published port is nginx's 127.0.0.1:18090 from docker-compose.yml (loopback only; not 8080 or
+# 9000, which the maintenance page holds). dcgm-exporter, metrics, API, Postgres and Redis publish nothing.
+# The OCSR cache clear of the load judge (R21) needs the Postgres container name: marcus-v2-test-postgres-1.
+#
+# Judge-friendly limits (the D2/R20 ruling): every judge request comes from one client IP (the Docker gateway),
+# so the PER-IP limits are raised exactly as docker-compose.fake.yml raises them; otherwise the security suite
+# (dozens of owners per run) and the load scenarios (one owner per paper) hit "10 new owners per IP per hour" and
+# "6 active papers per IP" within minutes. Per-OWNER limits (3 active papers, 10 uploads per minute, 60 tool calls
+# per minute) and every other setting stay as in production.
+#
+#   limit                                   production   this stack
+#   MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR       10           1000
+#   MARCUS_IP_MAX_ACTIVE_PAPERS             6            100
+#   MARCUS_RATE_LIMIT_IP_PER_MIN            300          6000
+#   MARCUS_NGINX_CONN_PER_IP (nginx)        64           1000
+#   MARCUS_NGINX_UPLOADS_PER_IP (nginx)     4            100
+#
+# The two nginx caps (limit_conn per address, docker/nginx-edge.sh; added by the final-review fix wave, 7410155) are
+# per-IP limits too and are raised the same way (ruling R25): the robustness judge uploads 8 adversarial PDFs at once
+# from the one judge IP, which the production cap of 4 uploads in progress per address would answer with 429. Every
+# other nginx setting stays as in production (the 1 MB body cap outside POST /papers and /images, 21 MB on those two,
+# the tmpfs and mem_limit of api and nginx). Used since Task D5 (rerun of Safe, Responsive and a Robust smoke).
+#
+# Fake engines stay OFF in GPU mode (MARCUS_ENABLE_FAKE_ENGINES from docker-compose.yml, default 0); security
+# mode turns them on through docker-compose.fake.yml only.
+#
+# MolScribe device: cuda, from docker-compose.gpu.yml (since D4 fix round 1; the fixture judge showed no loss
+# against cpu, judges/results/2026-11-17-gpu-session.md).
+
+#
+# The first D4 session (2026-11-17, morning) ran worker-segment WITHOUT its TensorFlow budget here (finding F2:
+# decimer_segmentation's import-time set_memory_growth). segment.py now skips that call when a budget is set, so
+# every worker runs with the budgets of docker-compose.gpu.yml (the shipping configuration).
+#
+# Throughput experiment (2 slots for segmentation and DECIMER OCSR): add -f docker-compose.v2-jarvis-2slot.yml last.
+
+services:
+  api:
+    environment:
+      MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
+      MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
+      MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
+
+  nginx:
+    environment:
+      MARCUS_NGINX_CONN_PER_IP: "1000"
+      MARCUS_NGINX_UPLOADS_PER_IP: "100"

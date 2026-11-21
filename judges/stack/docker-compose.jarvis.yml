@@ -1,0 +1,17 @@
+# Override for running the judge copy on jarvis (shares the V100 with production).
+# Use: docker compose -p marcus-judge -f docker-compose.yml -f docker-compose.jarvis.yml up -d
+# Safety: own project name, own data folder, ports on 127.0.0.1 only,
+# TensorFlow grows GPU memory on demand instead of grabbing all free memory.
+services:
+  backend:
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

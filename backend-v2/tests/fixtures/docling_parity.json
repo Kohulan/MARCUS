@@ -1,0 +1,273 @@
+{
+ "_about": "Shared parity fixture (review A-M4): one synthetic Docling document with the Paper view's text blocks (frontend-v2 doclingText.ts doclingBlocks, backend-v2 marcus.core.annotation.docling_blocks) and the model input (marcus.workers.annotate.inputs.model_input). Covers a nested list item, a group that refers back to its parent, a text and a list item shared by two paths, a picture's caption, a table, a text blank under JavaScript's trim, a soft hyphen, a double space, U+2028 and a non-BMP character. Both test suites read it; change the walks only together.",
+ "doc": {
+  "schema_name": "DoclingDocument",
+  "body": {
+   "children": [
+    {
+     "$ref": "#/texts/0"
+    },
+    {
+     "$ref": "#/texts/1"
+    },
+    {
+     "$ref": "#/texts/2"
+    },
+    {
+     "$ref": "#/texts/3"
+    },
+    {
+     "$ref": "#/texts/4"
+    },
+    {
+     "$ref": "#/texts/5"
+    },
+    {
+     "$ref": "#/groups/0"
+    },
+    {
+     "$ref": "#/pictures/0"
+    },
+    {
+     "$ref": "#/tables/0"
+    },
+    {
+     "$ref": "#/texts/8"
+    },
+    {
+     "$ref": "#/texts/11"
+    },
+    {
+     "$ref": "#/texts/6"
+    }
+   ]
+  },
+  "texts": [
+   {
+    "self_ref": "#/texts/0",
+    "label": "title",
+    "text": "Taxanes from the Bark of Taxus brevifolia",
+    "prov": [
+     {
+      "page_no": 1
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/1",
+    "label": "section_header",
+    "text": "Abstract",
+    "prov": [
+     {
+      "page_no": 1
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/2",
+    "label": "text",
+    "text": "Two new taxane diter\u00adpenoids were isolated from the bark of Taxus brevifolia collected in Oregon.  Their structures were established by NMR spectroscopy and HRMS.",
+    "prov": [
+     {
+      "page_no": 1
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/3",
+    "label": "section_header",
+    "text": "1. Introduction",
+    "prov": [
+     {
+      "page_no": 1
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/4",
+    "label": "text",
+    "text": "Taxus brevifolia is a source of paclitaxel. In this study we report two new taxanes from its bark.",
+    "prov": [
+     {
+      "page_no": 1
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/5",
+    "label": "section_header",
+    "text": "2. Results and Discussion",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/6",
+    "label": "list_item",
+    "text": "Compound 1 was obtained as a white powder.",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ],
+    "children": [
+     {
+      "$ref": "#/texts/7"
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/7",
+    "label": "list_item",
+    "text": "Its formula was established by HRMS.",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/8",
+    "label": "text",
+    "text": " \u00a0\ufeff\u3000 ",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/9",
+    "label": "text",
+    "text": "The bark of Taxus brevifolia was extracted with methanol.",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/10",
+    "label": "caption",
+    "text": "Figure 1. Structures of compounds 1 and 2.",
+    "prov": [
+     {
+      "page_no": 2
+     }
+    ]
+   },
+   {
+    "self_ref": "#/texts/11",
+    "label": "text",
+    "text": "Taxus  brevifolia\u2028grows in the Pacific Northwest (\ud835\udefc-taxane).",
+    "prov": [
+     {
+      "page_no": 3
+     }
+    ]
+   }
+  ],
+  "groups": [
+   {
+    "self_ref": "#/groups/0",
+    "label": "list",
+    "children": [
+     {
+      "$ref": "#/texts/6"
+     },
+     {
+      "$ref": "#/groups/1"
+     }
+    ]
+   },
+   {
+    "self_ref": "#/groups/1",
+    "label": "inline",
+    "children": [
+     {
+      "$ref": "#/groups/0"
+     },
+     {
+      "$ref": "#/texts/9"
+     },
+     {
+      "$ref": "#/texts/2"
+     }
+    ]
+   }
+  ],
+  "pictures": [
+   {
+    "self_ref": "#/pictures/0",
+    "children": [
+     {
+      "$ref": "#/texts/10"
+     }
+    ]
+   }
+  ],
+  "tables": [
+   {
+    "self_ref": "#/tables/0",
+    "children": []
+   }
+  ]
+ },
+ "blocks": [
+  {
+   "kind": "heading",
+   "text": "Taxanes from the Bark of Taxus brevifolia"
+  },
+  {
+   "kind": "heading",
+   "text": "Abstract"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Two new taxane diter\u00adpenoids were isolated from the bark of Taxus brevifolia collected in Oregon.  Their structures were established by NMR spectroscopy and HRMS."
+  },
+  {
+   "kind": "heading",
+   "text": "1. Introduction"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Taxus brevifolia is a source of paclitaxel. In this study we report two new taxanes from its bark."
+  },
+  {
+   "kind": "heading",
+   "text": "2. Results and Discussion"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Compound 1 was obtained as a white powder."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Its formula was established by HRMS."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The bark of Taxus brevifolia was extracted with methanol."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Two new taxane diter\u00adpenoids were isolated from the bark of Taxus brevifolia collected in Oregon.  Their structures were established by NMR spectroscopy and HRMS."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Taxus  brevifolia\u2028grows in the Pacific Northwest (\ud835\udefc-taxane)."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Compound 1 was obtained as a white powder."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Its formula was established by HRMS."
+  }
+ ],
+ "input_text": "Taxanes from the Bark of Taxus brevifolia\tABSTRACT: Two new taxane diterpenoids were isolated from the bark of Taxus brevifolia collected in Oregon. Their structures were established by NMR spectroscopy and HRMS.\tINTRODUCTION: Taxus brevifolia is a source of paclitaxel. In this study we report two new taxanes from its bark."
+}

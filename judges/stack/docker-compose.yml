@@ -1,0 +1,44 @@
+# Local, CPU-only copy of MARCUS production for the judges.
+# Uses the exact production images (see IMAGES.md). Ports bind to 127.0.0.1 only.
+# Start:  docker compose -p marcus-judge -f judges/stack/docker-compose.yml up -d
+# Stop:   docker compose -p marcus-judge -f judges/stack/docker-compose.yml down
+services:
+  backend:
+    image: marcus-backend:latest
+    container_name: marcus-judge-backend
+    environment:
+      # Dummy key in the format the startup validator accepts. OpenAI calls fail with 401, at no cost.
+      - OPENAI_API_KEY=sk-judgeDUMMYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      - OPENAI_MODEL_ID=gpt-4o-mini
+      - SECRET_KEY=judge-local-secret-key-not-used-in-production-0123456789
+      - RELEASE_VERSION=1.0
+      - HOMEPAGE_URL=/latest/docs
+      - CORS_ORIGINS=http://localhost:18080
+      - CUDA_VISIBLE_DEVICES=
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/models:/app/models
+      - ./data/cache:/root/.data    # pystow cache: DECIMER weights, CDK jars
+      - ./data/hf:/root/.cache      # Hugging Face and docling caches
+    ports:
+      - "127.0.0.1:19000:9000"
+    networks:
+      judge-net:
+        aliases: [marcus-backend]   # frontend nginx.conf proxies to marcus-backend:9000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 60s
+
+  frontend:
+    image: marcus-frontend:latest
+    container_name: marcus-judge-frontend
+    depends_on: [backend]
+    ports:
+      - "127.0.0.1:18080:8080"
+    networks: [judge-net]
+
+networks:
+  judge-net: {}

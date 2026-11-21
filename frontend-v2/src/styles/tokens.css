@@ -1,0 +1,119 @@
+/*
+ * Survey Sheet design tokens (spec §7 decision 8, seed key 6b4eb402). Light only.
+ *
+ * Every value is fixed by the plan's Global Constraints. Contrast (WCAG 2.x) is
+ * pinned in styles.test.ts. Notes for use:
+ * - line is about 1.7:1 on paper: hairlines and frames only, never a control edge
+ *   (controls use control-border, 3.3:1 or more on every ground).
+ * - orange is 3.4:1 on paper: shapes only (markers, outlines, fills). Small orange
+ *   text is orange-ink; text on an orange fill is on-orange.
+ * - accepted is 4.4:1 on sunken: accepted text sits on paper or surface only.
+ * - States always pair a colour with a word and a shape, never colour alone.
+ * - The sheet is flat: only what floats above it (glass pills, the nav's water drop, the
+ *   footer's porcelain bubbles, menus, toasts, dialogs) takes a lift, and every dialog
+ *   dims the page with the one scrim (DESIGN.md Elevation).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Grounds */
+  --paper: #F4F3EA;
+  --surface: #FFFFFF;
+  --sunken: #ECEBE1;
+
+  /* Text */
+  --ink: #1C211D;
+  --text-2: #3F443D;
+  --muted: #5E625B;
+
+  /* Drawing-sheet rules: frame, inner hairline, ruler ticks, failed-ground stripes */
+  --line: #B9BCB2;
+  --hair: #D9DACF;
+  --tick: #9FA398;
+  --hatch: #E6E5DC;
+
+  /* Every control edge: inputs, checkboxes, selects, the solid clear button */
+  --control-border: #7E8279;
+
+  /* Green leads; orange asks; charcoal for rejected and failed */
+  --green: #1E4D33;
+  --accepted: #2D7A46;
+  --orange: #FA3600;
+  --orange-ink: #B82800;
+  --charcoal: #1C211D;
+
+  /* Text set on a filled ground */
+  --on-green: #FFFFFF;
+  --on-orange: #141414;
+  --on-charcoal: #F4F3EA;
+
+  /* Browser surfaces */
+  --focus: var(--green);
+  --selection: #DCEBDF;
+
+  /* Annotation highlights (DESIGN.md Annotation): six families, each a tint (marks, value
+     chips, swatches; ink and text-2 at least 4.5:1 on it) and a deep colour (underlines,
+     edges, the clicked occurrence's fill; white at least 4.5:1 on it, 3:1 on the page) */
+  --ann-organism: #2F6A1A;
+  --ann-organism-tint: #C8E4A4;
+  --ann-part: #7A5600;
+  --ann-part-tint: #F7E08C;
+  --ann-place: #1D5DA6;
+  --ann-place-tint: #CFE3FA;
+  --ann-name: #A3305F;
+  --ann-name-tint: #FBD7E5;
+  --ann-class: #6A3CA6;
+  --ann-class-tint: #D2BEF2;
+  --ann-systematic: #17675F;
+  --ann-systematic-tint: #9FD6CB;
+
+  /* Elevation: one green-black ambient family, one lift per kind of floating object */
+  --lift-glass: 0 10px 24px -8px rgba(15, 30, 22, 0.35);
+  --lift-menu: 0 12px 28px -10px rgba(15, 30, 22, 0.35);
+  --lift-dialog: 0 24px 64px -24px rgba(15, 30, 22, 0.45);
+  --lift-pill-solid: 0 6px 16px -8px rgba(15, 30, 22, 0.35);
+  /* The glass pill's inner light: a top highlight, a soft rim and a bottom shade */
+  --glass-shine:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 3px rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    inset 0 -12px 18px -12px rgba(0, 0, 0, 0.22);
+  --scrim: rgba(28, 33, 29, 0.42);
+  /* The footer's porcelain bubbles: a glazed top edge, a faint rim and a low lift */
+  --porcelain:
+    inset 0 1px 0 #FFFFFF,
+    inset 0 -1.5px 2px rgba(28, 33, 29, 0.1),
+    inset 0 0 0 1px rgba(28, 33, 29, 0.07),
+    0 1px 1px rgba(15, 30, 22, 0.1),
+    0 8px 16px -10px rgba(15, 30, 22, 0.45);
+  /* The Waterline nav's drop of green water: its meniscus and a small lift */
+  --water-drop:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55),
+    0 5px 10px -7px rgba(15, 30, 22, 0.45);
+
+  /* Spacing: the landing-page-design skill's table (B2); nothing between, nothing outside */
+  --s-25: 2px;
+  --s-50: 4px;
+  --s-75: 8px;
+  --s-100: 12px;
+  --s-200: 16px;
+  --s-300: 24px;
+  --s-400: 32px;
+  --s-500: 40px;
+  --s-600: 48px;
+  --s-700: 64px;
+  --s-800: 80px;
+  --s-900: 96px;
+
+  /* Motion: the one curve (skill B7): 500ms for position, 300ms for colour and opacity */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Type */
+  --font-head: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-text: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mark: "Gmarket Sans", var(--font-text);
+}

@@ -1,0 +1,1947 @@
+{
+ "scenario": "S4",
+ "target": "jarvis",
+ "client": "v2",
+ "base_url": "http://127.0.0.1:18090",
+ "build": "v2-r1b-f40a0d0+recycle",
+ "started_at": "2026-11-17T17:58:51+00:00",
+ "config": {
+  "target": "jarvis",
+  "client": "v2",
+  "base_url": "http://127.0.0.1:18090",
+  "scenarios": [
+   "S4"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "depict_period_s": 2.0,
+  "prod_stopped": true,
+  "cache_pg_container": "marcus-v2-test-postgres-1",
+  "allow_warm_cache": false,
+  "tag": "d4r1b-2slot"
+ },
+ "stopped_early": false,
+ "host_load": {
+  "start": [
+   5.98,
+   5.72,
+   5.57
+  ],
+  "end": [
+   7.08,
+   6.74,
+   6.75
+  ]
+ },
+ "results": {
+  "fixture": "synth_190.pdf",
+  "expected_each": 190,
+  "arms": [
+   {
+    "kind": "two_papers",
+    "mode": "sequential",
+    "repeat": 0,
+    "wall_s": 185.6,
+    "expected_each": 190,
+    "papers": [
+     {
+      "file": "synth_190_half0.pdf",
+      "segments_listed": 96,
+      "segments_reported": 96,
+      "segment_ms": 16494.1,
+      "wall_ms": 94984.9,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 96,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 15427.5,
+      "ocsr_done_ms": 94748.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth_190_half1.pdf",
+      "segments_listed": 94,
+      "segments_reported": 94,
+      "segment_ms": 16083.9,
+      "wall_ms": 90608.0,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 94,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 15172.9,
+      "ocsr_done_ms": 90512.7,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "two_papers",
+    "mode": "concurrent",
+    "repeat": 0,
+    "wall_s": 181.5,
+    "expected_each": 190,
+    "papers": [
+     {
+      "file": "synth_190_half0.pdf",
+      "segments_listed": 96,
+      "segments_reported": 96,
+      "segment_ms": 31748.5,
+      "wall_ms": 181439.9,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 96,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 30796.1,
+      "ocsr_done_ms": 181351.7,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth_190_half1.pdf",
+      "segments_listed": 94,
+      "segments_reported": 94,
+      "segment_ms": 34098.3,
+      "wall_ms": 180128.6,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 94,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 33077.3,
+      "ocsr_done_ms": 179973.2,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "two_papers",
+    "mode": "sequential",
+    "repeat": 1,
+    "wall_s": 183.2,
+    "expected_each": 190,
+    "papers": [
+     {
+      "file": "synth_190_half0.pdf",
+      "segments_listed": 96,
+      "segments_reported": 96,
+      "segment_ms": 16271.7,
+      "wall_ms": 92242.1,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 96,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 15398.5,
+      "ocsr_done_ms": 92123.6,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth_190_half1.pdf",
+      "segments_listed": 94,
+      "segments_reported": 94,
+      "segment_ms": 16045.8,
+      "wall_ms": 90896.3,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 94,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 15244.4,
+      "ocsr_done_ms": 90806.2,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "two_papers",
+    "mode": "concurrent",
+    "repeat": 1,
+    "wall_s": 181.6,
+    "expected_each": 190,
+    "papers": [
+     {
+      "file": "synth_190_half0.pdf",
+      "segments_listed": 96,
+      "segments_reported": 96,
+      "segment_ms": 32979.2,
+      "wall_ms": 181571.8,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 96,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 29905.9,
+      "ocsr_done_ms": 181497.0,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth_190_half1.pdf",
+      "segments_listed": 94,
+      "segments_reported": 94,
+      "segment_ms": 32247.0,
+      "wall_ms": 179789.8,
+      "fatal_error": null,
+      "pages_total": 12,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11
+      ],
+      "segments_with_smiles": 94,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 31468.0,
+      "ocsr_done_ms": 179695.3,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "single_pages",
+    "mode": "sequential",
+    "repeat": 0,
+    "wall_s": 133.6,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2526.8,
+      "wall_ms": 15400.4,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 1750.3,
+      "ocsr_done_ms": 8941.6,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2896.3,
+      "wall_ms": 16871.4,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2136.7,
+      "ocsr_done_ms": 12440.0,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2873.8,
+      "wall_ms": 16400.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2118.6,
+      "ocsr_done_ms": 10919.5,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2746.2,
+      "wall_ms": 15210.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 1994.7,
+      "ocsr_done_ms": 9499.2,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p04.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2901.7,
+      "wall_ms": 16031.3,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2147.1,
+      "ocsr_done_ms": 11285.8,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p05.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2872.2,
+      "wall_ms": 15670.8,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2112.6,
+      "ocsr_done_ms": 9794.0,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p06.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2632.0,
+      "wall_ms": 22242.1,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 1933.6,
+      "ocsr_done_ms": 10250.3,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p07.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2635.3,
+      "wall_ms": 15696.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 1907.1,
+      "ocsr_done_ms": 11199.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "single_pages",
+    "mode": "concurrent",
+    "repeat": 0,
+    "wall_s": 64.3,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3608.8,
+      "wall_ms": 60649.8,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2365.5,
+      "ocsr_done_ms": 60547.0,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 11355.4,
+      "wall_ms": 63588.8,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2610.3,
+      "ocsr_done_ms": 63713.6,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 5846.4,
+      "wall_ms": 61209.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2211.1,
+      "ocsr_done_ms": 61138.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3670.9,
+      "wall_ms": 59546.3,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2493.0,
+      "ocsr_done_ms": 59461.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p04.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 10520.1,
+      "wall_ms": 64328.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2228.0,
+      "ocsr_done_ms": 64407.4,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p05.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 8141.3,
+      "wall_ms": 62014.2,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2207.3,
+      "ocsr_done_ms": 61987.5,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p06.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 6227.9,
+      "wall_ms": 61750.8,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2462.3,
+      "ocsr_done_ms": 61610.1,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p07.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 8585.6,
+      "wall_ms": 62481.1,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2255.8,
+      "ocsr_done_ms": 62495.7,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "single_pages",
+    "mode": "sequential",
+    "repeat": 1,
+    "wall_s": 132.2,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3010.5,
+      "wall_ms": 15439.2,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2241.0,
+      "ocsr_done_ms": 9342.2,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2913.1,
+      "wall_ms": 16507.1,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2199.0,
+      "ocsr_done_ms": 12579.4,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2798.6,
+      "wall_ms": 16214.0,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2056.7,
+      "ocsr_done_ms": 10901.8,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2832.9,
+      "wall_ms": 15341.6,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2097.4,
+      "ocsr_done_ms": 9567.1,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p04.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2905.0,
+      "wall_ms": 15893.0,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2161.1,
+      "ocsr_done_ms": 11330.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p05.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2929.9,
+      "wall_ms": 15681.6,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2199.0,
+      "ocsr_done_ms": 9779.1,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p06.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3045.1,
+      "wall_ms": 21548.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2297.1,
+      "ocsr_done_ms": 10869.5,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p07.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 2548.3,
+      "wall_ms": 15552.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 1823.1,
+      "ocsr_done_ms": 11042.7,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   },
+   {
+    "kind": "single_pages",
+    "mode": "concurrent",
+    "repeat": 1,
+    "wall_s": 64.6,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 8567.4,
+      "wall_ms": 62412.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2315.3,
+      "ocsr_done_ms": 62417.6,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 6186.6,
+      "wall_ms": 61759.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2419.2,
+      "ocsr_done_ms": 61740.3,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3593.2,
+      "wall_ms": 60611.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2219.6,
+      "ocsr_done_ms": 60539.2,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 8113.3,
+      "wall_ms": 62780.3,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2114.7,
+      "ocsr_done_ms": 62767.1,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p04.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 10273.8,
+      "wall_ms": 64600.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2121.8,
+      "ocsr_done_ms": 64580.9,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p05.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 10979.9,
+      "wall_ms": 63671.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2367.7,
+      "ocsr_done_ms": 63640.3,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p06.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 3645.2,
+      "wall_ms": 58765.0,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2492.1,
+      "ocsr_done_ms": 58661.4,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p07.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 5924.5,
+      "wall_ms": 61509.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "segments_with_smiles": 8,
+      "ocsr_errors": 0,
+      "segment_compute_ms": 2265.0,
+      "ocsr_done_ms": 61407.8,
+      "ocsr_cache_hits": 0,
+      "failed_steps": [],
+      "cancelled": false,
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": null,
+    "log_keywords": null,
+    "backend_crash": null,
+    "error_pages_by_batch4": {},
+    "timing": {
+     "valid": true,
+     "ocsr_cache_hits": 0,
+     "failed_steps": 0,
+     "reasons": []
+    }
+   }
+  ],
+  "note": "page errors come from each paper's failed page steps",
+  "engine": "decimer",
+  "ocsr": "full pipeline (segmentation + OCSR)",
+  "two_papers": [
+   "synth_190_half0.pdf",
+   "synth_190_half1.pdf"
+  ]
+ },
+ "summary": {
+  "two_papers/sequential": {
+   "arms": 2,
+   "papers": 4,
+   "page_errors": 0,
+   "segments_found": [
+    96,
+    94,
+    96,
+    94
+   ],
+   "wall_s": [
+    185.6,
+    183.2
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": false,
+   "segments_with_smiles": [
+    96,
+    94,
+    96,
+    94
+   ],
+   "ocsr_errors": 0,
+   "fatal_errors": 0
+  },
+  "two_papers/concurrent": {
+   "arms": 2,
+   "papers": 4,
+   "page_errors": 0,
+   "segments_found": [
+    96,
+    94,
+    96,
+    94
+   ],
+   "wall_s": [
+    181.5,
+    181.6
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": false,
+   "segments_with_smiles": [
+    96,
+    94,
+    96,
+    94
+   ],
+   "ocsr_errors": 0,
+   "fatal_errors": 0
+  },
+  "single_pages/sequential": {
+   "arms": 2,
+   "papers": 16,
+   "page_errors": 0,
+   "segments_found": [
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "wall_s": [
+    133.6,
+    132.2
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true,
+   "segments_with_smiles": [
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "ocsr_errors": 0,
+   "fatal_errors": 0
+  },
+  "single_pages/concurrent": {
+   "arms": 2,
+   "papers": 16,
+   "page_errors": 0,
+   "segments_found": [
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "wall_s": [
+    64.3,
+    64.6
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true,
+   "segments_with_smiles": [
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "ocsr_errors": 0,
+   "fatal_errors": 0
+  },
+  "errors_in_batches_with_2plus_errors": {
+   "errors": 0,
+   "in_multi_error_batches": 0
+  },
+  "expected_segments_two_papers_each": 190,
+  "pages_each": 24,
+  "two_papers_concurrent_vs_sequential": {
+   "sequential_mean_s": 184.4,
+   "concurrent_mean_s": 181.6,
+   "valid": true,
+   "speedup": 1.02,
+   "concurrent_faster": true
+  },
+  "single_pages_concurrent_vs_sequential": {
+   "sequential_mean_s": 132.9,
+   "concurrent_mean_s": 64.4,
+   "valid": true,
+   "speedup": 2.06,
+   "concurrent_faster": true
+  },
+  "timing_valid_all": true,
+  "ocsr_cache_hits_total": 0,
+  "failed_steps_by_kind": {},
+  "v2_breaker_503": 0,
+  "host_load": {
+   "start": [
+    5.98,
+    5.72,
+    5.57
+   ],
+   "end": [
+    7.08,
+    6.74,
+    6.75
+   ]
+  }
+ },
+ "guard": {
+  "enabled": true,
+  "prod_expected": "stopped",
+  "checks": 38,
+  "cancelled": null,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": 17017,
+  "max_gpu_used_mib": 15478,
+  "events": [
+   {
+    "t": "2026-11-17T17:58:51+00:00",
+    "scenario": "S4",
+    "when": "before",
+    "prod_status": "exited",
+    "gpu_free_mib": 17065,
+    "gpu_used_mib": 15430,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 8,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T17:59:21+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 89,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T17:59:51+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 88,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:00:21+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 82,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:00:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 87,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:01:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 88,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:01:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:02:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 91,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:02:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:03:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 13,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:03:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 7,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:04:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 52,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:04:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:05:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:05:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 90,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:06:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 87,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:06:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 19,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:07:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 88,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:07:52+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 51,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:08:22+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 91,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:08:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 90,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:09:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:09:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 85,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:10:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 88,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:10:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 59,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:11:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 87,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:11:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:12:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:12:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:13:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 81,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:13:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 89,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:14:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 19,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:14:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:15:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:15:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 0,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:16:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 87,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:16:53+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 89,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:17:23+00:00",
+    "scenario": "S4",
+    "when": "during",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 53,
+    "ok": true,
+    "reason": null
+   },
+   {
+    "t": "2026-11-17T18:17:39+00:00",
+    "scenario": "S4",
+    "when": "after",
+    "prod_status": "exited",
+    "gpu_free_mib": 17017,
+    "gpu_used_mib": 15478,
+    "gpu_total_mib": 32768,
+    "gpu_util_pct": 15,
+    "ok": true,
+    "reason": null
+   }
+  ]
+ },
+ "finished_at": "2026-11-17T18:17:39+00:00",
+ "duration_s": 1127.8,
+ "v2_http_errors": {
+  "n": 0,
+  "by_status": {},
+  "events": []
+ },
+ "v2_breaker_503": {
+  "adapter_calls": 0,
+  "paper_runs_503": 0,
+  "paper_runs_503_detail": []
+ },
+ "v2_created": {
+  "papers": [
+   "746ec328-8967-4c5e-af9d-d6b5df33c714",
+   "e52aeb71-3fe3-4344-8099-2187f5bb3965",
+   "2a06f14b-24e6-4599-82a8-4091cf97604b",
+   "e1b96056-1043-49f0-a512-5f50f131d1c9",
+   "f8fef354-1d8b-4e72-90da-599054dba171",
+   "9397225f-57fd-497c-86ab-7dbe42d50c31",
+   "dd1a2f21-d879-48ca-a7cd-457c0c053f6e",
+   "ecd84422-de8d-4d74-b712-ac0a9f2a24ef",
+   "3cfe8e6b-6033-4f1e-89e9-a614bb00e212",
+   "84528714-cf78-4479-91f2-e055e6d3a5e2",
+   "8c2c6b89-d12e-4f0b-be7b-948fdbce691d",
+   "a04aaba1-1a36-40d3-ab2c-809ff8ec2f6e",
+   "77a539a3-bbbd-4474-b557-9c61021956d6",
+   "31b4e09f-164f-461b-99f7-ca4e226dab38",
+   "0b8cbde7-64d8-4a16-8948-1c46faee96f4",
+   "aab190bf-cafd-449e-8b00-bd9112f350f3",
+   "6785cdec-66bd-41a4-8ccf-8768ac1cbeff",
+   "a12783e2-9701-42b9-9a3c-9afb170af28d",
+   "15f20815-b4fb-490d-a06f-9ff092836d29",
+   "50e323b9-6ef8-4993-a568-d2f710119954",
+   "22152e12-3bbf-4aa9-8b7e-57b81347d4c0",
+   "f7234511-2a5b-46e6-bd70-b4947f61b358",
+   "32336b5c-4c52-4326-ad7e-3b6fdc4f8baa",
+   "c4f0280f-b2ba-4966-9a00-15e4aa76c54b",
+   "8ae465aa-24ee-4ccb-b069-27c93a1f33d0",
+   "f195b703-42d6-49ff-b859-810f5afe2fa5",
+   "f744795a-5254-43b7-96fb-21eb87540e48",
+   "dee09482-de84-4dde-9368-5f1f37e0fa54",
+   "61245e95-7793-4fd1-95bd-76a28c31abd0",
+   "498d804c-e30d-4293-a221-01a609f68ea0",
+   "d4762597-fdaa-4799-b5cc-b40f178aa3ef",
+   "cb00c168-dfa5-42b5-99ac-989938c658f9",
+   "206da0be-6c44-49ce-92b2-eec5c4152c20",
+   "69984c62-3bd3-4737-b51b-539f0a6d78ed",
+   "32ab813e-a033-4118-841a-970538bbb6da",
+   "d2d12555-f9f1-4441-bd5f-5c9658282325",
+   "04a0e5f3-5711-433f-80e1-25bcfe49a60e",
+   "519a1405-b261-4b7d-918f-603b9ffc4f27",
+   "cd5d6ab0-5c61-42d6-919d-89d56a1ba684",
+   "e78a6d81-964a-4d8f-a616-e6d4e1ab7a2f"
+  ],
+  "image_jobs": []
+ },
+ "ocsr_cache": {
+  "cleared": [
+   {
+    "label": "before S4",
+    "deleted": 325,
+    "t": 1794938331.8959386
+   },
+   {
+    "label": "S4 two_papers sequential repeat 0",
+    "deleted": 0,
+    "t": 1794938331.9842482
+   },
+   {
+    "label": "S4 two_papers concurrent repeat 0",
+    "deleted": 190,
+    "t": 1794938517.7286103
+   },
+   {
+    "label": "S4 two_papers sequential repeat 1",
+    "deleted": 190,
+    "t": 1794938699.315831
+   },
+   {
+    "label": "S4 two_papers concurrent repeat 1",
+    "deleted": 190,
+    "t": 1794938882.6060407
+   },
+   {
+    "label": "S4 single_pages sequential repeat 0",
+    "deleted": 190,
+    "t": 1794939064.317922
+   },
+   {
+    "label": "S4 single_pages concurrent repeat 0",
+    "deleted": 64,
+    "t": 1794939198.0370228
+   },
+   {
+    "label": "S4 single_pages sequential repeat 1",
+    "deleted": 64,
+    "t": 1794939262.5121787
+   },
+   {
+    "label": "S4 single_pages concurrent repeat 1",
+    "deleted": 64,
+    "t": 1794939394.8958223
+   }
+  ],
+  "allow_warm_cache": false,
+  "container": "marcus-v2-test-postgres-1"
+ },
+ "validity": {
+  "timings": 8,
+  "all_valid": true,
+  "ocsr_cache_hits": 0,
+  "failed_steps_by_kind": {}
+ }
+}

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-150 -160 320 330" width="134" height="139" role="img">
+<title>Caffeine</title>
+<!-- Our own drawing for the MARCUS landing (no data from a paper). Static; shown with an img element. -->
+<g stroke="#1C211D" stroke-width="5" stroke-linecap="round">
+<line x1="0" y1="-60" x2="52" y2="-30"/>
+<line x1="52" y1="-30" x2="52" y2="30"/>
+<line x1="52" y1="30" x2="0" y2="60"/>
+<line x1="0" y1="60" x2="-52" y2="30"/>
+<line x1="-52" y1="30" x2="-52" y2="-30"/>
+<line x1="-52" y1="-30" x2="0" y2="-60"/>
+<line x1="52" y1="-30" x2="109" y2="-48.5"/>
+<line x1="109" y1="-48.5" x2="144.3" y2="0"/>
+<line x1="144.3" y1="0" x2="109" y2="48.5"/>
+<line x1="109" y1="48.5" x2="52" y2="30"/>
+<line x1="60" y1="-20" x2="60" y2="20"/>
+<line x1="132.5" y1="2.6" x2="107.8" y2="36.5"/>
+<line x1="-4" y1="-60" x2="-4" y2="-118"/>
+<line x1="4" y1="-60" x2="4" y2="-118"/>
+<line x1="-50" y1="33.5" x2="-100" y2="62.5"/>
+<line x1="-54" y1="26.5" x2="-104" y2="55.5"/>
+<line x1="-52" y1="-30" x2="-104" y2="-60"/>
+<line x1="0" y1="60" x2="0" y2="120"/>
+<line x1="109" y1="-48.5" x2="127.6" y2="-105.6"/>
+</g>
+<g font-family="Geist, Arial, Helvetica, sans-serif" font-size="34" font-weight="600" fill="#1C211D" text-anchor="middle" dominant-baseline="central" paint-order="stroke" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round">
+<text x="-52" y="-30">N</text>
+<text x="0" y="60">N</text>
+<text x="109" y="-48.5">N</text>
+<text x="109" y="48.5">N</text>
+<text x="0" y="-128">O</text>
+<text x="-112" y="66">O</text>
+</g>
+</svg>

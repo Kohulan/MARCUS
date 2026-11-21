@@ -1,0 +1,401 @@
+{
+ "scenario": "S4",
+ "target": "local",
+ "base_url": "http://localhost:19101",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T11:32:04+00:00",
+ "config": {
+  "target": "local",
+  "base_url": "http://localhost:19101",
+  "scenarios": [
+   "S4"
+  ],
+  "engines": [
+   "decimer",
+   "molnextr",
+   "molscribe"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": null,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "s2_big_size": 190,
+  "small_gap_s": 10.0,
+  "s3_size": 190,
+  "s3_idle_s": 15.0,
+  "s4_size": 15,
+  "s4_repeats": 1,
+  "s4_single_pages": 4,
+  "s5_seconds": 60.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": false,
+  "tag": ""
+ },
+ "stopped_early": false,
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected_each": 15,
+  "arms": [
+   {
+    "kind": "two_papers",
+    "mode": "sequential",
+    "repeat": 0,
+    "wall_s": 223.1,
+    "expected_each": 15,
+    "papers": [
+     {
+      "file": "synth_015.pdf",
+      "segments_listed": 15,
+      "segments_reported": 15,
+      "segment_ms": 104697.9,
+      "wall_ms": 109877.9,
+      "fatal_error": null,
+      "pages_total": 5,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth_015.pdf",
+      "segments_listed": 15,
+      "segments_reported": 15,
+      "segment_ms": 108260.1,
+      "wall_ms": 113169.3,
+      "fatal_error": null,
+      "pages_total": 5,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": [
+     104.63,
+     108.18
+    ],
+    "log_keywords": {},
+    "backend_crash": false,
+    "error_pages_by_batch4": {}
+   },
+   {
+    "kind": "two_papers",
+    "mode": "concurrent",
+    "repeat": 0,
+    "wall_s": 223.9,
+    "expected_each": 15,
+    "papers": [
+     {
+      "file": "synth_015.pdf",
+      "segments_listed": 15,
+      "segments_reported": 15,
+      "segment_ms": 109611.1,
+      "wall_ms": 223810.7,
+      "fatal_error": null,
+      "pages_total": 5,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth_015.pdf",
+      "segments_listed": 15,
+      "segments_reported": 15,
+      "segment_ms": 223770.7,
+      "wall_ms": 223825.1,
+      "fatal_error": null,
+      "pages_total": 5,
+      "listed_pages": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": [
+     109.52,
+     109.23
+    ],
+    "log_keywords": {},
+    "backend_crash": false,
+    "error_pages_by_batch4": {}
+   },
+   {
+    "kind": "single_pages",
+    "mode": "sequential",
+    "repeat": 0,
+    "wall_s": 154.8,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 36767.5,
+      "wall_ms": 36806.3,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 40687.4,
+      "wall_ms": 40729.5,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 42752.9,
+      "wall_ms": 42813.1,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 34349.5,
+      "wall_ms": 34391.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [
+     {
+      "page": 0,
+      "error": "(empty message; per-page 30 s timeout)",
+      "layer_type": null,
+      "kind": "timeout_30s"
+     }
+    ],
+    "page_error_count": 1,
+    "server_segment_s": [
+     36.72,
+     40.66,
+     42.72,
+     34.32
+    ],
+    "log_keywords": {},
+    "backend_crash": false,
+    "error_pages_by_batch4": {
+     "0": [
+      0
+     ]
+    }
+   },
+   {
+    "kind": "single_pages",
+    "mode": "concurrent",
+    "repeat": 0,
+    "wall_s": 97.0,
+    "expected_each": [
+     8,
+     8,
+     8,
+     8
+    ],
+    "papers": [
+     {
+      "file": "synth190_p00.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 23891.3,
+      "wall_ms": 23973.9,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p01.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 96829.0,
+      "wall_ms": 96976.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p02.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 96826.4,
+      "wall_ms": 96988.7,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     },
+     {
+      "file": "synth190_p03.pdf",
+      "segments_listed": 8,
+      "segments_reported": 8,
+      "segment_ms": 96803.0,
+      "wall_ms": 97005.4,
+      "fatal_error": null,
+      "pages_total": 1,
+      "listed_pages": [
+       0
+      ],
+      "lost_pages": []
+     }
+    ],
+    "page_errors": [],
+    "page_error_count": 0,
+    "server_segment_s": [
+     23.73,
+     24.01,
+     24.97,
+     23.92
+    ],
+    "log_keywords": {},
+    "backend_crash": false,
+    "error_pages_by_batch4": {}
+   }
+  ],
+  "note": "page errors come from backend docker logs in the arm's time window (all papers of the arm together)"
+ },
+ "summary": {
+  "two_papers/sequential": {
+   "arms": 1,
+   "papers": 2,
+   "page_errors": 0,
+   "segments_found": [
+    15,
+    15
+   ],
+   "wall_s": [
+    223.1
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true
+  },
+  "two_papers/concurrent": {
+   "arms": 1,
+   "papers": 2,
+   "page_errors": 0,
+   "segments_found": [
+    15,
+    15
+   ],
+   "wall_s": [
+    223.9
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true
+  },
+  "single_pages/sequential": {
+   "arms": 1,
+   "papers": 4,
+   "page_errors": 1,
+   "segments_found": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "wall_s": [
+    154.8
+   ],
+   "layers": {
+    "?": 1
+   },
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true
+  },
+  "single_pages/concurrent": {
+   "arms": 1,
+   "papers": 4,
+   "page_errors": 0,
+   "segments_found": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "wall_s": [
+    97.0
+   ],
+   "layers": {},
+   "crashes": 0,
+   "lost_pages": 0,
+   "all_segment_counts_equal": true
+  },
+  "errors_in_batches_with_2plus_errors": {
+   "errors": 1,
+   "in_multi_error_batches": 0
+  },
+  "expected_segments_two_papers_each": 15,
+  "pages_each": 5
+ },
+ "guard": {
+  "enabled": false,
+  "checks": 0,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-16T11:43:44+00:00",
+ "duration_s": 700.2
+}

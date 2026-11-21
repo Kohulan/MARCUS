@@ -1,0 +1,294 @@
+/* Compare engines: a drawing sheet of engine columns over the paper ground, then the
+   similarity label and the actions on the glass bed. */
+
+.cmp {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+}
+
+/* As a modal: a native <dialog> in the top layer, the one dialog lift and scrim. */
+.cmp--dialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  padding: 0;
+  color: var(--ink);
+  box-shadow: var(--lift-dialog);
+}
+
+.cmp--dialog:not([open]) {
+  display: none;
+}
+
+.cmp--dialog::backdrop {
+  background-color: var(--scrim);
+}
+
+/* jsdom and old engines without showModal get the open attribute: keep it on top. */
+.cmp--dialog[open]:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+/* The box takes focus only so a click inside keeps Esc working; not a control, so no ring. */
+.cmp:focus {
+  outline: none;
+}
+
+.cmp--inline {
+  width: 100%;
+}
+
+.cmp__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cmp__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--green);
+}
+
+.cmp__tag {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+}
+
+.cmp__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The engine table: a label column, then one column per engine. */
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cmp-table th,
+.cmp-table td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--hair);
+  border-left: 1px solid var(--hair);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cmp-table thead th,
+.cmp-table thead td {
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.cmp-table tr > :first-child {
+  width: 88px;
+  border-left: 0;
+}
+
+.cmp-table tbody th {
+  padding-top: 12px;
+  padding-left: 16px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cmp-table__engine {
+  vertical-align: bottom;
+}
+
+.cmp-table__name {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.cmp-table__version {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-table__figure {
+  background-color: var(--surface);
+}
+
+.cmp-table__figure .structure {
+  height: 168px;
+}
+
+/* No result to draw: a quiet ground in the state's shape (spec §7 state table). */
+.cmp-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 168px;
+  background-color: var(--paper);
+}
+
+.cmp-blank--reading {
+  border: 1px dashed var(--orange);
+}
+
+.cmp-blank--idle {
+  border: 1px solid var(--hair);
+}
+
+.cmp-table__none {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cmp-result {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.cmp-result--valid {
+  color: var(--accepted);
+}
+
+.cmp-result--invalid {
+  color: var(--orange-ink);
+}
+
+.cmp-result--reading {
+  color: var(--ink);
+}
+
+/* An engine reading: the calm indeterminate bar under its word. */
+.cmp-result__bar {
+  max-width: 120px;
+  margin-top: 6px;
+}
+
+.cmp-result__note {
+  display: block;
+  max-width: 160px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cmp-result--failed {
+  color: var(--ink);
+}
+
+.cmp-result--idle {
+  color: var(--muted);
+}
+
+.cmp-table__use {
+  padding-bottom: 14px;
+}
+
+/* Similarity and actions. */
+.cmp__foot {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 16px 24px;
+  align-items: start;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.cmp__similarity {
+  min-width: 0;
+}
+
+.cmp-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The last Run all engines: its bar and its count, above the message. */
+.cmp__run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.cmp__run-line {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.cmp__side {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cmp__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--hair);
+}
+
+.cmp__msg {
+  min-height: 1.5em;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
+  color: var(--text-2);
+}
+
+.cmp__msg:empty {
+  visibility: hidden;
+}
+
+/* "Show common part" is a toggle: a square that fills green while on (shape, not tint). */
+.cmp__actions .glass[aria-pressed]::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--control-border);
+}
+
+.cmp__actions .glass[aria-pressed="true"]::before {
+  border-color: var(--green);
+  background-color: var(--green);
+}

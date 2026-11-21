@@ -1,0 +1,157 @@
+{
+ "scenario": "S1",
+ "target": "local",
+ "base_url": "http://localhost:19101",
+ "build": "v1-976396a5",
+ "started_at": "2026-11-16T10:48:42+00:00",
+ "config": {
+  "target": "local",
+  "base_url": "http://localhost:19101",
+  "scenarios": [
+   "S1",
+   "S3",
+   "S5"
+  ],
+  "engines": [
+   "decimer"
+  ],
+  "engine": "decimer",
+  "s1_repeats": 1,
+  "s1_max_segments": 2,
+  "big_cap": 80,
+  "s2_small_count": 1,
+  "small_gap_s": 10.0,
+  "s3_size": 15,
+  "s3_idle_s": 10.0,
+  "s4_size": 190,
+  "s4_repeats": 2,
+  "s4_single_pages": 8,
+  "s5_seconds": 20.0,
+  "s5_period_s": 3.5,
+  "s5_skip_during": true,
+  "tag": "validation"
+ },
+ "stopped_early": false,
+ "results": {
+  "fixture": "synth_015.pdf",
+  "expected": 15,
+  "engines": {
+   "decimer": {
+    "runs": [
+     {
+      "paper_id": "synth_015",
+      "engine": "decimer",
+      "wall_ms": 245325.2,
+      "segment_ms": 159617.9,
+      "segments_reported": 15,
+      "segments_listed": 15,
+      "expected_structures": 15,
+      "pages_total": 5,
+      "pages_with_segments": 5,
+      "page_errors": [],
+      "fatal_error": null,
+      "aborted": false,
+      "http_calls": 4,
+      "rate_limit_events": 0,
+      "server_segment_s": [],
+      "n_segments": 2,
+      "n_errors": 0,
+      "n_fallback": 0,
+      "ocsr_ms": {
+       "n": 2,
+       "min": 36267.3,
+       "p50": 40500.3,
+       "p95": 44310.0,
+       "max": 44733.3,
+       "mean": 40500.3
+      },
+      "fixture_recall_skeleton": 0.133,
+      "lost_pages": [],
+      "segments": [
+       {
+        "segment_id": "page_1_1",
+        "page": 1,
+        "ocsr_ms": 44733.3,
+        "error": null,
+        "fallback": false
+       },
+       {
+        "segment_id": "page_1_0",
+        "page": 1,
+        "ocsr_ms": 36267.3,
+        "error": null,
+        "fallback": false
+       }
+      ],
+      "http_log": [
+       {
+        "step": "extract_segments",
+        "method": "POST",
+        "path": "/latest/decimer/extract_segments",
+        "status": 200,
+        "t_ms": 165.4,
+        "ms": 159617.8,
+        "error": null
+       },
+       {
+        "step": "list_directory",
+        "method": "GET",
+        "path": "/latest/decimer/list_directory/synth_015__91f3240647de/all_segments",
+        "status": 200,
+        "t_ms": 159783.4,
+        "ms": 4540.8,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 164324.4,
+        "ms": 44733.1,
+        "error": null
+       },
+       {
+        "step": "ocsr",
+        "method": "POST",
+        "path": "/latest/ocsr/generate_with_depiction",
+        "status": 200,
+        "t_ms": 209057.8,
+        "ms": 36267.0,
+        "error": null
+       }
+      ]
+     }
+    ],
+    "warmup": {
+     "ms": 34595.5,
+     "status": 200
+    }
+   }
+  }
+ },
+ "summary": {
+  "decimer": [
+   {
+    "wall_s": 245.3,
+    "segment_s": 159.6,
+    "ocsr_p50_ms": 40500.3,
+    "ocsr_p95_ms": 44310.0,
+    "segments": 2,
+    "recall_skel": 0.133,
+    "page_errors": 0
+   }
+  ]
+ },
+ "guard": {
+  "enabled": false,
+  "checks": 0,
+  "tripped": false,
+  "trip_reason": null,
+  "min_gpu_free_mib": null,
+  "max_gpu_used_mib": null,
+  "events": []
+ },
+ "finished_at": "2026-11-16T10:53:22+00:00",
+ "duration_s": 280.8
+}

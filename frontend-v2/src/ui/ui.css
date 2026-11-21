@@ -1,0 +1,1202 @@
+/*
+ * Survey Sheet parts and the app frame (spec §7; values from
+ * frontend-v2/reference/survey-sheet-board.html). Light only. Every size, rotation and
+ * tint is a class here: no component sets a style prop (CSP style-src 'self').
+ * Accepted text (--accepted) sits on paper or surface only, never on sunken (4.4:1).
+ */
+
+/* App frame ---------------------------------------------------------------- */
+
+/* The header floats free above the page; the ruled frame is the page's own (.sheet__page).
+   The footer follows the page in the flow, 12 px under it. */
+.frame {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px 8px 12px;
+}
+
+.frame > .sheet {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 20px);
+  min-height: calc(100dvh - 20px);
+  border: 0;
+}
+
+.sheet__page {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  border: 1px solid var(--line);
+}
+
+/* Skip to content: out of sight above the window until the keyboard reaches it. Body 4. */
+.skip {
+  position: absolute;
+  top: var(--s-75);
+  left: var(--s-75);
+  z-index: 20;
+  padding: var(--s-75) var(--s-100);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--porcelain);
+  font: 700 14px/20px var(--font-text);
+  color: var(--ink);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 300ms var(--ease);
+}
+
+.skip:focus {
+  transform: none;
+}
+
+.skip:hover {
+  color: var(--ink);
+}
+
+/* Header: the mark, then the Waterline pill, both free of the sheet -------- */
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 24px;
+}
+
+.site-header__mark {
+  display: flex;
+  align-items: center;
+  gap: var(--s-100);
+  padding: var(--s-100) var(--s-300);
+  color: var(--green);
+  text-decoration: none;
+}
+
+.site-header__mark:hover {
+  color: var(--green);
+}
+
+.site-header__mark img {
+  width: 36px;
+  height: 36px;
+}
+
+.site-header__word {
+  font-family: var(--font-mark);
+  font-weight: 300;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+.site-header__mark:focus-visible {
+  outline-offset: -4px;
+  border-radius: 0;
+}
+
+.site-header__nav {
+  padding: var(--s-100) var(--s-300);
+}
+
+/*
+ * Waterline: a clear glass pill (blur and saturate; no refraction filter, no WebGL). The
+ * marked item is a drop of green water that slides to the item you pick and settles with
+ * a ripple. Header.tsx sets --wl-x and --wl-w (the drop's offset and width), --wl-mx (the
+ * pointer) through the CSSOM, and the classes has-drop, is-settling and data-dir. The drop
+ * moves by transform only, on the one curve (--ease).
+ */
+.wl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--s-50);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.25));
+  -webkit-backdrop-filter: blur(3px) saturate(1.8);
+  backdrop-filter: blur(3px) saturate(1.8);
+  box-shadow: var(--glass-shine), var(--lift-glass);
+  isolation: isolate;
+}
+
+/* The meniscus: light lifts on the rim under the pointer, a faint shade below it. */
+.wl::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms var(--ease);
+  background:
+    radial-gradient(64px 20px at var(--wl-mx, 50%) 0, rgba(255, 255, 255, 0.95), transparent 72%),
+    radial-gradient(84px 14px at var(--wl-mx, 50%) 100%, rgba(30, 77, 51, 0.2), transparent 72%);
+}
+
+.wl:hover::before {
+  opacity: 1;
+}
+
+/* Title 5: Geist Mono 500, 12 / 16 */
+.wl__item {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-75);
+  padding: var(--s-100) var(--s-200);
+  border-radius: 999px;
+  font: 500 12px/16px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform 300ms var(--ease);
+}
+
+.wl__item:hover {
+  color: var(--ink);
+}
+
+.wl__item:active {
+  transform: scale(0.98);
+}
+
+.wl__item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 999px;
+}
+
+.wl__item .fa {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  color: var(--green);
+}
+
+.wl__drop {
+  position: absolute;
+  z-index: 1;
+  top: var(--s-50);
+  bottom: var(--s-50);
+  left: 0;
+  width: var(--wl-w, 0);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(var(--wl-x, 0));
+  background: linear-gradient(180deg, rgba(45, 122, 70, 0.14), rgba(30, 77, 51, 0.3));
+  box-shadow: var(--water-drop);
+  transition: opacity 300ms var(--ease);
+}
+
+.wl.has-drop .wl__drop {
+  opacity: 1;
+}
+
+/* From one item to the next it slides; it appears and goes by opacity alone. */
+.wl[data-dir="right"] .wl__drop,
+.wl[data-dir="left"] .wl__drop {
+  transition:
+    transform 500ms var(--ease),
+    opacity 300ms var(--ease);
+}
+
+.wl__ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(45, 122, 70, 0.7);
+  opacity: 0;
+}
+
+.wl.is-settling .wl__ripple {
+  animation: wl-ripple 600ms var(--ease);
+}
+
+@keyframes wl-ripple {
+  from {
+    opacity: 0.75;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.16, 1.6);
+  }
+}
+
+/* Reduced motion: the drop jumps to its item and only fades (skill B7); no ripple, no
+   meniscus. */
+@media (prefers-reduced-motion: reduce) {
+  .wl[data-dir] .wl__drop {
+    transition: opacity 300ms var(--ease) !important;
+  }
+
+  .wl .wl__ripple {
+    animation: none !important;
+  }
+
+  .wl::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .wl {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border), var(--lift-pill-solid);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .wl {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--control-border), var(--lift-pill-solid);
+  }
+}
+
+@media (forced-colors: active) {
+  .wl {
+    border: 1px solid ButtonBorder;
+  }
+
+  .wl__drop {
+    border: 2px solid Highlight;
+    background: none;
+  }
+}
+
+@media (max-width: 559.98px) {
+  .site-header__mark {
+    padding: var(--s-100) var(--s-200) var(--s-75);
+  }
+
+  .site-header__nav {
+    width: 100%;
+    padding: 0 var(--s-200) var(--s-200);
+  }
+
+  .wl {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .wl__item {
+    padding: var(--s-100);
+  }
+}
+
+/* Font Awesome icons (Icon.tsx): inline SVG in the text's colour, 1.05 em. */
+.fa {
+  display: inline-block;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.45em;
+  vertical-align: -0.15em;
+  fill: currentColor;
+  overflow: visible;
+}
+
+.fa.fa--after {
+  margin: 0 0 0 0.5em;
+}
+
+/* Menu panels in the top layer ---------------------------------------------- */
+
+/* An open menu panel (ui/anchor: a manual popover the client places in viewport px, next
+   to its button): no column's scroll or sticky caption cuts it off. The UA popover box
+   (canvas colours, centred) gives way to the panel's own look; a panel taller than the
+   room it has scrolls inside. */
+[data-anchored] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  color: var(--ink);
+}
+
+/* Footer ------------------------------------------------------------------- */
+
+.site-footer {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.site-footer a {
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+/* The workspace's thin line: the page's frame continues round it (the review grid keeps
+   its space; a sticky footer there would cover cards while scrolling). */
+.site-footer--thin {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 24px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.site-footer__line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.site-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+/* Each link is a 24 px tall target (WCAG 2.5.8). */
+.site-footer--thin a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--muted);
+}
+
+/* The bubbles: three opaque porcelain pills (glazed white, unlike the glass header), the
+   copyright far left, the credit in the middle, the links far right. The row lets clicks
+   through; only the bubbles take them. Caption 5: Geist Mono 400, 12 / 16. */
+.site-footer--bubbles {
+  position: sticky;
+  bottom: var(--s-100);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-100);
+  margin: var(--s-100) 0 0;
+  padding: 0 var(--s-100);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  pointer-events: none;
+}
+
+.site-footer__copy,
+.site-footer__credit,
+.site-footer__nav {
+  position: relative;
+  margin: 0;
+  padding: var(--s-50) var(--s-200);
+  border-radius: 999px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: auto;
+  background: radial-gradient(120% 90% at 30% 0%, var(--surface) 0%, #fbfbf7 45%, #efefe8 100%);
+  box-shadow: var(--porcelain);
+  isolation: isolate;
+}
+
+/* The glaze: a soft white highlight on the upper left of each bubble, under the text (over
+   it, it would wash the letters out). */
+.site-footer__copy::after,
+.site-footer__credit::after,
+.site-footer__nav::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 12%;
+  width: 38%;
+  height: 38%;
+  border-radius: 999px;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.site-footer__credit {
+  flex: 0 1 auto;
+  text-align: center;
+}
+
+.site-footer__nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0 var(--s-75);
+}
+
+/* 24 px tall targets (WCAG 2.5.8) on 16 px lines, the credit's links too: 4 px above and
+   below each link, taken back by its margin so the bubble stays 24 px. A link never breaks
+   inside. */
+.site-footer--bubbles a {
+  display: inline-block;
+  margin: calc(-1 * var(--s-50)) 0;
+  padding: var(--s-50) 0;
+  color: var(--text-2);
+  transition: color 300ms var(--ease);
+}
+
+.site-footer--bubbles a:hover {
+  color: var(--ink);
+}
+
+.site-footer--bubbles a:active {
+  transform: translateY(1px);
+}
+
+.site-footer--bubbles a:focus-visible {
+  outline-offset: 1px;
+}
+
+.site-footer--bubbles .fa {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--s-50);
+  color: var(--green);
+}
+
+.site-footer .fa-mug {
+  margin: 0 var(--s-50);
+  transform-origin: 50% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-footer .fa-mug {
+    animation: mug-steam 2.6s var(--ease) infinite;
+  }
+}
+
+@keyframes mug-steam {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+
+  30% {
+    transform: translateY(-1.5px) rotate(-4deg);
+  }
+
+  60% {
+    transform: translateY(0) rotate(3deg);
+  }
+}
+
+/* Narrower than one line (12 px text needs 1200 px): the footer stops sticking and stacks
+   its bubbles, centred. */
+@media (max-width: 1199.98px) {
+  .site-footer--bubbles {
+    position: static;
+    flex-direction: column;
+    gap: var(--s-75);
+  }
+
+  .site-footer__credit {
+    border-radius: 16px;
+    white-space: normal;
+  }
+
+  .site-footer__nav {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 559.98px) {
+  .site-footer--thin {
+    padding: 16px;
+  }
+}
+
+@media (forced-colors: active) {
+  .site-footer__copy,
+  .site-footer__credit,
+  .site-footer__nav {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* Specimen label: charcoal header bar, ruled rows -------------------------- */
+
+.specimen {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.specimen__head {
+  caption-side: top;
+  padding: 6px 10px;
+  background: var(--charcoal);
+  color: var(--on-charcoal);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.specimen th,
+.specimen td {
+  padding: 6px 10px;
+  border-top: 1px solid var(--hair);
+  text-align: left;
+  vertical-align: top;
+}
+
+.specimen tr:first-child > * {
+  border-top: 0;
+}
+
+.specimen th {
+  width: 1%;
+  border-right: 1px solid var(--hair);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.specimen td {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Failed: the rows lie on the hatched ground (muted is 4.9:1 on the darker stripe). */
+.specimen--failed {
+  background: repeating-linear-gradient(135deg, var(--hatch) 0 6px, var(--paper) 6px 12px);
+}
+
+/* Stamp: round, 2 px ring, rotated −12° ------------------------------------ */
+
+.stamp {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transform: rotate(-12deg);
+  user-select: none;
+}
+
+.stamp--accepted {
+  color: var(--accepted);
+}
+
+.stamp--charcoal {
+  color: var(--charcoal);
+}
+
+.stamp--sm {
+  width: 66px;
+  height: 66px;
+  font-size: 10px;
+}
+
+.stamp--lg {
+  width: 128px;
+  height: 128px;
+  font-size: 17px;
+}
+
+/* Pressed onto the sheet: from 1.4 down to rest in 160 ms. */
+.stamp--landing {
+  animation: stamp-land 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes stamp-land {
+  from {
+    opacity: 0.4;
+    transform: rotate(-12deg) scale(1.4);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(-12deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp--landing {
+    animation: none;
+  }
+}
+
+/* State words and their shapes --------------------------------------------- */
+
+.state {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.state--accepted {
+  color: var(--accepted);
+}
+
+.state--not-read {
+  color: var(--muted);
+}
+
+.badge,
+.tag {
+  padding: 1px 6px;
+}
+
+.badge--orange {
+  background: var(--orange);
+  color: var(--on-orange);
+}
+
+.badge--dashed {
+  padding: 0 5px;
+  border: 1px dashed var(--orange);
+}
+
+.tag--charcoal {
+  background: var(--charcoal);
+  color: var(--on-charcoal);
+}
+
+/* Progress bar ------------------------------------------------------------- */
+/*
+ * The one progress bar (ProgressBar): a square track (control-border edge 3.3:1 on paper,
+ * surface ground) with a forest-green fill (about 10:1 on the track) and the percentage
+ * beside it in mono tabular figures. The fill is transform: scaleX(var(--pb)) on the one
+ * curve; --pb is set through the CSSOM (no style attribute). While the work goes on a slow
+ * sheen (surface at 22% over the green, still 5:1 on the track) crosses the filled part,
+ * clipped to it. Unmeasured, the track is an empty ruler (a tick every 8px) with a green
+ * segment sliding calmly across it. Under reduced motion: no sheen, no slide, no easing.
+ */
+
+.pb {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pb__track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+}
+
+.pb--sm .pb__track {
+  height: 6px;
+}
+
+.pb__fill,
+.pb__sheen {
+  position: absolute;
+  inset: 0;
+}
+
+.pb__fill {
+  background: var(--green);
+  transform: scaleX(var(--pb, 0));
+  transform-origin: left center;
+  transition: transform 500ms var(--ease);
+}
+
+.pb__sheen {
+  display: none;
+  overflow: hidden;
+  clip-path: inset(0 calc(100% - var(--pb, 0) * 100%) 0 0);
+  transition: clip-path 500ms var(--ease);
+}
+
+.pb__sheen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 22%, transparent) 50%,
+    transparent
+  );
+  transform: translateX(-100%);
+}
+
+.pb--indeterminate .pb__track {
+  background: repeating-linear-gradient(90deg, var(--tick) 0 1px, var(--surface) 1px 8px);
+}
+
+.pb__slide {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: var(--green);
+}
+
+.pb__pct {
+  flex: none;
+  min-width: 4ch;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-2);
+}
+
+.pb--sm .pb__pct {
+  font-size: 11px;
+}
+
+.pb--indeterminate .pb__pct {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pb--active .pb__sheen {
+    display: block;
+  }
+
+  .pb--active .pb__sheen::before {
+    animation: pb-sheen 2.4s linear infinite;
+  }
+
+  .pb__slide {
+    display: block;
+    animation: pb-slide 2s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb__fill,
+  .pb__sheen {
+    transition: none;
+  }
+}
+
+/* The band crosses the filled part, then rests a moment. */
+@keyframes pb-sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  70%,
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes pb-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(333.34%);
+  }
+}
+
+/* Reading progress --------------------------------------------------------- */
+/* A paper's read: the stages in mono above the progress bar. */
+
+.rp {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rp__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 20px;
+}
+
+.rp__stages,
+.rp__line,
+.rp__queue {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp__stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rp__stage {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.rp__stage + .rp__stage::before {
+  content: "\2192" / "";
+  margin: 0 10px;
+  color: var(--control-border);
+}
+
+.rp__stage--done {
+  color: var(--text-2);
+}
+
+.rp__tick {
+  margin-right: 6px;
+  vertical-align: -0.125em;
+  color: var(--green);
+}
+
+.rp__stage--current,
+.rp__line--current {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.rp__line {
+  color: var(--text-2);
+}
+
+.rp__queue {
+  color: var(--muted);
+}
+
+.rp--compact {
+  gap: 4px;
+  max-width: 360px;
+  margin-top: 8px;
+}
+
+.rp--compact .rp__line {
+  font-size: 11px;
+}
+
+/* Structure drawing -------------------------------------------------------- */
+
+.structure {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+}
+
+.structure__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.structure--crossed .structure__img {
+  opacity: 0.55;
+}
+
+.structure__wait {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--tick);
+}
+
+.structure--retry {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.structure__note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* SMILES ------------------------------------------------------------------- */
+
+.smiles {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.smiles__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.smiles--struck .smiles__value {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.smiles__copy {
+  flex: none;
+  margin: -5px -6px 0 0;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.smiles__copy:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Keys --------------------------------------------------------------------- */
+
+.kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.85em;
+  line-height: 1.4;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* Toasts ------------------------------------------------------------------- */
+
+.toasts {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: calc(100vw - 48px);
+  pointer-events: none;
+}
+
+/* From 1024 px the footer's bubbles stick to the bottom: a toast sits above them, and
+   anything scrolled into view (a focused link, an anchor) stops above them (WCAG 2.4.11). */
+@media (min-width: 1024px) {
+  .toasts {
+    bottom: 56px;
+  }
+
+  html {
+    scroll-padding-bottom: 56px;
+  }
+}
+
+.toasts__region {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Both regions stay in the accessibility tree (never display: none), or the first toast
+   of an empty region might not be announced; an empty one is simply 0 px tall. */
+.toasts__region:not(:empty) + .toasts__region:not(:empty) {
+  margin-top: 8px;
+}
+
+.toast {
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: var(--lift-glass);
+  animation: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.toast--error {
+  border-color: var(--charcoal);
+  background: var(--charcoal);
+  color: var(--on-charcoal);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Below the tool's minimum width ------------------------------------------- */
+
+/* The mounted tool's wrapper: no box of its own while shown; [hidden] (narrowed) hides it. */
+.desktop-only__tool:not([hidden]) {
+  display: contents;
+}
+
+.desktop-only {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 64px 24px;
+}
+
+/* The page's h1, set as the note it always was. */
+.desktop-only__note {
+  max-width: 18ch;
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+/* The way back: a text link in the mono control voice, 24 px tall for a thumb. */
+.desktop-only__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--green);
+}
+
+.desktop-only__back:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  color: var(--green);
+}
+
+/* A finished paper: a filled green square and the word, like a finished step. */
+.item-done__mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  vertical-align: 1px;
+  background-color: var(--accepted);
+}
+
+/* Gone (404), or a paper or image that could not be opened ----------------- */
+
+.gone {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.gone__sheet {
+  position: relative;
+  max-width: 560px;
+  padding: 40px 44px 36px;
+  border: 1px dashed var(--control-border);
+}
+
+.gone__corner {
+  position: absolute;
+  top: -8px;
+  left: -6px;
+  padding: 0 2px;
+  background-color: var(--paper);
+  font-size: 16px;
+}
+
+.gone .gone__title {
+  font-size: 32px;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.gone .gone__why {
+  margin-top: 14px;
+  max-width: 46ch;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.gone__bed {
+  display: inline-flex;
+  margin-top: 24px;
+  padding: 8px;
+}

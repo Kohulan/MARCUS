@@ -1,0 +1,48 @@
+# Read-only search for the Exclusive_Process setter on jarvis (D4, 2026-11-17T14:23:35Z). Nothing was changed.
+$ systemctl list-unit-files | grep -i nvidia
+nvidia-cdi-refresh.path                                                       enabled         enabled
+nvidia-cdi-refresh.service                                                    enabled         enabled
+nvidia-hibernate.service                                                      enabled         enabled
+nvidia-persistenced.service                                                   static          -
+nvidia-powerd.service                                                         disabled        enabled
+nvidia-resume.service                                                         enabled         enabled
+nvidia-suspend-then-hibernate.service                                         disabled        enabled
+nvidia-suspend.service                                                        enabled         enabled
+nvidia-v100-setup.service                                                     enabled         enabled
+
+$ grep -rnE "compute-mode|-c 3|-c EXCLUSIVE|EXCLUSIVE_PROCESS" /etc/systemd /etc/rc.local /etc/cron* /etc/nvidia* /etc/modprobe.d /usr/lib/systemd/system/nvidia*  (README command)
+(no output: the README command finds nothing)
+
+$ crontab -l | grep -i nvidia
+(none; root crontab not readable without sudo)
+
+$ grep -rlnE "nvidia-smi.*-c|--compute-mode" /etc /usr/local/bin /usr/local/sbin /opt
+/usr/local/bin/nvidia-v100-setup.sh
+
+$ systemctl cat nvidia-v100-setup.service
+# /etc/systemd/system/nvidia-v100-setup.service
+[Unit]
+Description=NVIDIA Tesla V100 Setup
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nvidia-v100-setup.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+
+$ grep -n nvidia-smi /usr/local/bin/nvidia-v100-setup.sh
+33-# Enable persistence mode
+34:nvidia-smi -pm 1 2>/dev/null || echo "Failed to enable persistence mode"
+--
+36-# Set compute mode to COMPUTE_EXCLUSIVE_PROCESS (for Tesla cards)
+37:nvidia-smi -c 3 2>/dev/null || echo "Failed to set compute mode"
+
+$ systemctl cat nvidia-persistenced.service | grep ExecStart
+ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --no-persistence-mode --verbose
+
+$ nvidia-smi -q | grep -E "Persistence|Compute Mode"
+    Persistence Mode                                   : Disabled
+    Compute Mode                                       : Default

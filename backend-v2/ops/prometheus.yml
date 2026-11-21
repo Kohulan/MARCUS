@@ -1,0 +1,27 @@
+# MARCUS v2 Prometheus (docker-compose.monitoring.yml).
+# Targets: the internal metrics service and, with docker-compose.gpu.yml, dcgm-exporter (GPU
+# metrics). Without the GPU override the `dcgm` target simply shows as down.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+# Alert rules (disk-use alarm): ops/prometheus-alerts.yml, mounted by the monitoring override.
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: marcus
+    metrics_path: /metrics
+    scrape_timeout: 10s
+    # Explicit, so the gaugehistogram metric families (OpenMetrics only) are parsed as such.
+    scrape_protocols: [OpenMetricsText1.0.0, PrometheusText0.0.4]
+    static_configs:
+      - targets: ["metrics:9100"]
+
+  - job_name: dcgm
+    metrics_path: /metrics
+    scrape_timeout: 10s
+    scrape_protocols: [OpenMetricsText1.0.0, PrometheusText0.0.4]
+    static_configs:
+      - targets: ["dcgm-exporter:9400"]
