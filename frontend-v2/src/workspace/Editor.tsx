@@ -70,6 +70,26 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
     if (!savingNow.current) latest.current.onClose();
   }, []);
 
+  // Where the curator's focus was in the dialog (outside the frame), and when they last
+  // pressed Tab: a marcus:unfocus puts the focus back there, unless they just tabbed into
+  // the frame themselves.
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const tabbedAt = useRef(-Infinity);
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      if (e.target instanceof HTMLElement && e.target !== iframe.current) lastFocus.current = e.target;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") tabbedAt.current = performance.now();
+    };
+    document.addEventListener("focusin", onFocus);
+    document.addEventListener("keydown", onKey, { capture: true });
+    return () => {
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("keydown", onKey, { capture: true });
+    };
+  }, []);
+
   useEffect(
     () =>
       listenToFrame(
@@ -82,6 +102,11 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
             setReady(true);
           } else if (message.type === "marcus:cancel") {
             close();
+          } else if (message.type === "marcus:unfocus") {
+            const tabbedIn = performance.now() - tabbedAt.current < 1000;
+            if (document.activeElement === iframe.current && !tabbedIn) {
+              (lastFocus.current?.isConnected ? lastFocus.current : field.current)?.focus();
+            }
           } else if (message.smiles.trim() === "") {
             setError("Draw a structure first.");
           } else {

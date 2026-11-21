@@ -11,6 +11,7 @@
 //   frame → app   {type: "marcus:ready"}
 //                 {type: "marcus:save", molfile: string, smiles: string}
 //                 {type: "marcus:cancel"}
+//                 {type: "marcus:unfocus"}  (the focus landed in the frame without the curator)
 
 export type LoadMessage = {
   type: "marcus:load";
@@ -21,7 +22,8 @@ export type LoadMessage = {
 export type FrameMessage =
   | { type: "marcus:ready" }
   | { type: "marcus:save"; molfile: string; smiles: string }
-  | { type: "marcus:cancel" };
+  | { type: "marcus:cancel" }
+  | { type: "marcus:unfocus" };
 
 /** A plain object with exactly these keys (no more, no fewer). */
 function exactly(data: unknown, keysWanted: string[]): data is Record<string, unknown> {
@@ -36,6 +38,7 @@ function readFrameData(data: unknown): FrameMessage | null {
   if (exactly(data, ["type"])) {
     if (data.type === "marcus:ready") return { type: "marcus:ready" };
     if (data.type === "marcus:cancel") return { type: "marcus:cancel" };
+    if (data.type === "marcus:unfocus") return { type: "marcus:unfocus" };
     return null;
   }
   if (
