@@ -114,6 +114,20 @@ export async function expectNoA11yViolations(
   page: Page,
   opts: { exclude?: string[]; tags?: string[] } = {},
 ): Promise<void> {
+  // Contrast is judged at rest: wait for the running finite animations (a dialog's fade-in)
+  // to end, so axe never measures text halfway through an opacity fade. Endless loops (a
+  // spinner, the ring's arrow) are left alone.
+  await page.evaluate(() =>
+    Promise.race([
+      Promise.allSettled(
+        document
+          .getAnimations()
+          .filter((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity)
+          .map((a) => a.finished),
+      ),
+      new Promise((done) => setTimeout(done, 3000)),
+    ]),
+  );
   let axe = new AxeBuilder({ page });
   if (opts.tags) axe = axe.withTags(opts.tags);
   for (const selector of opts.exclude ?? []) axe = axe.exclude(selector);
