@@ -89,14 +89,18 @@ class LiveQueues:
             self._lock = asyncio.Lock()
             # late-bound: tests replace inspect_live_queues
             self._probe = LiveQueuesProbe(INSPECT_TIMEOUT_S, "ready", lambda: inspect_live_queues())
+        result: frozenset[str] | None = None  # stays None when the budget runs out
         with anyio.move_on_after(INSPECT_BUDGET_S):
             async with self._lock:
                 if self._fresh():  # refreshed by the request we waited behind
-                    return self._value
-                live = await anyio.to_thread.run_sync(
-                    self._probe.get, INSPECT_BUDGET_S, abandon_on_cancel=True
-                )
-                return self._store(frozenset(live or ()))  # None (no answer): no live queue
+                    result = self._value
+                else:
+                    live = await anyio.to_thread.run_sync(
+                        self._probe.get, INSPECT_BUDGET_S, abandon_on_cancel=True
+                    )
+                    result = self._store(frozenset(live or ()))  # None (no answer): no live queue
+        if result is not None:
+            return result
         log.warning("ready: no consumer check answer within %.1f s", INSPECT_BUDGET_S)
         if self._fresh():  # a waiter whose budget ran out after the holder stored a result
             return self._value
