@@ -208,6 +208,8 @@ class Prediction(Base):
     ms: Mapped[int] = mapped_column(Integer)
     # True when the result came from ocsr_cache (ms is then 0), not from the engine
     cached: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    # R-group labels of the structure (marcus.core.rgroups; [] none, NULL not computed)
+    rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
@@ -226,6 +228,8 @@ class Curation(Base):
     smiles: Mapped[str | None] = mapped_column(Text, nullable=True)
     molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # R-group labels of the curated structure (marcus.core.rgroups); NULL without one
+    rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 

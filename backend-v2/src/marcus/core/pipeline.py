@@ -701,6 +701,10 @@ def _copy_crop(session: Session, paper: Paper, sha: str) -> bool:
 
 
 def _prediction(step: Step, result: dict) -> Prediction:
+    # The R-group labels are computed once here, with the row (a string check; RDKit only for a
+    # scaffold), so no read of the paper has to. Imported here: RDKit only where results land.
+    from marcus.core.rgroups import rgroup_labels
+
     return Prediction(
         segment_id=step.segment_id,
         image_job_id=step.image_job_id,
@@ -711,6 +715,7 @@ def _prediction(step: Step, result: dict) -> Prediction:
         valid=result["valid"],
         ms=result["ms"],
         cached=bool(result.get("cached", False)),
+        rgroups=rgroup_labels(result["smiles"], result.get("molfile")),
     )
 
 

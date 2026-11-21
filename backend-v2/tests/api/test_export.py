@@ -13,7 +13,7 @@ from tests.api.conftest import make_client, new_owner, seed_paper
 
 HEADER = [
     "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
-    "organism", "organism_part", "geo_location", "kingdom",
+    "organism", "organism_part", "geo_location", "kingdom", "rgroups",
 ]  # fmt: skip
 
 
@@ -109,7 +109,7 @@ async def test_export_prefers_paper_engine_and_accepted_filter_skips_rejected(
     assert rows == [
         HEADER,
         [str(s0), "0", "0", "CCO", "accepted", "decimer", "", "false", "predicted",
-         "", "", "", ""],
+         "", "", "", "", ""],
     ]  # fmt: skip
 
 
@@ -353,7 +353,7 @@ async def test_csv_export_has_the_source_columns_guarded(app, async_db_session):
     rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
     assert rows[0] == HEADER and len(rows) == 3
     for row in rows[1:]:
-        assert row[9:] == ["Taxus brevifolia; T. baccata", "", "'=Oregon", "Plant"]
+        assert row[9:13] == ["Taxus brevifolia; T. baccata", "", "'=Oregon", "Plant"]
 
 
 async def test_csv_export_without_annotation_has_empty_source_columns(app, async_db_session):
@@ -361,7 +361,7 @@ async def test_csv_export_without_annotation_has_empty_source_columns(app, async
     alice, token = await new_owner(db)
     seeded = await seed_paper(db, alice)
     rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
-    assert all(row[9:] == ["", "", "", ""] for row in rows[1:])
+    assert all(row[9:13] == ["", "", "", ""] for row in rows[1:])
 
 
 async def test_sdf_export_has_the_source_properties(app, async_db_session):
@@ -378,3 +378,48 @@ async def test_sdf_export_has_the_source_properties(app, async_db_session):
         assert mol.GetProp("MARCUS_ORGANISM_PART") == "bark"
         assert mol.GetProp("MARCUS_KINGDOM") == "Plant"
         assert not mol.HasProp("MARCUS_GEO_LOCATION")  # empty: left out
+
+
+async def test_scaffold_is_exported_flagged_not_as_a_finished_compound(app, async_db_session):
+    """A structure with R-group placeholders is kept (the curator accepted it) and every format
+    names its labels; a plain structure has none. A row stored without labels (NULL) is
+    labelled at export time."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    s0, s1 = seeded.segment_ids
+    later = datetime.now(UTC) + timedelta(seconds=10)
+
+    def add(s):
+        s.add(
+            Prediction(
+                segment_id=s0, engine="decimer", engine_version="d", smiles="[1*]c1ccc(*)cc1",
+                valid=True, ms=1, created_at=later,  # rgroups NULL: computed by the export
+            )
+        )  # fmt: skip
+
+    await db.run_sync(add)
+    await db.commit()
+    body = json.loads((await _export(app, token, seeded.paper_id, "json")).content)
+    flags = {s["segment_id"]: s["rgroups"] for s in body["segments"]}
+    assert flags == {str(s0): ["R1", "*"], str(s1): []}
+
+    rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
+    assert rows[0][-1] == "rgroups"
+    assert {r[0]: r[-1] for r in rows[1:]} == {str(s0): "R1; *", str(s1): ""}
+
+    r = await _export(app, token, seeded.paper_id, "sdf", "all")
+    by_seg = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
+    assert by_seg[str(s0)].GetProp("MARCUS_RGROUPS") == "R1; *"
+    assert not by_seg[str(s1)].HasProp("MARCUS_RGROUPS")
+
+
+async def test_curated_scaffold_labels_come_from_the_curation(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    s0, _ = seeded.segment_ids
+    r = await _curate(app, token, s0, {"status": "accepted", "smiles": "[2*]CCO"})
+    assert r.status_code == 200
+    body = json.loads((await _export(app, token, seeded.paper_id, "json", "accepted")).content)
+    assert [(s["source"], s["rgroups"]) for s in body["segments"]] == [("curated", ["R2"])]
