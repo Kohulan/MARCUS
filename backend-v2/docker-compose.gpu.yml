@@ -97,7 +97,7 @@ services:
   # metrics are off; the basic DCGM fields need no extra privilege.
   dcgm-exporter:
     <<: *gpu
-    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubuntu22.04
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
