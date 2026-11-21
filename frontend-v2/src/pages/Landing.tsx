@@ -1,8 +1,11 @@
 import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Beams from "../ui/Beams";
+import { isFirstScreen } from "../ui/firstScreen";
 import { GlassLink } from "../ui/GlassButton";
 import Icon from "../ui/Icon";
+import { mediaMatches } from "../ui/motion";
+import { flyInitials } from "./flight";
 import { pageMeta, usePageTitle } from "./meta";
 import RingDrop from "./RingDrop";
 import "./landing.css";
@@ -14,11 +17,17 @@ import "./landing.css";
 const NAME = "Molecular Annotation and Recognition for Curating Unravelled Structures";
 
 /**
- * The name assembles once per page load (landing.css, .acro--assemble): pure CSS from the
- * first paint, so the pre-rendered page needs no script for it. A later visit in the same tab
- * (back from /about) shows the name at rest. False on the server and while hydrating.
+ * The first screen plays once per page load (landing.css, "The first screen"): the sheet's
+ * lines draw themselves, the ring is built from its six bonds, and the initials are copied out
+ * of the header's wordmark and fall into place (flight.ts). When the landing is the page the
+ * load opened on, the header and footer arrive first ("entry"); after a click from another
+ * page they are already there ("intro"). A later visit in the same tab shows it all at rest.
+ * Lines, ring, header and footer are CSS from the first paint; only the flight needs the
+ * script, and without it the CSS shows the name. False on the server and while hydrating.
  */
 let assembled = false;
+
+type Intro = "entry" | "intro" | null;
 
 /**
  * One line of the acrostic: the bold green initial, then the rest of the word. `n` (1 to 6)
@@ -53,19 +62,51 @@ function Line({
 
 export default function Landing() {
   usePageTitle(pageMeta("/").title);
-  const assemble = !assembled;
+  // when the first screen's CSS starts: the time origin for the page the load opened on,
+  // this mount for a landing reached by a click
+  const [{ intro, origin }] = useState<{ intro: Intro; origin: number }>(() =>
+    assembled
+      ? { intro: null, origin: 0 }
+      : isFirstScreen()
+        ? { intro: "entry", origin: 0 }
+        : { intro: "intro", origin: performance.now() },
+  );
+  const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     assembled = true;
   }, []);
+  useEffect(() => {
+    if (!intro || !title.current || mediaMatches("(prefers-reduced-motion: reduce)")) return;
+    return flyInitials(title.current, origin);
+  }, [intro, origin]);
+  const assemble = intro !== null;
   return (
     <main className="home">
-      <section className="landing" aria-label="MARCUS">
+      {intro && (
+        // the sheet's frame, drawn over its border while the lines draw themselves
+        <span className="rules" aria-hidden="true">
+          <span className="rule rule--top" />
+          <span className="rule rule--right" />
+          <span className="rule rule--bottom" />
+          <span className="rule rule--left" />
+        </span>
+      )}
+      <section
+        className={
+          intro === "entry"
+            ? "landing landing--intro landing--entry"
+            : intro
+              ? "landing landing--intro"
+              : "landing"
+        }
+        aria-label="MARCUS"
+      >
         <Beams />
         <div className="lead">
           <div className="lead__title">
             {/* Drawn as an acrostic, read as the plain name: a screen reader would split
                 "M olecular" at each bold initial. */}
-            <h1 className={assemble ? "acro acro--assemble" : "acro"}>
+            <h1 ref={title} className={assemble ? "acro acro--assemble" : "acro"}>
               <span aria-hidden="true">
                 {/* the spaces keep a copied selection readable: "Molecular Annotation and …" */}
                 <Line n={1} initial="M" rest="olecular" />{" "}

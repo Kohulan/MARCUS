@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigationType } from "react-router-dom";
 import { trackPage } from "./analytics";
 import AppRoutes from "./AppRoutes";
+import { useFirstScreenDone } from "./ui/firstScreen";
 import Footer from "./ui/Footer";
 import GlassFilter from "./ui/GlassFilter";
 import Header from "./ui/Header";
@@ -63,6 +64,7 @@ function useScrollOnNavigate() {
 export default function App() {
   usePageViews();
   useScrollOnNavigate();
+  useFirstScreenDone();
   return (
     <ToastProvider>
       <GlassFilter />
