@@ -48,5 +48,10 @@
     "typescript-eslint": "8.73.0",
     "vite": "6.4.6",
     "vitest": "4.1.12"
+  },
+  "overrides": {
+    "dpdm": {
+      "glob": "^14.0.2"
+    }
   }
 }

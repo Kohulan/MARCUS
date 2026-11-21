@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "marcus"
 version = "0.2.0.dev0"
 description = "MARCUS v2 backend"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11.5,<3.12"
 dependencies = []
 
 [project.optional-dependencies]
