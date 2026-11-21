@@ -1,7 +1,8 @@
 """A fake COCONUT for the fake stack (docker-compose.fake.yml) and the e2e and judge runs.
 
 It holds the name coconut.naturalproducts.net on the stack's internal network and answers on
-443 with a certificate only the test CA (ca.pem) vouches for, so the production relay config in
+443 with a certificate only the test CA vouches for (gen-certs.sh makes both at the first start
+into MARCUS_FAKE_TLS_DIR; no key is stored in git), so the production relay config in
 docker/nginx.conf runs unchanged (fixed host, TLS verification, SNI) and nothing reaches the real
 COCONUT. Standard library only (it runs in the api image as uid 10001, read-only root).
 
@@ -26,13 +27,13 @@ from __future__ import annotations
 
 import itertools
 import json
+import os
 import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-HERE = Path(__file__).resolve().parent
 SEEN = Path("/tmp/seen.jsonl")
 
 LOGIN_EMAIL = "curator@example.org"
@@ -145,7 +146,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain(HERE / "cert.pem", HERE / "key.pem")
+    tls = Path(os.environ.get("MARCUS_FAKE_TLS_DIR", "/data"))
+    ctx.load_cert_chain(tls / "cert.pem", tls / "key.pem")
 
     def keep_sni(sock, name, _ctx):  # the name the client asked for (SNI), or None
         sock.marcus_sni = name

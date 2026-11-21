@@ -1293,44 +1293,48 @@ def test_production_points_at_the_real_coconut_and_only_the_fake_stack_at_the_fa
     assert set(fake["networks"]) == {"internal"}
     assert fake["networks"]["internal"]["aliases"] == [COCONUT_HOST]
     assert "ports" not in fake
-    mounts = {v["target"]: v["source"] for v in services["nginx"]["volumes"]}
-    assert mounts["/etc/ssl/certs/ca-certificates.crt"] == str(FAKE_COCONUT_DIR / "ca.pem")
+    mounts = {v["target"]: v for v in services["nginx"]["volumes"]}
+    assert mounts["/etc/ssl/certs"]["type"] == "volume"
+    assert mounts["/etc/ssl/certs"]["source"] == "fake-coconut-tls"
+    assert mounts["/etc/ssl/certs"].get("read_only") is True
+    fake_mounts = {v["target"]: v.get("source") for v in fake["volumes"]}
+    assert fake_mounts["/data"] == "fake-coconut-tls"
+    assert fake["environment"]["MARCUS_FAKE_TLS_DIR"] == "/data"
     assert services["nginx"]["depends_on"]["fake-coconut"]["condition"] == "service_healthy"
 
 
-def test_fake_coconut_certificate_is_for_the_coconut_name_and_signed_by_the_test_ca():
+def test_fake_coconut_certificate_is_for_the_coconut_name_and_signed_by_the_test_ca(tmp_path):
     openssl = shutil.which("openssl")
     if openssl is None:
         pytest.skip("openssl not available")
-    ca, cert = FAKE_COCONUT_DIR / "ca.pem", FAKE_COCONUT_DIR / "cert.pem"
+    subprocess.run(["sh", str(FAKE_COCONUT_DIR / "gen-certs.sh"), str(tmp_path)], check=True)
+    ca, cert = tmp_path / "ca.pem", tmp_path / "cert.pem"
     out = subprocess.run([openssl, "verify", "-CAfile", str(ca), str(cert)],
                          capture_output=True, text=True)  # fmt: skip
     assert out.returncode == 0, out.stdout + out.stderr
     text = subprocess.run([openssl, "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
                           capture_output=True, text=True).stdout  # fmt: skip
     assert f"DNS:{COCONUT_HOST}" in text
+    assert (tmp_path / "ca-certificates.crt").read_bytes() == ca.read_bytes()
     # the CA's key was thrown away after signing: only the server's own test key is kept
-    assert sorted(p.name for p in FAKE_COCONUT_DIR.glob("*.pem")) == [
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "ca-certificates.crt",
         "ca.pem",
         "cert.pem",
         "key.pem",
     ]
 
 
-def test_fake_coconut_tls_files_are_tracked_by_git():
-    """A fresh checkout must have them: compose would otherwise mount a directory over nginx's
-    CA bundle (nginx does not start) and the fake would die loading its certificate."""
+def test_no_tls_key_or_certificate_is_tracked_by_git():
+    """The fake makes its TLS files at its first start (gen-certs.sh); a key in git is a leak
+    alarm for secret scanners, even a test one."""
     git = shutil.which("git")
     if git is None or not (ROOT.parent / ".git").exists():
         pytest.skip("not a git checkout")
-    out = subprocess.run(
-        [git, "-C", str(ROOT.parent), "ls-files", "backend-v2/tests/fake_coconut"],
-        capture_output=True,
-        text=True,
-    )
+    out = subprocess.run([git, "-C", str(ROOT.parent), "ls-files", "*.pem", "*.key"],
+                         capture_output=True, text=True)  # fmt: skip
     assert out.returncode == 0, out.stderr
-    tracked = {Path(p).name for p in out.stdout.split()}
-    assert {"ca.pem", "cert.pem", "key.pem", "server.py", "gen-certs.sh"} <= tracked, tracked
+    assert out.stdout.split() == []
 
 
 def _relay(url: str, method: str, path: str, body: bytes = b"{}", ctype="application/json",
