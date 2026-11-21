@@ -160,9 +160,14 @@ services:
       internal:
         aliases:
           - coconut.naturalproducts.net
+    # TLS files are made at the first start into a volume (tests/fake_coconut/gen-certs.sh), so
+    # no key is stored in git; /data is the image's folder owned by uid 10001.
+    environment:
+      MARCUS_FAKE_TLS_DIR: /data
     volumes:
       - ./tests/fake_coconut:/fake:ro
-    command: ["python", "/fake/server.py"]
+      - fake-coconut-tls:/data
+    command: ["sh", "-c", "[ -s /data/key.pem ] || sh /fake/gen-certs.sh /data; exec python /fake/server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 443), 2)"]
       interval: 5s
@@ -171,8 +176,12 @@ services:
 
   nginx:
     volumes:
-      - ./tests/fake_coconut/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+      # Only the fake's test CA (ca-certificates.crt in the volume), nothing else.
+      - fake-coconut-tls:/etc/ssl/certs:ro
     # The fake holds COCONUT's name before nginx first resolves it.
     depends_on:
       fake-coconut:
         condition: service_healthy
+
+volumes:
+  fake-coconut-tls:

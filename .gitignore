@@ -208,9 +208,6 @@ Thumbs.db
 # Additional secrets/keys
 *.pem
 *.key
-# ...except the fake COCONUT's test-only TLS files (fake stack only; the CA key is deleted
-# after signing, see backend-v2/tests/fake_coconut/gen-certs.sh).
-!backend-v2/tests/fake_coconut/*.pem
 **/secrets.json
 
 # Large media files
