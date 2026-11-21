@@ -512,9 +512,9 @@ def test_concurrent_last_two_steps_mark_paper_done(db_session):
                 try:
                     barrier.wait()
                 except threading.BrokenBarrierError:
-                    pass
+                    pass  # the other thread never arrived: commit anyway, the asserts judge it
                 ws.commit()
-        except BaseException as exc:
+        except Exception as exc:
             errors.append(exc)
 
     threads = [threading.Thread(target=worker, args=(st.id, st.kind)) for st in last]

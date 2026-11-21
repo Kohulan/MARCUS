@@ -48,12 +48,12 @@ def fake_tf(monkeypatch):
         monkeypatch.setitem(sys.modules, "tensorflow", tf)
         return tf
 
-    monkeypatch.setattr(gpu, "_tf_limited", False)
+    monkeypatch.setitem(gpu._applied, "tf_memory", False)
     return install
 
 
 def test_no_budget_is_a_noop_and_does_not_import_tensorflow(monkeypatch):
-    monkeypatch.setattr(gpu, "_tf_limited", False)
+    monkeypatch.setitem(gpu._applied, "tf_memory", False)
     monkeypatch.delitem(sys.modules, "tensorflow", raising=False)
     assert gpu.limit_tf_memory(None) is False
     assert "tensorflow" not in sys.modules
@@ -155,8 +155,8 @@ def fake_torch(monkeypatch):
         monkeypatch.setitem(sys.modules, "torch", torch)
         return torch
 
-    monkeypatch.setattr(gpu, "_torch_threads", None)
-    monkeypatch.setattr(gpu, "_torch_limited", False)
+    monkeypatch.setitem(gpu._torch_state, "threads", None)
+    monkeypatch.setitem(gpu._torch_state, "memory", False)
     for var in gpu.THREAD_ENV_VARS:
         # setenv first: monkeypatch then restores the original state after the test, also the
         # values limit_torch_threads writes with os.environ.setdefault.
@@ -189,7 +189,7 @@ def test_torch_thread_env_already_set_is_kept(fake_torch, monkeypatch):
 
 
 def test_torch_threads_none_is_a_noop_and_does_not_import_torch(monkeypatch):
-    monkeypatch.setattr(gpu, "_torch_threads", None)
+    monkeypatch.setitem(gpu._torch_state, "threads", None)
     monkeypatch.delitem(sys.modules, "torch", raising=False)
     gpu.limit_torch_threads(None)
     assert "torch" not in sys.modules
@@ -202,7 +202,7 @@ def test_torch_threads_must_be_positive(fake_torch):
 
 
 def test_torch_memory_none_is_a_noop_and_does_not_import_torch(monkeypatch):
-    monkeypatch.setattr(gpu, "_torch_limited", False)
+    monkeypatch.setitem(gpu._torch_state, "memory", False)
     monkeypatch.delitem(sys.modules, "torch", raising=False)
     assert gpu.limit_torch_memory(None) is False
     assert "torch" not in sys.modules

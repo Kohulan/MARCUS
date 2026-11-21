@@ -60,7 +60,7 @@ def _wait_ready(timeout_s: float) -> httpx.Response:
             if r.status_code == 200:
                 return r
         except httpx.HTTPError:
-            pass
+            pass  # the stack is not up yet: poll again
         time.sleep(1)
     return r
 

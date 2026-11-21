@@ -892,7 +892,7 @@ def remove_paper_files(paper_id: uuid.UUID) -> None:
     try:
         shutil.rmtree(storage.paper_dir(paper_id))
     except FileNotFoundError:
-        pass
+        pass  # already gone: nothing to remove
     except OSError as exc:
         log.warning(
             "paper %s: files not removed (%s: %s); the retention sweep retries",

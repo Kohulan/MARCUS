@@ -343,7 +343,7 @@ def preload_on_worker_init(load: Callable[[], object], what: str) -> None:
         return
     try:
         load()
-    except BaseException:  # noqa: BLE001 - any failure, incl. SystemExit from a library
+    except (Exception, SystemExit, KeyboardInterrupt):  # any failure, incl. SystemExit from a library
         log.exception("%s failed to load; stopping the worker", what)
         abort_worker()
 

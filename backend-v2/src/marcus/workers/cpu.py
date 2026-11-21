@@ -7,6 +7,7 @@ marcus.workers.retention and is registered by the import below.
 """
 
 import html
+import importlib
 import json
 import logging
 import re
@@ -22,11 +23,10 @@ from marcus.core.enums import StepKind
 from marcus.core.models import Paper
 from marcus.core.queues import time_limits_for
 from marcus.core.storage import disk_is_full, page_image_path, paper_dir, pdf_path
-from marcus.workers import (
-    pdfsafe,
-    retention,  # noqa: F401  (registers the purge task in worker-cpu)
-)
+from marcus.workers import pdfsafe
 from marcus.workers.runtime import StorageFull, register
+
+importlib.import_module("marcus.workers.retention")  # registers the purge task in worker-cpu
 
 log = logging.getLogger(__name__)
 

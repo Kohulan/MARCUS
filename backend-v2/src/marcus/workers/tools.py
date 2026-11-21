@@ -211,10 +211,10 @@ def _highlight_mol(smiles: str):
     from rdkit import Chem
     from rdkit.rdBase import BlockLogs
 
-    _block = BlockLogs()  # noqa: F841
     params = Chem.SmilesParserParams()
     params.removeHs = False
-    mol = Chem.MolFromSmiles(smiles, params)
+    with BlockLogs():
+        mol = Chem.MolFromSmiles(smiles, params)
     if mol is None:
         raise ToolInputError("cannot read the SMILES for the highlight")
     return mol

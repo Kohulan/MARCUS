@@ -17,8 +17,8 @@ from marcus.core.enums import OwnerKind, PriorityClass
 from marcus.core.models import ImageJob, Owner, Paper, Step
 from marcus.core.settings import get_settings
 from marcus.core.tokens import hash_token
+from tests.api._upload_helpers import image_bytes
 from tests.api.conftest import _dispatcher_alive, _limiter_redis  # noqa: F401 (autouse)
-from tests.api.test_images import image_bytes
 from tests.factories import make_owner, make_paper
 
 

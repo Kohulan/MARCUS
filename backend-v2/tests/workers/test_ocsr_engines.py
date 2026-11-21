@@ -218,7 +218,7 @@ def fake_decimer(monkeypatch, tmp_path):
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(decimer, "_predict", None)
     monkeypatch.setattr(decimer, "_hand", None)
-    monkeypatch.setattr(decimer, "_warmed_up", False)
+    monkeypatch.setitem(decimer._warm, "done", False)
     monkeypatch.setattr(decimer, "decimer_version", lambda: "2.8.0")
     limits = []
     from marcus.workers import gpu
@@ -250,7 +250,7 @@ def test_normal_engine_loads_only_the_normal_model(fake_decimer):
 
     assert tf.loads == ["DECIMER_model"]
     assert decimer.hand_model_loaded() is False
-    assert decimer._warmed_up is True  # one prediction at load: the first step pays no warm-up
+    assert decimer._warm["done"] is True  # one prediction at load: the first step pays no warm-up
     assert tf.limits[0][0] == "threads"  # caps before the import
     # the import-time patches are undone
     assert tf.saved_model.load == tf.real_load
@@ -334,7 +334,7 @@ def test_hand_engine_alone_does_not_warm_up_the_normal_model(fake_decimer):
     fake_decimer()
     decimer.DecimerEngine(hand_drawn=True).load()
     assert decimer.hand_model_loaded() is True
-    assert decimer._warmed_up is False
+    assert decimer._warm["done"] is False
 
 
 # --- recycle the pool process after an interrupted model load ------------------------------

@@ -166,7 +166,7 @@ def main(argv=None) -> int:
                 owner.delete(f"/api/v2/papers/{pid}")
                 done.append(pid)
             except Exception:
-                pass
+                pass  # best-effort cleanup: a paper that cannot be deleted expires by itself
         return {"adversarial_papers_deleted": done}
 
     try:
