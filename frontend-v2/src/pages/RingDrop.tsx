@@ -30,6 +30,22 @@ type State = { kind: "idle" | "drag" } | { kind: "done" | "error"; text: string;
 
 const hasFiles = (e: DragEvent<HTMLElement>) => e.dataTransfer.types.includes("Files");
 
+const HEX = "60,8 110.2,37 110.2,95 60,124 9.8,95 9.8,37";
+
+/**
+ * The ring's six bonds, for the landing's first screen (landing.css, .dz__edge): each flies in
+ * and snaps into the hexagon, then the ring itself takes over. Each starts its dashes where
+ * the ring's own run of dashes reaches that corner (its offset), so the swap does not show.
+ */
+const EDGES = [
+  { d: "M60 8 110.2 37", offset: 0 },
+  { d: "M110.2 37V95", offset: -57.97 },
+  { d: "M110.2 95 60 124", offset: -115.97 },
+  { d: "M60 124 9.8 95", offset: -173.95 },
+  { d: "M9.8 95V37", offset: -231.95 },
+  { d: "M9.8 37 60 8", offset: -289.92 },
+];
+
 export default function RingDrop() {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
@@ -125,7 +141,18 @@ export default function RingDrop() {
         onDrop={onDrop}
       >
         <svg className="dz__ring" viewBox="0 0 120 132" aria-hidden="true" focusable="false">
-          <polygon className="dz__hex" points="60,8 110.2,37 110.2,95 60,124 9.8,95 9.8,37" />
+          <polygon className="dz__hex" points={HEX} />
+          <g className="dz__build">
+            {EDGES.map((e, i) => (
+              <path
+                key={e.d}
+                className={`dz__edge dz__edge--${i + 1}`}
+                d={e.d}
+                strokeDashoffset={e.offset}
+              />
+            ))}
+          </g>
+          <polygon className="dz__pulse" points={HEX} />
           <g className="dz__bonds--a">
             <path className="dz__bond" pathLength={1} d="M65.7 22.3 95 39.2" />
             <path className="dz__bond" pathLength={1} d="M95 92.8 65.7 109.7" />

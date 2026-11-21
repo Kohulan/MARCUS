@@ -7,8 +7,9 @@
  *
  * On the landing-page-design skill: every font size on its type scale with the step's own
  * line height (named text styles in the comments), every gap on the spacing tokens
- * (tokens.css --s-*), one motion curve (--ease), transform and opacity only. The one
- * exception: the ring's running dashes on drag keep a linear loop (a constant speed).
+ * (tokens.css --s-*), one motion curve (--ease), transform and opacity only. The exceptions:
+ * the ring's running dashes on drag keep a linear loop (a constant speed), and the falling
+ * initials of the first screen fall on gravity's curve (flight.ts).
  */
 
 .home {
@@ -64,7 +65,6 @@
 .landing .acro {
   font-size: 72px;
   font-weight: 400;
-  --acro-lh: 1em; /* the line height, for the assembly below */
   line-height: 1;
   letter-spacing: -0.035em;
   color: var(--ink);
@@ -77,6 +77,7 @@
 }
 
 .acro__line {
+  --acro-i: 0;
   display: block;
   white-space: nowrap;
 }
@@ -90,89 +91,25 @@
   color: var(--muted);
 }
 
-/*
- * The assembly, once per page load (Landing.tsx adds .acro--assemble on the first visit):
- * the six initials stand as one word, MARCUS, centred on the title's box; they glide into
- * the column; then each word's rest slides out from behind its initial. 1.5 s in all, on the
- * one curve, transform and opacity only. The final box is the layout itself (every frame is a
- * transform of it): nothing shifts when it ends, and the page reads the same without it.
- *
- * Where each initial starts: --acro-dx is its place in the word, the word centred on the
- * h1. Measured on Geist 700 at -0.035em (in em, so every breakpoint scales with it): the
- * initials' kerned offsets in "MARCUS" 0, 0.868, 1.541, 2.187, 2.888, 3.561; the word 4.207
- * wide; the h1 8.392 wide (its widest line, "Recognition for"); so 2.093 + the offset.
- * Vertically each starts on the middle of the six lines: (2.5 - n + 1) line heights.
- */
-.acro__line--1 {
-  --acro-i: 0;
-  --acro-dx: 2.093em;
-}
-
+/* Each line's place in the name, for the first screen at the end of this file. */
 .acro__line--2 {
   --acro-i: 1;
-  --acro-dx: 2.96em;
 }
 
 .acro__line--3 {
   --acro-i: 2;
-  --acro-dx: 3.634em;
 }
 
 .acro__line--4 {
   --acro-i: 3;
-  --acro-dx: 4.279em;
 }
 
 .acro__line--5 {
   --acro-i: 4;
-  --acro-dx: 4.98em;
 }
 
 .acro__line--6 {
   --acro-i: 5;
-  --acro-dx: 5.654em;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .acro--assemble b,
-  .acro--assemble .acro__rest {
-    display: inline-block;
-  }
-
-  /* the word shows (300 ms), then each initial glides to its line (500 ms, 30 ms apart) */
-  .acro--assemble b {
-    animation:
-      acro-show 300ms var(--ease) both,
-      acro-glide 500ms var(--ease) calc(350ms + var(--acro-i) * 30ms) both;
-  }
-
-  /* each rest slides out from behind its initial as it lands (500 ms, 60 ms apart); it
-     shows a beat after it sets off, so it never draws over the initial */
-  .acro--assemble .acro__rest {
-    --acro-at: calc(700ms + var(--acro-i) * 60ms);
-
-    animation:
-      acro-slide 500ms var(--ease) var(--acro-at) both,
-      acro-show 400ms var(--ease) calc(var(--acro-at) + 100ms) both;
-  }
-}
-
-@keyframes acro-show {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes acro-glide {
-  from {
-    transform: translate(var(--acro-dx), calc((2.5 - var(--acro-i)) * var(--acro-lh)));
-  }
-}
-
-@keyframes acro-slide {
-  from {
-    transform: translateX(-0.25em);
-  }
 }
 
 .lead__text {
@@ -582,7 +519,496 @@
 @media (max-width: 559.98px) {
   .landing .acro {
     font-size: 36px;
-    --acro-lh: 40px;
     line-height: 40px;
+  }
+}
+
+/*
+ * The first screen, once per page load (Landing.tsx adds .landing--intro, and .landing--entry
+ * when the load opened on the landing). About 2 s, from the first paint:
+ *
+ *   0       the header drops in and the footer's bubbles rise (entry only)
+ *   0–900   the sheet's lines draw themselves, each from its own end, in no order
+ *   480     the initials lift off the header's MARCUS and fall into place (flight.ts)
+ *   450     the ring's six bonds fly in and snap into the hexagon
+ *   1300    the ring closes: a ripple, and the double bonds flash once (aromatic)
+ *   1350    the upload mark, the words, the sample paper and the sentence settle in
+ *
+ * Every element's resting place is its layout; the animations only fill backwards, so when
+ * one ends nothing moves, and a page without the animations reads the same. Reduced motion:
+ * no drawing, no flight, no flying bonds; the page fades in.
+ */
+
+.home {
+  position: relative;
+}
+
+/* The sheet's frame: four lines over its border (Landing.tsx .rules), which steps aside. */
+.rules {
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rule {
+  position: absolute;
+  background: var(--line);
+}
+
+.rule--top,
+.rule--bottom {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.rule--left,
+.rule--right {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.rule--top {
+  top: 0;
+  transform-origin: right;
+}
+
+.rule--right {
+  right: 0;
+  transform-origin: bottom;
+}
+
+.rule--bottom {
+  bottom: 0;
+  transform-origin: left;
+}
+
+.rule--left {
+  left: 0;
+  transform-origin: top;
+}
+
+.sheet__page:has(> .home > .landing--intro) {
+  border-color: transparent;
+}
+
+/* The two lines inside: the lead's right edge and the sentence's top edge (below 1024 px the
+   action's top edge instead), drawn as lines over their own border. */
+.landing--intro .lead {
+  position: relative;
+  border-right-color: transparent;
+}
+
+.landing--intro .lead::after,
+.landing--intro .lead__text::before,
+.landing--intro .act::before {
+  content: "";
+  position: absolute;
+  background: var(--line);
+  pointer-events: none;
+}
+
+.landing--intro .lead::after {
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 1px;
+  transform-origin: bottom;
+}
+
+.landing--intro .lead__text {
+  position: relative;
+  border-top-color: transparent;
+}
+
+.landing--intro .lead__text::before {
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform-origin: left;
+}
+
+.landing--intro .act::before {
+  display: none;
+}
+
+@media (max-width: 1023.98px) {
+  .landing--intro .lead::after {
+    display: none;
+  }
+
+  .landing--intro .act {
+    border-top-color: transparent;
+  }
+
+  .landing--intro .act::before {
+    display: block;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    transform-origin: right;
+  }
+}
+
+/* The ring's bonds and its ripple exist only for the first screen. */
+.dz__build,
+.dz__pulse {
+  display: none;
+}
+
+.dz__edge {
+  fill: none;
+  stroke: var(--dz-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dz__pulse {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* The copies of the initials in flight (flight.ts): over everything, never in the way. */
+.acro-flight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.acro-fly {
+  position: absolute;
+  color: var(--green);
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+.acro-fly__fall,
+.acro-fly__glyphs {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.acro-fly__mark,
+.acro-fly__bold {
+  grid-area: 1 / 1;
+}
+
+/* the header's letter, centred on the initial's box: Gmarket Sans Light, as the wordmark */
+.acro-fly__mark {
+  justify-self: center;
+  font-family: var(--font-mark);
+  font-weight: 300;
+  letter-spacing: 0;
+}
+
+/* the initial itself, where the h1 sets it: Geist 700 */
+.acro-fly__bold {
+  justify-self: start;
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The header and the footer arrive (entry only). */
+  .sheet:has(.landing--entry) > .site-header > * {
+    animation: intro-drop 450ms var(--ease) backwards;
+  }
+
+  .sheet:has(.landing--entry) > .site-header > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > * {
+    animation: intro-rise 500ms var(--ease) 160ms backwards;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > :nth-child(2) {
+    animation-delay: 230ms;
+  }
+
+  .sheet:has(.landing--entry) > .site-footer--bubbles > :nth-child(3) {
+    animation-delay: 300ms;
+  }
+
+  /* The lines draw themselves: each its own end, its own pace, in no order. */
+  .rule--top {
+    animation: rule-x 760ms var(--ease) 120ms backwards;
+  }
+
+  .rule--right {
+    animation: rule-y 640ms var(--ease) 420ms backwards;
+  }
+
+  .rule--bottom {
+    animation: rule-x 820ms var(--ease) 230ms backwards;
+  }
+
+  .rule--left {
+    animation: rule-y 600ms var(--ease) 300ms backwards;
+  }
+
+  .landing--intro .lead::after {
+    animation: rule-y 700ms var(--ease) 0ms backwards;
+  }
+
+  .landing--intro .lead__text::before {
+    animation: rule-x 560ms var(--ease) 360ms backwards;
+  }
+
+  .landing--intro .act::before {
+    animation: rule-x 600ms var(--ease) 80ms backwards;
+  }
+
+  /* the four registration crosses turn into place as the lines meet them */
+  .landing--intro .act__corner {
+    animation: corner-in 520ms var(--ease) 560ms backwards;
+  }
+
+  .landing--intro .act__corner:nth-child(2) {
+    animation-delay: 700ms;
+  }
+
+  .landing--intro .act__corner:nth-child(3) {
+    animation-delay: 480ms;
+  }
+
+  .landing--intro .act__corner:nth-child(4) {
+    animation-delay: 780ms;
+  }
+
+  /*
+   * The name. The script (flight.ts) adds .acro--flying, hides the initials and flies them in
+   * from the header. Without it, at 1.6 s the CSS shows the name itself: each initial fades
+   * in and its rest slides out from behind it.
+   */
+  .acro--assemble b,
+  .acro--assemble .acro__rest {
+    display: inline-block;
+  }
+
+  .acro--assemble b {
+    transform-origin: 50% 85%;
+    animation: acro-show 400ms var(--ease) calc(1600ms + var(--acro-i) * 40ms) backwards;
+  }
+
+  .acro--assemble .acro__rest {
+    --acro-at: calc(1700ms + var(--acro-i) * 60ms);
+
+    animation:
+      acro-slide 500ms var(--ease) var(--acro-at) backwards,
+      acro-show 400ms var(--ease) calc(var(--acro-at) + 100ms) backwards;
+  }
+
+  .acro--flying b,
+  .acro--flying .acro__rest {
+    opacity: 0;
+    animation: none;
+  }
+
+  /* The ring is built: six bonds fly in from all sides and snap together. The ring itself
+     takes over the frame they close (1300 ms); then a ripple, and one aromatic flash. */
+  .landing--intro .dz__build {
+    display: inline;
+    animation: dz-handover 0s 1300ms forwards;
+  }
+
+  .landing--intro .dz__hex {
+    animation:
+      dz-stroke-in 0s 1300ms backwards,
+      dz-fill-in 500ms var(--ease) 1000ms backwards;
+  }
+
+  .landing--intro .dz__edge {
+    animation: dz-edge 700ms var(--ease) calc(450ms + var(--dz-i) * 70ms) backwards;
+  }
+
+  .dz__edge--1 {
+    --dz-i: 2;
+    --dz-from: translate(18px, -31px) rotate(28deg);
+  }
+
+  .dz__edge--2 {
+    --dz-i: 5;
+    --dz-from: translate(36px, 0) rotate(-24deg);
+  }
+
+  .dz__edge--3 {
+    --dz-i: 0;
+    --dz-from: translate(18px, 31px) rotate(-32deg);
+  }
+
+  .dz__edge--4 {
+    --dz-i: 3;
+    --dz-from: translate(-18px, 31px) rotate(22deg);
+  }
+
+  .dz__edge--5 {
+    --dz-i: 1;
+    --dz-from: translate(-36px, 0) rotate(30deg);
+  }
+
+  .dz__edge--6 {
+    --dz-i: 4;
+    --dz-from: translate(-18px, -31px) rotate(-26deg);
+  }
+
+  .landing--intro .dz__pulse {
+    display: inline;
+    animation: dz-pulse 800ms var(--ease) 1300ms;
+  }
+
+  .landing--intro .dz__bonds--a .dz__bond {
+    animation: dz-aromatic 900ms var(--ease) 1360ms;
+  }
+
+  /* then the zone's words and the sample paper settle in */
+  .landing--intro .dz__mark {
+    animation: acro-show 500ms var(--ease) 1350ms backwards;
+  }
+
+  .landing--intro .dz__title {
+    animation: intro-rise 500ms var(--ease) 1420ms backwards;
+  }
+
+  .landing--intro .dz__hint {
+    animation: intro-rise 500ms var(--ease) 1480ms backwards;
+  }
+
+  .landing--intro .act__sample {
+    animation: intro-rise 500ms var(--ease) 1560ms backwards;
+  }
+
+  .landing--intro .lead__text > * {
+    animation: intro-rise 600ms var(--ease) 1500ms backwards;
+  }
+
+  .landing--intro .lead__text > :nth-child(2) {
+    animation-delay: 1600ms;
+  }
+}
+
+/* Reduced motion: nothing draws, flies or builds; the page fades in. */
+@media (prefers-reduced-motion: reduce) {
+  .landing--intro > .lead,
+  .landing--intro > .act {
+    animation: acro-show 500ms var(--ease) backwards;
+  }
+}
+
+@keyframes acro-show {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes acro-slide {
+  from {
+    transform: translateX(-0.25em);
+  }
+}
+
+@keyframes intro-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes rule-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes rule-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes corner-in {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.4);
+  }
+}
+
+@keyframes dz-edge {
+  from {
+    opacity: 0;
+    transform: var(--dz-from);
+  }
+
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes dz-handover {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dz-stroke-in {
+  from {
+    stroke-opacity: 0;
+  }
+}
+
+@keyframes dz-fill-in {
+  from {
+    fill-opacity: 0;
+  }
+}
+
+@keyframes dz-pulse {
+  from {
+    opacity: 0.85;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes dz-aromatic {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  35%,
+  60% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
   }
 }
