@@ -1,0 +1,12 @@
+# GitGuardian / ggshield: these paths hold only fake test credentials and placeholders.
+# Real secrets live in git-ignored .env files on the servers, never in the repo.
+version: 2
+secret:
+  ignored_paths:
+    - "backend-v2/tests/**"             # fake COCONUT TLS key, throwaway test DB URLs
+    - "backend/tests/**"                # v1 tests: sk-1234567890abcdef... fake keys
+    - "judges/**"                       # sk-judgeDUMMY... and local-only judge secrets
+    - "**/.env.example"
+    - ".env.security.example"
+    - "backend-v2/docker-compose.test.yml"
+    - ".github/workflows/backend-v2.yml" # CI service DB marcus:marcus, deleted after the run
