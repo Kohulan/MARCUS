@@ -20,6 +20,18 @@ class _Orm(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class _RGroups(BaseModel):
+    """`rgroups`: the R-group labels of the structure (marcus.core.rgroups), [] for none. A
+    structure with labels stands for several compounds: it is not sent to COCONUT."""
+
+    rgroups: list[str] = []
+
+    @field_validator("rgroups", mode="before")
+    @classmethod
+    def _none_is_empty(cls, value: list[str] | None) -> list[str]:
+        return value or []
+
+
 class PaperSummary(_Orm):
     id: uuid.UUID
     display_name: str
@@ -60,14 +72,14 @@ class Counts(BaseModel):
     steps_by_status: dict[str, int]
 
 
-class CurationOut(_Orm):
+class CurationOut(_RGroups, _Orm):
     status: CurationStatus
     smiles: str | None
     molfile: str | None
     note: str | None
 
 
-class PredictionOut(_Orm):
+class PredictionOut(_RGroups, _Orm):
     id: uuid.UUID
     engine: str
     engine_version: str
@@ -210,7 +222,7 @@ class QueueOut(BaseModel):
     estimate_s: float
 
 
-class ImagePrediction(_Orm):
+class ImagePrediction(_RGroups, _Orm):
     smiles: str
     molfile: str | None
     valid: bool

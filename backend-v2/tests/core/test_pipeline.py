@@ -424,6 +424,28 @@ def test_cancel_paper_file_error_is_logged_not_raised(db_session, monkeypatch, c
     assert str(paper.id) in caplog.text and "PermissionError" in caplog.text
 
 
+def test_ocsr_result_stores_rgroup_labels(db_session):
+    """The labels are computed once, with the row: [] for a plain structure, the labels for a
+    scaffold (MolScribe's dummy atoms, DECIMER's R tokens that make it invalid)."""
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    ocsr1, ocsr2 = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    finish(s, ocsr1, {**OCSR, "smiles": "[1*]c1ccccc1[2*]"})
+    finish(s, ocsr2, {**OCSR, "smiles": "[R1]c1ccccc1", "valid": False})
+    got = {p.segment_id: p.rgroups for p in s.execute(select(Prediction)).scalars()}
+    assert got == {ocsr1.segment_id: ["R1", "R2"], ocsr2.segment_id: ["R1"]}
+
+
+def test_ocsr_result_plain_structure_has_no_rgroups(db_session):
+    s = db_session
+    job, step = make_image_job(s, engine=Engine.MOLSCRIBE)
+    finish(s, step, OCSR)
+    (pred,) = s.execute(select(Prediction)).scalars()
+    assert pred.rgroups == []
+
+
 def test_image_job_ocsr_done(db_session):
     s = db_session
     job, step = make_image_job(s, engine=Engine.MOLSCRIBE)

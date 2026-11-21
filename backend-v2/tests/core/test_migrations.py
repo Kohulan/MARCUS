@@ -252,3 +252,71 @@ def test_migration_0010_annotations_up_down(migrated_db):
         assert "annotations" not in inspect(engine).get_table_names()
     finally:
         command.upgrade(cfg, "head")
+
+
+KETCHER_R1 = (
+    "\n  Ketcher\n\n  2  1  0  0  0  0  0  0  0  0999 V2000\n"
+    "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"
+    "    1.0000    0.0000    0.0000 R#  0  0  0  0  0  0  0  0  0  0  0  0\n"
+    "  1  2  1  0  0  0  0\nM  RGP  1   2   1\nM  END\n"
+)
+
+
+def test_migration_0011_rgroups_up_down_and_backfill(migrated_db):
+    """0011 adds the columns and fills the rows already there: [] for a plain structure, the
+    labels for a scaffold; a curation without its own structure stays NULL."""
+    from sqlalchemy import text
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from marcus.core.models import Segment
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.downgrade(cfg, "0010")
+        assert "rgroups" not in _columns(engine, "predictions")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            segs = [
+                Segment(paper_id=paper.id, page=0, idx=i, bbox=[0, 0, 1, 1], image_sha256="b" * 64)
+                for i in range(3)
+            ]
+            s.add_all(segs)
+            s.flush()
+            ids = [seg.id for seg in segs]
+            # raw SQL: the models already have the column this revision does not
+            for seg, smiles, valid in [
+                (ids[0], "CCO", True),
+                (ids[1], "[1*]c1ccccc1*", True),
+                (ids[2], "[R1]c1ccccc1[X]", False),
+            ]:
+                s.execute(
+                    text(
+                        "INSERT INTO predictions (id, segment_id, engine, engine_version, smiles,"
+                        " valid, ms) VALUES (gen_random_uuid(), :s, 'decimer', 'v', :smi, :v, 1)"
+                    ),
+                    {"s": seg, "smi": smiles, "v": valid},
+                )
+            s.execute(
+                text(
+                    "INSERT INTO curation (segment_id, status, molfile) VALUES"
+                    " (:a, 'accepted', :m), (:b, 'accepted', NULL)"
+                ),
+                {"a": ids[0], "b": ids[1], "m": KETCHER_R1},
+            )
+            s.commit()
+        command.upgrade(cfg, "0011")
+        with engine.connect() as conn:
+            preds = dict(conn.execute(text("SELECT segment_id, rgroups FROM predictions")).all())
+            curs = dict(conn.execute(text("SELECT segment_id, rgroups FROM curation")).all())
+        assert preds == {ids[0]: [], ids[1]: ["R1", "*"], ids[2]: ["R1", "X"]}
+        assert curs == {ids[0]: ["R1"], ids[1]: None}
+        command.downgrade(cfg, "0010")
+        assert "rgroups" not in _columns(engine, "predictions")
+        assert "rgroups" not in _columns(engine, "curation")
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))  # papers, segments and the rest cascade
+        command.upgrade(cfg, "head")
