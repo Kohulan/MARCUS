@@ -97,7 +97,9 @@ services:
   # metrics are off; the basic DCGM fields need no extra privilege.
   dcgm-exporter:
     <<: *gpu
-    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.2-4.8.1-ubuntu22.04
+    # Pinned at 4.2.3: 4.5.2 stops collecting GPU metrics unless it runs as root ("Host engine
+    # is running as non-root", seen on jarvis 2026-11-21), and this container runs without root.
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubuntu22.04
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
