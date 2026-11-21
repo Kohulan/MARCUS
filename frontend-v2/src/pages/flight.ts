@@ -92,7 +92,10 @@ export function flyInitials(h1: HTMLElement, origin: number): () => void {
     document.body.append(layer);
     const range = document.createRange();
     const font = getComputedStyle(first);
-    const markSize = parseFloat(getComputedStyle(word).fontSize);
+    const mark = getComputedStyle(word);
+    const markSize = parseFloat(mark.fontSize);
+    // a letter's range ends after its letter spacing: the glyph's centre is half of it before
+    const spacing = parseFloat(mark.letterSpacing) || 0;
     const scale = markSize / parseFloat(font.fontSize);
 
     initials.forEach((b, i) => {
@@ -102,6 +105,7 @@ export function flyInitials(h1: HTMLElement, origin: number): () => void {
       range.setStart(text, i);
       range.setEnd(text, i + 1);
       const from = centre(range.getBoundingClientRect());
+      from.x -= spacing / 2;
       const at = centre(to);
       const dx = from.x - at.x;
       const dy = from.y - at.y;

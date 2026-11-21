@@ -110,23 +110,26 @@ test.describe("landing and info pages @mocked", () => {
     });
   }
 
-  // The name assembles: MARCUS as one word, then the column, then each word's rest. Every
-  // frame is a transform of the layout, so the end is the layout itself.
+  // The name: each initial is copied out of the header's MARCUS and falls to its line
+  // (src/pages/flight.ts). The copies start on the header's letters; at the end they are gone
+  // and the name is its layout, as it is under reduced motion (no flight at all).
   for (const [width, height] of [
     [1440, 900],
     [390, 844],
   ] as const) {
-    test(`${width} × ${height}: the name assembles from one word and ends on the layout`, async ({
+    test(`${width} × ${height}: the initials fall from the header's MARCUS and end on the layout`, async ({
       browser,
     }) => {
-      // the assembly's animations: count them, or hold them at a time (null: run to the end)
-      const acro = (at: number | null | undefined) => {
-        const all = document
-          .getAnimations()
-          .filter((a) => (a as CSSAnimation).animationName?.startsWith("acro-"));
+      // the flight's animations (the copies, the initials, the rests): hold at a time, or
+      // run to the end (null); returns how many there are
+      const flight = (at: number | null) => {
+        const all = document.getAnimations().filter((a) => {
+          const el = (a.effect as KeyframeEffect | null)?.target;
+          return el instanceof Element && el.closest(".acro-flight, .acro") !== null;
+        });
         for (const a of all) {
           if (at === null) a.finish();
-          else if (at !== undefined) {
+          else {
             a.pause();
             a.currentTime = at;
           }
@@ -144,33 +147,43 @@ test.describe("landing and info pages @mocked", () => {
       const open = async (reducedMotion: "reduce" | "no-preference") => {
         const page = await browser.newPage({ viewport: { width, height }, reducedMotion });
         await routeMatomo(page);
-        await page.goto("/", { waitUntil: "load" });
-        await page.evaluate(() => document.fonts.ready);
+        await page.goto("/", { waitUntil: "commit" });
         return page;
       };
 
       const still = await open("reduce");
-      expect(await still.evaluate(acro, undefined)).toBe(0);
+      await still.waitForLoadState("load");
+      await still.evaluate(() => document.fonts.ready);
+      await still.waitForTimeout(1000);
+      expect(await still.locator(".acro-fly").count()).toBe(0);
       const layout = await still.evaluate(glyphs);
       await still.close();
 
       const page = await open("no-preference");
-      expect(await page.evaluate(acro, 0)).toBe(24); // a show and a glide or slide for each of 6 initials and 6 rests
-      const start = await page.evaluate(glyphs);
-      const initials = start.filter((_, i) => i % 2 === 0);
-      // one row: the same top, left to right, each letter after the last
-      expect(new Set(initials.map((g) => g.y)).size).toBe(1);
-      for (let i = 1; i < initials.length; i++) {
-        const [prev, cur] = [initials[i - 1]!, initials[i]!];
-        expect(cur.x).toBeGreaterThanOrEqual(prev.x + prev.w - 2);
-        expect(cur.x).toBeLessThanOrEqual(prev.x + prev.w + 2);
-      }
-      const rests = await page.$$eval(".acro .acro__rest", (els) =>
+      await expect(page.locator(".acro-fly")).toHaveCount(6);
+      expect(await page.evaluate(flight, 0)).toBeGreaterThan(0);
+      // at lift-off each copy's wordmark letter sits on its letter in the header's MARCUS
+      const starts = await page.evaluate(() => {
+        const word = document.querySelector(".site-header__word")!;
+        const text = word.firstChild as Text;
+        const spacing = parseFloat(getComputedStyle(word).letterSpacing) || 0;
+        const range = document.createRange();
+        return [...document.querySelectorAll(".acro-fly__mark")].map((mark, i) => {
+          range.setStart(text, i);
+          range.setEnd(text, i + 1);
+          const [h, c] = [range.getBoundingClientRect(), mark.getBoundingClientRect()];
+          return { dx: c.left + c.width / 2 - (h.left + (h.width - spacing) / 2) };
+        });
+      });
+      for (const s of starts) expect(Math.abs(s.dx)).toBeLessThanOrEqual(1);
+      // the initials wait hidden until their copies land
+      const hidden = await page.$$eval(".acro b", (els) =>
         els.map((el) => getComputedStyle(el).opacity),
       );
-      expect(rests.every((o) => o === "0")).toBe(true);
+      expect(hidden.every((o) => o === "0")).toBe(true);
 
-      await page.evaluate(acro, null);
+      await page.evaluate(flight, null);
+      await expect(page.locator(".acro-flight")).toHaveCount(0);
       expect(await page.evaluate(glyphs)).toEqual(layout);
       await page.close();
     });
