@@ -26,6 +26,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 docs/*
+# the README graphics and the logo are tracked; the rest of docs/ stays local
+!docs/assets/
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
