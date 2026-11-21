@@ -3,6 +3,8 @@
 // Seeds its own data (through the API) from synth_015.pdf (engine fake, 10 structures) and one image.
 //
 //   node scripts/capture-review.mjs            # MARCUS_UI_URL=http://localhost:18090
+//   MARCUS_SHOT_SCALE=2 MARCUS_SHOT_OUT=../docs/assets/screens node scripts/capture-review.mjs
+//                                               # sharp shots for the README
 //
 // Never point it at production.
 import { mkdir, readFile } from "node:fs/promises";
@@ -14,7 +16,8 @@ if (!["localhost", "127.0.0.1"].includes(new URL(BASE).hostname)) {
   console.error(`capture-review: refusing ${BASE} (local stack only)`);
   process.exit(2);
 }
-const OUT = resolve(".impeccable/review");
+const OUT = resolve(process.env.MARCUS_SHOT_OUT ?? ".impeccable/review");
+const SCALE = Number(process.env.MARCUS_SHOT_SCALE ?? 1);
 const PDF = resolve("public/sample/synth_015.pdf");
 // A real crop of synth_015 (page 1, structure 1), for a realistic single-image result.
 const IMAGE = resolve("../backend-v2/tests/fixtures/ocsr/synth015_p0_i0.png");
@@ -51,6 +54,7 @@ try {
   const desk = await browser.newContext({
     baseURL: BASE,
     viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: SCALE,
     colorScheme: "light",
   });
   await offline(desk);
@@ -70,7 +74,7 @@ try {
   await page.goto(`/app/papers/${id}`);
   await page
     .getByRole("region", { name: "Status" })
-    .getByText("Done")
+    .locator(".state.item-done")
     .waitFor({ timeout: 360_000 });
 
   // A realistic mix: some accepted, one rejected, the rest to check.
