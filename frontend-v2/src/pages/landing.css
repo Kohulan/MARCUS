@@ -696,20 +696,23 @@
 
 .acro-fly__fall,
 .acro-fly__glyphs {
-  display: grid;
+  display: block;
   width: 100%;
   height: 100%;
   will-change: transform;
 }
 
-.acro-fly__mark,
-.acro-fly__bold {
-  grid-area: 1 / 1;
+.acro-fly__glyphs {
+  position: relative;
 }
 
-/* the header's letter, centred on the initial's box: Gmarket Sans Light, as the wordmark */
+/* the header's letter, centred on the initial's box (out of the flow: it is wider than the
+   bold initial and must not push it): Gmarket Sans Light, as the wordmark */
 .acro-fly__mark {
-  justify-self: center;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
   font-family: var(--font-mark);
   font-weight: 300;
   letter-spacing: 0;
@@ -717,7 +720,7 @@
 
 /* the initial itself, where the h1 sets it: Geist 700 */
 .acro-fly__bold {
-  justify-self: start;
+  display: block;
   font-family: var(--font-head);
   font-weight: 700;
 }
