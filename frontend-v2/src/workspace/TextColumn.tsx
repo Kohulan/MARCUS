@@ -23,8 +23,7 @@ import {
   type FieldSpan,
   type HitAt,
 } from "./annotation";
-import { doclingBlocks, type TextBlock } from "./doclingText";
-import { newestFirst } from "./pageFailures";
+import { doclingBlocks, newestDocling, type TextBlock } from "./doclingText";
 import { scrollWithin } from "./scrollWithin";
 import { useAnnotation, useAnnotationActions } from "./useAnnotation";
 
@@ -86,10 +85,6 @@ const Block = memo(function Block({
   );
 });
 
-/** The paper's newest docling step. */
-const newestDocling = (steps: StepOut[]): StepOut | undefined =>
-  newestFirst(steps.filter((s) => s.kind === "docling"))[0];
-
 /** "alkaloids.pdf" → "alkaloids.txt": one trailing ".pdf" (any case) gives way to ".txt". */
 const textFileName = (displayName: string) => `${displayName.replace(/\.pdf$/i, "")}.txt`;
 
@@ -102,7 +97,8 @@ function download(blocks: TextBlock[], name: string) {
 /**
  * The middle column of the Paper view: the paper's text from Docling, its download, and its
  * annotation (Annotate, then the values, marked in the text). The text file can be large: it
- * is asked for only here (the Paper view is open) and only once the docling step is done, or
+ * is asked for only here (the Paper view is open; focus mode asks for it only for a structure
+ * with R-groups, useDefinitionPages) and only once the docling step is done, or
  * when the paper has no docling step and is not being worked on (the server answers 404 if it
  * has none). The annotation sits above the text, which scrolls on its own, so a value can be
  * clicked again (its next occurrence) while the text shows the last one.

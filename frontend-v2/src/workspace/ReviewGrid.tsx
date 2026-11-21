@@ -6,7 +6,7 @@ import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { isPaperReading } from "./annotation";
-import { filterOf, hasDrawing, segmentCard, type GridFilter } from "./cardState";
+import { hasDrawing, inFilter, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
@@ -74,7 +74,7 @@ export default function ReviewGrid({
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
 
   const shown = useMemo(
-    () => (filter === "all" ? rows : rows.filter((r) => filterOf(r.state) === filter)),
+    () => (filter === "all" ? rows : rows.filter((r) => inFilter(r, filter))),
     [rows, filter],
   );
   const shownRef = useRef(shown);

@@ -26,6 +26,7 @@ import {
   type CompareTarget,
   type EngineRow,
 } from "./useCompare";
+import { resultWord } from "./rgroups";
 import "./compare.css";
 
 export type CompareProps = {
@@ -270,7 +271,7 @@ export default function Compare({
 }
 
 function resultText(r: EngineRow): ReactNode {
-  if (r.prediction) return r.prediction.valid ? "Valid" : "Invalid";
+  if (r.prediction) return resultWord(r.prediction);
   if (r.state === "reading") {
     const note = firstRunNote(r.engine);
     return (

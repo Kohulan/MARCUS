@@ -253,6 +253,25 @@ describe("Paper view", () => {
     expect(two).toHaveTextContent("[02]");
   });
 
+  it("a structure with R-groups carries the tag on its marker and its list card", async () => {
+    renderAt(
+      paper([
+        segment("s1", {
+          predictions: [prediction({ smiles: "[1*]c1ccccc1", rgroups: ["R1"] })],
+        }),
+        segment("s2"),
+      ]),
+    );
+    await loadPage(2);
+    const one = screen.getByRole("button", { name: "Structure [01] on page 2, R-groups: R1" });
+    expect(one).toHaveTextContent("R-groups: R1");
+    expect(screen.getByRole("button", { name: "Structure [02] on page 2" })).not.toHaveTextContent(
+      "R-groups",
+    );
+    const list = screen.getByRole("region", { name: "Structures" });
+    expect(within(list).getByText("R-groups: R1")).toBeInTheDocument();
+  });
+
   it("selects a structure's card when its marker is clicked", async () => {
     renderAt(paper([segment("s1"), segment("s2")]));
     await loadPage(2);

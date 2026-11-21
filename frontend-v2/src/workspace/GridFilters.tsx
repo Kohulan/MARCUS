@@ -1,5 +1,5 @@
 import { GlassButton } from "../ui/GlassButton";
-import { FILTERS, type GridFilter } from "./cardState";
+import { FILTERS, shownFilter, type GridFilter } from "./cardState";
 import "./grid.css";
 
 type GridFiltersProps = {
@@ -26,7 +26,7 @@ export default function GridFilters({
     <div className="rg-filters">
       <div className="rg-filters__lead">
         <div className="rg-filters__set" role="group" aria-label="Filter">
-          {FILTERS.map(({ filter: f, label }) => (
+          {FILTERS.filter(({ filter: f }) => shownFilter(f, filter, counts)).map(({ filter: f, label }) => (
             <button
               key={f}
               type="button"

@@ -479,6 +479,50 @@ describe("SubmitForm", () => {
     expect([...sentIds("p1")].sort()).toEqual(["s1", "s2", "s3"]);
   });
 
+  it("lists structures with R-groups as left out, with the reason, and never sends them", async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    stubFetch(okServer());
+    render(
+      <SubmitForm
+        paper={{ id: "p1", title: "A paper on willow", doi: "10.1/x" }}
+        // s4 slipped through with a wildcard atom: the form's own guard holds it
+        structures={[...structures, { segmentId: "s4", n: 4, smiles: "*CC", name: "X" }]}
+        held={[{ segmentId: "s5", n: 5, rgroups: ["R1", "R2"] }]}
+        onClose={() => {}}
+      />,
+    );
+    const left = screen.getByRole("region", { name: "Left out (2)" });
+    expect(within(left).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "[04] has R-groups (*): build the compounds or edit the structure first",
+      "[05] has R-groups (R1, R2): build the compounds or edit the structure first",
+    ]);
+    expect(screen.queryByRole("listitem", { name: /\[04\]/ })).toBeNull(); // no row to name
+    fillPaper();
+    fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
+    expect(await screen.findByText("Report 1")).toBeInTheDocument();
+    const sent = calls.flatMap((c) => bodyOf(c).mutate.map((m) => m.attributes));
+    expect(sent.map((a) => a.suggested_changes.new_molecule_data.canonical_smiles)).toEqual([
+      "CCO",
+      "CCN",
+      "CCC",
+    ]);
+  });
+
+  it("shows the left-out list at the login too", () => {
+    render(
+      <SubmitForm
+        paper={{ id: "p1", title: null, doi: null }}
+        structures={structures}
+        held={[{ segmentId: "s5", n: 5, rgroups: ["X"] }]}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Left out (1)" })).toHaveTextContent(
+      "[05] has R-groups (X): build the compounds or edit the structure first",
+    );
+  });
+
   it("shows progress while chunks are sent", async () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN);
     let release!: () => void;
