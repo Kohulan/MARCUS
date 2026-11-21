@@ -18,7 +18,7 @@ docker run -d --rm --name marcus-ui-dev --network host \
   -v "$PWD/deploy/ui-locations.conf:/etc/nginx/marcus/ui-locations.conf:ro" \
   -v "$PWD/deploy/headers-app.conf:/etc/nginx/marcus/headers-app.conf:ro" \
   -v "$PWD/deploy/headers-ketcher.conf:/etc/nginx/marcus/headers-ketcher.conf:ro" \
-  nginxinc/nginx-unprivileged:1.27-alpine >/dev/null
+  nginxinc/nginx-unprivileged:1.31-alpine >/dev/null
 
 i=0
 until curl -fsS -o /dev/null http://127.0.0.1:18091/; do
