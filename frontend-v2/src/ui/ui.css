@@ -690,6 +690,18 @@
   color: var(--on-charcoal);
 }
 
+/* R-groups (a scaffold, several compounds): information, not a state, so no orange. The words
+   in a square 1px ink outline on surface; a long label list ends in an ellipsis (title: all). */
+.tag--rgroups {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 5px;
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  text-overflow: ellipsis;
+}
+
 /* Progress bar ------------------------------------------------------------- */
 /*
  * The one progress bar (ProgressBar): a square track (control-border edge 3.3:1 on paper,

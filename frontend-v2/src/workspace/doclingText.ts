@@ -1,7 +1,25 @@
 // The paper's text as the Paper view shows it: Docling's document (GET /papers/{id}/text)
 // flattened to headings and paragraphs, in reading order. Plain strings only: the view
 // renders them as React text nodes, never as HTML.
-import type { DoclingDoc } from "../api/types";
+import { isPaperBusy, isStepActive } from "../api/status";
+import type { DoclingDoc, StepOut } from "../api/types";
+import { newestFirst } from "./pageFailures";
+
+/** The paper's newest docling step. */
+export const newestDocling = (steps: StepOut[]): StepOut | undefined =>
+  newestFirst(steps.filter((s) => s.kind === "docling"))[0];
+
+/**
+ * Whether GET /papers/{id}/text may be asked for: the steps are known (`known`), and the
+ * newest docling step is done, or the paper has none and is not being worked on (the server
+ * answers 404 if it has no text). A failed docling step has no text to ask for.
+ */
+export function textAskable(steps: StepOut[], known: boolean, paperStatus: string): boolean {
+  if (!known) return false;
+  const docling = newestDocling(steps);
+  if (docling === undefined) return !isPaperBusy(paperStatus);
+  return docling.status !== "failed" && !isStepActive(docling.status);
+}
 
 export type TextBlock = { kind: "heading" | "paragraph"; text: string };
 

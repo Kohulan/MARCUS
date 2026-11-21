@@ -4,7 +4,9 @@
 // Structures this browser already sent for the paper, and those whose send ended without an
 // answer ("Unknown": they may be in COCONUT), are left out unless the curator ticks
 // "Send again" and confirms. One submit at a time; the dialog stays open while it runs.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// Accepted structures that still have R-group placeholders are never sent: the form lists them
+// under "Left out" with the reason (never dropped silently).
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
@@ -23,6 +25,7 @@ import {
   unknownIds,
 } from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
+import { guardSend, heldReason, type HeldStructure } from "./held";
 import { chunkNews, endNews, startNews } from "./sendNews";
 import SubmitResults from "./SubmitResults";
 import type {
@@ -40,6 +43,11 @@ export type SubmitFormProps = {
   /** The accepted structures to send, in (page, idx) order. */
   structures: SubmitStructure[];
   /**
+   * Accepted structures left out because they have R-groups (coconutList). Listed with the
+   * reason; the form also holds back any structure whose SMILES has a dummy atom (guardSend).
+   */
+  held?: HeldStructure[];
+  /**
    * Starting values for the paper's fields (for example a submission title). Read when the
    * form opens; organisms that come later (a new array) still start the form if the curator
    * has not changed its organisms yet.
@@ -56,6 +64,7 @@ type Phase =
   | { kind: "results"; results: SubmitResult[]; structures: SubmitStructure[] };
 
 const EMPTY_ORGANISM: OrganismDraft = { name: "", parts: "", location: "", ecosystems: "" };
+const NO_HELD: HeldStructure[] = [];
 
 function startFields(
   paper: SubmitFormProps["paper"],
@@ -78,11 +87,17 @@ function startRows(structures: SubmitStructure[]): Record<string, StructureField
 
 export default function SubmitForm({
   paper,
-  structures,
+  structures: given,
+  held: heldGiven = NO_HELD,
   initial,
   organismsNote,
   onClose,
 }: SubmitFormProps) {
+  // Only structures without R-groups may go; the others are listed with their reason.
+  const { send: structures, held: leftOut } = useMemo(
+    () => guardSend(given, heldGiven),
+    [given, heldGiven],
+  );
   const [token, setToken] = useState<string | null>(() => getToken());
   const [fields, setFields] = useState<PaperFields>(() => startFields(paper, initial));
   const [rows, setRows] = useState(() => startRows(structures));
@@ -486,6 +501,18 @@ export default function SubmitForm({
           </GlassButton>
         </div>
       </header>
+      {leftOut.length > 0 && phase.kind !== "results" ? (
+        <section className="coconut-held" aria-labelledby="coconut-held-head">
+          <h3 id="coconut-held-head" className="mono-label coconut-held__head">
+            {`Left out (${leftOut.length})`}
+          </h3>
+          <ul className="coconut-held__list">
+            {leftOut.map((h) => (
+              <li key={h.segmentId}>{heldReason(h)}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {body}
       {/* Kept mounted (the results replace the form): the send's news, else the form's problem. */}
       <p className="visually-hidden" role="status" aria-live="polite">

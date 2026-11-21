@@ -34,7 +34,9 @@ import {
 } from "./cardState";
 import KeyHelp from "./KeyHelp";
 import { boxStyle } from "./pageBox";
+import { resultWord, rgroupNotice } from "./rgroups";
 import StructureActions from "./StructureActions";
+import { useDefinitionPages } from "./useDefinitionPages";
 import { useReviewKeys } from "./useReviewKeys";
 import type { ReviewRow } from "./useReviewRows";
 import type { Workspace } from "./useWorkspace";
@@ -225,10 +227,12 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   );
   const depiction = useDepiction(depictionUrl);
   const shown = shownStructure(segment, paper.engine);
-  const { smiles, edited } = shown;
+  const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
   const curation = segment.curation;
   const rejected = state === "rejected";
+  // The text is asked for only for a structure with R-groups (it can be large).
+  const definitions = useDefinitionPages(paper.id, paper.status, rgroups.length > 0);
 
   return (
     <section
@@ -316,6 +320,11 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
           <div className="fm-facts">
             {smiles !== null && <Smiles value={smiles} struck={rejected} />}
             {meta !== null && <p className="fm-meta">{meta}</p>}
+            {rgroups.length > 0 && (
+              <p className="fm-rgroups">
+                {rgroupNotice(rgroups, definitions?.has(segment.page) ?? false)}
+              </p>
+            )}
             {state === "failed" && row?.reason && <p className="fm-reason">{sentence(row.reason)}</p>}
           </div>
 
@@ -400,7 +409,7 @@ function engineRows(predictions: PredictionOut[]): [string, ReactNode][] {
       <span className="fm-pred" key={p.id}>
         <code className="fm-pred__smiles">{p.smiles}</code>
         <span className={p.valid ? "fm-pred__meta" : "fm-pred__meta fm-pred__meta--bad"}>
-          {`${p.valid ? "Valid" : "Invalid"} · ${p.engine_version}`}
+          {`${resultWord(p)} · ${p.engine_version}`}
         </span>
       </span>,
     ]);

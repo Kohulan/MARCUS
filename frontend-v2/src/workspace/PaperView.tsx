@@ -28,7 +28,8 @@ const sameMarker = (a: PageMarker, b: PageMarker) =>
   a.segmentId === b.segmentId &&
   a.n === b.n &&
   a.state === b.state &&
-  a.bbox.every((v, i) => v === b.bbox[i]);
+  a.bbox.every((v, i) => v === b.bbox[i]) &&
+  a.rgroups.join() === b.rgroups.join();
 
 /**
  * Per page: can its image be shown? Yes once a render_page step of the page is done. Its
@@ -113,7 +114,13 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     for (const r of rows) {
       const s = byId.get(r.segmentId);
       if (!s) continue;
-      const m: PageMarker = { segmentId: s.id, n: r.n, state: r.state, bbox: s.bbox };
+      const m: PageMarker = {
+        segmentId: s.id,
+        n: r.n,
+        state: r.state,
+        bbox: s.bbox,
+        rgroups: r.rgroups,
+      };
       const list = map.get(s.page);
       if (list) list.push(m);
       else map.set(s.page, [m]);

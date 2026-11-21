@@ -406,6 +406,7 @@ Liquid glass on paper: tactile pills that are the only shiny thing on a matte sh
 - **Border:** each card rules its right and bottom edge in line; to check adds a 2px orange inside edge, selected a 3px green inside ring, both stack.
 - **Internal Padding:** 14px, 8px between rows: tag row (checkbox, [nn] · page, state), drawing, SMILES row with Copy, engine readout, pill row.
 - **Rejected:** drawing at 55% opacity under the charcoal diagonal strike, SMILES struck through in muted, charcoal stamp drawn above the strike.
+- **R-groups:** a structure that still has R-group placeholders (a scaffold, several compounds) carries the tag "R-groups: R1, R2" beside its state badge: mono 11px uppercase ink in a square 1px ink outline on surface, no orange (information, not a state); it drops below the badge when both do not fit and ends in an ellipsis when long (title and the card's name hold all of it). The same tag hangs under its Paper view marker. The engine readout says "R-group scaffold (R1, R2)" instead of Valid or Invalid.
 
 ### Inputs / Fields
 - **Style:** surface ground, 1px control-border edge, 2px radius, 40px tall, 15px Geist; labels in mono over text-2.
