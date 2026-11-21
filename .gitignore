@@ -178,24 +178,6 @@ cython_debug/
 # VS Code workspace settings
 .vscode-test/
 
-# upload
-backend/uploads/
-
-# dockling models
-backend/dockling_models/
-backend/models/
-# fronend
-frontend/node_modules/
-frontend/build/
-frontend/.env
-frontend/.env.local
-frontend/.env.development.local
-
-#backend
-backend/.env
-backend/.env.local
-backend/.env.development.local
-
 # OS generated files
 .DS_Store
 .DS_Store?

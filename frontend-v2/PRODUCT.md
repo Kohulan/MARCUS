@@ -44,8 +44,8 @@ The whole pipeline in one open tool: segment, recognise with several engines (DE
 
 ## Brand Commitments
 
-- Name: MARCUS. The logo stays: navy stacked papers with a green hexagonal magnifying lens (`../frontend/public/logo.png`, `logo.svg`).
-- The wordmark font stays: Gmarket Sans Light (`../frontend/public/GmarketSansLight.otf`).
+- Name: MARCUS. The logo stays: navy stacked papers with a green hexagonal magnifying lens (`public/logo.png`).
+- The wordmark font stays: Gmarket Sans Light (`public/fonts/gmarket-mark.woff2`, a subset for the wordmark).
 - A fresh visual style is built around the logo and wordmark; the v1 look (blue tokens, Inter) is not binding.
 - Family: part of the DECIMER project (decimer.ai) and connected to COCONUT, Steinbeck group, Friedrich Schiller University Jena.
 
