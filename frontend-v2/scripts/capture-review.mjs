@@ -1,6 +1,6 @@
 // Review screenshots for the finish review (F16), light mode only, into .impeccable/review/.
 // Needs the fake stack up (Group F header) and serves from its own nginx by default.
-// Seeds its own data through the API: synth_015.pdf (engine fake, 10 structures) and one image.
+// Seeds its own data (through the API) from synth_015.pdf (engine fake, 10 structures) and one image.
 //
 //   node scripts/capture-review.mjs            # MARCUS_UI_URL=http://localhost:18090
 //
