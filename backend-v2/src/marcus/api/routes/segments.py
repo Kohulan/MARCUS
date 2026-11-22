@@ -110,7 +110,7 @@ async def put_curation(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
-    segment, paper = await get_owned_segment(db, owner, segment_id)
+    segment, paper = await get_owned_segment(db, owner, segment_id, with_labels=True)
     named = named_on(paper.rgroup_text_labels, segment.page)
     rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:
