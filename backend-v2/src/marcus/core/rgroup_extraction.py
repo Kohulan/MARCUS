@@ -129,11 +129,11 @@ def labels_to_ask(labels: list[str], context: str) -> list[str]:
     The model was trained and tested on the labels printed in the paper (the markush-train and
     markush-testset gold labels: R, R1, R′, X, n, Ar...), never on `*`, and the trained requests
     named only those. An unlabelled point is no column the paper fills; and the text's
-    asterisks (author marks, footnotes) would otherwise count as naming it. A structure with no
-    label but `*` is asked as before (["*"]): there is no trained request for it.
+    asterisks (author marks, footnotes) would otherwise count as naming it. [] for a structure
+    with no label but `*`: there is no trained request for it (request_rgroups refuses it).
     """
     labelled = [lab for lab in labels if lab != UNLABELLED]
-    return named_labels(labelled, context) if labelled else list(labels)
+    return named_labels(labelled, context) if labelled else []
 
 
 def user_prompt(labels: list[str], context: str) -> str:

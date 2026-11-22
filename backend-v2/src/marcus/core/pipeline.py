@@ -1169,7 +1169,7 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
 
     Locks the paper, then the row. Raises ValueError for a missing prediction, one not from a
     paper, or a deleted paper, and RgroupsNotAllowed("no_rgroups") for a prediction without
-    R-group labels.
+    R-group labels or with only unlabelled points (`*`: the model has no request for them).
     """
     found = session.execute(
         select(Prediction.rgroups, Segment.id, Segment.paper_id)
@@ -1182,8 +1182,8 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper not found")
     labels = list(found.rgroups or [])
-    if not labels:
-        raise RgroupsNotAllowed("no_rgroups")
+    if not [lab for lab in labels if lab != rgroup_extraction.UNLABELLED]:
+        raise RgroupsNotAllowed("no_rgroups")  # none, or only unlabelled points (`*`)
     row = session.execute(
         select(RgroupExtraction)
         .where(RgroupExtraction.prediction_id == prediction_id)

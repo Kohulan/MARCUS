@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 from rdkit import Chem
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from marcus.core.models import Prediction, Segment, Step
 from tests.api.conftest import (
@@ -209,6 +209,19 @@ async def test_a_structure_without_rgroups_is_refused(app, async_db_session, rea
     async with make_client(app, token) as c:
         r = await c.post(f"/api/v2/predictions/{plain}/rgroups")
     assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+
+
+async def test_a_structure_whose_only_label_is_unlabelled_is_refused(app, async_db_session, ready):
+    """`*` alone (a dummy atom without a drawn label) is refused like no R-groups."""
+    token, _, scaffold, _, _, _ = ready
+    db = async_db_session
+    await db.execute(update(Prediction).where(Prediction.id == scaffold).values(rgroups=["*"]))
+    await db.commit()
+    async with make_client(app, token) as c:
+        r = await c.post(f"/api/v2/predictions/{scaffold}/rgroups")
+        one = await c.get(f"/api/v2/predictions/{scaffold}/rgroups")
+    assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+    assert one.status_code == 200 and one.json()["status"] == "none"
 
 
 async def test_other_owners_and_missing_predictions_are_404(app, async_db_session, ready):

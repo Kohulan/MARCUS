@@ -11,6 +11,7 @@ import {
   RGROUP_NOTE,
   rgroupFailure,
   rgroupProgress,
+  UNLABELLED,
 } from "./rgroups";
 import { useRgroupReading } from "./useRgroupRows";
 import "./rgroupRows.css";
@@ -36,7 +37,9 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
   const [problem, setProblem] = useState<string | null>(null);
   const status = extraction?.status ?? "none";
   const rows = extraction?.rows ?? null;
-  if (!available && rows === null) return null;
+  // Only unlabelled points (*): nothing the model can be asked for (the server answers 409).
+  const askable = labels.some((label) => label !== UNLABELLED);
+  if ((!available || !askable) && rows === null) return null;
 
   const active = starting || isRgroupActive(status);
   const columns = extraction?.labels.length ? extraction.labels : labels;
@@ -111,7 +114,8 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
             {rgroupProgress(status === "none" ? "queued" : status)}
           </span>
         ) : (
-          available && (
+          available &&
+          askable && (
             <GlassButton tint="clear" size="sm" onClick={() => void run()}>
               {action}
             </GlassButton>
