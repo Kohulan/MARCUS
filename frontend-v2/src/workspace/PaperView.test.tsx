@@ -1176,6 +1176,27 @@ describe("Paper view: a main structure and its repeats", () => {
     expect(screen.getByRole("button", { name: "Send 1 to COCONUT" })).toBeEnabled();
   });
 
+  it("Reject on a main card is a decision for its group: the card shows Rejected at once", async () => {
+    const put = vi
+      .spyOn(api, "putCuration")
+      .mockImplementation(() => new Promise<never>(() => undefined)); // still on the wire
+    renderAt(
+      paper([segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })], {
+        main_figure_page: 0,
+      }),
+      { search: "" },
+    );
+    await screen.findByRole("button", { name: "Reject [01]" });
+    fireEvent.click(screen.getByRole("button", { name: "Reject [01]" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0]![0]).toBe("s1");
+    expect(put.mock.calls[0]![2]).toBe(true);
+    // without the repeat shown rejected too, the group would still be to check
+    await waitFor(() =>
+      expect(card("[01]")).toHaveAttribute("aria-label", "[01] · Page 1, Rejected"),
+    );
+  });
+
   it("while the server could not link the repeats, nothing goes to COCONUT", async () => {
     renderAt(
       paper([segment("s1", { page: 0, curation: accepted })], {

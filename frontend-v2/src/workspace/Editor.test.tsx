@@ -329,7 +329,7 @@ describe("segment caller (useSaveCuration + editorChange)", () => {
       smiles: "CCO",
       molfile: "M",
       note: "n",
-    });
+    }, true);
   });
 
   it("an unchecked structure becomes accepted on save", async () => {
@@ -346,7 +346,7 @@ describe("segment caller (useSaveCuration + editorChange)", () => {
       smiles: "CCO",
       molfile: "M",
       note: null,
-    });
+    }, true);
   });
 
   it("a rejected structure stays rejected; the SMILES field clears the stored molfile", async () => {
@@ -366,7 +366,7 @@ describe("segment caller (useSaveCuration + editorChange)", () => {
       smiles: "CCN",
       molfile: null,
       note: "why",
-    });
+    }, true);
     await waitFor(() =>
       expect(client.getQueryData<PaperDetail>(keys.paper("p1"))?.segments[0]?.curation).toEqual({
         status: "rejected",

@@ -849,6 +849,7 @@ describe("Compare in the workspace", () => {
     expect(put.mock.calls[0]).toEqual([
       "s1",
       { status: "accepted", smiles: "CCN", molfile: "<molnextr>", note: "keep me" },
+      true, // a decision
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
