@@ -16,7 +16,6 @@ import {
   hitsOf,
   markLabel,
   markRuns,
-  newestAnnotate,
   nextHit,
   piecesOf,
   shownPositions,
@@ -25,7 +24,7 @@ import {
 } from "./annotation";
 import { doclingBlocks, newestDocling, type TextBlock } from "./doclingText";
 import { scrollWithin } from "./scrollWithin";
-import { useAnnotation, useAnnotationActions } from "./useAnnotation";
+import { annotationBusy, useAnnotation, useAnnotationActions } from "./useAnnotation";
 
 const NO_BLOCKS: TextBlock[] = [];
 const NO_STEPS: StepOut[] = [];
@@ -107,13 +106,10 @@ export default function TextColumn({
   paperId,
   displayName,
   paperStatus,
-  onStarted,
 }: {
   paperId: string;
   displayName: string;
   paperStatus: string;
-  /** After an annotation started: the live stream opens again, the steps are read. */
-  onStarted: () => void;
 }) {
   const headId = useId();
   const reduce = usePrefersReducedMotion();
@@ -131,21 +127,17 @@ export default function TextColumn({
   const text = useText(paperId, !failed && !waiting);
   const blocks = useMemo(() => (text.data ? doclingBlocks(text.data) : NO_BLOCKS), [text.data]);
 
-  const annStep = useMemo(() => newestAnnotate(steps), [steps]);
-  const annotationQuery = useAnnotation(paperId, annStep);
+  const annotationQuery = useAnnotation(paperId);
   const annotation = annotationQuery.data;
-  const actions = useAnnotationActions(paperId, onStarted);
-  // The step a start made, until the steps show it (then its own status says).
+  const actions = useAnnotationActions(paperId);
+  // The step a start made, until GET shows it (then its own status says).
   const [startedId, setStartedId] = useState<string | null>(null);
-  // Running: the step is active, a start is not in the steps yet, or the step has ended but
-  // the annotation has not been read since (no flash of the old state in between).
+  // Running: its step is queued or running, it is about to start by itself (it runs beside the
+  // read, so the paper's steps never show it; the annotation is read again meanwhile), or a
+  // start is not in GET yet.
   const running =
-    (annStep !== undefined && isStepActive(annStep.status)) ||
-    (startedId !== null && !steps.some((s) => s.id === startedId)) ||
-    (annStep !== undefined &&
-      annotation !== undefined &&
-      !annotationQuery.isError && // a failed re-read must not hold "Annotating…" for good
-      (annotation.step?.id !== annStep.id || annotation.step.status !== annStep.status));
+    annotationBusy(annotation) ||
+    (startedId !== null && !annotationQuery.isError && annotation?.step?.id !== startedId);
   const values = annotation?.values ?? null;
   const positions = useMemo(() => (annotation ? shownPositions(annotation) : {}), [annotation]);
   const ranges = useMemo(
@@ -170,10 +162,13 @@ export default function TextColumn({
     },
     [at, positions],
   );
-  const start = useCallback(async () => {
-    const out = await actions.start();
-    if (out.step_id !== null) setStartedId(out.step_id);
-  }, [actions]);
+  const start = useCallback(
+    async (rerun: boolean) => {
+      const out = await actions.start(rerun);
+      if (out.step_id !== null) setStartedId(out.step_id);
+    },
+    [actions],
+  );
 
   // A click (or the annotation changing under it) brings the shown occurrence into view.
   useLayoutEffect(() => {
@@ -241,7 +236,6 @@ export default function TextColumn({
         <AnnotationPanel
           annotation={annotation}
           running={running}
-          step={annStep}
           at={at}
           onShow={show}
           onStart={start}

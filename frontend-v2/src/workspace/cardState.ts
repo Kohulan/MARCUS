@@ -1,13 +1,12 @@
 // What a structure card shows: its state (spec §7 state table), the structure the server
 // draws for it, and the grid's filters. Pure functions: the grid computes them once per
 // paper or steps change, for up to hundreds of segments.
-import { isStepActive } from "../api/status";
+import { isPaperBusy, isStepActive } from "../api/status";
 import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { engineName } from "../api/engines";
 import { STATE_WORD, type CardState } from "../ui/StateBadge";
-import { isPaperReading } from "./annotation";
 import { newestFirst } from "./pageFailures";
-import { labelList, resultWord, rgroupsOf } from "./rgroups";
+import { isPlaceholder, labelList, resultWord, rgroupsOf } from "./rgroups";
 
 export { STATE_WORD, type CardState };
 
@@ -36,7 +35,7 @@ export function stateOf(segment: SegmentOut, ocsr: StepOut[], paper: PaperDetail
   if (ocsr.some((s) => isStepActive(s.status))) return "reading";
   const newest = ocsr[0];
   if (newest === undefined) {
-    return paper.ocsr_mode !== "off" && isPaperReading(paper) ? "reading" : "not-read";
+    return paper.ocsr_mode !== "off" && isPaperBusy(paper.status) ? "reading" : "not-read";
   }
   return newest.status === "failed" ? "failed" : "to-check";
 }
@@ -82,7 +81,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
       smiles: c.smiles || null,
       molfile: c.molfile ?? null,
       rgroups: rgroupsOf(c),
-      placeholder: c.placeholder === true || rgroupsOf(c).length > 0,
+      placeholder: isPlaceholder(c),
     };
   }
   return {
@@ -91,7 +90,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
     smiles: prediction?.smiles || null,
     molfile: prediction?.molfile ?? null,
     rgroups: rgroupsOf(prediction),
-    placeholder: prediction?.placeholder === true || rgroupsOf(prediction).length > 0,
+    placeholder: isPlaceholder(prediction),
   };
 }
 

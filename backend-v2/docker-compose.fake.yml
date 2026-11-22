@@ -7,7 +7,8 @@
 # rows 2 s per scaffold (the fake reader: "3a: R1 = OMe, R2 = H" definitions from the page text).
 # The fake workers run the api image (it already has everything they import) with exactly
 # their own handler module (--include). Concurrency 1 each = the q.segment / q.fake / q.llm /
-# q.rgroup slots.
+# q.rgroup slots. No model server: the GPU stack's one llama-server (two slots, one per queue)
+# is stood in for by worker-fake-annotate (q.llm) and worker-fake-rgroup (q.rgroup).
 #
 # Test-only relaxations on the API: all e2e traffic comes from one client IP (the Docker
 # gateway), so the per-IP limits (new owners per hour, active papers, requests per minute)
@@ -19,6 +20,35 @@
 # (its CA bundle is replaced). The relay in docker/nginx.conf runs unchanged (fixed host, TLS
 # verification, SNI); nothing is ever sent to the real COCONUT: a request that somehow reached
 # it would fail certificate verification before any HTTP is sent.
+
+# The two fake model workers (worker-fake-annotate, worker-fake-rgroup): the same settings, each
+# with its own command and engine environment.
+x-llm-worker: &llm-worker
+  image: marcus-v2-api:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+  volumes:
+    - data:/data:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    api-migrate:
+      condition: service_completed_successfully
+  environment: &llm-env
+    MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+    MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    MARCUS_DATA_ROOT: /data
+    MARCUS_ENABLE_FAKE_ENGINES: "1"
 
 services:
   # The real DECIMER segmenter is replaced by worker-fake-segment below (both would consume
@@ -45,6 +75,13 @@ services:
       MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
+
+  # Annotation and R-group rows run by themselves (marcus.dispatcher.auto): the dispatcher asks
+  # for them where the API offers them, and only while a worker serves q.llm / q.rgroup.
+  dispatcher:
+    environment:
+      MARCUS_ANNOTATE_ENABLED: "1"
+      MARCUS_RGROUP_ENABLED: "1"
 
   worker-cpu:
     environment:
@@ -116,67 +153,23 @@ services:
       MARCUS_FAKE_OCSR_DELAY_S: "1"
 
   worker-fake-annotate:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
               "-n", "fake-annotate@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
-      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      <<: *llm-env
       MARCUS_ANNOTATOR: fake
       MARCUS_FAKE_ANNOTATE_DELAY_S: "2"
 
   # The fake R-group reader on its own queue, as worker-rgroup in the GPU override.
   worker-fake-rgroup:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
               "-n", "fake-rgroup@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
-      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      <<: *llm-env
       MARCUS_RGROUP_READER: fake
       MARCUS_FAKE_RGROUP_DELAY_S: "2"
 

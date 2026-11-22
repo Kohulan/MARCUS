@@ -5,13 +5,16 @@ transaction. Steps are created only when their inputs exist: completing a step c
 successors. Functions that change a paper lock its row first (SELECT ... FOR UPDATE), so two
 workers finishing the last two steps of one paper cannot both miss the `done` transition.
 
-Annotation (owner decision 2026-11-20): on demand only. request_annotation adds one `annotate`
-step (q.llm) to a paper whose docling step is done; its result (the MARCUS model's values and
+Annotation (owner decisions 2026-11-20, 2026-11-22): request_annotation adds one `annotate`
+step (q.llm) to a paper whose docling step is done, asked for by the dispatcher once the text
+is read (marcus.core.auto) or by the user (a re-run); its result (the MARCUS model's values and
 their positions in the text, marcus.core.annotation) is stored in the paper's one `annotations`
-row. A re-run replaces the model's values and keeps the curator's. An annotate step never
-decides whether the paper is done or failed.
+row. A re-run replaces the model's values and keeps the curator's. An annotate step is outside
+the paper's progress, like an rgroups step: it never reopens a paper, never keeps one busy and
+never decides whether it is done or failed.
 
-R-group rows (Markush Phase 2): on demand only, per prediction with R-group labels.
+R-group rows (Markush Phase 2): per prediction with R-group labels, asked for by the dispatcher
+(marcus.core.auto) or by the user.
 request_rgroups adds one `rgroups` step (q.rgroup, the step's segment set, no page) and writes the
 prediction's `rgroup_extractions` row (status `queued`); the step's end sets it `done` with the
 rows or `failed` with the error class. An rgroups step is outside the paper's progress: it never
@@ -353,14 +356,19 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
     return step, paper, job
 
 
+# Step kinds outside the paper's read: they never keep it busy or count in its progress.
+OUTSIDE_PROGRESS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
+
+
 def in_paper_progress():
-    """SQL condition: the step counts in its paper's progress (every kind but `rgroups`)."""
-    return Step.kind != StepKind.RGROUPS.value
+    """SQL condition: the step counts in its paper's progress (every kind but `annotate` and
+    `rgroups`, which run beside the read)."""
+    return Step.kind.not_in(OUTSIDE_PROGRESS)
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
-    """If no step of the paper is still active (rgroups steps aside), close the paper as done or
-    failed.
+    """If no step of the paper is still active (annotate and rgroups steps aside), close the
+    paper as done or failed.
 
     Failed (spec §8): check_pdf failed, or every page failed, a page being failed when its
     render_page or its segment_page step failed for good. Otherwise done, failed steps and all.
@@ -534,13 +542,6 @@ def _check_nothing(result: dict) -> None:
     pass
 
 
-def _check_docling_result(result: dict) -> None:
-    if "rgroup_text_labels" in result:
-        error = rgroup_labels.index_error(result["rgroup_text_labels"], get_settings().max_pages)
-        if error:
-            raise BadResult(f"docling: {error}")
-
-
 _CHECK = {
     StepKind.CHECK_PDF.value: _check_pdf_result,
     StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
@@ -548,7 +549,6 @@ _CHECK = {
     StepKind.DOI.value: _check_doi_result,
     StepKind.ANNOTATE.value: _check_annotate_result,
     StepKind.RGROUPS.value: _check_rgroups_result,
-    StepKind.DOCLING.value: _check_docling_result,
 }
 
 
@@ -848,16 +848,18 @@ def _rgroups_failed(session: Session, step: Step) -> None:
 
 def _after_docling(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     """The text file already sits in the paper dir; the page label index goes on the paper
-    (only pages the paper has: checked against its page count here)."""
+    (checked here, where the paper's page count is known: only pages the paper has)."""
     index = result.get("rgroup_text_labels")
-    if index is not None and rgroup_labels.index_error(index, paper.pages or 0):
-        raise BadResult("docling: the page label index names pages the paper does not have")
+    if "rgroup_text_labels" in result:
+        error = rgroup_labels.index_error(index, paper.pages or 0)
+        if error:
+            raise BadResult(f"docling: {error}")
     paper.rgroup_text_labels = index
     return []
 
 
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    # docling: the text file already sits in the paper dir; nothing to store.
+    # Fallback for a step kind with no entry in _AFTER: nothing to store, no successors.
     return []
 
 
@@ -1028,11 +1030,26 @@ def remove_paper_files(paper_id: uuid.UUID) -> None:
         )
 
 
+def _waiting_ocsr(session: Session, where, engine: Engine) -> Step | None:
+    """The `engine` OCSR step of a segment or image job (`where`) still pending, queued or
+    running. Read under the parent's lock, so two requests at once cannot both miss it."""
+    session.flush()
+    return session.execute(
+        select(Step)
+        .where(where, Step.kind == StepKind.OCSR.value, Step.engine == engine.value,
+               Step.status.in_(ACTIVE))
+        .order_by(Step.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()  # fmt: skip
+
+
 def request_ocsr(
     session: Session, segment_id: uuid.UUID, engine: Engine, started_ip: str | None = None
 ) -> Step:
     """Create a pending `ocsr` step for one segment with the given engine. Caller commits.
     A `done` paper becomes active again, with `started_ip` (the requesting address bucket).
+    A step of that engine still waiting or running for the segment is returned instead (repeat
+    requests never queue a second one).
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
@@ -1043,6 +1060,9 @@ def request_ocsr(
     paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
+    waiting = _waiting_ocsr(session, Step.segment_id == segment.id, engine)
+    if waiting is not None:
+        return waiting
     step = _new_step(
         paper,
         StepKind.OCSR,
@@ -1115,7 +1135,7 @@ def request_image_ocsr(
 ) -> Step:
     """Create a pending `ocsr` step for an image job with the given engine and reopen the job
     (status `queued`; a finished job gets `started_ip`, the requesting address bucket). Caller
-    commits.
+    commits. A step of that engine still waiting or running for the job is returned instead.
 
     Raises ValueError for an unknown or deleted image job, or a disabled engine.
     """
@@ -1123,6 +1143,9 @@ def request_image_ocsr(
     job = _lock(session, ImageJob, job_id)
     if job is None or job.status == ImageJobStatus.DELETED.value:
         raise ValueError("image job not found")
+    waiting = _waiting_ocsr(session, Step.image_job_id == job.id, engine)
+    if waiting is not None:
+        return waiting
     seq = session.execute(
         select(func.count()).select_from(Step).where(Step.image_job_id == job.id)
     ).scalar_one()
@@ -1135,13 +1158,11 @@ def request_image_ocsr(
     return step
 
 
-def request_annotation(
-    session: Session, paper_id: uuid.UUID, rerun: bool = False, started_ip: str | None = None
-) -> Step | None:
+def request_annotation(session: Session, paper_id: uuid.UUID, rerun: bool = False) -> Step | None:
     """Ask for the paper's annotation: a new pending `annotate` step, or None when the paper
     already has one and `rerun` is false. An annotate step still pending, queued or running is
-    returned instead of a new one (repeat clicks). A `done`/`failed` paper goes back to
-    `processing` with `started_ip` until the step ends. Caller commits.
+    returned instead of a new one (repeat clicks). The paper's status does not change. Caller
+    commits.
 
     Locks the paper first. Raises ValueError for a missing or deleted paper and
     AnnotateNotAllowed("no_text") unless the paper's docling step is done.
@@ -1170,10 +1191,6 @@ def request_annotation(
         return None
     step = _new_step(paper, StepKind.ANNOTATE, ANNOTATE_SEQ, created_at=_now())
     session.add(step)
-    if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
-        paper.status = PaperStatus.PROCESSING.value
-        paper.error = None
-        keep_address(paper, started_ip)
     session.flush()
     return step
 
@@ -1200,7 +1217,7 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper not found")
     labels = list(found.rgroups or [])
-    if not [lab for lab in labels if lab != rgroup_labels.UNLABELLED]:
+    if not rgroup_labels.drawn_labels(labels):
         raise RgroupsNotAllowed("no_rgroups")  # none, or only unlabelled points (`*`)
     row = session.execute(
         select(RgroupExtraction)

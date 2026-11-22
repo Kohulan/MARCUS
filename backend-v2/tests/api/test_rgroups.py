@@ -101,13 +101,56 @@ async def test_nothing_asked_for_yet(app, async_db_session):
         listed = await c.get(f"/api/v2/papers/{paper_id}/rgroups")
         one = await c.get(f"/api/v2/predictions/{scaffold}/rgroups")
     assert listed.status_code == 200
-    assert listed.json() == {"available": False, "extractions": []}
+    assert listed.json() == {"available": False, "extractions": [], "auto_pending": []}
     assert one.status_code == 200
     assert one.json() == {
         "prediction_id": str(scaffold), "segment_id": str(segment), "status": "none",
         "labels": ["R1"], "rows": None, "truncated": False, "error": None, "model": None,
         "model_version": None, "created_at": None, "updated_at": None, "finished_at": None,
     }  # fmt: skip
+
+
+async def test_the_list_names_the_scaffolds_about_to_be_read_by_themselves(
+    app, async_db_session, ready
+):
+    """`auto_pending`: scaffolds of the paper's reading with nothing asked yet, while a worker
+    serves q.rgroup (the dispatcher starts them within seconds; the client keeps reading)."""
+    db = async_db_session
+    token, paper_id, scaffold, _, _, _ = ready
+    async with make_client(app, token) as c:
+        first = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+        assert first["auto_pending"] == [str(scaffold)] and first["extractions"] == []
+        assert (await c.post(f"/api/v2/predictions/{scaffold}/rgroups")).status_code == 202
+        after = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+    assert after["auto_pending"] == [] and after["extractions"][0]["status"] == "queued"
+    assert db is not None
+
+
+async def test_auto_pending_is_only_the_moment_before_it_starts(app, async_db_session, ready):
+    """Past the few dispatcher passes after the scaffold and the text were read, nothing is
+    listed: the card offers its action again (the dispatcher skipped it)."""
+    from datetime import UTC, datetime, timedelta
+
+    db = async_db_session
+    token, paper_id, scaffold, _, _, _ = ready
+    old = datetime.now(UTC) - timedelta(seconds=120)
+    await db.execute(update(Step).where(Step.paper_id == paper_id).values(finished_at=old))
+    await db.execute(update(Prediction).where(Prediction.id == scaffold).values(created_at=old))
+    await db.commit()
+    async with make_client(app, token) as c:
+        listed = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+    assert listed["auto_pending"] == []
+
+
+async def test_the_polled_list_never_asks_the_broker(app, async_db_session, ready, monkeypatch):
+    async def boom():
+        raise AssertionError("GET must not wait on the consumer broadcast")
+
+    token, paper_id, scaffold, _, _, _ = ready
+    monkeypatch.setattr(app.state, "live_queues", boom)
+    async with make_client(app, token) as c:
+        r = await c.get(f"/api/v2/papers/{paper_id}/rgroups")
+    assert r.status_code == 200 and r.json()["auto_pending"] == [str(scaffold)]
 
 
 async def test_start_is_503_where_it_is_not_available(app, async_db_session):
@@ -284,7 +327,7 @@ async def test_rgroups_steps_are_not_part_of_the_paper_read(app, async_db_sessio
     assert after == before and all(s["kind"] != "rgroups" for s in after)
     assert paper["status"] == "done" and "pending" not in paper["counts"]["steps_by_status"]
     (row,) = listed
-    assert row["annotating"] is False and row["rereading"] is False
+    assert row["rereading"] is False
 
 
 async def test_exports_carry_the_rows(app, async_db_session, ready):

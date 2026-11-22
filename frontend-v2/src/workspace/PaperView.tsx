@@ -9,9 +9,9 @@ import {
   type RefObject,
 } from "react";
 import { reasonText } from "../api/reasons";
+import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
-import { isPaperReading } from "./annotation";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
@@ -95,7 +95,7 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun, started } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -104,7 +104,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const listCol = useRef<HTMLElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const busy = isPaperReading(paper, steps); // not while only its annotation runs
+  const busy = isPaperBusy(paper.status);
   const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
   const pages = paper.pages ?? 0;
   const images = useMemo(() => pageImages(steps, pages, busy), [steps, pages, busy]);
@@ -225,7 +225,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
         paperId={paper.id}
         displayName={paper.display_name}
         paperStatus={paper.status}
-        onStarted={started}
       />
 
       <section className="pv-col pv-col--list" aria-labelledby={listHead} ref={listCol}>

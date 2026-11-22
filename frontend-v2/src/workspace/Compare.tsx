@@ -1,10 +1,10 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
-import { asEngine, firstRunNote } from "../api/engines";
+import { asEngine, firstRunNote, orientationTemplate } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
-import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import type { DepictReply, Engine, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
 import ProgressBar, { useHeldAfter } from "../ui/ProgressBar";
@@ -20,7 +20,7 @@ import {
   enginesToRun,
   tooManyText,
   useCommonPart,
-  useRunAll,
+  useEngineRuns,
   useSimilarity,
   type CompareStep,
   type CompareTarget,
@@ -37,7 +37,7 @@ export type CompareProps = {
   steps: CompareStep[];
   /** "Use this one". */
   onPick: (p: PredictionOut) => void;
-  /** After "Run all engines" was accepted: the page reopens its own live stream. */
+  /** After an engine start was accepted: the page reopens its own live stream. */
   onStarted: () => void;
   /** Given: Compare is a modal dialog (Close, Esc, the backdrop). Without: a page section. */
   onClose?: (() => void) | undefined;
@@ -45,12 +45,16 @@ export type CompareProps = {
   tag?: string | undefined;
   /** As a page section (no `onClose`): a control at the end of the head (the page's Close). */
   headAction?: ReactNode;
+  /** The paper or image was uploaded with DECIMER hand-drawn: Hand-drawn starts on. */
+  handDrawn?: boolean | undefined;
 };
 
 /**
- * Compare engines: each engine's result side by side (drawing, SMILES, validity), the
+ * Compare engines: the image the engines read (the paper's crop, or the uploaded image), then
+ * each engine's result side by side (drawing, SMILES, validity), the
  * pairwise Tanimoto similarity, "Show common part" (the MCS highlighted in every drawing),
- * "Run all engines" for the ones not read yet, and "Use this one".
+ * and "Use this one". Opening it starts every engine not read and not running, at once; a
+ * failed engine has its own Retry.
  */
 export default function Compare({
   target,
@@ -61,21 +65,37 @@ export default function Compare({
   onClose,
   tag,
   headAction,
+  handDrawn = false,
 }: CompareProps) {
   const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
-  const { requested, batch, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
+  const { requested, batch, sending, error: runError, run } = useEngineRuns(target, steps, onStarted);
+  // The DECIMER column shows the hand-drawn model while this is on: on opening, on only where
+  // the upload chose DECIMER hand-drawn.
+  const [hand, setHand] = useState(handDrawn);
   const rows = useMemo(
-    () => engineRows(predictions, steps, requested),
-    [predictions, steps, requested],
+    () => engineRows(predictions, steps, requested, hand),
+    [predictions, steps, requested, hand],
   );
-  // The last "Run all engines": engines read (or failed) of those it started; the bar stays on
-  // its full figure for a moment once every one has answered.
+  const toggleHand = () => {
+    const on = !hand;
+    setHand(on);
+    // On: read it now unless it is read or running (its first run loads the model).
+    if (on) run(enginesToRun(engineRows(predictions, steps, requested, true)).filter((e) => e === "decimer-hand"));
+  };
+  // Opening starts the engines not read yet, once (the ref holds across a strict-mode remount).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    run(enginesToRun(rows));
+  }, [run, rows]);
+  // The last start: engines read (or failed) of those it started; the bar stays on its full
+  // figure for a moment once every one has answered.
   const batchRows = rows.filter((r) => batch.includes(r.engine));
   const batchDone = batchRows.filter((r) => r.state !== "reading").length;
   const batchRunning = batch.length > 0 && (sending || batchDone < batchRows.length);
   const showBatch = useHeldAfter(batchRunning, END_HOLD_MS) && batchRows.length > 0;
-  const toRun = enginesToRun(rows);
   const pairs = useSimilarity(rows);
   const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
   const canCommon = new Set(valid.map((p) => p.smiles)).size >= 2;
@@ -83,13 +103,18 @@ export default function Compare({
   const part = useCommonPart(valid, common);
 
   // Drawings from /tools/depict: every one with the common part, and an image job's always
-  // (a segment's plain drawing is its stored depiction, free of the tools bucket).
+  // (a segment's plain drawing is its stored depiction, free of the tools bucket). Each in the
+  // paper's orientation when MolNexTR or MolScribe gave the image's atom positions (the
+  // server does the same for a stored depiction).
+  const template = orientationTemplate(predictions);
   const viaTools = (r: EngineRow) =>
     r.prediction?.valid === true &&
     (part.highlight !== null || target.kind === "image" || asEngine(r.engine) === null);
   const drawn = rows.filter(viaTools);
   const depicts = useQueries({
-    queries: drawn.map((r) => depictQuery(r.prediction!.smiles, part.highlight, part.renew)),
+    queries: drawn.map((r) =>
+      depictQuery(r.prediction!.smiles, part.highlight, part.renew, template),
+    ),
   });
   const depictOf = (r: EngineRow) => {
     const i = drawn.indexOf(r);
@@ -123,11 +148,21 @@ export default function Compare({
           <thead>
             <tr>
               <td className="cmp-table__corner" />
-              {rows.map((r) => (
-                <th key={r.engine} scope="col" className="cmp-table__engine">
+              <th scope="col" className="cmp-table__engine cmp-table__source">
+                <span className="cmp-table__name">{target.kind === "image" ? "Image" : "Paper"}</span>
+              </th>
+              {rows.map((r, i) => (
+                <th key={colKey(r, i)} scope="col" className="cmp-table__engine">
                   <span className="cmp-table__name">{r.label}</span>
                   {r.prediction && (
                     <span className="cmp-table__version">{r.prediction.engine_version}</span>
+                  )}
+                  {i === 0 && (
+                    <span className="cmp-table__hand">
+                      <GlassButton tint="clear" size="sm" pressed={hand} onClick={toggleHand}>
+                        Hand-drawn
+                      </GlassButton>
+                    </span>
                   )}
                 </th>
               ))}
@@ -136,9 +171,16 @@ export default function Compare({
           <tbody>
             <tr>
               <th scope="row">Drawing</th>
+              {/* What the engines read, beside their drawings (one cell down the column). */}
+              <td rowSpan={4} className="cmp-table__figure cmp-table__source">
+                <Structure
+                  src={target.kind === "image" ? api.imageUrl(target.id) : api.segmentImageUrl(target.id)}
+                  alt={target.kind === "image" ? "The uploaded image" : "Crop from the paper"}
+                />
+              </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
-                  <Drawing row={r} target={target} depict={depictOf(r)} />
+                  <Drawing row={r} target={target} depict={depictOf(r)} templateId={template?.id} />
                 </td>
               ))}
             </tr>
@@ -162,6 +204,19 @@ export default function Compare({
               {rows.map((r) => (
                 <td key={r.engine} className={`cmp-result cmp-result--${resultTone(r)}`}>
                   {resultText(r)}
+                  {r.state === "failed" && asEngine(r.engine) !== null && (
+                    <span className="cmp-result__retry">
+                      <GlassButton
+                        tint="clear"
+                        size="sm"
+                        label={`Retry, ${r.label}`}
+                        disabled={sending}
+                        onClick={() => run([r.engine as Engine])}
+                      >
+                        Retry
+                      </GlassButton>
+                    </span>
+                  )}
                 </td>
               ))}
             </tr>
@@ -205,14 +260,6 @@ export default function Compare({
             <GlassButton
               tint="clear"
               size="sm"
-              disabled={toRun.length === 0 || sending}
-              onClick={() => runAll(toRun)}
-            >
-              Run all engines
-            </GlassButton>
-            <GlassButton
-              tint="clear"
-              size="sm"
               disabled={!canCommon}
               pressed={common && canCommon}
               onClick={() => setCommon((c) => !c)}
@@ -224,7 +271,7 @@ export default function Compare({
             <div className="cmp__run">
               <ProgressBar
                 value={batchDone / batchRows.length}
-                label="Run all engines"
+                label="Engines"
                 valueText={`Engines read, ${batchDone} of ${batchRows.length}`}
                 active={batchRunning}
                 size="sm"
@@ -270,6 +317,10 @@ export default function Compare({
   );
 }
 
+/** A column's key: the DECIMER column keeps its own whichever model it shows (the toggle in
+ * its head keeps focus). */
+const colKey = (r: EngineRow, i: number) => (i === 0 ? "decimer-column" : r.engine);
+
 function resultText(r: EngineRow): ReactNode {
   if (r.prediction) return resultWord(r.prediction);
   if (r.state === "reading") {
@@ -296,10 +347,13 @@ function Drawing({
   row,
   target,
   depict,
+  templateId,
 }: {
   row: EngineRow;
   target: CompareTarget;
   depict: UseQueryResult<DepictReply> | undefined;
+  /** The orientation template's prediction: a new one draws the stored depiction again. */
+  templateId: string | undefined;
 }) {
   const p = row.prediction;
   // Not read yet: the word in the blank too (the Result row says it to a screen reader).
@@ -315,7 +369,14 @@ function Drawing({
     );
   if (!p.valid) return <Structure src={null} failed alt="" />;
   if (depict) return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
-  return <StoredDrawing segmentId={target.id} prediction={p} alt={`Structure, ${row.label}`} />;
+  return (
+    <StoredDrawing
+      segmentId={target.id}
+      prediction={p}
+      templateId={templateId}
+      alt={`Structure, ${row.label}`}
+    />
+  );
 }
 
 function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt: string }) {
@@ -326,14 +387,17 @@ function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt:
 function StoredDrawing({
   segmentId,
   prediction,
+  templateId,
   alt,
 }: {
   segmentId: string;
   prediction: PredictionOut;
+  templateId: string | undefined;
   alt: string;
 }) {
   const engine = asEngine(prediction.engine) ?? undefined;
-  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, prediction.id, engine));
+  const key = templateId ? `${prediction.id}.${templateId}` : prediction.id;
+  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, key, engine));
   return <Structure src={src} failed={failed} onRetry={retry ?? undefined} alt={alt} />;
 }
 
@@ -345,6 +409,7 @@ function StoredDrawing({
  */
 export function SegmentCompare({
   paperId,
+  paperEngine,
   segment,
   steps,
   tag,
@@ -353,6 +418,8 @@ export function SegmentCompare({
   onSaved,
 }: {
   paperId: string;
+  /** The engine the paper was uploaded with (DECIMER hand-drawn: Hand-drawn starts on). */
+  paperEngine: string;
   segment: SegmentOut;
   /** The paper's steps (the segment's own are picked here). */
   steps: StepOut[];
@@ -384,6 +451,7 @@ export function SegmentCompare({
       onStarted={onStarted}
       onClose={onClose}
       tag={tag}
+      handDrawn={paperEngine === "decimer-hand"}
     />
   );
 }

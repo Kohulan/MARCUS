@@ -104,7 +104,8 @@ class Paper(Base):
     # Per page (0-based, key a string), the R-group labels its text names (docling result,
     # marcus.core.rgroup_labels.page_label_index): a structure shows only those of its labels.
     # NULL: no index (text not read, unreadable, or a paper from before 0015): all shown.
-    rgroup_text_labels: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Deferred: only the routes that show labels load it (undefer; see api.deps, with_labels).
+    rgroup_text_labels: Mapped[dict | None] = mapped_column(JSONB, nullable=True, deferred=True)
 
 
 class ImageJob(Base):

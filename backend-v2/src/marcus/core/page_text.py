@@ -1,5 +1,6 @@
 """The page text the R-group model reads for a scaffold: a port of MARCUS-training
-markush-eval/markush_eval.py `page_context` (and `_page`, `_table_rows`), unchanged.
+markush-eval/markush_eval.py `page_context` (and `_page`, here `page_of`, and `_table_rows`),
+unchanged.
 
 The Docling items of pages P-1..P+1 (P is the scaffold's page, Docling's 1-based page_no),
 captions and footnotes first, then tables written as rows, then the other text, each part whole,
@@ -31,12 +32,10 @@ def read_paper_document(paper_id) -> dict:
     return doc
 
 
-def _page(item) -> int | None:
+def page_of(item) -> int | None:
+    """The Docling page (1-based) an item is on, None without one (markush_eval's `_page`)."""
     prov = item.get("prov") or []
     return prov[0].get("page_no") if prov else None
-
-
-page_of = _page  # the Docling page (1-based) an item is on, None without one
 
 
 def _table_rows(table) -> list[str]:
@@ -54,7 +53,7 @@ def page_context(doc: dict, page: int) -> str:
     pages = {page - 1, page, page + 1}
     captions, tables, body = [], [], []
     for t in doc.get("texts", []):
-        p = _page(t)
+        p = page_of(t)
         if p not in pages or t.get("content_layer") == "furniture":
             continue
         text = " ".join(str(t.get("text", "")).split())
@@ -62,7 +61,7 @@ def page_context(doc: dict, page: int) -> str:
             continue
         (captions if t.get("label") in ("caption", "footnote") else body).append((p, text))
     for tb in doc.get("tables", []):
-        p = _page(tb)
+        p = page_of(tb)
         if p in pages:
             rows = _table_rows(tb)
             if rows:

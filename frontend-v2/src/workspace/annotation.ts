@@ -1,7 +1,6 @@
 // The paper's annotation (the local model's suggestion, or the curator's corrections) as the
 // Paper view shows it: which spans of the text to mark, which occurrence a click goes to, and
 // the editing of a field as lines. Model text is data: it is only ever a React text node.
-import { isPaperBusy, isStepActive } from "../api/status";
 import type {
   AnnotationHit,
   AnnotationField,
@@ -9,9 +8,7 @@ import type {
   AnnotationOut,
   AnnotationPositions,
   AnnotationValues,
-  StepOut,
 } from "../api/types";
-import { newestFirst } from "./pageFailures";
 
 /** The positions of the values shown: the curator's once saved, else the model's. */
 export function shownPositions(a: AnnotationOut): AnnotationPositions {
@@ -207,38 +204,6 @@ export type HitAt = { field: string; value: string; index: number };
 export function nextHit(at: HitAt | null, field: string, value: string, count: number): number {
   if (!at || at.field !== field || at.value !== value || count === 0) return 0;
   return (at.index + 1) % count;
-}
-
-/** The paper's newest annotate step. */
-export function newestAnnotate(steps: StepOut[]): StepOut | undefined {
-  return newestFirst(steps.filter((s) => s.kind === "annotate"))[0];
-}
-
-/** Its only steps in flight are annotate steps (the server's `annotating`, from the steps). */
-function onlyAnnotating(steps: StepOut[]): boolean {
-  let annotating = false;
-  for (const s of steps) {
-    if (!isStepActive(s.status)) continue;
-    if (s.kind !== "annotate") return false;
-    annotating = true;
-  }
-  return annotating;
-}
-
-type PaperState = { status: string; annotating?: boolean | undefined };
-
-/**
- * The paper is busy only with its annotation (an annotate run makes a done paper processing
- * again): the server's `annotating`, or, fresher where they are known, its steps.
- */
-export function isAnnotating(paper: PaperState, steps?: StepOut[]): boolean {
-  if (!isPaperBusy(paper.status)) return false;
-  return paper.annotating === true || (steps !== undefined && onlyAnnotating(steps));
-}
-
-/** The paper is being read: busy with more than its annotation. */
-export function isPaperReading(paper: PaperState, steps?: StepOut[]): boolean {
-  return isPaperBusy(paper.status) && !isAnnotating(paper, steps);
 }
 
 /** A field's values as the editor's lines. */

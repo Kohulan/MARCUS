@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.read import named_on
 from marcus.api.schemas import RgroupExtractionOut, RgroupRow
 from marcus.core.enums import StepStatus
-from marcus.core.models import Paper, Prediction, RgroupExtraction, Segment, Step
+from marcus.core.models import Prediction, RgroupExtraction, Segment, Step
 from marcus.core.rgroup_labels import shown_labels
 from marcus.core.settings import get_settings
 
@@ -39,7 +39,7 @@ def extraction_out(
     row: RgroupExtraction,
     segment_id: uuid.UUID,
     step_status: str | None,
-    named: list[str] | None = None,
+    named: list[str] | None,
 ) -> RgroupExtractionOut:
     """`named`: the labels the structure's page names (read.named_on). Before any rows the
     labels are the structure's shown ones (as on the card); with rows, those of the rows."""
@@ -61,7 +61,7 @@ def extraction_out(
     )
 
 
-def none_out(prediction: Prediction, named: list[str] | None = None) -> RgroupExtractionOut:
+def none_out(prediction: Prediction, named: list[str] | None) -> RgroupExtractionOut:
     """A prediction never asked for (its shown labels, as on the card)."""
     return RgroupExtractionOut(
         prediction_id=prediction.id,
@@ -81,24 +81,20 @@ def none_out(prediction: Prediction, named: list[str] | None = None) -> RgroupEx
 
 def _query(where):
     return (
-        select(
-            RgroupExtraction,
-            Prediction.segment_id,
-            Step.status,
-            Segment.page,
-            Paper.rgroup_text_labels,
-        )
+        select(RgroupExtraction, Prediction.segment_id, Step.status, Segment.page)
         .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
         .join(Segment, Segment.id == Prediction.segment_id)
-        .join(Paper, Paper.id == Segment.paper_id)
         .outerjoin(Step, Step.id == RgroupExtraction.step_id)
         .where(where)
         .execution_options(populate_existing=True)
     )
 
 
-async def for_paper(db: AsyncSession, paper_id: uuid.UUID) -> list[RgroupExtractionOut]:
-    """The paper's readings in paper order (page, idx, then oldest request first)."""
+async def for_paper(
+    db: AsyncSession, paper_id: uuid.UUID, index: dict | None
+) -> list[RgroupExtractionOut]:
+    """The paper's readings in paper order (page, idx, then oldest request first). `index`: the
+    paper's page label index (papers.rgroup_text_labels)."""
     rows = await db.execute(
         _query(Segment.paper_id == paper_id).order_by(
             Segment.page, Segment.idx, RgroupExtraction.created_at, RgroupExtraction.prediction_id
@@ -106,34 +102,30 @@ async def for_paper(db: AsyncSession, paper_id: uuid.UUID) -> list[RgroupExtract
     )
     return [
         extraction_out(r, seg, status, named_on(index, page))
-        for r, seg, status, page, index in rows.all()
+        for r, seg, status, page in rows.all()
     ]
 
 
-async def for_prediction(db: AsyncSession, prediction: Prediction) -> RgroupExtractionOut:
+async def for_prediction(
+    db: AsyncSession, prediction: Prediction, named: list[str] | None
+) -> RgroupExtractionOut:
+    """`named`: the labels the prediction's page names (read.named_on)."""
     found = (
         await db.execute(_query(RgroupExtraction.prediction_id == prediction.id))
     ).one_or_none()
     if found is None:
-        where = (
-            await db.execute(
-                select(Segment.page, Paper.rgroup_text_labels)
-                .join(Paper, Paper.id == Segment.paper_id)
-                .where(Segment.id == prediction.segment_id)
-            )
-        ).one_or_none()
-        return none_out(
-            prediction, named_on(where.rgroup_text_labels, where.page) if where else None
-        )
-    row, seg, status, page, index = found
-    return extraction_out(row, seg, status, named_on(index, page))
+        return none_out(prediction, named)
+    row, seg, status, _ = found
+    return extraction_out(row, seg, status, named)
 
 
-async def for_export(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, dict]:
+async def for_export(
+    db: AsyncSession, paper_id: uuid.UUID, index: dict | None
+) -> dict[uuid.UUID, dict]:
     """prediction id -> the rows an export writes for it (plain data: it travels pickled to the
     chem process). Only predictions with rows (a run that ended well)."""
     out: dict[uuid.UUID, dict] = {}
-    for item in await for_paper(db, paper_id):
+    for item in await for_paper(db, paper_id, index):
         if item.rows is None:
             continue
         out[item.prediction_id] = {

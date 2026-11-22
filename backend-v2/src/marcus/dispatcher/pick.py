@@ -259,15 +259,16 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     return True
 
 
-# Step kinds that depend on an optional model service, each on its own queue: annotation (q.llm,
-# llama-server) and R-group rows (q.rgroup, llama-rgroup). A waiting step fails when its own
+# Step kinds that depend on an optional model service, each on its own queue: annotation (q.llm)
+# and R-group rows (q.rgroup), both on llama-server. A waiting step fails when its own
 # queue has no live consumer, whatever the other's. Value: the step's error then.
-NO_ANNOTATOR = "no annotation worker"
-NO_RGROUP_READER = "no R-group worker"
-_NO_WORKER = {StepKind.ANNOTATE.value: NO_ANNOTATOR, StepKind.RGROUPS.value: NO_RGROUP_READER}
+_NO_WORKER = {
+    StepKind.ANNOTATE.value: "no annotation worker",
+    StepKind.RGROUPS.value: "no R-group worker",
+}
 
 
-def _unserved_annotations(session: Session) -> list[tuple[uuid.UUID, str, str]]:
+def _unserved_model_steps(session: Session) -> list[tuple[uuid.UUID, str, str]]:
     """(id, kind, queue) of the annotate and rgroups steps still waiting (pending/queued) for
     longer than annotate_max_wait_s."""
     wait = get_settings().annotate_max_wait_s
@@ -284,15 +285,14 @@ def _unserved_annotations(session: Session) -> list[tuple[uuid.UUID, str, str]]:
     ]
 
 
-def fail_unserved_annotation(session: Session, step_id: uuid.UUID,
-                             reason: str = NO_ANNOTATOR) -> bool:  # fmt: skip
+def fail_unserved_model_step(session: Session, step_id: uuid.UUID, kind: str) -> bool:
     """In the current transaction, lock the step's parent then the step and, if it is still
-    waiting, fail it for good as engine_error: the model service is not running, so the paper
-    goes back to done (an rgroups step: its request row says failed). Does not commit. True if
-    failed."""
+    waiting, fail it for good as engine_error with its kind's error (_NO_WORKER): the model
+    service is not running, so the paper goes back to done (an rgroups step: its request row says
+    failed). Does not commit. True if failed."""
     if _lock_status(session, step_id, Step.status.in_(WAITING_STEPS)) is None:
         return False
-    fail_step(session, step_id, ErrorClass.ENGINE_ERROR, reason, retryable=False)
+    fail_step(session, step_id, ErrorClass.ENGINE_ERROR, _NO_WORKER[kind], retryable=False)
     return True
 
 
@@ -305,10 +305,10 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
     The scan takes no locks; each step is re-checked and failed in its own transaction.
     """
     rows = session.execute(select(Step.id, Step.status, Step.queue).where(_stuck())).all()
-    waiting_annotations = _unserved_annotations(session) if live_queues is not None else []
+    waiting_model_steps = _unserved_model_steps(session) if live_queues is not None else []
     session.rollback()
     live: set[str] | frozenset[str] | None = None
-    needs_live = any(r.status == StepStatus.QUEUED.value for r in rows) or waiting_annotations
+    needs_live = any(r.status == StepStatus.QUEUED.value for r in rows) or waiting_model_steps
     if live_queues is not None and needs_live:
         try:
             live = live_queues()
@@ -337,15 +337,15 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
         except Exception:
             log.exception("watchdog: could not fail step %s", step_id)
             session.rollback()
-    # Annotation and R-group rows depend on optional services (llama-server, llama-rgroup): with
+    # Annotation and R-group rows depend on an optional service (llama-server): with
     # no live consumer on the step's own queue (known, not just unknown) an old waiting annotate
     # or rgroups step fails, so its paper is done again and its request row says failed.
     if live is not None:
-        for step_id, kind, queue in waiting_annotations:
+        for step_id, kind, queue in waiting_model_steps:
             if queue in live:
                 continue
             try:
-                if fail_unserved_annotation(session, step_id, _NO_WORKER[kind]):
+                if fail_unserved_model_step(session, step_id, kind):
                     session.commit()
                     done += 1
                     log.warning("watchdog: %s step %s failed: no live %s consumer", kind,

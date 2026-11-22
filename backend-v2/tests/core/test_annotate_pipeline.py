@@ -18,8 +18,6 @@ from marcus.core.pipeline import (
 from tests.core.test_pipeline import SEG_V, SEGS, finish, run, steps, to_processing
 from tests.factories import make_paper
 
-IP = "198.51.100.9"
-
 
 def result(**fields) -> dict:
     output = {f: list(fields.get(f, [])) for f in ann.FIELDS}
@@ -58,20 +56,20 @@ def _annotation(s, paper) -> Annotation | None:
     ).scalar_one_or_none()
 
 
-def test_request_creates_a_pending_llm_step_and_reopens_the_paper(db_session):
+def test_request_creates_a_pending_llm_step_and_leaves_the_paper_done(db_session):
     s = db_session
     paper = _done_paper(s)
     paper.started_ip = None
-    step = request_annotation(s, paper.id, started_ip=IP)
+    step = request_annotation(s, paper.id)
     assert (step.kind, step.queue, step.status, step.seq) == (
         "annotate", "q.llm", "pending", ANNOTATE_SEQ,
     )  # fmt: skip
     assert step.paper_id == paper.id and step.page is None and step.engine is None
     s.refresh(paper)
-    assert paper.status == "processing" and paper.started_ip == IP
+    assert paper.status == "done" and paper.started_ip is None  # beside the read
 
 
-def test_result_is_stored_and_the_paper_is_done_again(db_session):
+def test_result_is_stored_and_the_paper_stays_done(db_session):
     s = db_session
     paper = _done_paper(s)
     step = request_annotation(s, paper.id)
@@ -133,7 +131,7 @@ def test_a_failed_paper_with_text_can_be_annotated_and_stays_failed(db_session):
     assert paper.status == "failed"
     step = request_annotation(s, paper.id)
     s.refresh(paper)
-    assert paper.status == "processing"
+    assert paper.status == "failed"
     finish(s, step, result())
     s.refresh(paper)
     assert paper.status == "failed" and paper.error == "all pages failed to render"

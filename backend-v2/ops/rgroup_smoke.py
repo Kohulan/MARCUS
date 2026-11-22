@@ -1,8 +1,11 @@
 """Real-model smoke test of R-group reading: one scaffold page through the rgroups step's own code
-(marcus.workers.rgroups.handler.read_scaffold) against a running llama-rgroup server.
+(marcus.workers.rgroups.handler.read_scaffold) against a running llama-server with the MARCUS
+model and its vision projector (the GPU stack's `llama-server`, which annotation shares).
 
     python ops/rgroup_smoke.py --url http://127.0.0.1:8080 --pdf paper.pdf --page 3 \\
         --labels R1,R2 [--text docling.json] [--timeout 600]
+
+Inside the GPU stack: run it in the api image on the `llm` network, --url http://llama-server:8080.
 
 `--page` counts from 1, as Docling and the paper do. The page is rendered at 300 dpi with
 PyMuPDF as the render_page step does (marcus.workers.pdfsafe_child.op_render), into a temporary
@@ -56,9 +59,7 @@ def main() -> int:
         if a.text is not None:
             shutil.copyfile(a.text, text_path(pid))
         labels = [lab.strip() for lab in a.labels.split(",") if lab.strip()]
-        reader = LlamaRgroupReader(
-            a.url, a.timeout, settings.rgroup_model, settings.rgroup_model_version
-        )
+        reader = LlamaRgroupReader(a.url, a.timeout, settings.llm_model, settings.llm_model_version)
         start = time.monotonic()
         result = read_scaffold(reader, pid, page0, labels)
         took = time.monotonic() - start

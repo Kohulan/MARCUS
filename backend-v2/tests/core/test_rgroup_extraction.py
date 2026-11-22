@@ -191,7 +191,7 @@ STYLISSA = "(page 6) 7. R1 = R2 = Br; 8. R1 = H, R2 = Br (page 6) CONH2"
 
 
 def test_a_label_the_text_never_names_is_left_out():
-    assert rg.named_labels(["R1", "R2", "Z"], STYLISSA) == ["R1", "R2"]
+    assert rg.labels_to_ask(["R1", "R2", "Z"], STYLISSA) == ["R1", "R2"]
 
 
 @pytest.mark.parametrize(
@@ -214,7 +214,7 @@ def test_a_label_the_text_never_names_is_left_out():
 )
 def test_a_label_counts_as_written_in_the_text(label, text):
     # R7 is named too: a one-letter label named alone decides nothing (rgroup_labels.WEAK)
-    assert rg.named_labels([label, "R7", "Z9"], f"{text}; R7 = H") == [label, "R7"]
+    assert rg.labels_to_ask([label, "R7", "Z9"], f"{text}; R7 = H") == [label, "R7"]
 
 
 @pytest.mark.parametrize(
@@ -229,17 +229,17 @@ def test_a_label_counts_as_written_in_the_text(label, text):
     ],
 )
 def test_a_label_inside_another_token_does_not_count(label, text):
-    assert rg.named_labels([label, "R2"], f"{text}; R2 = H") == ["R2"]
+    assert rg.labels_to_ask([label, "R2"], f"{text}; R2 = H") == ["R2"]
 
 
 def test_a_text_that_names_no_label_keeps_them_all():
     """No text (a page read from the image alone) or a raster figure: the text cannot tell."""
-    assert rg.named_labels(["R1", "Z"], "") == ["R1", "Z"]
-    assert rg.named_labels(["R9"], "(page 3) Compound 3 R1 = H") == ["R9"]
+    assert rg.labels_to_ask(["R1", "Z"], "") == ["R1", "Z"]
+    assert rg.labels_to_ask(["R9"], "(page 3) Compound 3 R1 = H") == ["R9"]
 
 
-def test_named_labels_keep_their_order():
-    assert rg.named_labels(["R1", "R2", "X"], "X = Cl, R2 = H, R1 = Me") == ["R1", "R2", "X"]
+def test_the_labels_asked_keep_their_order():
+    assert rg.labels_to_ask(["R1", "R2", "X"], "X = Cl, R2 = H, R1 = Me") == ["R1", "R2", "X"]
 
 
 # --- `*`: an unlabelled attachment point -------------------------------------------------------

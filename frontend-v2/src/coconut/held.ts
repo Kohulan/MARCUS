@@ -1,6 +1,7 @@
 // Accepted structures that are never sent to COCONUT, and why (owner decision: a structure that
 // still has R-group placeholders stands for several compounds, not one). Pure, pinned by tests.
 import { structureTag } from "../ui/tag";
+import { UNLABELLED } from "../workspace/rgroups";
 import type { SubmitStructure } from "./types";
 
 /** An accepted structure left out of the send, with its R-group labels. */
@@ -32,7 +33,7 @@ export function guardSend(
   const send: SubmitStructure[] = [];
   const out = [...held];
   for (const s of structures) {
-    if (hasDummyAtom(s.smiles)) out.push({ segmentId: s.segmentId, n: s.n, rgroups: ["*"] });
+    if (hasDummyAtom(s.smiles)) out.push({ segmentId: s.segmentId, n: s.n, rgroups: [UNLABELLED] });
     else send.push(s);
   }
   out.sort((a, b) => a.n - b.n);

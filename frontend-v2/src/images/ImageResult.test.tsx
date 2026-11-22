@@ -158,6 +158,17 @@ describe("ImageResult", () => {
       created_at: "2026-11-18T10:02:00Z",
     });
 
+    it("draws the main structure in the image's orientation once MolNexTR gave its positions", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ predictions: [{ ...molnextr, molfile: "<nextr>" }, pred()] }),
+      );
+      renderPage();
+      await screen.findByRole("img", { name: "Structure read from the image" });
+      await waitFor(() =>
+        expect(api.depict).toHaveBeenCalledWith(CAFFEINE, { template: "<nextr>" }),
+      );
+    });
+
     it("stays on the job engine's structure when Compare's engines finish later", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
         job({
@@ -490,7 +501,7 @@ describe("ImageResult", () => {
       created_at: "2026-11-18T10:01:00Z",
     };
 
-    it("plugs in the real Compare: one Compare engines section, its Close, run all on this job", async () => {
+    it("plugs in the real Compare: one Compare engines section, its Close, its engines started on this job", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
         job({ predictions: [{ ...molnextr, engine: "decimer", engine_version: "2.7.1" }] }),
       );
@@ -502,13 +513,29 @@ describe("ImageResult", () => {
       const section = await screen.findByRole("region", { name: "Compare engines" });
       expect(within(section).getByRole("button", { name: "Close" })).toHaveFocus();
       expect(screen.getAllByRole("heading", { name: "Compare engines" })).toHaveLength(1);
-      fireEvent.click(within(section).getByRole("button", { name: "Run all engines" }));
-      await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
-      expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID, ID]);
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+      expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID]);
       await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
       fireEvent.click(within(section).getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("region", { name: "Compare engines" })).toBeNull();
       expect(screen.getByRole("button", { name: "Compare" })).toHaveFocus();
+    });
+
+    it.each([
+      ["decimer-hand", "true"],
+      ["decimer", "false"],
+    ])("an image read with %s opens Compare with Hand-drawn pressed=%s", async (engine, pressed) => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ engine, prediction: pred({ engine }) }),
+      );
+      vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Compare" }));
+      const section = await screen.findByRole("region", { name: "Compare engines" });
+      expect(within(section).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute(
+        "aria-pressed",
+        pressed,
+      );
     });
 
     it("has one Copy SMILES (the SMILES's own)", async () => {

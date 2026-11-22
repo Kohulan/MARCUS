@@ -151,31 +151,22 @@ def _start(session: Session, step_id: uuid.UUID, worker: str, *guard) -> Claim |
     return None if row is None else Claim.from_row(step_id, row)
 
 
-def claim(
-    step_id: uuid.UUID, sent_attempts: int, worker: str, queue: str | None = None
-) -> Claim | None:
+def claim(step_id: uuid.UUID, sent_attempts: int, worker: str) -> Claim | None:
     """Claim the step for this message and commit. None means: ack and do nothing.
-
-    `queue`: the queue the message came from, when known. A message from another queue than the
-    step's is stale (the step moved, e.g. rgroups from q.llm to q.rgroup in migration 0013, and
-    was sent again with the same attempt token): never claimed.
 
     Does not publish; the caller publishes the `running` event.
     """
     with sync_session() as session:
         queued = (Step.status == StepStatus.QUEUED.value, Step.attempts == sent_attempts)
-        if queue is not None:
-            queued = (*queued, Step.queue == queue)
         mine = _start(session, step_id, worker, *queued)
         if mine is None:
             row = session.execute(
-                select(*_RETURNING, Step.status, Step.queue).where(Step.id == step_id)
+                select(*_RETURNING, Step.status).where(Step.id == step_id)
             ).one_or_none()
             ours = (
                 row is not None
                 and row.status == StepStatus.RUNNING.value
                 and row.attempts == sent_attempts + 1
-                and (queue is None or row.queue == queue)
             )
             if not ours:
                 session.rollback()
@@ -271,13 +262,13 @@ def _call(handler: Handler, step_id: uuid.UUID) -> dict:
             reads.rollback()
 
 
-def execute(step_id: uuid.UUID, sent_attempts: int, worker: str, queue: str | None = None) -> None:
+def execute(step_id: uuid.UUID, sent_attempts: int, worker: str) -> None:
     """One delivery of a step: claim, run the handler, then complete or fail (fenced).
 
     Everything after the claim, including the `running` event (publish re-raises a soft
     time limit), is inside the error mapping, so the claimed attempt is always settled.
     """
-    mine = claim(step_id, sent_attempts, worker, queue)
+    mine = claim(step_id, sent_attempts, worker)
     if mine is None:
         return
     with log_context(paper_id=mine.paper_id):
@@ -317,10 +308,9 @@ def run_step(step_id: str, sent_attempts: int) -> None:
     except (TypeError, ValueError):
         log.error("run_step: malformed message %r, %r", step_id, sent_attempts)
         return
-    queue = (getattr(run_step.request, "delivery_info", None) or {}).get("routing_key")
     try:
         with log_context(step_id=sid):
-            execute(sid, token, _worker_name(), queue)
+            execute(sid, token, _worker_name())
     except Exception:
         log.exception("run_step: step %s could not be recorded; left to the watchdog", sid)
 

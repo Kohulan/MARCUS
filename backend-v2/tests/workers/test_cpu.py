@@ -131,7 +131,8 @@ def test_docling_returns_the_labels_each_pages_text_names(monkeypatch):
         "text_path": "text.json",
         "rgroup_text_labels": {"0": ["R1", "X"], "1": ["R1", "X"]},
     }
-    assert cpu.docling(view(pid), None)["rgroup_text_labels"] == {"0": ["R1", "X"], "1": ["R1", "X"]}
+    # page count unknown (never in production: check_pdf sets it before docling): no index
+    assert cpu.docling(view(pid), None) == {"text_path": "text.json"}
 
 
 @pytest.mark.parametrize("raw", ["{broken", "[1, 2]"])
