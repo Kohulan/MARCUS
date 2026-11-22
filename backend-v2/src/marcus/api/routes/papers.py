@@ -16,7 +16,8 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import annotation as annotations
@@ -36,8 +37,10 @@ from marcus.api.limits import enforce_active_limits
 from marcus.api.read import (
     IMAGE_HEADERS,
     load_segments,
+    main_figure_page,
     paper_counts,
     paper_summary,
+    repeat_links,
     segments_out,
     steps_by_status,
     steps_out,
@@ -46,6 +49,8 @@ from marcus.api.schemas import (
     BulkCurationIn,
     BulkCurationOut,
     Counts,
+    MainFigureIn,
+    MainFigureOut,
     PaperDetail,
     PaperList,
     SegmentList,
@@ -57,7 +62,7 @@ from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
-from marcus.core.models import Curation, Owner, Paper, Segment
+from marcus.core.models import Curation, MainFigure, Owner, Paper, Segment
 from marcus.core.pipeline import (
     RetryNotAllowed,
     cancel_paper,
@@ -124,10 +129,12 @@ async def get_paper(
 ) -> PaperDetail:
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     counts = await steps_by_status(db, paper.id)
+    main_page = await main_figure_page(db, paper.id)
     return PaperDetail(
         **paper_summary(paper, (await paper_counts(db, [paper.id]))[paper.id]).model_dump(),
+        main_figure_page=main_page,
         counts=Counts(steps_by_status=counts),
-        segments=await segments_out(db, paper),
+        segments=await segments_out(db, paper, main_page),
     )
 
 
@@ -138,7 +145,8 @@ async def get_segments(
     db: AsyncSession = Depends(get_db),
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
-    return SegmentList(segments=await segments_out(db, paper))
+    main_page = await main_figure_page(db, paper.id)
+    return SegmentList(segments=await segments_out(db, paper, main_page))
 
 
 @router.put("/papers/{paper_id}/curation", response_model=BulkCurationOut)
@@ -180,6 +188,37 @@ async def put_bulk_curation(
         cur.updated_at = now
     await db.commit()
     return BulkCurationOut(updated=len(ids))
+
+
+@router.put("/papers/{paper_id}/main-figure", response_model=MainFigureOut)
+async def put_main_figure(
+    paper_id: uuid.UUID,
+    body: MainFigureIn,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> MainFigureOut:
+    """Mark one page as the paper's main figure (its compound list), or clear the mark (null).
+    One per paper: a new page replaces the old one."""
+    paper = await get_owned_paper(db, owner, paper_id)
+    if body.page is not None and (paper.pages is None or body.page >= paper.pages):
+        await db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": ["body", "page"], "msg": "no such page"}],
+        )
+    if body.page is None:
+        await db.execute(delete(MainFigure).where(MainFigure.paper_id == paper.id))
+    else:
+        await db.execute(
+            pg_insert(MainFigure)
+            .values(paper_id=paper.id, page=body.page)
+            .on_conflict_do_update(
+                index_elements=[MainFigure.paper_id],
+                set_={"page": body.page, "updated_at": func.now()},
+            )
+        )
+    await db.commit()
+    return MainFigureOut(main_figure_page=body.page)
 
 
 @router.get("/papers/{paper_id}/steps", response_model=StepList)
@@ -280,10 +319,13 @@ async def export_paper(
     segments, curations, predictions = await load_segments(db, paper.id)
     annotation = annotations.for_export(await annotations.load(db, paper.id))
     rows = await rgroup_reads.for_export(db, paper.id, paper.rgroup_text_labels)
+    main_page = await main_figure_page(db, paper.id)
+    repeats = await repeat_links(paper, main_page, segments, curations, predictions, strict=True)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
-        export.build, format, paper, segments, curations, predictions, status, annotation, rows
-    )
+        export.build, format, paper, segments, curations, predictions, status, annotation, rows,
+        repeats, main_page,
+    )  # fmt: skip
     return Response(
         content=content,
         media_type=export.MEDIA_TYPES[format],

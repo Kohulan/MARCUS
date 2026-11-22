@@ -1,13 +1,18 @@
 """Read helpers shared by the route modules (routes never import each other)."""
 
+import hashlib
+import logging
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from typing import NamedTuple, TypeVar
 
+from fastapi import HTTPException
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.api.chem import inchikeys
+from marcus.api.chempool import CHEM
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
 from marcus.core.enums import (
     FINISHED_STEPS,
@@ -15,9 +20,12 @@ from marcus.core.enums import (
     StepKind,
     StepStatus,
 )
-from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.main_figure import Entry, link_repeats
+from marcus.core.models import Curation, MainFigure, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
 from marcus.core.rgroup_labels import shown_labels
+
+log = logging.getLogger(__name__)
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
@@ -281,16 +289,103 @@ def structure_out(model: type[_Structure], row: object, named: list[str] | None)
     return out
 
 
-async def segments_out(db: AsyncSession, paper: Paper) -> list[SegmentOut]:
-    """The paper's segments; each structure shows the R-group labels its page's text names."""
+def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
+    """The prediction shown and exported when nothing is curated: of `valid` (newest first),
+    the newest of the paper's engine, else the newest of any engine. The one rule; the stored
+    depiction (api.depiction.shown_structure) and the UI (cardState shownPrediction) agree."""
+    return next((p for p in valid if p.engine == paper_engine), None) or next(iter(valid), None)
+
+
+def shown_source(
+    paper_engine: str, curation: Curation | None, predictions: list[Prediction]
+) -> tuple[str, str] | None:
+    """("smiles" | "molfile", value) of the structure a segment shows, as the export picks it
+    (curated, else pick_prediction), whatever its status; None without one, and for an R-group
+    scaffold (it stands for several compounds). `predictions`: the segment's, newest first."""
+    if curation is not None and (curation.smiles or curation.molfile):
+        if curation.rgroups:
+            return None
+        return ("smiles", curation.smiles) if curation.smiles else ("molfile", curation.molfile)
+    pick = pick_prediction([p for p in predictions if p.valid], paper_engine)
+    if pick is None or not pick.smiles or pick.rgroups:
+        return None
+    return "smiles", pick.smiles
+
+
+# InChIKeys already computed, per (kind, sha256 of the value): a paper's live refreshes ask the
+# chem process only for structures it has not seen. Bounded, oldest out first.
+_KEYS: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+KEY_CACHE_MAX = 20_000
+
+
+async def _inchikeys(items: list[tuple[str, str]]) -> list[str | None]:
+    """inchikey of each (kind, value), from the cache or one chem-process trip (HTTPException
+    503 when it is busy)."""
+    names = [(kind, hashlib.sha256(value.encode()).hexdigest()) for kind, value in items]
+    found = {n: _KEYS[n] for n in names if n in _KEYS}
+    todo = {n: item for n, item in zip(names, items, strict=True) if n not in found}
+    if todo:
+        keys = await CHEM.run(inchikeys, list(todo.values()))
+        found.update(zip(todo, keys, strict=True))
+    for n in names:
+        _KEYS[n] = found[n]
+        _KEYS.move_to_end(n)
+    while len(_KEYS) > KEY_CACHE_MAX:
+        _KEYS.popitem(last=False)
+    return [found[n] for n in names]
+
+
+async def main_figure_page(db: AsyncSession, paper_id: uuid.UUID) -> int | None:
+    """The page (0-based) marked as the paper's main figure; None: none."""
+    return await db.scalar(select(MainFigure.page).where(MainFigure.paper_id == paper_id))
+
+
+async def repeat_links(
+    paper: Paper,
+    main_page: int | None,
+    segments: list[Segment],
+    curations: dict[uuid.UUID, Curation],
+    predictions: dict[uuid.UUID, list[Prediction]],
+    strict: bool = False,
+) -> dict[uuid.UUID, uuid.UUID]:
+    """repeat segment id -> its main-figure segment id (marcus.core.main_figure); empty
+    without a main figure (`main_page` None). `segments` in (page, idx) order. When the chem
+    process is busy: 503 if `strict` (an export must not count a compound twice), else no links
+    (a read)."""
+    if main_page is None:
+        return {}
+    sources = [
+        shown_source(paper.engine, curations.get(s.id), predictions.get(s.id, [])) for s in segments
+    ]
+    try:
+        keys = iter(await _inchikeys([src for src in sources if src is not None]))
+    except HTTPException:
+        if strict:
+            raise
+        log.warning("repeat links skipped: chem process busy")
+        return {}
+    entries = [
+        # compound_id: phase B item 4 (the ID printed by the drawing) fills it; not read yet.
+        Entry(s.id, s.page, next(keys) if src is not None else None)
+        for s, src in zip(segments, sources, strict=True)
+    ]
+    return link_repeats(entries, main_page)
+
+
+async def segments_out(db: AsyncSession, paper: Paper, main_page: int | None) -> list[SegmentOut]:
+    """The paper's segments; each structure shows the R-group labels its page's text names,
+    and a repeat of a main-figure structure (`main_page`: main_figure_page) names it
+    (repeat_links)."""
     segments, curations, predictions = await load_segments(db, paper.id)
     index = paper.rgroup_text_labels
+    repeats = await repeat_links(paper, main_page, segments, curations, predictions)
     return [
         SegmentOut(
             id=seg.id,
             page=seg.page,
             idx=seg.idx,
             bbox=list(seg.bbox),
+            repeat_of=repeats.get(seg.id),
             curation=(
                 structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
                 if seg.id in curations
