@@ -120,6 +120,22 @@ def named_labels(labels: list[str], context: str) -> list[str]:
     return named or list(labels)
 
 
+UNLABELLED = "*"  # marcus.core.rgroups: a dummy atom without a drawn label
+
+
+def labels_to_ask(labels: list[str], context: str) -> list[str]:
+    """The labels of a request: `*` left out, then those the page text names (named_labels).
+
+    The model was trained and tested on the labels printed in the paper (the markush-train and
+    markush-testset gold labels: R, R1, R′, X, n, Ar...), never on `*`, and the trained requests
+    named only those. An unlabelled point is no column the paper fills; and the text's
+    asterisks (author marks, footnotes) would otherwise count as naming it. A structure with no
+    label but `*` is asked as before (["*"]): there is no trained request for it.
+    """
+    labelled = [lab for lab in labels if lab != UNLABELLED]
+    return named_labels(labelled, context) if labelled else list(labels)
+
+
 def user_prompt(labels: list[str], context: str) -> str:
     """markush_eval.user_prompt, verbatim (the record's labels and context as arguments)."""
     return (f"The structure has these R-groups: {', '.join(labels)}.\n\n"

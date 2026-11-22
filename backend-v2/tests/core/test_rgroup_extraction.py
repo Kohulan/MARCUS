@@ -239,3 +239,24 @@ def test_a_text_that_names_no_label_keeps_them_all():
 
 def test_named_labels_keep_their_order():
     assert rg.named_labels(["R1", "R2", "X"], "X = Cl, R2 = H, R1 = Me") == ["R1", "R2", "X"]
+
+
+# --- `*`: an unlabelled attachment point -------------------------------------------------------
+# The model was trained and tested on the labels printed in the paper (markush-train and
+# markush-testset gold labels, 2,000+ of them): never `*`. So `*` is no label to ask for.
+
+
+def test_an_unlabelled_point_is_not_asked_for():
+    text = "Liang Xiong 1,2,3, * (page 3) 3a: R1 = OMe, R2 = H"  # an author's asterisk
+    assert rg.labels_to_ask(["R1", "R2", "*"], text) == ["R1", "R2"]
+    assert rg.labels_to_ask(["R", "*"], "") == ["R"]
+
+
+def test_the_text_still_decides_among_the_labelled_ones():
+    assert rg.labels_to_ask(["R1", "R2", "Z", "*"], STYLISSA) == ["R1", "R2"]
+
+
+def test_a_structure_with_only_unlabelled_points_is_asked_as_before():
+    """Nothing labelled to ask for: the request stays as it was (an open question for the
+    owner, not decided here)."""
+    assert rg.labels_to_ask(["*"], "R1 = H *") == ["*"]

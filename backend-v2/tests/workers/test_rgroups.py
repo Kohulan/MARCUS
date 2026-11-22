@@ -234,6 +234,18 @@ def test_a_label_the_page_text_never_names_is_not_asked_for(stub):
     assert out["rows"] == [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}]
 
 
+def test_an_unlabelled_point_is_not_asked_for(stub):
+    """`*` (a dummy atom without a label) is no label the model was trained on: the request
+    names the labelled ones only, as the trained requests did."""
+    stub.content = _answer(("3a", {"R1": "OMe", "R2": "H"}))
+    doc = {**DOC, "texts": [*DOC["texts"], _text("text", "Liang Xiong 1,2, *", 3)]}
+    out = read_scaffold(get_reader(), _paper(page=2, doc=doc), 2, ["R1", "R2", "*"])
+    (req,) = stub.requests
+    text = req["body"]["messages"][1]["content"][1]["text"]
+    assert text.startswith("The structure has these R-groups: R1, R2.\n\n")
+    assert out["labels"] == ["R1", "R2"]
+
+
 def test_an_answer_outside_the_schema_is_a_final_engine_error(stub):
     stub.content = _answer(("1", {"R9": "H"}))
     with pytest.raises(BadResult):
