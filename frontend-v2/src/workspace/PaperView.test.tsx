@@ -1058,6 +1058,38 @@ describe("Paper view: annotation", () => {
     expect(screen.queryByText(/appear here as/)).toBeNull();
   });
 
+  it("reads the annotation again when the text is read later: an auto run that starts then shows", async () => {
+    renderAt(paper([segment("s1")], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({ status: "running", finished_at: null })],
+    });
+    expect(await screen.findByText("The text of this paper is not ready")).toBeInTheDocument();
+    await waitFor(() => expect(api.getAnnotation).toHaveBeenCalled());
+    const before = vi.mocked(api.getAnnotation).mock.calls.length;
+    vi.mocked(api.getAnnotation).mockResolvedValue(annotation({ auto_pending: true }));
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({})] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    const p = await panel();
+    expect(await within(p).findByText("Annotating…", { selector: "span" })).toBeInTheDocument();
+    expect(vi.mocked(api.getAnnotation).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("reads the R-group list again when the text or a structure is read later", async () => {
+    const get = vi
+      .spyOn(api, "getPaperRgroups")
+      .mockResolvedValue({ available: true, extractions: [], auto_pending: [] });
+    const scaffold = segment("s1", { predictions: [prediction({ rgroups: ["R1"] })] });
+    renderAt(paper([scaffold], { status: "processing" }), {
+      doc: ANN_DOC,
+      steps: [step({ status: "running", finished_at: null })],
+    });
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    const before = get.mock.calls.length;
+    vi.mocked(api.getSteps).mockResolvedValue({ steps: [step({})] });
+    await client.invalidateQueries({ queryKey: ["steps", ID] });
+    await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(before));
+  });
+
   it("never reads the paper's steps for the annotation: an annotate step there changes nothing", async () => {
     renderAt(paper([segment("s1")]), { doc: ANN_DOC, steps: [step({}), annStep()] });
     const p = await panel();

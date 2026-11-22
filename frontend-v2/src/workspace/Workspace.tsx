@@ -22,7 +22,7 @@ import { SegmentEditor } from "./SegmentEditor";
 import { coconutStructures, submissionTitle } from "./coconutList";
 import { CARD_OPEN_HINT, filterCounts, hasScaffold, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
-import { useAnnotation } from "./useAnnotation";
+import { useAnnotation, useAutoRunRefresh } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { RgroupPaper, useRgroupList } from "./useRgroupRows";
@@ -157,6 +157,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
   const sendCount = toCoconut.send.length;
   const annotation = useAnnotation(paper.id).data;
+  useAutoRunRefresh(paper.id, ws.steps);
   // R-group rows: one list for the paper's scaffolds, polled while a reading is in flight
   const scaffolds = useMemo(
     () => ws.segments.some((s) => hasScaffold(s, paper.engine)),
