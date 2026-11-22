@@ -68,6 +68,7 @@ a synthetic article made for MARCUS (no copyrighted content).</sub>
 | Read them | [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer) (default), DECIMER hand-drawn, [MolNexTR](https://github.com/CYF2000127/MolNexTR), [MolScribe](https://github.com/thomas0809/MolScribe) | SMILES and molfiles; run all four and compare them side by side |
 | Read the text | [Docling](https://github.com/docling-project/docling) | the paper's text and layout, and its DOI |
 | Annotate | the MARCUS model, on [llama.cpp](https://github.com/ggml-org/llama.cpp) on the server's GPU | organism, part, place and compound names, each found in the text |
+| Read R-group tables | the same MARCUS model, from the page image and its text | the compounds a scaffold with R-groups stands for (`3a: R1 = OMe`), to check against the paper |
 | Check and fix | [Ketcher](https://github.com/epam/ketcher), [CDK](https://cdk.github.io/) depictions, PubChem and COCONUT lookups | a structure you have looked at, edited where it was wrong |
 | Hand over | JSON, CSV and SDF export; COCONUT batch submission with your own COCONUT login | the accepted structures, where they belong |
 
@@ -93,7 +94,8 @@ cp .env.example .env    # set POSTGRES_PASSWORD and REDIS_PASSWORD
 # CPU stack with fake engines (fast, no GPU)
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 
-# or the real engines on a GPU host (the MARCUS model file: MARCUS_LLM_GGUF=/path/to/model.gguf)
+# or the real engines on a GPU host (the MARCUS model files in .env:
+# MARCUS_LLM_GGUF=/path/to/model.gguf, MARCUS_LLM_MMPROJ=/path/to/mmproj.gguf)
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
@@ -113,6 +115,8 @@ stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
   `/api/v2/openapi.json`. Scripts can use it with an API key.
 - **Workers:** one Celery queue on Redis per kind of work, so a slow engine never holds up the
   others.
+- **The MARCUS model:** one model on one llama.cpp server on the GPU, with a slot each for
+  annotation (q.llm) and R-group rows (q.rgroup).
 
 ## Development
 

@@ -170,34 +170,50 @@ switch that did not take fails the unit. It is not installed by anything here. O
 - The segment worker replaces its process every 200 pages (`--max-tasks-per-child 200`): the segmentation library
   leaks about 3 MiB of GPU memory per page.
 
-### Paper annotation (the local MARCUS model)
+### The local MARCUS model (one model, one server, two jobs)
+
+One fine-tuned model, `nuextract3-marcus-multi-v1` (a NuExtract3 LoRA, Q8_0 GGUF plus its f16
+vision projector), does both model jobs: paper annotation and R-group rows. The GPU override runs
+it in one llama.cpp `llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter
+commit 7fce543 for the V100) on its own internal network `llm`, shared only with `worker-llm`
+(annotation, q.llm) and `worker-rgroup` (R-group rows, q.rgroup), both files mounted read-only.
+The server has two slots of 10,240 tokens (`--parallel 2 --ctx-size 20480`), one per worker, so
+an annotation run never holds back an R-group reading, nor the other way round:
+
+```bash
+MARCUS_LLM_GGUF=/path/to/nuextract3-marcus-multi-v1-Q8_0.gguf \
+MARCUS_LLM_MMPROJ=/path/to/nuextract3-marcus-multi-v1-mmproj-f16.gguf \
+MARCUS_LLM_USER="$(stat -c %u:%g "$MARCUS_LLM_GGUF")" \
+  docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+Measured on a V100 (model README, 2026-11-22): about 6.5 GB of GPU memory with both slots
+(6.33 GB after load, 6.46 GB peak); about 2.4 s per paper and 4.5 s per scaffold one at a time,
+6.0 s for one of each at once. Stored results name the model (`model`, `model_version`), set for
+both jobs by `MARCUS_LLM_MODEL` and `MARCUS_LLM_MODEL_VERSION` (defaults
+`nuextract3-marcus-multi-v1`, `Q8_0 llama.cpp b12554`); change them with the model file. Results
+made before the switch keep the names of the two earlier models (`qwen3.5-9b-marcus-v1`,
+`nuextract3-rgroup-v1`).
+
+### Paper annotation
 
 On demand per paper (`POST /api/v2/papers/{id}/annotation`, routes in
 `marcus.api.routes.annotation`): an `annotate` step on q.llm builds the model input from the
 paper's Docling text (title, abstract, introduction, as trained), asks the MARCUS model and
-locates every value in the whole text. The GPU override runs the model in llama.cpp's
-`llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter commit 7fce543 for the
-V100) on its own internal network, shared only with `worker-llm`, with the GGUF mounted read-only:
+locates every value in the whole text. `worker-llm` (one process) calls it; the fake stack runs
+`worker-fake-annotate` instead (values picked from the text by fixed rules). Without either, the
+API answers 503 (`annotate_enabled`). Real-model smoke test, outside any stack (the sample PDF
+through docling, then the step's own handler against llama-server):
+`MARCUS_LLM_GGUF=... MARCUS_LLM_MMPROJ=... ops/annotate_smoke.sh` (`--cpu` without a GPU; about
+100 s for a short paper on 32 CPU threads).
 
-```bash
-MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf MARCUS_LLM_USER="$(stat -c %u:%g "$MARCUS_LLM_GGUF")" \
-  docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
-```
-
-Measured on the jarvis V100 (2026-11-20): 8.9 GB of GPU memory at ctx 8192, about 2 s per short
-paper. `worker-llm` (one process) calls it; the fake stack runs `worker-fake-annotate` instead (values
-picked from the text by fixed rules). Without either, the API answers 503 (`annotate_enabled`).
-Real-model smoke test, outside any stack (the sample PDF through docling, then the step's own
-handler against llama-server): `MARCUS_LLM_GGUF=... ops/annotate_smoke.sh` (`--cpu` without a
-GPU; about 70 s per paper on 16 CPU threads).
-
-### R-group rows of a scaffold (the local R-group model)
+### R-group rows of a scaffold
 
 On demand per prediction with R-group labels (`POST /api/v2/predictions/{id}/rgroups`; read with
 `GET /api/v2/papers/{id}/rgroups` or `GET /api/v2/predictions/{id}/rgroups`; routes in
 `marcus.api.routes.rgroups`): an `rgroups` step on q.rgroup sends the scaffold's labels, the text of
-pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) to the R-group
-model (nuextract3-rgroup-v1, vision, Q8_0) in a second llama-server, `llama-rgroup`, and stores
+pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) to the MARCUS
+model on `llama-server` (above), and stores
 the rows (`rgroup_extractions`, one per prediction; a re-run replaces them). Of the labels, only
 those the page text names are asked for (all of them when it names none): OCSR sometimes adds a
 label the drawing does not have, and the model would fill that column too. An unlabelled point
@@ -205,10 +221,8 @@ label the drawing does not have, and the model would fill that column too. An un
 label is `*` is refused like one without R-groups (409), and the UI offers no reading for it. The request is the
 one the model was trained on (`marcus.core.rgroup_extraction`, byte for byte the bake-off
 client's). The step never reopens the paper. Exports: JSON `rgroup_rows` per segment, SDF
-`MARCUS_RGROUP_ROWS`. The GPU override runs `llama-rgroup` beside `llama-server` (same image,
-its own internal network `rgroup`, both GGUF files mounted read-only; 6.0 GB measured on a V100)
-and `worker-rgroup` (one process) on its own queue q.rgroup, so an annotation run never holds back
-an R-group reading, nor the other way round; the fake stack runs the fake reader in
+`MARCUS_RGROUP_ROWS`. The GPU override runs `worker-rgroup` (one process) on its own queue
+q.rgroup, with its own slot on `llama-server`; the fake stack runs the fake reader in
 `worker-fake-rgroup`. Without either, the API answers 503 (`rgroup_enabled`). Real-model smoke test against a running server:
 `python ops/rgroup_smoke.py --url http://127.0.0.1:8080 --pdf paper.pdf --page 3 --labels R1,R2 --text docling.json`.
 
