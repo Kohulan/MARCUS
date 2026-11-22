@@ -92,6 +92,22 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
 }
 
 /**
+ * The prediction whose R-group rows a segment shows: the shown prediction (cardState
+ * shownPrediction) when it is a scaffold, else none. An edited structure keeps the rows of the
+ * prediction under it while it still has R-groups itself (as the export does).
+ */
+export function scaffoldPrediction(
+  shown: { prediction: PredictionOut | null; rgroups: readonly string[] },
+): PredictionOut | null {
+  const p = shown.prediction;
+  return p !== null && shown.rgroups.length > 0 && rgroupsOf(p).length > 0 ? p : null;
+}
+
+/** The segment shows a scaffold that can have R-group rows. */
+export const hasScaffold = (segment: SegmentOut, paperEngine: string): boolean =>
+  scaffoldPrediction(shownStructure(segment, paperEngine)) !== null;
+
+/**
  * "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. A
  * scaffold says so instead, with its labels ("DECIMER · R-group scaffold (R1, R2)"), never a
  * bare "Invalid" (DECIMER's R tokens) or "Valid" (a dummy atom).

@@ -14,6 +14,7 @@ export const keys = {
   queue: () => ["queue"] as const,
   text: (id: string) => ["text", id] as const,
   annotation: (id: string) => ["annotation", id] as const,
+  rgroups: (id: string) => ["rgroups", id] as const,
   images: () => ["images"] as const,
   image: (id: string) => ["image", id] as const,
 };
