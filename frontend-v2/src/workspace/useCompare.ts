@@ -27,18 +27,28 @@ export type EngineRow = {
   reason: string | null;
 };
 
+/** The three main engines, Compare's columns. DECIMER hand-drawn is the DECIMER column's toggle. */
+export const MAIN_ENGINES: readonly Engine[] = ["decimer", "molnextr", "molscribe"];
+const HAND: Engine = "decimer-hand";
+
 /**
- * The columns: the four engines in menu order, then any other engine a prediction came
- * from (as sent). `requested` maps an engine started here to its step count at that moment:
- * it reads as "Reading…" until a newer step of it (or a prediction) arrives.
+ * The columns: the three main engines, then any other engine a prediction came from (as
+ * sent; never DECIMER hand-drawn). `hand`: the DECIMER column shows the hand-drawn model.
+ * `requested` maps an engine started here to its step count at that moment: it reads as
+ * "Reading…" until a newer step of it (or a prediction) arrives.
  */
 export function engineRows(
   predictions: PredictionOut[],
   steps: CompareStep[],
   requested: ReadonlyMap<string, number>,
+  hand = false,
 ): EngineRow[] {
-  const names = ENGINES.map((e) => e.value as string);
-  for (const p of predictions) if (!names.includes(p.engine)) names.push(p.engine);
+  const names: string[] = MAIN_ENGINES.map((e) => (hand && e === "decimer" ? HAND : e));
+  for (const p of predictions) {
+    if (!names.includes(p.engine) && p.engine !== HAND && p.engine !== "decimer") {
+      names.push(p.engine);
+    }
+  }
   return names.map((engine) => {
     const prediction = predictions.find((p) => p.engine === engine) ?? null;
     const own = steps.filter((s) => s.engine === engine);
@@ -56,8 +66,9 @@ export function engineRows(
 }
 
 /**
- * The engines Compare starts when it opens: offered ones not read and not running. A failed
- * one is left for its own Retry (an engine that just failed would likely fail again).
+ * The engines of these columns to start: offered ones not read and not running (Compare's
+ * opening start; the hand-drawn toggle's). A failed one is left for its own Retry (an engine
+ * that just failed would likely fail again).
  */
 export function enginesToRun(rows: EngineRow[]): Engine[] {
   return ENGINES.map((e) => e.value).filter((engine) => {

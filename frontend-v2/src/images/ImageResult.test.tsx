@@ -502,8 +502,8 @@ describe("ImageResult", () => {
       const section = await screen.findByRole("region", { name: "Compare engines" });
       expect(within(section).getByRole("button", { name: "Close" })).toHaveFocus();
       expect(screen.getAllByRole("heading", { name: "Compare engines" })).toHaveLength(1);
-      await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
-      expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID, ID]);
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+      expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID]);
       await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
       fireEvent.click(within(section).getByRole("button", { name: "Close" }));
       expect(screen.queryByRole("region", { name: "Compare engines" })).toBeNull();
