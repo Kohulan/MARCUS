@@ -222,7 +222,7 @@ describe("focus mode", () => {
       smiles: null,
       molfile: null,
       note: null,
-    });
+    }, true);
     expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
   });
 
@@ -258,7 +258,7 @@ describe("focus mode", () => {
       smiles: "CCO",
       molfile: "<m>",
       note: "n",
-    });
+    }, true);
   });
 
   it("R rejects with the same rule and lands the charcoal Rejected stamp", async () => {
@@ -279,7 +279,7 @@ describe("focus mode", () => {
       smiles: "CCO",
       molfile: "<m>",
       note: "n",
-    });
+    }, true);
     expect(within(region).getByRole("img", { name: "Rejected" })).toBeInTheDocument();
   });
 
@@ -339,7 +339,7 @@ describe("focus mode", () => {
       smiles: "CCO",
       molfile: "<m>",
       note: "ring closure unclear",
-    });
+    }, false);
     // An unchanged note is not saved again on the next blur.
     note.focus();
     fireEvent.blur(note);
@@ -503,6 +503,7 @@ describe("focus mode", () => {
     expect(put.mock.calls[0]).toEqual([
       "s1",
       { status: "accepted", smiles: "CCO", molfile: null, note: "n" },
+      true,
     ]);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
     expect(within(region).getByRole("img", { name: "Accepted" })).toBeInTheDocument();
