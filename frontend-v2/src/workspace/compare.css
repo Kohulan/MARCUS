@@ -119,8 +119,9 @@
   vertical-align: top;
 }
 
-/* Below DECIMER's name: the toggle to the hand-drawn model. */
-.cmp-table__hand {
+/* Below an engine's name: its toggle (DECIMER: the hand-drawn model; MolNexTR, MolScribe: their
+   coordinates). */
+.cmp-table__toggle {
   display: block;
   margin-top: 8px;
 }
@@ -294,7 +295,7 @@
 /* "Show common part" and "Hand-drawn" are toggles: a square that fills green while on (shape,
    not tint). */
 .cmp__actions .glass[aria-pressed]::before,
-.cmp-table__hand .glass[aria-pressed]::before {
+.cmp-table__toggle .glass[aria-pressed]::before {
   content: "";
   flex: none;
   width: 8px;
@@ -303,7 +304,7 @@
 }
 
 .cmp__actions .glass[aria-pressed="true"]::before,
-.cmp-table__hand .glass[aria-pressed="true"]::before {
+.cmp-table__toggle .glass[aria-pressed="true"]::before {
   border-color: var(--green);
   background-color: var(--green);
 }

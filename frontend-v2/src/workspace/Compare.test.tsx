@@ -5,6 +5,8 @@
 // replaced), and the dialog in focus mode (review keys held, Esc closes Compare first).
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +30,22 @@ vi.mock("../api/depictions", async (importOriginal) => ({
 }));
 
 const ID = "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f";
+
+// Real molfiles (backend-v2/tests/fixtures): MolScribe's and the fixed MolNexTR's hold the
+// image's positions; the old MolNexTR (fb7505b) wrote a computed layout.
+type Out = { molfile: string };
+const fixture = (name: string) =>
+  JSON.parse(readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures", name), "utf8")) as Record<string, never>;
+const REAL = fixture("orient_engines.json") as Record<string, Record<string, Out>>;
+const SCRIBE = REAL.p2_6!.molscribe!.molfile;
+const OLD_NEXTR = REAL.p2_6!.molnextr!.molfile;
+const NEXTR = (fixture("molnextr_7a4e03f.json") as Record<string, Out>)["corallomycetellains_p3_3"]!.molfile;
+
+/** The highlighted /tools/depict calls (the common part). */
+const litCalls = () => vi.mocked(api.depict).mock.calls.filter((c) => c[1]?.highlight);
+/** The template each /tools/depict call of `smiles` sent (undefined: the normal layout). */
+const templatesOf = (smiles: string) =>
+  vi.mocked(api.depict).mock.calls.filter((c) => c[0] === smiles).map((c) => c[1]?.template);
 
 let pseq = 0;
 function prediction(over: Partial<PredictionOut> = {}): PredictionOut {
@@ -336,38 +354,84 @@ describe("Compare", () => {
     expect(client.getQueryData(["depict", "CCO", null])).toEqual({ format: "svg", data: "<svg/>" });
   });
 
-  it("a segment's drawings are its stored depictions per engine (no tools call)", () => {
-    const p = prediction({ engine: "molnextr", smiles: "CCO" });
-    renderCompare({ predictions: [p] });
-    expect(screen.getByRole("img", { name: "Structure, MolNexTR" })).toHaveAttribute(
+  it("every drawing comes from /tools/depict, a segment's too", async () => {
+    renderCompare({ predictions: [prediction({ engine: "molnextr", smiles: "CCO" })] });
+    expect(await screen.findByRole("img", { name: "Structure, MolNexTR" })).toHaveAttribute(
       "src",
-      api.depictionUrl("s1", p.id, "molnextr"),
+      "blob:http://localhost/d",
     );
-    expect(api.depict).not.toHaveBeenCalled();
+    expect(api.depict).toHaveBeenCalledWith("CCO");
   });
 
-  it("the paper's orientation: a segment's stored drawings change with MolNexTR's positions", () => {
-    const decimer = prediction({ engine: "decimer", smiles: "CCO" });
-    const nextr = prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" });
-    renderCompare({ predictions: [nextr, decimer] });
-    // the server draws it oriented; the key names the template so a new one is drawn again
-    expect(screen.getByRole("img", { name: "Structure, DECIMER" })).toHaveAttribute(
-      "src",
-      api.depictionUrl("s1", `${decimer.id}.${nextr.id}`, "decimer"),
+  it("Use coordinates (on): MolScribe and MolNexTR draw on their own positions; DECIMER on MolScribe's", async () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: NEXTR }),
+        prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE }),
+      ],
+    });
+    for (const engine of ["MolNexTR", "MolScribe"]) {
+      expect(screen.getByRole("button", { name: `Use coordinates, ${engine}` })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE]));
+    expect(templatesOf("CCN")).toEqual([NEXTR]);
+    expect(templatesOf("CCC")).toEqual([SCRIBE]);
+  });
+
+  it("Use coordinates off: that engine draws in the normal layout and is no template; both off: all normal", async () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: NEXTR }),
+        prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE }),
+      ],
+    });
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE]));
+    fireEvent.click(screen.getByRole("button", { name: "Use coordinates, MolScribe" }));
+    expect(screen.getByRole("button", { name: "Use coordinates, MolScribe" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
     );
-    expect(api.depict).not.toHaveBeenCalled();
+    // MolScribe plain; DECIMER now on MolNexTR's positions
+    await waitFor(() => expect(templatesOf("CCC")).toEqual([SCRIBE, undefined]));
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE, NEXTR]));
+    fireEvent.click(screen.getByRole("button", { name: "Use coordinates, MolNexTR" }));
+    await waitFor(() => expect(templatesOf("CCN")).toEqual([NEXTR, undefined]));
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE, NEXTR, undefined]));
+  });
+
+  it("Use coordinates shows only with a molfile, and is disabled for one without the image's positions", async () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: OLD_NEXTR, engine_version: "fb7505b" }),
+        prediction({ engine: "molscribe", smiles: "CCC", molfile: null }),
+      ],
+    });
+    const old = screen.getByRole("button", { name: "Use coordinates, MolNexTR" });
+    expect(old).toBeDisabled();
+    expect(old).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: "Use coordinates, MolScribe" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Use coordinates, DECIMER/ })).toBeNull();
+    // nothing to orient by: every drawing in the normal layout
+    await waitFor(() => expect(templatesOf("CCN")).toEqual([undefined]));
+    expect(templatesOf("CCO")).toEqual([undefined]);
   });
 
   it("the paper's orientation: an image job's drawings send MolScribe's molfile (MolNexTR's without one)", async () => {
     const decimer = prediction({ engine: "decimer", smiles: "CCO" });
-    const scribe = prediction({ engine: "molscribe", smiles: "CCN", molfile: "<scribe>" });
-    const nextr = prediction({ engine: "molnextr", smiles: "CCC", molfile: "<nextr>" });
+    const scribe = prediction({ engine: "molscribe", smiles: "CCN", molfile: SCRIBE });
+    const nextr = prediction({ engine: "molnextr", smiles: "CCC", molfile: NEXTR });
     const view = renderCompare({ target: { kind: "image", id: "img1" }, predictions: [decimer, nextr] });
-    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<nextr>" }));
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: NEXTR }));
     expect(client.getQueryData(["depict", "CCO", null, nextr.id])).toBeDefined();
     view.unmount();
     renderCompare({ target: { kind: "image", id: "img1" }, predictions: [nextr, decimer, scribe] });
-    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<scribe>" }));
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: SCRIBE }));
   });
 
   it("the paper's orientation goes with the common part too", async () => {
@@ -388,23 +452,26 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: NEXTR }),
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
-    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1", template: "<nextr>" };
-    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", lit));
-    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
+    const on = { highlight: "[#6]-[#6]", highlightToken: "tok-1", template: NEXTR };
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", on));
+    expect(api.depict).toHaveBeenCalledWith("CCN", on);
   });
 
-  it("orientationTemplate: the newest valid MolScribe prediction with a molfile, else MolNexTR's", () => {
-    const old = prediction({ engine: "molscribe", molfile: "<old>" });
-    const invalid = prediction({ engine: "molscribe", molfile: "<bad>", valid: false });
+  it("orientationTemplate: the newest valid MolScribe prediction with the image's positions, else MolNexTR's", () => {
+    const old = prediction({ engine: "molscribe", molfile: SCRIBE });
+    const invalid = prediction({ engine: "molscribe", molfile: SCRIBE, valid: false });
     const bare = prediction({ engine: "molscribe", molfile: null });
-    const nextr = prediction({ engine: "molnextr", molfile: "<nextr>" });
-    const hand = prediction({ engine: "decimer-hand", molfile: "<hand>" });
+    const nextr = prediction({ engine: "molnextr", molfile: NEXTR });
+    const hand = prediction({ engine: "decimer-hand", molfile: SCRIBE });
     expect(orientationTemplate([invalid, bare, nextr, old])).toBe(old);
     expect(orientationTemplate([invalid, bare, hand, nextr])).toBe(nextr);
+    // a computed layout (old MolNexTR) is none; an engine left out is skipped
+    expect(orientationTemplate([prediction({ engine: "molnextr", molfile: OLD_NEXTR })])).toBeNull();
+    expect(orientationTemplate([old, nextr], { molscribe: false })).toBe(nextr);
     expect(orientationTemplate([hand, prediction()])).toBeNull();
   });
 
@@ -482,7 +549,7 @@ describe("Compare", () => {
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(litCalls()).toHaveLength(2));
     expect(molfile.mock.calls.map((c) => c[0]).sort()).toEqual(["CCN", "CCO"]);
     expect(mcs).toHaveBeenCalledWith(["M:CCN", "M:CCO"]);
     // the server's token from the MCS reply goes with every highlighted drawing (F5)
@@ -543,24 +610,24 @@ describe("Compare", () => {
     const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-new" };
     expect(api.depict).toHaveBeenCalledWith("CCO", lit);
     expect(api.depict).toHaveBeenCalledWith("CCN", lit);
-    expect(api.depict).toHaveBeenCalledTimes(4);
+    expect(litCalls()).toHaveLength(4);
   });
 
   it("a highlight still refused with the new token is not asked for again (no loop)", async () => {
     vi.mocked(api.depict).mockRejectedValue(INVALID);
     const mcs = commonPartWithTokens(["tok-old", "tok-new", "tok-3", "tok-4"]);
-    await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(litCalls()).toHaveLength(4));
     await new Promise((r) => setTimeout(r, 50));
     expect(mcs).toHaveBeenCalledTimes(2);
-    expect(api.depict).toHaveBeenCalledTimes(4);
-    const tokens = vi.mocked(api.depict).mock.calls.map((c) => c[1]?.highlightToken).sort();
+    expect(litCalls()).toHaveLength(4);
+    const tokens = litCalls().map((c) => c[1]?.highlightToken).sort();
     expect(tokens).toEqual(["tok-new", "tok-new", "tok-old", "tok-old"]);
   });
 
   it("another 4xx on a highlighted drawing does not ask the MCS again", async () => {
     vi.mocked(api.depict).mockRejectedValue(new ApiError(429, "slow down"));
     const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
-    await waitFor(() => expect(api.depict).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(litCalls()).toHaveLength(2));
     await new Promise((r) => setTimeout(r, 50));
     expect(mcs).toHaveBeenCalledTimes(1);
   });
