@@ -458,3 +458,20 @@ async def test_exports_name_the_labels_the_page_text_names(app, async_db_session
     r = await _export(app, token, seeded.paper_id, "sdf", "all")
     by_seg = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
     assert by_seg[str(s0)].GetProp("MARCUS_RGROUPS") == "R1; R2"
+
+
+def test_a_prediction_without_labels_exports_no_rgroup_rows():
+    """Review finding 5: rows read while a prediction had labels (before 0014 left MolScribe's
+    OMe out, say) do not go with it once it has none, as for a curated structure."""
+    from types import SimpleNamespace
+
+    seg = SimpleNamespace(id=uuid.uuid4(), page=0, idx=0)
+    paper = SimpleNamespace(engine="molscribe", rgroup_text_labels=None)
+    pred = SimpleNamespace(id=uuid.uuid4(), engine="molscribe", valid=True, smiles="COc1ccccc1",
+                           molfile=None, rgroups=[])  # fmt: skip
+    rows = {pred.id: {"labels": ["OMe"], "rows": []}}
+    (chosen,) = export.choose(paper, [seg], {}, {seg.id: [pred]}, rgroup_rows=rows)
+    assert chosen.rgroups == () and chosen.rgroup_rows is None
+    pred.rgroups = ["R1"]
+    (chosen,) = export.choose(paper, [seg], {}, {seg.id: [pred]}, rgroup_rows=rows)
+    assert chosen.rgroup_rows == rows[pred.id]
