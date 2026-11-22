@@ -37,7 +37,7 @@ class _RGroups(BaseModel):
 
     @model_validator(mode="after")
     def _placeholder(self):
-        self.placeholder = self.placeholder or bool(self.rgroups)
+        self.placeholder = bool(self.rgroups)
         return self
 
 

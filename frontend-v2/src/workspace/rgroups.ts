@@ -14,6 +14,16 @@ export function rgroupsOf(row: { rgroups?: string[] | undefined } | null | undef
 /** The label of an unlabelled attachment point (a dummy atom without a drawn label). */
 export const UNLABELLED = "*";
 
+/**
+ * The structure has R-group placeholder atoms, whatever labels its page shows (the server's
+ * `placeholder`, or labels from an older server): never sent to COCONUT.
+ */
+export function isPlaceholder(
+  row: { placeholder?: boolean | undefined; rgroups?: string[] | undefined } | null | undefined,
+): boolean {
+  return row?.placeholder === true || rgroupsOf(row).length > 0;
+}
+
 /** "R1, R2" */
 export const labelList = (labels: readonly string[]): string => labels.join(", ");
 
