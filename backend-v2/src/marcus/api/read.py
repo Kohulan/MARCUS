@@ -81,11 +81,13 @@ def _failed_structure():
 
 
 async def paper_counts(
-    db: AsyncSession, paper_ids: list[uuid.UUID]
+    db: AsyncSession, paper_ids: list[uuid.UUID], hidden: set[uuid.UUID] | None = None
 ) -> dict[uuid.UUID, PaperCounts]:
     """Structure, failure and progress counts per paper: two queries, whatever the number of
     papers (one over the segments, one over the steps).
 
+    `hidden`: segments left out of the structure counts, the repeats of main-figure structures
+    (repeat_ids): the paper list counts each compound once, as the workspace does.
     structures = segments; accepted / rejected = curations with that status; failed = the
     undecided ones whose read failed (_failed_structure); to_review = the rest (every segment
     has a curation row). failed_pages = distinct pages whose newest
@@ -105,7 +107,7 @@ async def paper_counts(
         )
         .select_from(Segment)
         .outerjoin(Curation, Curation.segment_id == Segment.id)
-        .where(Segment.paper_id.in_(paper_ids))
+        .where(Segment.paper_id.in_(paper_ids), *([Segment.id.not_in(hidden)] if hidden else []))
         .group_by(Segment.paper_id)
     )
     progress = {row.paper_id: row for row in (await db.execute(_step_counts(paper_ids))).all()}
@@ -239,12 +241,18 @@ async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, in
 async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
     """Segments in (page, idx) order, curation per segment, predictions per segment (newest
     first). Three queries, whatever the number of segments."""
+    return await _load_segments(db, [paper_id])
+
+
+async def _load_segments(db: AsyncSession, paper_ids: list[uuid.UUID]):
+    """load_segments for several papers at once: segments in (paper, page, idx) order."""
+    of_papers = Segment.paper_id.in_(paper_ids)
     segments = list(
         (
             await db.execute(
                 select(Segment)
-                .where(Segment.paper_id == paper_id)
-                .order_by(Segment.page, Segment.idx)
+                .where(of_papers)
+                .order_by(Segment.paper_id, Segment.page, Segment.idx)
             )
         ).scalars()
     )
@@ -252,9 +260,7 @@ async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
         c.segment_id: c
         for c in (
             await db.execute(
-                select(Curation)
-                .join(Segment, Segment.id == Curation.segment_id)
-                .where(Segment.paper_id == paper_id)
+                select(Curation).join(Segment, Segment.id == Curation.segment_id).where(of_papers)
             )
         ).scalars()
     }
@@ -263,7 +269,7 @@ async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
         await db.execute(
             select(Prediction)
             .join(Segment, Segment.id == Prediction.segment_id)
-            .where(Segment.paper_id == paper_id)
+            .where(of_papers)
             .order_by(Prediction.created_at.desc(), Prediction.id)
         )
     ).scalars():
@@ -370,6 +376,48 @@ async def repeat_links(
         for s, src in zip(segments, sources, strict=True)
     ]
     return link_repeats(entries, main_page)
+
+
+async def repeat_ids(db: AsyncSession, papers: list[Paper]) -> set[uuid.UUID]:
+    """The segments of `papers` that repeat a main-figure structure (repeat_links), for the
+    paper list's counts. Only papers with a main figure cost anything: one query for the main
+    pages, three for all their segments, one chem-process trip for the InChIKeys not cached.
+    The chem process busy: none (the counts then include the repeats)."""
+    if not papers:
+        return set()
+    mains = dict(
+        (
+            await db.execute(
+                select(MainFigure.paper_id, MainFigure.page).where(
+                    MainFigure.paper_id.in_([p.id for p in papers])
+                )
+            )
+        ).all()
+    )
+    if not mains:
+        return set()
+    segments, curations, predictions = await _load_segments(db, list(mains))
+    by_paper: dict[uuid.UUID, list[Segment]] = defaultdict(list)
+    for seg in segments:
+        by_paper[seg.paper_id].append(seg)
+    marked = [p for p in papers if p.id in mains]
+    # One trip for every paper's structures; repeat_links below then reads them from the cache.
+    sources = [
+        src
+        for p in marked
+        for s in by_paper[p.id]
+        if (src := shown_source(p.engine, curations.get(s.id), predictions.get(s.id, [])))
+    ]
+    try:
+        await _inchikeys(sources)
+    except HTTPException:
+        log.warning("repeat counts skipped: chem process busy")
+        return set()
+    out: set[uuid.UUID] = set()
+    for p in marked:
+        links = await repeat_links(p, mains[p.id], by_paper[p.id], curations, predictions)
+        out.update(links)
+    return out
 
 
 async def segments_out(db: AsyncSession, paper: Paper, main_page: int | None) -> list[SegmentOut]:
