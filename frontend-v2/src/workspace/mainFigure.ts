@@ -1,7 +1,9 @@
 // The main figure: the page the user marks as the paper's compound list. Its structures come
 // first; a structure on another page that shows the same compound (the server's `repeat_of`:
-// same InChIKey) is a repeat, shown once, on its main-figure card ("Also on page N").
+// same InChIKey) is a repeat, shown once, on its main-figure card ("Also on page N"). A main
+// structure and its repeats have one state (groupState), as the server counts and exports them.
 import type { SegmentOut } from "../api/types";
+import type { CardState } from "../ui/StateBadge";
 
 /** The main page's segments first, then the rest, each in (page, idx) order. */
 export function mainFirst(segments: SegmentOut[], mainPage: number | null | undefined): SegmentOut[] {
@@ -33,4 +35,40 @@ export function repeatPages(segments: SegmentOut[]): Map<string, number[]> {
 export function alsoOnText(pages: number[] | undefined): string | null {
   if (!pages || pages.length === 0) return null;
   return `Also on ${pages.length === 1 ? "page" : "pages"} ${pages.join(", ")}`;
+}
+
+/** Per main-figure segment id: its repeats, in the order given. */
+export function repeatsOf(segments: SegmentOut[]): Map<string, SegmentOut[]> {
+  const out = new Map<string, SegmentOut[]>();
+  for (const s of segments) {
+    if (!s.repeat_of) continue;
+    const list = out.get(s.repeat_of);
+    if (list) list.push(s);
+    else out.set(s.repeat_of, [s]);
+  }
+  return out;
+}
+
+const statusOf = (s: SegmentOut) => s.curation?.status ?? "unchecked";
+
+/**
+ * A main structure and its repeats have one state (the server's group_status): accepted if
+ * any member is accepted; rejected only if every member is; else the main card's own state
+ * (to check when the main one alone is rejected).
+ */
+export function groupState(own: CardState, main: SegmentOut, repeats: SegmentOut[]): CardState {
+  if (repeats.length === 0) return own;
+  const all = [main, ...repeats].map(statusOf);
+  if (all.includes("accepted")) return "accepted";
+  if (all.every((s) => s === "rejected")) return "rejected";
+  return own === "rejected" ? "to-check" : own;
+}
+
+/**
+ * The member whose structure an accepted group sends and exports: the main one when it is
+ * accepted, else the first accepted repeat (the server's chosen_member); the main one else.
+ */
+export function chosenMember(main: SegmentOut, repeats: SegmentOut[]): SegmentOut {
+  if (statusOf(main) === "accepted") return main;
+  return repeats.find((r) => statusOf(r) === "accepted") ?? main;
 }

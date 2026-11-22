@@ -146,7 +146,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     return map;
   }, [rows, segments]);
 
-  // The main figure: one page, marked from its caption (pages with structures only).
+  // The main figure: one page, marked from its caption (pages with structures, and the marked
+  // page, so its mark can always be cleared).
   const { mark } = useMainFigure(paper.id);
   const toast = useToast();
   const mainPage = paper.main_figure_page ?? null;
@@ -183,15 +184,21 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
 
   useViewTop(view);
 
+  // A structure picked from its marker: the pages column stays where the click was (a repeat's
+  // marker picks its main-figure structure, whose own marker is on another page).
+  const pickedFromMarker = useRef<string | null>(null);
+
   // A selection (here, from the URL, or from the Review view) brings its card and page in.
   useEffect(() => {
     if (selection === null) return;
     showCard(selection);
-    showMarker(selection);
+    if (pickedFromMarker.current === selection) pickedFromMarker.current = null;
+    else showMarker(selection);
   }, [selection, showCard, showMarker]);
 
   const onPick = useCallback(
     (segmentId: string) => {
+      pickedFromMarker.current = segmentId;
       latest.current.setSelection(segmentId);
       showCard(segmentId, true);
     },
@@ -201,7 +208,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const onCardHover = useCallback(
     (segmentId: string | null) => {
       setHovered(segmentId);
-      if (segmentId !== null) showMarker(segmentId);
+      if (segmentId === null) pickedFromMarker.current = null;
+      else if (segmentId !== pickedFromMarker.current) showMarker(segmentId);
     },
     [showMarker],
   );
@@ -237,7 +245,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                 onPick={onPick}
                 onHover={setHovered}
                 isMain={mainPage === page0}
-                onMark={markers.has(page0) ? onMark : null}
+                onMark={markers.has(page0) || mainPage === page0 ? onMark : null}
               />
             ))}
           </div>

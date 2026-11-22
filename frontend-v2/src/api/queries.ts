@@ -167,8 +167,15 @@ export function usePapers() {
   });
 }
 
+/** While the server could not link a paper's repeats (links_ready false), it is read again. */
+export const LINKS_POLL_MS = 5000;
+
 export function usePaper(id: string) {
-  return useQuery({ queryKey: keys.paper(id), queryFn: paperFn(id) });
+  return useQuery({
+    queryKey: keys.paper(id),
+    queryFn: paperFn(id),
+    refetchInterval: (query) => (query.state.data?.links_ready === false ? LINKS_POLL_MS : false),
+  });
 }
 
 function paperFn(id: string) {
@@ -457,9 +464,10 @@ export function useBulkCuration(paperId: string): {
 }
 
 /**
- * `mark(page0)`: marks a page as the paper's main figure (null clears it). The cache changes
- * at once (the order follows; the old repeat links are dropped, the server links again on the
- * fetch that follows); a failure puts the old page back and rejects.
+ * `mark(page0)`: marks a page as the paper's main figure (null clears it). The page changes in
+ * the cache at once (the order follows); the repeat links stay as they were until the fetch
+ * that follows brings the server's (dropping them early could let a compound be sent twice). A
+ * failure puts the old page back and rejects.
  */
 export function useMainFigure(paperId: string): { mark: (page0: number | null) => Promise<void> } {
   const client = useQueryClient();
@@ -468,17 +476,7 @@ export function useMainFigure(paperId: string): { mark: (page0: number | null) =
       const key = keys.paper(paperId);
       await client.cancelQueries({ queryKey: key });
       const old = client.getQueryData<PaperDetail>(key);
-      const set = (page: number | null) =>
-        client.setQueryData<PaperDetail>(key, (p) =>
-          p
-            ? {
-                ...p,
-                main_figure_page: page,
-                segments: p.segments.map((s) => (s.repeat_of ? { ...s, repeat_of: null } : s)),
-              }
-            : p,
-        );
-      set(page0);
+      client.setQueryData<PaperDetail>(key, (p) => (p ? { ...p, main_figure_page: page0 } : p));
       try {
         await api.putMainFigure(paperId, page0);
       } catch (err) {

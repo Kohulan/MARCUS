@@ -332,7 +332,7 @@ describe("the main figure", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.paper("p1") });
   });
 
-  it("mark() shows the page at once without the old links, and a failure puts it back", async () => {
+  it("mark() shows the page at once, keeps the old links until the fetch, and a failure puts it back", async () => {
     const before = paper(null);
     before.segments[1] = { ...before.segments[1]!, repeat_of: "s1" };
     client.setQueryData(keys.paper("p1"), { ...before, main_figure_page: 0 });
@@ -349,7 +349,8 @@ describe("the main figure", () => {
     await vi.waitFor(() => expect(put).toHaveBeenCalledWith("p1", null));
     const now = client.getQueryData<PaperDetail>(keys.paper("p1"));
     expect(now?.main_figure_page).toBeNull();
-    expect(now?.segments.map((s) => s.repeat_of ?? null)).toEqual([null, null]);
+    // a compound must never look unlinked before the server says so (COCONUT could get it twice)
+    expect(now?.segments.map((s) => s.repeat_of ?? null)).toEqual([null, "s1"]);
     await act(async () => {
       answer({ main_figure_page: null });
       await done;

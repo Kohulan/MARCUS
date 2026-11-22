@@ -1156,3 +1156,73 @@ describe("Paper view: the main figure", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("s=s2");
   });
 });
+
+describe("Paper view: a main structure and its repeats", () => {
+  const accepted = { status: "accepted" as const, smiles: null, molfile: null, note: null };
+
+  it("an accepted repeat makes its main card accepted, and COCONUT gets the compound once", async () => {
+    renderAt(
+      paper(
+        [
+          segment("s1", { page: 0 }),
+          segment("s2", { page: 2, repeat_of: "s1", curation: accepted }),
+        ],
+        { main_figure_page: 0 },
+      ),
+    );
+    const list = await screen.findByRole("region", { name: "Structures" });
+    expect(await within(list).findAllByRole("article")).toHaveLength(1);
+    expect(card("[01]")).toHaveAttribute("aria-label", "[01] · Page 1, Accepted");
+    expect(screen.getByRole("button", { name: "Send 1 to COCONUT" })).toBeEnabled();
+  });
+
+  it("while the server could not link the repeats, nothing goes to COCONUT", async () => {
+    renderAt(
+      paper([segment("s1", { page: 0, curation: accepted })], {
+        main_figure_page: 0,
+        links_ready: false,
+      }),
+    );
+    const send = await screen.findByRole("button", { name: "Send 0 to COCONUT" });
+    expect(send).toBeDisabled();
+    expect(screen.getByText("Checking repeats, try again soon")).toBeInTheDocument();
+  });
+
+  it("clicking a repeat's marker selects its main card and leaves the pages column where it was", async () => {
+    renderAt(
+      paper([segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })], {
+        main_figure_page: 0,
+      }),
+    );
+    await loadPage(3);
+    const pages = screen.getByRole("region", { name: "Pages" });
+    const scrolled = vi.fn();
+    pages.scrollTo = scrolled as unknown as typeof pages.scrollTo;
+    fireEvent.click(screen.getByRole("button", { name: "Structure [01] on page 3" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("s=s1");
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it("a marked page without structures keeps its button, so the mark can be cleared", async () => {
+    const put = vi.spyOn(api, "putMainFigure").mockResolvedValue({ main_figure_page: null });
+    renderAt(paper([segment("s1", { page: 0 })], { main_figure_page: 2 }));
+    const mark = await screen.findByRole("button", { name: "Main figure: Page 3" });
+    expect(mark).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Main figure: Page 2" })).toBeNull();
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenCalledWith(ID, null));
+  });
+
+  it("?s= naming a repeat selects its main card in the Paper view", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })];
+    renderAt(paper(segs, { main_figure_page: 0 }), { search: "?view=paper&s=s2" });
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+  });
+
+  it("?s= naming a repeat selects its main card in the grid", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })];
+    renderAt(paper(segs, { main_figure_page: 0 }), { search: "?s=s2" });
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+  });
+});
