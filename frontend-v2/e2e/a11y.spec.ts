@@ -165,8 +165,8 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
 
     await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
     const focus = page.getByRole("region", { name: "Focus [01]" });
-    await expect(focus.getByRole("table")).toBeVisible();
-    await expect(focus.getByRole("button", { name: "Read again" })).toBeVisible();
+    await expect(focus.getByRole("table", { name: /^Model output/ })).toBeVisible();
+    await expect(focus.getByRole("button", { name: "Run again" })).toBeVisible();
     await expectNoA11yViolations(page);
   });
 

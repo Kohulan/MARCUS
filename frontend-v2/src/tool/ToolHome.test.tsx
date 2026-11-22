@@ -36,7 +36,6 @@ function paper(over: Partial<PaperSummary> = {}): PaperSummary {
     to_review: 3,
     failed_pages: 1,
     failed: 1,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,
@@ -415,7 +414,6 @@ describe("Papers list", () => {
           to_review: 1,
           failed_pages: 0,
           failed: 0,
-          annotating: false,
           pages_read: 0,
           structures_total: 0,
           structures_read: 0,
@@ -428,13 +426,6 @@ describe("Papers list", () => {
     const row = (await screen.findByText("alkaloids.pdf")).closest("li")!;
     expect(within(row).getByText("1 structure · 1 to check")).toBeInTheDocument();
     expect(within(row).getByText("Reading…")).toBeInTheDocument();
-  });
-
-  it("says Annotating… for a paper busy only with its annotation", async () => {
-    renderHome({ papers: [paper({ status: "processing", annotating: true })] });
-    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
-    expect(within(row).getByText("Annotating…")).toBeInTheDocument();
-    expect(within(row).queryByText("Reading…")).toBeNull();
   });
 
   it("a busy paper's row has a thin progress bar and its stage in a few words, from the list", async () => {
@@ -459,14 +450,6 @@ describe("Papers list", () => {
     renderHome({ papers: [paper()] });
     await screen.findByText("Alkaloids from Coffea leaves");
     expect(screen.queryByRole("progressbar")).toBeNull();
-  });
-
-  it("an annotating paper's row has an estimated bar and no second word", async () => {
-    renderHome({ papers: [paper({ status: "processing", annotating: true })] });
-    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
-    const bar = await within(row).findByRole("progressbar");
-    expect(bar).toHaveAttribute("aria-valuetext", "Annotating, about 0%");
-    expect(within(row).getAllByText(/Annotating/)).toHaveLength(1);
   });
 
   it("says Not read yet for a finished paper uploaded with ocsr off", async () => {

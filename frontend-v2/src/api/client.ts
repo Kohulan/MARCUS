@@ -279,8 +279,8 @@ export const api = {
   getAnnotation: (id: string, opts?: ReadOpts) =>
     get<AnnotationOut>(`/papers/${enc(id)}/annotation`, opts),
   /** 202 {step_id}: started or still running; 200 {step_id: null}: already annotated. */
-  startAnnotation: (id: string) =>
-    sendJson<AnnotationStarted>("POST", `/papers/${enc(id)}/annotation`, { rerun: false }),
+  startAnnotation: (id: string, rerun = false) =>
+    sendJson<AnnotationStarted>("POST", `/papers/${enc(id)}/annotation`, { rerun }),
   /** The curator's whole set: all 11 fields ([] = none). */
   saveAnnotation: (id: string, values: AnnotationValues) =>
     sendJson<AnnotationOut>("PUT", `/papers/${enc(id)}/annotation/curation`, { values }),
@@ -310,14 +310,18 @@ export const api = {
   },
 
   // tools
-  /** A highlight is drawn only with the token its MCS reply carried (`highlight_token`). */
+  /**
+   * A highlight is drawn only with the token its MCS reply carried (`highlight_token`).
+   * `template`: an OCSR molfile with the image's atom positions (the paper's orientation).
+   */
   depict(
     smiles: string,
-    opts: { highlight?: string; highlightToken?: string } = {},
+    opts: { highlight?: string; highlightToken?: string; template?: string } = {},
   ): Promise<DepictReply> {
     const body: Record<string, string> = { smiles, format: "svg" };
     if (opts.highlight) body.highlight = opts.highlight;
     if (opts.highlight && opts.highlightToken) body.highlight_token = opts.highlightToken;
+    if (opts.template) body.template = opts.template;
     return sendJson<DepictReply>("POST", "/tools/depict", body);
   },
   compare: (smilesA: string, smilesB: string) =>

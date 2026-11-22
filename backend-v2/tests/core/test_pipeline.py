@@ -890,3 +890,30 @@ def test_reopened_paper_gets_the_requesting_address(db_session):
     request_ocsr(s, seg.id, Engine.DECIMER, started_ip="203.0.113.77")
     assert paper.status == "processing" and paper.started_ip == "203.0.113.77"
     assert _just_now(paper.started_ip_at)  # the purge goes by this, not by created_at
+
+
+def test_an_ocsr_request_while_one_waits_gets_it_back(db_session):
+    """Repeat requests (Compare closed and opened again before the steps came back, two tabs)
+    never queue a second step of one engine for one segment: the planner returns the waiting
+    one, under the paper's lock, so two requests at once cannot both add one."""
+    s = db_session
+    paper = _paper_from(s)
+    s.add(Segment(paper_id=paper.id, page=0, idx=0, bbox=[0, 0, 1, 1], image_sha256="0" * 64))
+    s.flush()
+    seg = s.execute(select(Segment).where(Segment.paper_id == paper.id)).scalar_one()
+    first = request_ocsr(s, seg.id, Engine.MOLNEXTR)
+    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id == first.id
+    other = request_ocsr(s, seg.id, Engine.MOLSCRIBE)
+    assert other.id != first.id
+    run(s, first)
+    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id == first.id  # running counts too
+    complete_step(s, first.id, OCSR)
+    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id != first.id  # ended: a new run
+
+
+def test_an_image_ocsr_request_while_one_waits_gets_it_back(db_session):
+    s = db_session
+    job, step = make_image_job(s)
+    first = request_image_ocsr(s, job.id, Engine.MOLNEXTR)
+    assert request_image_ocsr(s, job.id, Engine.MOLNEXTR).id == first.id
+    assert request_image_ocsr(s, job.id, Engine.DECIMER).id == step.id  # the job's own, waiting

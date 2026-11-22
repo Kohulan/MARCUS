@@ -3,11 +3,18 @@
 The GPU OCSR images have no Java; CDK lives only in the tools image. So a depiction is drawn
 lazily, on its first request, by `marcus.tools.depict` on q.tools (the same drawing as
 `POST /tools/depict`) and stored under `data_root/depictions/<owner id>`, keyed by sha256 of the
-SMILES. Later requests of that owner, for any segment with that SMILES, read the file. The cache
+SMILES (drawing_key). Later requests of that owner, for any segment with that SMILES, read the
+file.
+
+The paper's orientation: a segment with a valid MolScribe (else MolNexTR) prediction that has a
+molfile draws every structure with that molfile as the template (orientation_template;
+marcus.workers.orient), so the drawing follows the image. Such a drawing is keyed by the SMILES
+and the template together. The template comes from the owner's own stored rows, like the
+SMILES; where the worker cannot use it, the drawing is the normal one. The cache
 is per owner: a hit (or a `.nodraw` marker) never comes from another owner's request, so the
 status, timing and rate charge of a request say nothing about what other owners viewed. Only
-plain drawings are stored (DEPICT_OPTIONS: no highlight), so the SMILES alone is the key; a
-highlighted drawing comes only from `POST /tools/depict`, which checks its token before
+plain drawings are stored (DEPICT_OPTIONS: no highlight), so the SMILES (and template) are the
+key; a highlighted drawing comes only from `POST /tools/depict`, which checks its token before
 anything else and stores nothing.
 
 Bounds on the write path: the SMILES always comes from the owner's own stored rows, never from
@@ -48,6 +55,27 @@ DEPICTION_MAX_BYTES = 512 * 1024
 DEPICT_TASK = "marcus.tools.depict"
 DEPICT_OPTIONS = {"fmt": "svg", "width": 512, "height": 512, "highlight": ""}
 Source = Literal["curated", "predicted"]
+# The engines whose molfile can hold the image's atom positions, in the order they are preferred.
+TEMPLATE_ENGINES = (Engine.MOLSCRIBE.value, Engine.MOLNEXTR.value)
+
+
+def orientation_template(segment: Segment, predictions: list[Prediction]) -> str | None:
+    """The molfile to draw the segment's structures in the paper's orientation: of its newest
+    valid MolScribe prediction that has one, else MolNexTR's; None without one. (The worker
+    uses it only when its positions come from the image, marcus.workers.orient.image_layout:
+    the pinned MolNexTR's never do.)
+    `predictions`: the segment's, newest first."""
+    for engine in TEMPLATE_ENGINES:
+        for p in predictions:
+            if p.segment_id == segment.id and p.engine == engine and p.valid and p.molfile:
+                return p.molfile
+    return None
+
+
+def drawing_key(smiles: str, template: str | None) -> str:
+    """The stored drawing's name: sha256 of the SMILES, or of the SMILES and the template."""
+    text = smiles if not template else f"{smiles}\0template\0{template}"
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 async def shown_structure(
@@ -108,14 +136,17 @@ def _store(path, data: bytes) -> None:
         log.warning("depiction not stored (%s)", type(exc).__name__)
 
 
-async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Source) -> bytes:
-    """The stored SVG of `smiles`, drawing (and storing) it on a miss. 404 (`not_found()`)
+async def draw_or_read(
+    request: Request, owner: Owner, smiles: str, source: Source, template: str | None = None
+) -> bytes:
+    """The stored SVG of `smiles` (in `template`'s orientation when one is given), drawing (and
+    storing) it on a miss. 404 (`not_found()`)
     for a SMILES that is never drawn; 429 for a curated miss over the tools limit; 503 with
     Retry-After when the depictions' share of the tools budget is held, or the tools worker is
     busy, slow or failing (nothing stored)."""
     if len(smiles) > MAX_SMILES:
         raise not_found()
-    sha = hashlib.sha256(smiles.encode()).hexdigest()
+    sha = drawing_key(smiles, template)
     path = storage.depiction_path(owner.id, sha)
     marker = storage.depiction_marker_path(owner.id, sha)
     found = await anyio.to_thread.run_sync(_lookup, path, marker)
@@ -129,15 +160,17 @@ async def draw_or_read(request: Request, owner: Owner, smiles: str, source: Sour
     with depiction_slot():
         if source == "curated":
             await tools_limit(request, owner)
-        svg = await _draw(smiles, marker)
+        svg = await _draw(smiles, marker, template)
     data = svg.encode()
     if len(data) <= DEPICTION_MAX_BYTES:
         await anyio.to_thread.run_sync(_store, path, data)
     return data
 
 
-async def _draw(smiles: str, marker) -> str:
+async def _draw(smiles: str, marker, template: str | None = None) -> str:
     kwargs = {"smiles": smiles, **DEPICT_OPTIONS}
+    if template:
+        kwargs["template"] = template
     try:
         svg = await in_tool_budget(run_tool, DEPICT_TASK, kwargs, WAIT_S)
     except HTTPException as exc:

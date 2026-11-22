@@ -19,11 +19,10 @@ import FocusMode from "./FocusMode";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
-import { newestAnnotate } from "./annotation";
 import { coconutStructures, submissionTitle } from "./coconutList";
 import { CARD_OPEN_HINT, filterCounts, hasScaffold, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
-import { useAnnotation } from "./useAnnotation";
+import { useAnnotation, useAutoRunRefresh } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { RgroupPaper, useRgroupList } from "./useRgroupRows";
@@ -157,8 +156,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   // still starts them (the form takes them only if the curator has not typed organisms).
   const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
   const sendCount = toCoconut.send.length;
-  const annotateStep = useMemo(() => newestAnnotate(ws.steps), [ws.steps]);
-  const annotation = useAnnotation(paper.id, annotateStep).data;
+  const annotation = useAnnotation(paper.id).data;
+  useAutoRunRefresh(paper.id, ws.steps);
   // R-group rows: one list for the paper's scaffolds, polled while a reading is in flight
   const scaffolds = useMemo(
     () => ws.segments.some((s) => hasScaffold(s, paper.engine)),
@@ -251,7 +250,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         Enter: open
       </span>
 
-      <StatusBar paper={paper} steps={ws.steps} annotateStep={annotateStep} live={ws.live} />
+      <StatusBar paper={paper} steps={ws.steps} live={ws.live} />
 
       {ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">
@@ -326,6 +325,7 @@ function OpenDialog({
     <SegmentCompare
       key={segment.id}
       paperId={paper.id}
+      paperEngine={paper.engine}
       segment={segment}
       steps={ws.steps}
       tag={structureTag(rows[at]?.n ?? at + 1)}

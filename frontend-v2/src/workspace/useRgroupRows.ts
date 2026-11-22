@@ -14,15 +14,19 @@ export const RGROUP_POLL_MS = 2000;
 export const RgroupPaper = createContext<string | null>(null);
 
 /**
- * The paper's list, read again every RGROUP_POLL_MS while a reading is queued or running.
- * `enabled`: the paper has a scaffold (a paper without one never asks).
+ * The paper's list, read again every RGROUP_POLL_MS while a reading is queued or running, or
+ * about to start by itself (`auto_pending`). `enabled`: the paper has a scaffold (a paper
+ * without one never asks).
  */
 export function useRgroupList(paperId: string, enabled: boolean) {
   return useQuery({
     queryKey: keys.rgroups(paperId),
     queryFn: ({ signal }) => api.getPaperRgroups(paperId, { signal }),
     enabled,
-    refetchInterval: (query) => (anyRgroupActive(query.state.data) ? RGROUP_POLL_MS : false),
+    refetchInterval: (query) =>
+      anyRgroupActive(query.state.data) || (query.state.data?.auto_pending?.length ?? 0) > 0
+        ? RGROUP_POLL_MS
+        : false,
   });
 }
 
@@ -31,6 +35,8 @@ export type RgroupReading = {
   available: boolean;
   /** The prediction's reading; undefined: never asked for. */
   extraction: RgroupExtractionOut | undefined;
+  /** Never asked for, but its reading starts by itself within seconds. */
+  pending: boolean;
   /** POST, then the list is read again (it polls from there). Rejects with the ApiError. */
   start: (rerun: boolean) => Promise<void>;
 };
@@ -46,6 +52,7 @@ export function useRgroupReading(predictionId: string | undefined): RgroupReadin
     (list: RgroupList) => ({
       available: list.available,
       extraction: extractionFor(list, predictionId),
+      pending: predictionId !== undefined && (list.auto_pending ?? []).includes(predictionId),
     }),
     [predictionId],
   );
@@ -67,6 +74,7 @@ export function useRgroupReading(predictionId: string | undefined): RgroupReadin
   return {
     available: query.data?.available ?? false,
     extraction: query.data?.extraction,
+    pending: query.data?.pending ?? false,
     start,
   };
 }

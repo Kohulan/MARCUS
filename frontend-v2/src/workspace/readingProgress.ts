@@ -4,7 +4,6 @@
 // same counts with the papers list (PaperSummary), so its rows poll no steps.
 import { isPaperBusy, isStepActive } from "../api/status";
 import type { PaperSummary, StepOut } from "../api/types";
-import { isAnnotating } from "./annotation";
 import { checkFailure, pageSteps } from "./pageFailures";
 
 export type Stage =
@@ -14,7 +13,6 @@ export type Stage =
   | "structures"
   | "text"
   | "finishing"
-  | "annotating"
   | "done";
 
 export type StageMark = {
@@ -37,18 +35,15 @@ export type ReadingProgress = {
   valueText: string;
   /** The tool home row's line: "Reading pages 2/4", "Waiting"; "" when there is none. */
   line: string;
-  /** Said once when the stage changes; "" while annotating (the badge and the panel say it). */
+  /** Said once when the stage changes. */
   said: string;
-  /** The figure is an annotate run's time-based estimate (its model reports no progress). */
-  estimated: boolean;
-  /** The stages, done ones ticked, the current one counted; [] while annotating. */
+  /** The stages, done ones ticked, the current one counted. */
   stages: StageMark[];
 };
 
 /** What a read is measured by: the papers list's fields, or readCounts from the steps. */
 export type ReadCounts = Pick<
   PaperSummary,
-  | "annotating"
   | "pages_read"
   | "structures_total"
   | "structures_read"
@@ -61,7 +56,6 @@ type PaperLike = {
   status: string;
   pages: number | null;
   ocsr_mode: string;
-  annotating?: boolean | undefined;
 };
 
 // The weights of the parts of a read; the last 5% fills when the paper is done. Pages,
@@ -134,7 +128,6 @@ export function readCounts(paper: PaperLike, steps: StepOut[]): ReadCounts {
   const pagesRead = paper.pages === null ? 0 : pagesHandled(steps, paper.pages);
   const structures = structuresHandled(steps);
   return {
-    annotating: isAnnotating(paper, steps),
     pages_read: pagesRead,
     structures_total: structures.total,
     structures_read: structures.done,
@@ -154,7 +147,6 @@ const STAGES: Record<Stage, { label: string; order: number }> = {
   structures: { label: "Reading structures", order: 2 },
   text: { label: "Reading the text", order: 3 },
   finishing: { label: "Finishing", order: 4 },
-  annotating: { label: "Annotating", order: 4 },
   done: { label: "Done", order: 5 },
 };
 
@@ -173,42 +165,33 @@ type Read = {
   textDone: boolean;
 };
 
-const NO_READ: Read = { pages: null, structures: null, textDone: false };
-
 /** The model of one stage: its words (bar, row line, announcement) and its marks. */
 function make(stage: Stage, fraction: number | null, read: Read): ReadingProgress {
   const { pages, structures, textDone } = read;
   const counted = stage === "pages" ? pages : stage === "structures" ? structures : null;
   const { label, order } = STAGES[stage];
   const count = counted ? `${counted.done}/${counted.total}` : null;
-  const estimated = stage === "annotating";
-  const stages = estimated
-    ? []
-    : MARKS.filter(([key]) => key !== "structures" || structures !== null).map(
-        ([key, at]): StageMark => {
-          const i = STAGES[at].order;
-          let state: StageMark["state"] = i < order ? "done" : i === order ? "current" : "next";
-          // The text is read beside the pages: ticked as soon as it is, whatever the stage.
-          if (key === "text" && textDone && state === "next") state = "done";
-          const mark = key === "end" && stage === "done" ? "done" : at;
-          return { key, label: STAGES[mark].label, count: at === stage ? count : null, state };
-        },
-      );
+  const stages = MARKS.filter(([key]) => key !== "structures" || structures !== null).map(
+    ([key, at]): StageMark => {
+      const i = STAGES[at].order;
+      let state: StageMark["state"] = i < order ? "done" : i === order ? "current" : "next";
+      // The text is read beside the pages: ticked as soon as it is, whatever the stage.
+      if (key === "text" && textDone && state === "next") state = "done";
+      const mark = key === "end" && stage === "done" ? "done" : at;
+      return { key, label: STAGES[mark].label, count: at === stage ? count : null, state };
+    },
+  );
   return {
     stage,
     fraction,
     pages,
     structures,
     valueText: counted ? `${label}, ${counted.done} of ${counted.total}` : label,
-    line: estimated || stage === "done" ? "" : count ? `${label} ${count}` : label,
-    said: estimated ? "" : label,
-    estimated,
+    line: stage === "done" ? "" : count ? `${label} ${count}` : label,
+    said: label,
     stages,
   };
 }
-
-/** A finished annotate run's full bar, held for a moment before the bar goes. */
-export const ANNOTATE_END = make("annotating", 1, NO_READ);
 
 /**
  * The read's stage and overall figure from its counts (the papers list's fields, or
@@ -225,7 +208,6 @@ export function progressOf(paper: PaperLike & ReadCounts): ReadingProgress | nul
 
   if (paper.status === "done") return make("done", 1, read);
   if (!isPaperBusy(paper.status)) return null;
-  if (paper.annotating) return make("annotating", null, read);
   if (paper.rereading) return null;
   if (pages === null) return make(paper.check_started ? "checking" : "waiting", null, read);
 

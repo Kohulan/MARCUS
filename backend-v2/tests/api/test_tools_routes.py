@@ -30,6 +30,24 @@ async def test_depict_dispatches_to_task(app, calls):
     assert timeout == 10
 
 
+async def test_depict_passes_an_orientation_template(app, calls):
+    """The paper's orientation: an OCSR molfile goes to the task as is; without one the task
+    gets no template (drawn as before)."""
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "CCO", "template": "a molfile"})
+        plain = await c.post(f"{BASE}/depict", json={"smiles": "CCO"})
+    assert r.status_code == plain.status_code == 200
+    assert calls[0][1]["template"] == "a molfile"
+    assert "template" not in calls[1][1]
+
+
+async def test_depict_template_over_the_molfile_limit_422(app, calls):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "C", "template": "x" * 200_001})
+    assert r.status_code == 422
+    assert calls == []
+
+
 async def test_long_smiles_422(app, calls):
     async with make_client(app) as c:
         for path, body in [

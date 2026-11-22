@@ -1,5 +1,6 @@
-// A scaffold's R-group rows, read on request by the local R-group model: the action, its
-// progress or failure, then the rows as a table (one row per compound, one column per label).
+// A scaffold's R-group rows, read by the local R-group model (by itself once the scaffold and the
+// page's text are read, or by hand): its progress or failure, the rows as a table (one row per
+// compound, one column per label), then a small action (Run again).
 // Every value is model text: rendered as React text only, and marked as output to check.
 import { useState } from "react";
 import { errorText } from "../api/client";
@@ -32,10 +33,11 @@ const cell = (row: RgroupRow, label: string): string =>
 
 /** Nothing where the deployment cannot read R-groups and nothing was read before. */
 export default function RgroupRows({ predictionId, labels, tag, compact = false }: Props) {
-  const { available, extraction, start } = useRgroupReading(predictionId);
+  const { available, extraction, pending, start } = useRgroupReading(predictionId);
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const status = extraction?.status ?? "none";
+  // about to start by itself: as good as queued
+  const status = extraction?.status ?? (pending ? "queued" : "none");
   const rows = extraction?.rows ?? null;
   // Only unlabelled points (*): nothing the model can be asked for (the server answers 409).
   const askable = labels.some((label) => label !== UNLABELLED);
@@ -56,7 +58,7 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
     }
   }
 
-  const action = rows !== null ? "Read again" : status === "failed" ? "Try again" : "Extract R-groups";
+  const action = rows !== null ? "Run again" : status === "failed" ? "Try again" : "Extract R-groups";
   const said = active
     ? rgroupProgress(status === "none" ? "queued" : status)
     : status === "done" && rows !== null
