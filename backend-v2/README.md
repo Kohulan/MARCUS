@@ -265,7 +265,7 @@ positions, RDKit lays out the rest, CDK draws it (`marcus.workers.orient`, `marc
 segment, and a curated one, is drawn that way; it is stored under the SMILES and the template
 together. `POST /tools/depict` takes the same template as `template` (a molfile, at most
 200,000 bytes; Compare and image jobs send it). The y axis needs no flip (the libraries write
-(x, 1 - y)); the image's width:height squeeze is undone from the template's bond lengths. No
+(x, 1 - y)); both libraries already undo the image's width:height squeeze, so the positions are used as they are. No
 template, an unreadable or computed one, a common part under 3 atoms or half the structure, or a
 double bond the template would draw against the structure's own E/Z: the normal layout.
 

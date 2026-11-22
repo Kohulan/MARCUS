@@ -1,7 +1,7 @@
 """Drawings in the paper's orientation: atom positions for a SMILES, laid out like a template.
 
-MolScribe reads atom positions off the image and writes them into its molfile (v1 drew MolNexTR
-and MolScribe with their own coordinates, `shouldUseCoordinates`). Here such a molfile is the
+MolScribe and MolNexTR (from 7a4e03f) read atom positions off the image and write them into
+their molfile (v1 drew both with their own coordinates, `shouldUseCoordinates`). Here such a molfile is the
 template for every engine's structure of that image: the common part (an MCS
 of the structure and the template) keeps the template's positions, RDKit lays out the rest
 around it, and CDK draws the result instead of its own layout (marcus.workers.tools.depict).
@@ -10,16 +10,15 @@ The y axis: both libraries write each atom at (x, 1 - y) of the image's normalis
 pointing down in the image, so the molfile's y already points up, like every molfile and like
 CDK's model coordinates. No flip is needed here; flipping again would mirror the drawing.
 
-The x axis: both libraries resize the image to a square before reading it, so x and y are
-fractions of the image's width and height: a wide crop comes out squeezed. The width:height
-factor is estimated from the template itself, as the one that makes its bonds most nearly one
-length (printed structures draw every bond about the same length); a template whose bonds
-cannot tell (all along two mirrored directions, or a single bond) keeps the factor 1.
+The x axis: both libraries read the image resized to a square, then undo it before writing the
+molfile (_convert_graph_to_smiles in MolScribe 250f683 and MolNexTR: x * width / height, given
+the image), so the positions keep the drawing's proportions. They are used as they are, only
+scaled to BOND_LENGTH.
 
-Only a molfile that holds the image's positions is a template (image_layout). The pinned
-MolNexTR rewrites its molfile from its own SMILES (MolNexTR/chemical.py: MolFromSmiles, then
-MolToMolBlock), and MolScribe lays its molecule out itself when its structure does not sanitize
-(its _verify_chirality gives up before the positions are set): both are RDKit's computed layout,
+Only a molfile that holds the image's positions is a template (image_layout). MolNexTR before
+7a4e03f (fb7505b) rewrote its molfile from its own SMILES (MolFromSmiles, then MolToMolBlock), and
+MolScribe lays its molecule out itself when its structure does not sanitize (its
+_verify_chirality gives up before the positions are set): both are RDKit's computed layout,
 nearly every bond one length. Positions read off a printed drawing never are.
 
 Everything here is a fallback to the normal layout: any input it cannot use, a common part
@@ -40,31 +39,12 @@ MIN_COMMON_SHARE = 0.5
 MAX_ATOMS = 250
 MCS_TIMEOUT_S = 2  # below the depict task's 5 s soft limit, with the drawing still to come
 BOND_LENGTH = 1.5  # RDKit's depiction bond length: the laid-out rest matches the template
-_ASPECTS = [math.exp(math.log(0.2) + i * (math.log(5.0) - math.log(0.2)) / 200) for i in range(201)]
-_FLAT = 0.01  # a spread gain below this: the bonds cannot tell the factor
 # A computed layout: at least this share of the bonds within ONE_LENGTH of the median length
 # (measured on real output: computed layouts 0.86 to 1.00, positions from the image 0.09 and
 # 0.59). Fewer than FEW_BONDS bonds cannot tell.
 COMPUTED_SHARE = 0.8
 ONE_LENGTH = 0.01
 FEW_BONDS = 4
-
-
-def _spread(vectors: list[tuple[float, float]], factor: float) -> float:
-    """The standard deviation of the log bond lengths with x scaled by `factor`."""
-    logs = [0.5 * math.log((factor * dx) ** 2 + dy**2) for dx, dy in vectors]
-    mean = sum(logs) / len(logs)
-    return math.sqrt(sum((v - mean) ** 2 for v in logs) / len(logs))
-
-
-def width_factor(vectors: list[tuple[float, float]]) -> float:
-    """The factor x must be scaled by so the bonds (dx, dy) are most nearly one length; 1.0
-    when the bonds cannot tell."""
-    vectors = [(dx, dy) for dx, dy in vectors if dx * dx + dy * dy > 1e-12]
-    if len(vectors) < 2:
-        return 1.0
-    best = min(_ASPECTS, key=lambda f: _spread(vectors, f))
-    return best if _spread(vectors, 1.0) - _spread(vectors, best) > _FLAT else 1.0
 
 
 def _computed(lengths: list[float]) -> bool:
@@ -107,12 +87,11 @@ def _template(molfile: str):
     vectors = _bond_vectors(mol)
     if _computed([math.hypot(dx, dy) for dx, dy in vectors]):
         return None  # a computed layout says nothing about the image
-    factor = width_factor(vectors)
-    lengths = sorted(math.hypot(factor * dx, dy) for dx, dy in vectors)
+    lengths = sorted(math.hypot(dx, dy) for dx, dy in vectors)
     if not lengths or lengths[len(lengths) // 2] <= 1e-9:
         return None  # no bond, or no positions (a molfile with every atom at 0,0)
     scale = BOND_LENGTH / lengths[len(lengths) // 2]
-    return mol, [(factor * x * scale, y * scale) for x, y in pos]
+    return mol, [(x * scale, y * scale) for x, y in pos]
 
 
 def _structure(smiles: str):
