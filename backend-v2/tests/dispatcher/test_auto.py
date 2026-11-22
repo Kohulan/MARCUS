@@ -104,6 +104,7 @@ def test_nothing_to_do_asks_no_one(db_session, features):
 def test_a_paper_deleted_meanwhile_is_skipped(db_session, features, monkeypatch):
     from marcus.core import auto
     from marcus.core.pipeline import cancel_paper
+    from marcus.dispatcher import auto as pass_
 
     s = db_session
     features(rgroup=False)
@@ -111,7 +112,8 @@ def test_a_paper_deleted_meanwhile_is_skipped(db_session, features, monkeypatch)
     found = auto.annotation_candidates(s)
     cancel_paper(s, paper.id, remove_files=False)
     s.commit()
-    monkeypatch.setattr(auto, "annotation_candidates", lambda session: found)
+    # found before the delete, asked for after it
+    monkeypatch.setattr(pass_, "_ids", lambda session, query: found if query is not None else [])
     assert auto_once(s, lambda: BOTH) == 0
     assert _kinds(s) == []
 

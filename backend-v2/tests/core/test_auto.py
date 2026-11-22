@@ -209,3 +209,42 @@ def test_plain_structures_are_never_candidates(db_session):
     paper, scaffold, plain = done_paper(s)
     assert plain.id not in auto.rgroup_candidates(s)
     assert PLAIN["smiles"] == plain.smiles
+
+
+# --- one rule for the dispatcher and the API -------------------------------------------------
+
+
+def test_the_rule_is_none_where_the_feature_is_off(monkeypatch, clear_settings_cache):
+    from marcus.core.enums import StepKind
+
+    monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "0")
+    monkeypatch.setenv("MARCUS_RGROUP_ENABLED", "1")
+    clear_settings_cache()
+    assert auto.candidates_query(StepKind.ANNOTATE) is None
+    assert auto.candidates_query(StepKind.RGROUPS) is not None
+
+
+def test_about_to_start_is_a_short_window(db_session, monkeypatch, clear_settings_cache):
+    """The API's `auto_pending` uses the same rule over START_S, not the hour."""
+    from marcus.core.enums import StepKind
+
+    monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "1")
+    clear_settings_cache()
+    s = db_session
+    paper = _text_read_paper(s)
+    soon = auto.candidates_query(StepKind.ANNOTATE, paper.id, within_s=auto.START_S)
+    assert list(s.execute(soon).scalars()) == [paper.id]
+    _age_text(s, paper, hours=auto.START_S / 3600 + 0.01)
+    assert list(s.execute(soon).scalars()) == []
+    assert auto.annotation_candidates(s) == [paper.id]  # the dispatcher's hour still holds
+
+
+def test_the_scaffold_query_narrows_to_the_window_before_picking_the_newest():
+    """DISTINCT ON over every prediction of every live paper every 3 s would grow with the
+    database: the window is applied inside, before the newest per segment is picked."""
+    from sqlalchemy.dialects import postgresql
+
+    sql = str(auto.rgroup_query().compile(dialect=postgresql.dialect()))
+    inner = sql[sql.index("DISTINCT ON") :]
+    inner = inner[: inner.index(") AS anon")]
+    assert "make_interval" in inner

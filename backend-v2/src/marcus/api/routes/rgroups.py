@@ -61,7 +61,6 @@ async def get_owned_prediction(
 
 @router.get("/papers/{paper_id}/rgroups", response_model=RgroupList)
 async def get_paper_rgroups(
-    request: Request,
     paper_id: uuid.UUID,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
@@ -70,20 +69,18 @@ async def get_paper_rgroups(
     return RgroupList(
         available=reads.available(),
         extractions=await reads.for_paper(db, paper.id, paper.rgroup_text_labels),
-        auto_pending=await _auto_pending(request, db, paper.id),
+        auto_pending=await _auto_pending(db, paper.id),
     )
 
 
-async def _auto_pending(request: Request, db: AsyncSession, paper_id: uuid.UUID) -> list[uuid.UUID]:
-    """The paper's scaffolds the dispatcher will read by themselves: the feature is on, they
-    are candidates (marcus.core.auto) and a worker serves q.rgroup (the cached /ready check,
-    asked only when there is a candidate)."""
-    if not reads.available():
-        return []
-    found = list((await db.execute(auto.rgroup_query(paper_id, limit=MAX_LISTED))).scalars())
-    if not found or queue_for(StepKind.RGROUPS, None) not in await request.app.state.live_queues():
-        return []
-    return found
+async def _auto_pending(db: AsyncSession, paper_id: uuid.UUID) -> list[uuid.UUID]:
+    """The paper's scaffolds whose reading is about to start by itself: candidates within the
+    last few dispatcher passes (marcus.core.auto START_S). After that a reading that did not
+    start leaves the card's action. One narrow query; never the broker."""
+    query = auto.candidates_query(
+        StepKind.RGROUPS, paper_id, within_s=auto.START_S, limit=MAX_LISTED
+    )
+    return [] if query is None else list((await db.execute(query)).scalars())
 
 
 @router.get("/predictions/{prediction_id}/rgroups", response_model=RgroupExtractionOut)

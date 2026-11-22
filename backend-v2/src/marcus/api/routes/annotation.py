@@ -15,7 +15,8 @@ before are searched, in the chem process.
 The annotation also starts by itself once the paper's text is read (marcus.core.auto, the
 dispatcher): no rate limit is charged for that. It runs beside the paper's read: the paper's
 status, steps and progress never show it, so a client reads GET again while `step` is active
-or `auto_pending` says a run is about to start.
+or `auto_pending` says a run is about to start (the few seconds before the dispatcher's next
+passes; marcus.core.auto START_S).
 """
 
 import uuid
@@ -52,26 +53,22 @@ NOTHING_TO_CORRECT = "This paper has no annotation yet"
 
 @router.get("/papers/{paper_id}/annotation", response_model=AnnotationOut)
 async def get_annotation(
-    request: Request,
     paper_id: uuid.UUID,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> AnnotationOut:
     paper = await get_owned_paper(db, owner, paper_id)
     out = await reads.annotation_out(db, paper.id)
-    out.auto_pending = await _auto_pending(request, db, paper.id)
+    out.auto_pending = await _auto_pending(db, paper.id)
     return out
 
 
-async def _auto_pending(request: Request, db: AsyncSession, paper_id: uuid.UUID) -> bool:
-    """The dispatcher will start this paper's annotation by itself: the feature is on, the
-    paper is a candidate (marcus.core.auto) and a worker serves q.llm (the cached /ready
-    check, asked only for a candidate)."""
-    if not get_settings().annotate_enabled:
-        return False
-    if await db.scalar(auto.annotation_query(paper_id)) is None:
-        return False
-    return queue_for(StepKind.ANNOTATE, None) in await request.app.state.live_queues()
+async def _auto_pending(db: AsyncSession, paper_id: uuid.UUID) -> bool:
+    """The annotation is about to start by itself: the paper became a candidate within the
+    last few dispatcher passes (marcus.core.auto START_S). After that a run that did not start
+    leaves the manual action. One narrow query; never the broker."""
+    query = auto.candidates_query(StepKind.ANNOTATE, paper_id, within_s=auto.START_S)
+    return query is not None and await db.scalar(query) is not None
 
 
 @router.post(
