@@ -1,6 +1,6 @@
 # Next session — written 2026-11-22 (updated after the ~20:10 UTC deploy), by session handoff
 - Milestone/phase: tester feedback, phase B (brief /home/kohulan/MARCUS-training/review-feedback/PHASE-B-BRIEF.md). LIVE on jarvis: Markush Phase 2, the Phase 2 follow-ups, one model for annotation and R-groups, MolNexTR image coordinates. Markush Phase 3 (enumeration) is not started and not decided.
-- Last commit: main 86ea787 "Merge pull request #55 from Kohulan/feature/molnextr-coords" (pushed: yes; it includes #51 to #54). Local /home/kohulan/MARCUS main is at a9009ca, 44 commits behind origin/main. Pull with care: NEXT-SESSION.md is modified and stays uncommitted (owner choice).
+- Last commit: main 86ea787 "Merge pull request #55 from Kohulan/feature/molnextr-coords" (pushed: yes; it includes #51 to #54). Local /home/kohulan/MARCUS main is at a9009ca, 44 commits behind origin/main. NEXT-SESSION.md is now tracked in git (PR #56).
 - Baseline:
   - Backend: 1597 passed, 1 skipped (`-m "not ml and not e2e"`). Frontend: vitest 980, Playwright @mocked 48.
   - One model nuextract3-marcus-multi-v1 (annotation and R-groups): annotation test F1 0.711; R-group text 0.933, image 0.621; it invented 0 rows. Report: /home/kohulan/MARCUS-training/multitask/REPORT.md.
