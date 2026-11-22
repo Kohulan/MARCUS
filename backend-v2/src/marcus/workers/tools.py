@@ -88,13 +88,17 @@ def _sdg(molecule):
     return gen.getMolecule()
 
 
-def _layout(molecule, smiles: str, template: str):
+def _layout(molecule, smiles: str, template: str | list[str]):
     """2D positions for `molecule` (CDK's reading of `smiles`): the paper's orientation from an
     OCSR template molfile (marcus.workers.orient, RDKit, same atom order as CDK) when it can
-    be had, else CDK's own layout. Wedges are set from the stereo on the given positions."""
+    be had, else CDK's own layout. `template`: one molfile, or candidates in the order they are
+    preferred (the first with the image's positions is used, orient.first_template). Wedges are
+    set from the stereo on the given positions."""
     from marcus.workers import orient  # RDKit, as the highlight match: only where it runs
 
-    coords = orient.oriented_coords(smiles, template) if template else None
+    candidates = [template] if isinstance(template, str) else list(template or [])
+    chosen = orient.first_template(candidates)
+    coords = orient.oriented_coords(smiles, chosen) if chosen else None
     if coords is None or len(coords) != molecule.getAtomCount():
         return _sdg(molecule)
     jpype = _jvm()
@@ -190,12 +194,12 @@ def depict(
     width: int,
     height: int,
     highlight: str = "",
-    template: str = "",
+    template: str | list[str] = "",
 ) -> str:
     """CDK StandardGenerator depiction (v1 defaults: kekulize, CIP, CDK2D colours, white
     background, fill-to-fit). SVG as text; PNG as base64. `highlight` is an optional SMARTS.
-    `template`: an OCSR molfile with the image's atom positions; the drawing then follows the
-    paper's orientation where it can (_layout)."""
+    `template`: an OCSR molfile with the image's atom positions, or candidates in order; the
+    drawing then follows the paper's orientation where it can (_layout)."""
     jpype = _jvm()
     J = jpype.JClass
     mol = _smiles_to_cdk(smiles)
@@ -418,7 +422,7 @@ def depict_task(
     width: int = 512,
     height: int = 512,
     highlight: str = "",
-    template: str = "",
+    template: str | list[str] = "",
 ) -> dict:
     return _envelope(depict, smiles, fmt, width, height, highlight, template)
 

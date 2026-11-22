@@ -11,7 +11,7 @@ from rdkit import Chem
 from rdkit.Chem import rdDepictor
 from rdkit.Geometry import Point3D
 
-from marcus.workers.orient import image_layout, oriented_coords, width_factor
+from marcus.workers.orient import image_layout, oriented_coords
 
 FERULIC = "COc1cc(/C=C/C(=O)O)ccc1O"  # no symmetry: every atom maps one way
 
@@ -34,7 +34,8 @@ def _ocsr_molfile(
 ):
     """The molfile an OCSR library writes for a crop of `width` x `height` in which the
     structure is drawn as `pos` (y up): image coordinates (y down) as fractions of the width
-    and height, then each atom at (x, 1 - y), as MolScribe/MolNexTR `_verify_chirality` do.
+    and height, x corrected for the aspect ratio (x * width / height, both scaled by 10) and
+    each atom at (x, 1 - y), as MolScribe/MolNexTR `_convert_graph_to_smiles` do.
     Each atom is read `jitter` bond lengths off (a fixed seed), as a model reads a printed
     drawing: no two bonds come out exactly one length."""
     rng = random.Random(7)
@@ -48,7 +49,7 @@ def _ocsr_molfile(
     for i, (x, y) in enumerate(pos):
         u, v = (x - left) / width, (top - y) / height  # image: y grows downwards
         image.append((u, v))
-        conf.SetAtomPosition(i, Point3D(u, 1 - v, 0))
+        conf.SetAtomPosition(i, Point3D(u * width / height * 10, 1 - v * 10, 0))
     return Chem.MolToMolBlock(out), image
 
 
@@ -88,7 +89,7 @@ def _paired(smiles: str, template: Chem.Mol, coords, mapped_from: Chem.Mol | Non
 @pytest.mark.parametrize("degrees", [0, 70, 180, 250])
 def test_the_structure_keeps_the_template_orientation(degrees):
     """A wide crop (3:1) of the structure turned by `degrees`; the SMILES (another atom order)
-    comes out turned the same way, the same way round, and not squeezed."""
+    comes out turned the same way, the same way round, and in the drawing's proportions."""
     mol, pos = _layout(FERULIC, degrees)
     molfile, _ = _ocsr_molfile(mol, pos, width=30.0, height=10.0)
     smiles = "OC(=O)/C=C/c1ccc(O)c(OC)c1"  # the same structure in another atom order
@@ -104,7 +105,7 @@ def test_the_structure_keeps_the_template_orientation(degrees):
         * _area(coords, on_drawn[a], on_drawn[b], on_drawn[c])
         > 0
     )
-    # not squeezed: the bonds are one length again
+    # in the proportions of the drawing: the bonds are one length
     lengths = [
         math.dist(coords[b.GetBeginAtomIdx()], coords[b.GetEndAtomIdx()])
         for b in Chem.MolFromSmiles(smiles).GetBonds()
@@ -147,27 +148,6 @@ def test_written_hydrogens_keep_their_place_in_the_atom_order():
     molfile, _ = _ocsr_molfile(mol, pos, width=10.0, height=10.0)
     coords = oriented_coords("[H]OC(=O)c1ccccc1", molfile)
     assert coords is not None and len(coords) == 10
-
-
-def test_width_factor_finds_the_squeeze():
-    mol, pos = _layout(FERULIC, 20)
-    vectors = []
-    for b in mol.GetBonds():
-        (x1, y1), (x2, y2) = pos[b.GetBeginAtomIdx()], pos[b.GetEndAtomIdx()]
-        vectors.append(((x2 - x1) / 2.5, y2 - y1))
-    assert width_factor(vectors) == pytest.approx(2.5, rel=0.05)
-
-
-@pytest.mark.parametrize(
-    "vectors",
-    [
-        [],
-        [(1.0, 0.0)],  # one bond
-        [(0.87, 0.5), (0.87, -0.5), (0.87, 0.5)],  # a zig-zag chain: any squeeze keeps it even
-    ],
-)
-def test_width_factor_without_information_is_one(vectors):
-    assert width_factor(vectors) == 1.0
 
 
 def _template_of(smiles: str, degrees: float = 0) -> str:
@@ -311,3 +291,54 @@ def test_decimers_reading_follows_molscribes_positions(crop):
     assert abs(turn) < 5
     a, b, c = 0, tpl.GetNumAtoms() // 2, tpl.GetNumAtoms() - 1
     assert _side(pos, a, b, c) * _side(coords, on_drawn[a], on_drawn[b], on_drawn[c]) > 0
+
+
+# --- the fixed MolNexTR (7a4e03f): its positions are taken as they are ----------------------
+# Both libraries already correct the image's aspect ratio (x * width / height, y up:
+# _convert_graph_to_smiles in MolScribe 250f683 and MolNexTR), so the template's positions are
+# used as they are: any squeeze guessed from them would only stretch a correct drawing.
+
+FIXED = json.loads(
+    (Path(__file__).parent.parent / "fixtures" / "molnextr_7a4e03f.json").read_text()
+)
+
+
+@pytest.mark.parametrize("crop", ["corallomycetellains_p3_3", "stylissa-bromopyrroles_p6_2"])
+def test_a_fixed_molnextr_molfile_is_drawn_without_a_stretch(crop):
+    """MolNexTR's own structure on its own positions: every bond keeps its length relative to
+    the template's (one scale for all), nothing is stretched along x."""
+    out = FIXED[crop]
+    assert image_layout(out["molfile"])
+    coords = oriented_coords(out["smiles"], out["molfile"])
+    assert coords is not None
+    tpl = Chem.MolFromMolBlock(out["molfile"])
+    params = Chem.SmilesParserParams()
+    params.removeHs = False
+    drawn = Chem.MolFromSmiles(out["smiles"], params)
+    on_drawn = drawn.GetSubstructMatch(tpl)
+    assert len(on_drawn) == tpl.GetNumAtoms()
+    conf = tpl.GetConformer()
+    ratios = []
+    for bond in tpl.GetBonds():
+        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        p, q = conf.GetAtomPosition(i), conf.GetAtomPosition(j)
+        ratios.append(
+            math.dist(coords[on_drawn[i]], coords[on_drawn[j]]) / math.hypot(p.x - q.x, p.y - q.y)
+        )
+    assert max(ratios) / min(ratios) < 1.001
+
+
+# --- the first usable of several candidates (one rule for cards, focus mode and Compare) ------
+
+
+def test_the_first_candidate_with_the_images_positions_is_the_template():
+    """An old MolNexTR molfile (fb7505b, computed) never blocks a good MolScribe one."""
+    from marcus.workers.orient import first_template
+
+    scribe = REAL["p2_6"]["molscribe"]["molfile"]
+    old = REAL["p2_6"]["molnextr"]["molfile"]
+    assert first_template([old, scribe]) == scribe
+    assert first_template([scribe, old]) == scribe
+    assert first_template([old]) is None
+    assert first_template([]) is None
+    assert first_template(["", "not a molfile", scribe]) == scribe

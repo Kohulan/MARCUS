@@ -1,6 +1,8 @@
 // The single image result (/app/images/:id): the job's states, the reason of a failure
 // (never the raw error text), live refetches, a local-only edit, the gone page, and the
 // slot Compare (F10) plugs into.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -10,6 +12,13 @@ import { createQueryClient } from "../api/queries";
 import type { ImageJobOut, PredictionOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import ImageResult, { type ImageCompareProps } from "./ImageResult";
+
+// The fixed MolNexTR's molfile of a CC BY crop (backend-v2/tests/fixtures): image positions.
+const NEXTR = (
+  JSON.parse(
+    readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures/molnextr_7a4e03f.json"), "utf8"),
+  ) as Record<string, { molfile: string }>
+)["corallomycetellains_p3_3"]!.molfile;
 
 // The page's live stream: record each mount's onEvent and hand back a reconnect spy.
 const live = vi.hoisted(() => ({
@@ -160,13 +169,11 @@ describe("ImageResult", () => {
 
     it("draws the main structure in the image's orientation once MolNexTR gave its positions", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
-        job({ predictions: [{ ...molnextr, molfile: "<nextr>" }, pred()] }),
+        job({ predictions: [{ ...molnextr, molfile: NEXTR }, pred()] }),
       );
       renderPage();
       await screen.findByRole("img", { name: "Structure read from the image" });
-      await waitFor(() =>
-        expect(api.depict).toHaveBeenCalledWith(CAFFEINE, { template: "<nextr>" }),
-      );
+      await waitFor(() => expect(api.depict).toHaveBeenCalledWith(CAFFEINE, { template: NEXTR }));
     });
 
     it("stays on the job engine's structure when Compare's engines finish later", async () => {

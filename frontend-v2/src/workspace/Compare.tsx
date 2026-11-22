@@ -1,8 +1,14 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
-import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
-import { asEngine, firstRunNote, orientationTemplate } from "../api/engines";
+import { depictQuery, useReplyUrl } from "../api/depictions";
+import {
+  asEngine,
+  firstRunNote,
+  orientationTemplate,
+  TEMPLATE_ENGINES,
+  usableTemplate,
+} from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, Engine, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
@@ -102,18 +108,26 @@ export default function Compare({
   const [common, setCommon] = useState(false);
   const part = useCommonPart(valid, common);
 
-  // Drawings from /tools/depict: every one with the common part, and an image job's always
-  // (a segment's plain drawing is its stored depiction, free of the tools bucket). Each in the
-  // paper's orientation when MolNexTR or MolScribe gave the image's atom positions (the
-  // server does the same for a stored depiction).
-  const template = orientationTemplate(predictions);
-  const viaTools = (r: EngineRow) =>
-    r.prediction?.valid === true &&
-    (part.highlight !== null || target.kind === "image" || asEngine(r.engine) === null);
-  const drawn = rows.filter(viaTools);
+  // "Use coordinates" of MolScribe and MolNexTR (on at every opening; this dialog only). On: the
+  // engine's drawing uses its own positions from the image, and it can be the template of the
+  // others (MolScribe first). Off, or a molfile without the image's positions: the normal layout,
+  // and no template.
+  const [coords, setCoords] = useState<Readonly<Record<string, boolean>>>({});
+  const coordsOn = (engine: string) => coords[engine] !== false;
+  const shared = orientationTemplate(predictions, coords);
+  const templateOf = (r: EngineRow): PredictionOut | null =>
+    TEMPLATE_ENGINES.includes(r.engine)
+      ? coordsOn(r.engine) && usableTemplate(r.prediction)
+        ? r.prediction
+        : null
+      : shared;
+
+  // Every drawing from /tools/depict, each with its own template (the toggles decide), and with
+  // the common part when it is shown.
+  const drawn = rows.filter((r) => r.prediction?.valid === true);
   const depicts = useQueries({
     queries: drawn.map((r) =>
-      depictQuery(r.prediction!.smiles, part.highlight, part.renew, template),
+      depictQuery(r.prediction!.smiles, part.highlight, part.renew, templateOf(r)),
     ),
   });
   const depictOf = (r: EngineRow) => {
@@ -158,9 +172,23 @@ export default function Compare({
                     <span className="cmp-table__version">{r.prediction.engine_version}</span>
                   )}
                   {i === 0 && (
-                    <span className="cmp-table__hand">
+                    <span className="cmp-table__toggle">
                       <GlassButton tint="clear" size="sm" pressed={hand} onClick={toggleHand}>
                         Hand-drawn
+                      </GlassButton>
+                    </span>
+                  )}
+                  {TEMPLATE_ENGINES.includes(r.engine) && r.prediction?.molfile && (
+                    <span className="cmp-table__toggle">
+                      <GlassButton
+                        tint="clear"
+                        size="sm"
+                        label={`Use coordinates, ${r.label}`}
+                        disabled={!usableTemplate(r.prediction)}
+                        pressed={usableTemplate(r.prediction) && coordsOn(r.engine)}
+                        onClick={() => setCoords((c) => ({ ...c, [r.engine]: !coordsOn(r.engine) }))}
+                      >
+                        Use coordinates
                       </GlassButton>
                     </span>
                   )}
@@ -180,7 +208,7 @@ export default function Compare({
               </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
-                  <Drawing row={r} target={target} depict={depictOf(r)} templateId={template?.id} />
+                  <Drawing row={r} depict={depictOf(r)} />
                 </td>
               ))}
             </tr>
@@ -342,18 +370,13 @@ function resultTone(r: EngineRow): string {
   return r.state;
 }
 
-/** One engine's drawing: the stored depiction (segments) or a /tools/depict reply. */
+/** One engine's drawing: a /tools/depict reply. */
 function Drawing({
   row,
-  target,
   depict,
-  templateId,
 }: {
   row: EngineRow;
-  target: CompareTarget;
   depict: UseQueryResult<DepictReply> | undefined;
-  /** The orientation template's prediction: a new one draws the stored depiction again. */
-  templateId: string | undefined;
 }) {
   const p = row.prediction;
   // Not read yet: the word in the blank too (the Result row says it to a screen reader).
@@ -367,38 +390,13 @@ function Drawing({
         )}
       </div>
     );
-  if (!p.valid) return <Structure src={null} failed alt="" />;
-  if (depict) return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
-  return (
-    <StoredDrawing
-      segmentId={target.id}
-      prediction={p}
-      templateId={templateId}
-      alt={`Structure, ${row.label}`}
-    />
-  );
+  if (!p.valid || !depict) return <Structure src={null} failed alt="" />;
+  return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
 }
 
 function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt: string }) {
   const src = useReplyUrl(query.data);
   return <Structure src={src} failed={query.isError} alt={alt} />;
-}
-
-function StoredDrawing({
-  segmentId,
-  prediction,
-  templateId,
-  alt,
-}: {
-  segmentId: string;
-  prediction: PredictionOut;
-  templateId: string | undefined;
-  alt: string;
-}) {
-  const engine = asEngine(prediction.engine) ?? undefined;
-  const key = templateId ? `${prediction.id}.${templateId}` : prediction.id;
-  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, key, engine));
-  return <Structure src={src} failed={failed} onRetry={retry ?? undefined} alt={alt} />;
 }
 
 /**

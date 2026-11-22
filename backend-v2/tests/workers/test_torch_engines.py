@@ -136,7 +136,7 @@ def stubs(monkeypatch, tmp_path):
     monkeypatch.setattr(torch_common, "warm_up", lambda name, fn: calls.append(("warm", fn("w"))))
     monkeypatch.setattr(molnextr, "warm_up", torch_common.warm_up)
     monkeypatch.setattr(molscribe, "warm_up", torch_common.warm_up)
-    commits = {"MolNexTR": "fb7505b", "MolScribe": "250f683"}
+    commits = {"MolNexTR": "7a4e03f", "MolScribe": "250f683"}
     monkeypatch.setattr(molnextr, "package_commit", lambda dist: commits[dist])
     monkeypatch.setattr(molscribe, "package_commit", lambda dist: commits[dist])
 
@@ -216,7 +216,7 @@ def test_molscribe_device_setting(monkeypatch):
 def test_molnextr_load_and_predict_like_v1(stubs):
     stubs.bake("molnextr", "molnextr_best.pth")
     engine = molnextr.MolnextrEngine()
-    assert engine.name == Engine.MOLNEXTR and engine.version == "fb7505b"
+    assert engine.name == Engine.MOLNEXTR and engine.version == "7a4e03f"
     engine.load()
 
     assert stubs.calls[0] == "prepare_torch"  # thread caps and GPU share before the model
@@ -405,9 +405,9 @@ def test_package_commit_reads_direct_url(monkeypatch):
     monkeypatch.setattr(
         torch_common,
         "distribution",
-        lambda name: Dist(url % "fb7505bed4774d13e8feae2aafbb57da22114512"),
+        lambda name: Dist(url % "7a4e03f22c13f4c1c236effa9dab4a365a8e08d5"),
     )
-    assert torch_common.package_commit("MolNexTR") == "fb7505b"
+    assert torch_common.package_commit("MolNexTR") == "7a4e03f"
     monkeypatch.setattr(torch_common, "distribution", lambda name: Dist(None))
     with pytest.raises(RuntimeError, match="pinned git commit"):
         torch_common.package_commit("MolNexTR")
