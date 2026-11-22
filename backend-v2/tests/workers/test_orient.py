@@ -209,3 +209,42 @@ def test_the_template_engines_own_reading_needs_no_mcs(monkeypatch):
     on_tpl, on_drawn = _paired(smiles, mol, coords)
     turn, _ = _turn([pos[i] for i in on_tpl], [coords[j] for j in on_drawn])
     assert abs(turn) < 3
+
+
+def _same_side(coords, a, b, c, d) -> bool:
+    """c (on a) and d (on b) lie on the same side of the a=b axis: a Z (cis) drawing."""
+    (ax, ay), (bx, by) = coords[a], coords[b]
+
+    def side(p):
+        return (bx - ax) * (p[1] - ay) - (by - ay) * (p[0] - ax)
+
+    return side(coords[c]) * side(coords[d]) > 0
+
+
+Z_CINNAMIC = "OC(=O)/C=C\\c1ccccc1"
+E_CINNAMIC = "OC(=O)/C=C/c1ccccc1"  # atoms: 1 C(acid), 3 C=, 4 =C, 5 ring C
+
+
+def test_a_double_bond_keeps_the_structures_own_e_z():
+    """The template engine drew the double bond Z, the structure says E: the drawing shows E
+    (its label says E), never the template's Z (it falls back to the normal layout)."""
+    z_mol, z_pos = _layout(Z_CINNAMIC, 40)
+    molfile, _ = _ocsr_molfile(z_mol, z_pos, width=12.0, height=12.0)
+    coords = oriented_coords(E_CINNAMIC, molfile)
+    assert coords is None or not _same_side(coords, 3, 4, 1, 5)
+    # the Z reading itself keeps the template's place, Z and all
+    same = oriented_coords(Z_CINNAMIC, molfile)
+    assert same is not None and _same_side(same, 3, 4, 1, 5)
+
+
+def test_a_double_bond_without_e_z_follows_the_template():
+    z_mol, z_pos = _layout(Z_CINNAMIC, 40)
+    molfile, _ = _ocsr_molfile(z_mol, z_pos, width=12.0, height=12.0)
+    coords = oriented_coords("OC(=O)C=Cc1ccccc1", molfile)
+    assert coords is not None and _same_side(coords, 3, 4, 1, 5)
+
+
+def test_an_unsanitizable_template_falls_back():
+    pentavalent = Chem.MolFromSmiles("C(C)(C)(C)(C)C", sanitize=False)
+    rdDepictor.Compute2DCoords(pentavalent)
+    assert oriented_coords("CC(C)(C)C", Chem.MolToMolBlock(pentavalent, kekulize=False)) is None
