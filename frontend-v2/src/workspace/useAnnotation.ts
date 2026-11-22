@@ -3,11 +3,11 @@
 // run is beside the paper's read, so the paper's steps and stream never show it. And the
 // curator's writes.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api/client";
 import { keys } from "../api/queries";
 import { isStepActive } from "../api/status";
-import type { AnnotationOut, AnnotationValues } from "../api/types";
+import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
 
 export const ANNOTATION_POLL_MS = 2000;
 
@@ -53,4 +53,31 @@ export function useAnnotationActions(paperId: string) {
   const reset = useCallback(async () => put(await api.resetAnnotation(paperId)), [paperId, put]);
 
   return { start, save, reset };
+}
+
+/**
+ * What runs by itself becomes due when the paper's text or a structure is read: each time a
+ * docling or OCSR step of the paper ends (the live stream refreshes the steps), the annotation
+ * and the R-group list are read again, so a run the dispatcher starts then shows (and polls)
+ * without a reload. Not on the first steps the page sees: those queries read on their own.
+ */
+export function useAutoRunRefresh(paperId: string, steps: readonly StepOut[]): void {
+  const client = useQueryClient();
+  const ended = useMemo(
+    () =>
+      steps
+        .filter((s) => (s.kind === "docling" || s.kind === "ocsr") && !isStepActive(s.status))
+        .map((s) => `${s.id}:${s.status}`)
+        .sort()
+        .join(","),
+    [steps],
+  );
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = ended;
+    if (before === null || before === ended) return;
+    void client.invalidateQueries({ queryKey: keys.annotation(paperId) }, { cancelRefetch: false });
+    void client.invalidateQueries({ queryKey: keys.rgroups(paperId) }, { cancelRefetch: false });
+  }, [ended, client, paperId]);
 }
