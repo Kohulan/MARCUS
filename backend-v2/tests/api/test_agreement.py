@@ -7,7 +7,7 @@ import uuid
 
 from sqlalchemy import select
 
-from marcus.core.models import BackgroundStep, Curation, Step
+from marcus.core.models import BackgroundStep, Curation, Prediction, Step
 from tests.api.conftest import (
     finish,
     make_client,
@@ -299,3 +299,67 @@ async def test_bulk_and_group_decisions_freeze_each_structure(app, async_db_sess
         frozen = preds[rows[sid].shown_prediction_id]
         assert frozen.segment_id == sid  # its own structure
     assert preds[rows[repeat].shown_prediction_id].smiles == "OCC"
+
+
+async def _put(app, token, seg, status, shown=None):
+    body = {"status": status, "smiles": None, "molfile": None, "note": None}
+    query = "?decision=true" + (f"&shown_prediction_id={shown}" if shown else "")
+    async with make_client(app, token) as client:
+        return await client.put(f"/api/v2/segments/{seg}/curation{query}", json=body)
+
+
+async def _frozen(db, seg):
+    row = (
+        await db.execute(
+            select(Curation).where(Curation.segment_id == seg).execution_options(
+                populate_existing=True
+            )
+        )
+    ).scalar_one()
+    return row.shown_prediction_id
+
+
+async def test_a_decision_freezes_the_prediction_the_card_showed(app, async_db_session):
+    """The race: the card showed DECIMER's CCN (A); MolNexTR and MolScribe land CCO (B) before
+    the click reaches the server, so the server's own pick would be B. The browser names A:
+    A is frozen."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(0, "decimer"): "CCN", (1, "decimer"): "CCN"})
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")  # what the client read
+    seg = paper["segments"][0]
+    seen = seg["default_prediction_id"]
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+    r = await _put(app, token, seg["id"], "accepted", seen)
+    assert r.status_code == 200, r.text
+    assert await _frozen(db, uuid.UUID(seg["id"])) == uuid.UUID(seen)
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    assert next(s for s in paper["segments"] if s["id"] == seg["id"])["default_prediction_id"] == seen
+    # without it (an older client), the server's pick when the decision lands: the majority
+    other = next(s for s in paper["segments"] if s["id"] != seg["id"])
+    assert (await _put(app, token, other["id"], "accepted")).status_code == 200
+    frozen = await db.get(Prediction, await _frozen(db, uuid.UUID(other["id"])))
+    assert frozen.smiles == "CCO"
+
+
+async def test_the_shown_prediction_must_be_the_segments_own(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    paper = await _get(app, token, f"/api/v2/papers/{seeded.paper_id}")
+    first, second = paper["segments"]
+    foreign = second["predictions"][0]["id"]
+    r = await _put(app, token, first["id"], "accepted", foreign)
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"] == ["query", "shown_prediction_id"]
+    assert (await _put(app, token, first["id"], "accepted", str(uuid.uuid4()))).status_code == 422
+    assert await _frozen(db, uuid.UUID(first["id"])) is None  # nothing saved
+    items = [{"segment_id": first["id"], "status": "accepted", "shown_prediction_id": foreign}]
+    async with make_client(app, token) as client:
+        bad = await client.put(f"/api/v2/papers/{seeded.paper_id}/curation", json={"items": items})
+        items[0]["shown_prediction_id"] = first["predictions"][-1]["id"]
+        good = await client.put(f"/api/v2/papers/{seeded.paper_id}/curation", json={"items": items})
+    assert bad.status_code == 422 and good.status_code == 200
+    assert await _frozen(db, uuid.UUID(first["id"])) == uuid.UUID(first["predictions"][-1]["id"])

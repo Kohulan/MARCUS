@@ -112,10 +112,21 @@ async def put_curation(
     segment_id: uuid.UUID,
     body: CurationIn,
     decision: bool = False,
+    shown_prediction_id: uuid.UUID | None = None,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
     segment, paper = await get_owned_segment(db, owner, segment_id, with_labels=True)
+    # ?shown_prediction_id=: the prediction the card showed, frozen with a decision on it
+    # (marcus.api.decisions); it must be this segment's own.
+    if shown_prediction_id is not None and await db.scalar(
+        select(Prediction.segment_id).where(Prediction.id == shown_prediction_id)
+    ) != segment.id:
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": ["query", "shown_prediction_id"],
+                     "msg": "not a prediction of this segment"}],
+        )  # fmt: skip
     named = named_on(paper.rgroup_text_labels, segment.page)
     rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:
@@ -145,7 +156,8 @@ async def put_curation(
     # edit that keeps it); on a main-figure structure it goes to its repeats.
     if decision:
         try:
-            await record_decisions(db, paper, {segment.id: body.status})
+            shown = {segment.id: shown_prediction_id} if shown_prediction_id else None
+            await record_decisions(db, paper, {segment.id: body.status}, shown)
         except HTTPException:
             await db.rollback()
             raise

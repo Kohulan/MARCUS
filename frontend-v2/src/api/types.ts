@@ -203,6 +203,8 @@ export interface BulkCurationItem {
   segment_id: string;
   status: CurationStatus;
   note?: string | null;
+  /** The prediction the card showed: kept as the decided structure. Absent: the server's pick. */
+  shown_prediction_id?: string;
 }
 
 export interface MainFigureOut {

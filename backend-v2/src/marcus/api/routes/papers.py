@@ -66,7 +66,7 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.main_figure import stale_members
-from marcus.core.models import Curation, MainFigure, Owner, Paper, Segment
+from marcus.core.models import Curation, MainFigure, Owner, Paper, Prediction, Segment
 from marcus.core.pipeline import (
     RetryNotAllowed,
     cancel_paper,
@@ -194,9 +194,28 @@ async def put_bulk_curation(
         if "note" in item.model_fields_set:
             cur.note = item.note
         cur.updated_at = now
+    shown = {i.segment_id: i.shown_prediction_id for i in body.items if i.shown_prediction_id}
+    if shown:
+        owners = dict(
+            (
+                await db.execute(
+                    select(Prediction.id, Prediction.segment_id).where(
+                        Prediction.id.in_(shown.values())
+                    )
+                )
+            ).all()
+        )
+        if any(owners.get(pid) != sid for sid, pid in shown.items()):
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail=[{"type": "value_error", "loc": ["body", "items", "shown_prediction_id"],
+                         "msg": "not a prediction of that segment"}],
+            )  # fmt: skip
     # A bulk status is a decision: on a main-figure structure it goes to its repeats.
     try:
-        await record_decisions(db, paper, {item.segment_id: item.status for item in body.items})
+        decided = {item.segment_id: item.status for item in body.items}
+        await record_decisions(db, paper, decided, shown)
     except HTTPException:
         await db.rollback()
         raise

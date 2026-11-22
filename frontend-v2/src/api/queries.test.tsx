@@ -449,6 +449,59 @@ describe("a decision on a main-figure structure covers its repeats", () => {
   });
 });
 
+describe("a decision names the prediction the card showed", () => {
+  function shown(): PaperDetail {
+    const p = paper(null);
+    p.segments[0] = { ...p.segments[0]!, default_prediction_id: "pA" };
+    return p;
+  }
+
+  it("taken at the click, even when a newer pick lands before the save is sent", async () => {
+    client.setQueryData(keys.paper("p1"), shown());
+    const put = vi.mocked(api.putCuration);
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let done: Promise<unknown> = Promise.resolve();
+    act(() => {
+      done = result.current.save("s1", { status: "accepted" });
+      // the background engines land a new pick before the save goes out
+      const p = shown();
+      p.segments[0] = { ...p.segments[0]!, default_prediction_id: "pB" };
+      client.setQueryData(keys.paper("p1"), p);
+    });
+    await act(() => done);
+    expect(put.mock.calls[0]!.slice(2)).toEqual([true, "pA"]);
+  });
+
+  it("not for an edit with a structure of its own, nor a note", async () => {
+    client.setQueryData(keys.paper("p1"), shown());
+    const put = vi.mocked(api.putCuration);
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    await act(() =>
+      result.current.save("s1", { status: "accepted", structure: { smiles: "CCN", molfile: null } }),
+    );
+    expect(put.mock.calls.at(-1)!.length).toBe(3);
+    await act(() => result.current.save("s1", { note: "n" }));
+    expect(put.mock.calls.at(-1)!.length).toBe(3);
+  });
+
+  it("bulk items carry each card's shown prediction where it is known", async () => {
+    client.setQueryData(keys.paper("p1"), shown());
+    const bulk = vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 2 });
+    vi.spyOn(api, "getPaper").mockImplementation(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useBulkCuration("p1"), { wrapper });
+    await act(() =>
+      result.current.bulk([
+        { segment_id: "s1", status: "accepted" },
+        { segment_id: "s2", status: "accepted" },
+      ]),
+    );
+    expect(bulk).toHaveBeenCalledWith("p1", [
+      { segment_id: "s1", status: "accepted", shown_prediction_id: "pA" },
+      { segment_id: "s2", status: "accepted" },
+    ]);
+  });
+});
+
 describe("useSaveCuration without a cached paper", () => {
   it("fetches the paper first and builds on its stored curation", async () => {
     const stored = { status: "accepted", smiles: "CCN", molfile: "M  END", note: "kept" } as const;
