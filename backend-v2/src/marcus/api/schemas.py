@@ -106,6 +106,9 @@ class SegmentOut(BaseModel):
     bbox: list[int]
     curation: CurationOut | None
     predictions: list[PredictionOut]
+    # The main-figure structure this one repeats (same compound on another page:
+    # marcus.core.main_figure); None for every other structure, and without a main figure.
+    repeat_of: uuid.UUID | None = None
 
 
 class SegmentList(BaseModel):
@@ -133,6 +136,8 @@ class StepList(BaseModel):
 
 
 class PaperDetail(PaperSummary):
+    # The page (0-based) marked as the main figure, the paper's compound list; None: none.
+    main_figure_page: int | None
     counts: Counts
     segments: list[SegmentOut]
 
@@ -177,6 +182,18 @@ class CurationIn(BaseModel):
         # Whether RDKit can read the SMILES / molfile is checked by the route, after the owner
         # check and outside the event loop (marcus.api.chem.curation_error).
         return value.strip() if value is not None else None
+
+
+class MainFigureIn(BaseModel):
+    """The page (0-based) to mark as the paper's main figure; null clears the mark."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page: int | None = Field(..., ge=0)
+
+
+class MainFigureOut(BaseModel):
+    main_figure_page: int | None
 
 
 MAX_BULK_ITEMS = 500

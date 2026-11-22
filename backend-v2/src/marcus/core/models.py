@@ -335,3 +335,19 @@ class RgroupExtraction(Base):
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     finished_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+
+
+class MainFigure(Base):
+    """The page the user marked as a paper's main figure, its compound list: its structures come
+    first, and a structure on another page showing the same compound is a repeat of one of them
+    (marcus.core.main_figure). At most one per paper; no row: none. A table of its own, not a
+    papers column: the papers rows stay as the migration tests of older revisions write them."""
+
+    __tablename__ = "main_figures"
+    __table_args__ = (CheckConstraint("page >= 0", name="ck_main_figures_page"),)
+
+    paper_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("papers.id", ondelete="CASCADE"), primary_key=True
+    )
+    page: Mapped[int] = mapped_column(Integer)  # 0-based, as Segment.page
+    updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
