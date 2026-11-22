@@ -210,3 +210,80 @@ async def test_inchikeys_are_cached_per_structure(app, async_db_session, monkeyp
     assert _repeats(await _paper(app, token, paper_id))[str(a)] == str(s0)
     assert _repeats(await _paper(app, token, paper_id))[str(a)] == str(s0)
     assert asked == [3]  # CCO (twice the same), OCC, CCN, in one trip; the second read: none
+
+
+# --- counts: the paper list counts each compound once ----------------------------------------
+
+
+async def _listed(app, token, paper_id):
+    async with make_client(app, token) as client:
+        papers = (await client.get("/api/v2/papers")).json()["papers"]
+    return next(p for p in papers if p["id"] == str(paper_id))
+
+
+def _counts(p: dict) -> tuple[int, int, int, int, int]:
+    return p["structures"], p["accepted"], p["rejected"], p["to_review"], p["failed"]
+
+
+async def test_the_paper_list_leaves_repeats_out_of_its_counts(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (_, _, a, _, _) = await _three_pages(db, alice)
+    other = await seed_paper(db, alice)  # no main figure: counted as before
+    assert _counts(await _listed(app, token, paper_id)) == (5, 0, 0, 5, 0)
+
+    await _mark(app, token, paper_id, 0)
+    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 0, 4, 0)  # a repeats s0
+    assert _counts(await _listed(app, token, other.paper_id)) == (2, 0, 0, 2, 0)
+    # the paper's own read counts the same
+    assert _counts(await _paper(app, token, paper_id)) == (4, 0, 0, 4, 0)
+
+    # an accepted repeat leaves "accepted", not "to review"
+    async with make_client(app, token) as client:
+        body = {"items": [{"segment_id": str(a), "status": "accepted"}]}
+        assert (await client.put(f"/api/v2/papers/{paper_id}/curation", json=body)).is_success
+    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 0, 4, 0)
+
+    await _mark(app, token, paper_id, None)
+    assert _counts(await _listed(app, token, paper_id)) == (5, 1, 0, 4, 0)
+
+
+async def test_list_counts_ask_the_chem_process_only_for_papers_with_a_main_figure(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    first, _ = await _three_pages(db, alice)
+    second, _ = await _three_pages(db, alice)
+    monkeypatch.setattr(read, "_KEYS", OrderedDict())
+    real = read.CHEM.run
+    asked: list[int] = []
+
+    async def counting(fn, items):
+        asked.append(len(items))
+        return await real(fn, items)
+
+    monkeypatch.setattr(read.CHEM, "run", counting)
+    await _listed(app, token, first)
+    assert asked == []  # no main figure, no work
+    await _mark(app, token, first, 0)
+    await _mark(app, token, second, 0)
+    assert _counts(await _listed(app, token, first)) == (4, 0, 0, 4, 0)
+    assert _counts(await _listed(app, token, second)) == (4, 0, 0, 4, 0)
+    assert asked == [3]  # both papers in one trip (same 3 structures), then the cache
+
+
+async def test_list_counts_with_a_busy_chem_process_count_every_structure(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, _ = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+
+    async def busy(fn, *args):
+        raise HTTPException(status_code=503, detail="busy, try again")
+
+    monkeypatch.setattr(read, "_KEYS", OrderedDict())
+    monkeypatch.setattr(read.CHEM, "run", busy)
+    assert _counts(await _listed(app, token, paper_id)) == (5, 0, 0, 5, 0)
