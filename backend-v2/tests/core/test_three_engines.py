@@ -158,30 +158,120 @@ def _age(s, paper, engine, seconds):
     s.commit()
 
 
-def test_waiting_background_steps_expire_without_failing_anything(db_session):
-    """No live worker on q.molscribe: its background steps are cancelled once past the queue's
-    wait allowance; MolNexTR's (served) wait up to BACKGROUND_MAX_WAIT_S. Cancelled, not
-    failed: the paper stays done."""
-    from marcus.dispatcher.pick import BACKGROUND_MAX_WAIT_S, watchdog_once
+class Clock:
+    def __init__(self):
+        self.t = 1000.0
 
-    s = db_session
-    paper = segmented(s)
+    def __call__(self):
+        return self.t
+
+
+def _decimer_done(s, paper):
     for st in steps(s, paper, "ocsr", "pending"):
         if st.engine == "decimer":
             finish(s, st, OCSR)
+    s.commit()
+
+
+def test_waiting_background_steps_expire_without_failing_anything(db_session):
+    """q.molscribe has no live worker: its background steps are cancelled once it was seen
+    unserved for its whole wait allowance; MolNexTR's (served) wait up to
+    BACKGROUND_MAX_WAIT_S. Cancelled, not failed: the paper stays done."""
+    from marcus.core.queues import QUEUE_WAIT_S
+    from marcus.dispatcher.pick import BACKGROUND_MAX_WAIT_S, BackgroundWatch, watchdog_once
+
+    s = db_session
+    paper = segmented(s)
+    _decimer_done(s, paper)
     _age(s, paper, "molscribe", 400)
     _age(s, paper, "molnextr", 400)
+    clock = Clock()
+    watch = BackgroundWatch(clock)
     live = {"q.decimer", "q.molnextr", "q.cpu"}
-    watchdog_once(s, live_queues=lambda: live)
+    watchdog_once(s, live_queues=lambda: live, watch=watch)  # first seen unserved: nothing yet
+    assert {st.status for st in steps(s, paper, "ocsr") if st.engine != "decimer"} == {"pending"}
+    clock.t += QUEUE_WAIT_S["q.molscribe"]
+    watchdog_once(s, live_queues=lambda: live, watch=watch)
     by_engine = {st.engine: st.status for st in steps(s, paper, "ocsr")}
     assert by_engine == {"decimer": "done", "molnextr": "pending", "molscribe": "cancelled"}
     _age(s, paper, "molnextr", BACKGROUND_MAX_WAIT_S + 60)
-    watchdog_once(s)  # no liveness known: only the time limit
+    watchdog_once(s, watch=watch)  # no liveness known: only the time limit
     assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molnextr"} == {
         "cancelled"
     }
     s.refresh(paper)
     assert paper.status == "done" and paper.error is None
+
+
+def test_one_missed_probe_cancels_nothing(db_session):
+    """A worker restart or one broadcast reply missed: the queue is served again before its
+    allowance has passed, so the count starts over."""
+    from marcus.core.queues import QUEUE_WAIT_S
+    from marcus.dispatcher.pick import BACKGROUND_PROBE_EVERY_S, BackgroundWatch, watchdog_once
+
+    s = db_session
+    paper = segmented(s)
+    _decimer_done(s, paper)
+    _age(s, paper, "molscribe", 1200)  # waited long, but the queue is what counts
+    clock = Clock()
+    watch = BackgroundWatch(clock)
+    served = {"q.molnextr", "q.molscribe"}
+    unserved = {"q.molnextr"}
+    for live in (unserved, served, unserved):
+        watchdog_once(s, live_queues=lambda live=live: live, watch=watch)
+        clock.t += max(QUEUE_WAIT_S["q.molscribe"] - 10, BACKGROUND_PROBE_EVERY_S)
+    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molscribe"} == {
+        "pending"
+    }
+
+
+def test_background_steps_alone_probe_at_most_once_a_minute(db_session):
+    from marcus.dispatcher.pick import BACKGROUND_PROBE_EVERY_S, BackgroundWatch, watchdog_once
+
+    s = db_session
+    paper = segmented(s)
+    _decimer_done(s, paper)
+    clock = Clock()
+    watch = BackgroundWatch(clock)
+    calls = []
+
+    def live():
+        calls.append(clock.t)
+        return {"q.molnextr", "q.molscribe", "q.decimer"}
+
+    for _ in range(3):  # watchdog runs 10 s apart
+        watchdog_once(s, live_queues=live, watch=watch)
+        clock.t += 10
+    assert len(calls) == 1
+    clock.t += BACKGROUND_PROBE_EVERY_S
+    watchdog_once(s, live_queues=live, watch=watch)
+    assert len(calls) == 2
+
+
+def test_a_step_asked_for_meanwhile_is_not_expired(db_session):
+    """Review finding: the watchdog scans, then the user asks for MolScribe (the waiting
+    background step becomes the paper's own, the done paper busy again), then the expiry runs
+    on its earlier scan: the step stays the paper's own, and the paper ends normally."""
+    from marcus.core.pipeline import request_ocsr
+    from marcus.dispatcher.pick import BACKGROUND_MAX_WAIT_S, _waiting_background, expire_background
+
+    s = db_session
+    paper = segmented(s)
+    _decimer_done(s, paper)
+    _age(s, paper, "molscribe", BACKGROUND_MAX_WAIT_S + 60)
+    scanned = _waiting_background(s)
+    s.rollback()
+    target = next(st for st in steps(s, paper, "ocsr") if st.engine == "molscribe")
+    request_ocsr(s, target.segment_id, Engine.MOLSCRIBE)
+    s.commit()
+    assert expire_background(s, scanned, {"q.molscribe"}) == 1  # the other segment's step
+    s.refresh(target)
+    assert target.status == "pending" and target.id not in background_ids(s)
+    s.refresh(paper)
+    assert paper.status == "processing"
+    finish(s, target, OCSR)
+    s.refresh(paper)
+    assert paper.status == "done"
 
 
 def test_a_young_background_step_is_left_alone(db_session):

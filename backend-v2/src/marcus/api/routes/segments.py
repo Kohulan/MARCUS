@@ -71,7 +71,10 @@ async def segment_depiction(
             )
         ).scalars()
     )
-    shown = await shown_structure(paper, segment, curation, predictions, engine)
+    # A structure frozen with an inherited decision is not drawn (api.read: it holds only while
+    # the structure is a hidden repeat, whose card is the main one's).
+    inherited = await db.get(InheritedStatus, segment.id) is not None
+    shown = await shown_structure(paper, segment, curation, predictions, engine, not inherited)
     template = orientation_templates(segment, predictions)
     # End the read-only transaction (and free its connection): a miss may wait up to WAIT_S
     # on the tools worker. commit, not rollback: a rollback would expire `owner`.
@@ -149,6 +152,10 @@ async def put_curation(
         curation.status = body.status
     curation.smiles = body.smiles
     curation.molfile = body.molfile
+    if body.smiles is not None or body.molfile is not None:
+        # a structure of its own: no prediction stays decided on (marcus.api.decisions), so
+        # clearing the structure later brings back the default pick, not an old frozen one
+        curation.shown_prediction_id = None
     curation.note = body.note
     curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)

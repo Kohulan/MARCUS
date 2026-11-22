@@ -4,6 +4,7 @@ import hashlib
 import logging
 import uuid
 from collections import OrderedDict, defaultdict
+from collections.abc import Collection
 from typing import NamedTuple, TypeVar
 
 from fastapi import HTTPException
@@ -341,18 +342,22 @@ def structure_out(model: type[_Structure], row: object, named: list[str] | None)
 
 
 def shown_source(
-    paper_engine: str, curation: Curation | None, predictions: list[Prediction]
+    paper_engine: str,
+    curation: Curation | None,
+    predictions: list[Prediction],
+    use_frozen: bool = True,
 ) -> tuple[str, str] | None:
     """("smiles" | "molfile", value) of the structure a segment shows, as the export picks it
     (curated, else pick_prediction), whatever its status; None without one, and for an R-group
     scaffold (it stands for several compounds). `predictions`: the segment's, newest first.
     Rows with only the columns read here do as well (_load_light). The one pick the linking
-    uses: a new default pick plugs in here."""
+    uses: a new default pick plugs in here. `use_frozen` False: the decided structure
+    (Curation.shown_prediction_id) is not taken (an inherited decision's: see link_entries)."""
     if curation is not None and (curation.smiles or curation.molfile):
         if curation.rgroups:
             return None
         return ("smiles", curation.smiles) if curation.smiles else ("molfile", curation.molfile)
-    frozen = curation.shown_prediction_id if curation is not None else None
+    frozen = curation.shown_prediction_id if curation is not None and use_frozen else None
     pick = pick_prediction(predictions, paper_engine, frozen)
     if pick is None or not pick.smiles or pick.rgroups:
         return None
@@ -460,6 +465,7 @@ async def repeat_links(
     strict: bool = False,
     known: dict[tuple[str, str], str | None] | None = None,
     compound_id_of: dict[uuid.UUID, str] | None = None,
+    inherited: Collection[uuid.UUID] = (),
 ) -> dict[uuid.UUID, uuid.UUID] | None:
     """repeat segment id -> its main-figure segment id (marcus.core.main_figure); empty
     without a main figure (`main_page` None). `segments` in (page, idx) order; `known`: keys
@@ -471,7 +477,7 @@ async def repeat_links(
     if main_page is None:
         return {}
     entries = await link_entries(
-        paper, segments, curations, predictions, strict, known, compound_id_of
+        paper, segments, curations, predictions, strict, known, compound_id_of, inherited
     )
     return None if entries is None else link_repeats(entries, main_page)
 
@@ -484,9 +490,13 @@ async def link_entries(
     strict: bool = False,
     known: dict[tuple[str, str], str | None] | None = None,
     compound_id_of: dict[uuid.UUID, str] | None = None,
+    inherited: Collection[uuid.UUID] = (),
 ) -> list[Entry] | None:
     """The marcus.core.main_figure entries of the segments (InChIKey of the structure shown,
-    compound ID), as repeat_links takes them; None when not ready (repeat_links)."""
+    compound ID), as repeat_links takes them; None when not ready (repeat_links). `inherited`:
+    structures with an inherited status (inherited_of). Their decided structure (frozen with
+    the inherited decision) never counts here: the links decide whether that decision still
+    holds, so they must not depend on it."""
     if compound_id_of is None:
         labels = await figure_labels(paper.id, strict)
         if labels is None:
@@ -494,7 +504,10 @@ async def link_entries(
         compound_id_of = segment_ids(segments, labels[0])
     ids = compound_id_of
     sources = [
-        shown_source(paper.engine, curations.get(s.id), predictions.get(s.id, [])) for s in segments
+        shown_source(
+            paper.engine, curations.get(s.id), predictions.get(s.id, []), s.id not in inherited
+        )
+        for s in segments
     ]
     needed = [src for src in sources if src is not None]
     if known is None:
@@ -614,14 +627,20 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
             src
             for p in marked
             for s in by_paper[p.id]
-            if (src := shown_source(p.engine, curations.get(s.id), predictions.get(s.id, [])))
+            if (
+                src := shown_source(
+                    p.engine, curations.get(s.id), predictions.get(s.id, []),
+                    s.id not in inherited.get(p.id, {}),
+                )
+            )  # fmt: skip
         ]
     )
     status_of = _statuses(curations)
     for p in marked:
         links = await repeat_links(
-            p, mains[p.id], by_paper[p.id], curations, predictions, known=known
-        )
+            p, mains[p.id], by_paper[p.id], curations, predictions, known=known,
+            inherited=inherited.get(p.id, {}),
+        )  # fmt: skip
         stale = stale_members(inherited.get(p.id, {}), links)
         fix |= CountFix(stale=stale) if links is None else count_fix(links, status_of, stale)
     return fix
@@ -689,17 +708,19 @@ async def segments_out(
     labels = await figure_labels(paper.id)
     boxes, names = labels if labels is not None else NO_LABELS
     ids = segment_ids(segments, boxes)
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
     entries: list[Entry] | None = []
     if main_page is not None:
         entries = (
             None  # the compound IDs are not known yet: the links are not ready
             if labels is None
-            else await link_entries(paper, segments, curations, predictions, compound_id_of=ids)
+            else await link_entries(
+                paper, segments, curations, predictions, compound_id_of=ids, inherited=inherited
+            )
         )
     links = None if entries is None else link_repeats(entries, main_page)
     conflicts = id_conflicts(entries, main_page, links) if entries and links is not None else {}
     page_of = {seg.id: seg.page for seg in segments}
-    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
     stale = stale_members(inherited, links)
     fix = CountFix(stale=stale) if links is None else count_fix(links, _statuses(curations), stale)
     repeats = links or {}
@@ -733,7 +754,10 @@ async def segments_out(
                 paper.engine,
                 predictions[seg.id],
                 ran.get(seg.id, {}),
-                curations[seg.id].shown_prediction_id if seg.id in curations else None,
+                # an inherited status that no longer holds: its decided structure neither
+                curations[seg.id].shown_prediction_id
+                if seg.id in curations and seg.id not in stale
+                else None,
             ),
             curation=curation_out(seg) if seg.id in curations else None,
             predictions=[

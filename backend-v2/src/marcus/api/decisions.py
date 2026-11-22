@@ -15,8 +15,10 @@ never change a decided card, its export or its links. The browser names the pred
 showed (`shown`, checked by the routes to be the segment's own): a prediction that landed after
 the card was drawn is never the one decided on. Without it (an older client, an API-key user)
 it is the server's pick when the decision lands. A card already frozen keeps its prediction. A
-repeat that inherits a decision freezes its own shown prediction (the server's pick). Back to
-unchecked, or a curated structure, clears it.
+repeat that inherits a decision freezes its own shown prediction (the server's pick); that one
+holds only with the inherited status: while it is stale (api.read) the card shows the default
+pick, the links never use it, and a decision on the card itself drops it. Back to unchecked,
+or a curated structure, clears it.
 """
 
 import uuid
@@ -26,7 +28,7 @@ from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from marcus.api.read import load_segments, main_figure_page, repeat_links
+from marcus.api.read import inherited_of, load_segments, main_figure_page, repeat_links
 from marcus.core.agreement import pick_prediction
 from marcus.core.main_figure import ACCEPTED, REJECTED, groups_of
 from marcus.core.models import Curation, InheritedStatus, Paper, Prediction
@@ -46,16 +48,29 @@ async def record_decisions(
     if not decided:
         return
     await db.flush()
-    await db.execute(delete(InheritedStatus).where(InheritedStatus.segment_id.in_(decided)))
+    # A structure decided on its own card loses its inherited mark, and the structure frozen
+    # with that inherited decision (it was not the one this card showed, see api.read).
+    was_inherited = set(
+        await db.scalars(
+            delete(InheritedStatus)
+            .where(InheritedStatus.segment_id.in_(decided))
+            .returning(InheritedStatus.segment_id)
+        )
+    )
     segments, curations, predictions = await load_segments(db, paper.id)
     for sid, status in decided.items():
         if sid in curations:
+            if sid in was_inherited:
+                curations[sid].shown_prediction_id = None
             seen = (shown or {}).get(sid)
             freeze(curations[sid], status, paper.engine, predictions.get(sid, []), seen)
     main_page = await main_figure_page(db, paper.id)
     if main_page is None:
         return
-    links = await repeat_links(paper, main_page, segments, curations, predictions, strict=True)
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
+    links = await repeat_links(
+        paper, main_page, segments, curations, predictions, strict=True, inherited=inherited
+    )
     groups = groups_of(links or {})
     now = datetime.now(UTC)
     for main, status in decided.items():

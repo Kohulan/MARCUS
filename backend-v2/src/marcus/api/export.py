@@ -118,7 +118,9 @@ def choose(
             continue
         member = by_id[chosen_member(seg.id, repeats, status_of)]
         others = {by_id[m].page for m in members if m != member.id}
-        record = _record(paper, member, curations.get(member.id), predictions, rows_of)
+        record = _record(
+            paper, member, curations.get(member.id), predictions, rows_of, member.id in stale
+        )
         if record is not None:
             out.append(replace(record, status=status, also_on_pages=tuple(sorted(others))))
     return out
@@ -130,9 +132,11 @@ def _record(
     cur: Curation | None,
     predictions: dict[uuid.UUID, list[Prediction]],
     rows_of: dict[uuid.UUID, dict],
+    stale: bool = False,
 ) -> Chosen | None:
     """One segment's record with its own status (the curated structure, else pick_prediction);
-    None without a structure."""
+    None without a structure. `stale`: an inherited status that no longer holds, whose decided
+    structure does not hold either."""
     named = named_on(paper.rgroup_text_labels, seg.page)
     status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
     row = {
@@ -142,7 +146,7 @@ def _record(
         "status": status,
         "note": cur.note if cur is not None else None,
     }
-    frozen = cur.shown_prediction_id if cur is not None else None
+    frozen = cur.shown_prediction_id if cur is not None and not stale else None
     pick = pick_prediction(predictions.get(seg.id, []), paper.engine, frozen)
     if cur is not None and (cur.smiles or cur.molfile):
         labels = _labels(cur, named)

@@ -96,6 +96,7 @@ async def shown_structure(
     curation: Curation | None,
     predictions: list[Prediction],
     engine: Engine | None,
+    use_frozen: bool = True,
 ) -> tuple[str, Source] | None:
     """The SMILES the UI shows for `segment` and where it comes from.
 
@@ -121,7 +122,7 @@ async def shown_structure(
             raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
     own = [p for p in predictions if p.segment_id == segment.id]
-    frozen = curation.shown_prediction_id if curation is not None else None
+    frozen = curation.shown_prediction_id if curation is not None and use_frozen else None
     pick = pick_prediction(own, paper.engine, frozen)
     return (pick.smiles, "predicted") if pick is not None and pick.smiles else None
 

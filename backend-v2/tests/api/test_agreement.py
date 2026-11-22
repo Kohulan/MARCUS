@@ -7,6 +7,7 @@ import uuid
 
 from sqlalchemy import select
 
+from marcus.core.agreement import inchikey_of
 from marcus.core.models import BackgroundStep, Curation, Prediction, Step
 from tests.api.conftest import (
     finish,
@@ -363,3 +364,91 @@ async def test_the_shown_prediction_must_be_the_segments_own(app, async_db_sessi
         good = await client.put(f"/api/v2/papers/{seeded.paper_id}/curation", json={"items": items})
     assert bad.status_code == 422 and good.status_code == 200
     assert await _frozen(db, uuid.UUID(first["id"])) == uuid.UUID(first["predictions"][-1]["id"])
+
+
+async def test_a_structure_edit_drops_the_frozen_prediction(app, async_db_session):
+    """Review finding: an edit with a structure of its own, even one that keeps the status (no
+    decision), clears the frozen prediction; clearing the structure later shows the default
+    pick, not the old frozen one."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(0, "decimer"): "CCN", (1, "decimer"): "CCN"})
+    seg = seeded.segment_ids[0]
+    assert (await _put(app, token, seg, "accepted")).status_code == 200
+    assert await _frozen(db, seg) is not None
+    edit = {"status": "accepted", "smiles": "CCCl", "molfile": None, "note": None}
+    async with make_client(app, token) as client:
+        assert (await client.put(f"/api/v2/segments/{seg}/curation", json=edit)).is_success
+    assert await _frozen(db, seg) is None
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+    back = {**edit, "smiles": None}
+    async with make_client(app, token) as client:
+        assert (await client.put(f"/api/v2/segments/{seg}/curation", json=back)).is_success
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    s0 = next(s for s in paper["segments"] if s["id"] == str(seg))
+    shown = next(p for p in s0["predictions"] if p["id"] == s0["default_prediction_id"])
+    assert shown["smiles"] == "CCO"  # the majority now, not the old CCN
+
+
+async def test_a_stale_inherited_decision_drops_its_frozen_structure(app, async_db_session):
+    """Review finding: a repeat inherits the main card's accept and freezes its own OCC; later
+    MolNexTR and MolScribe agree on CCN for it, and the main figure is unmarked, so the
+    inherited status no longer holds ("to review"). Its card, export and links take the
+    default pick (CCN), not the frozen OCC; a decision on the card itself freezes what it
+    shows."""
+    from marcus.core.models import Paper, Segment
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(0, "decimer"): "CCN", (1, "decimer"): "CCO"})
+
+    def add_repeat(s):
+        s.get(Paper, pid).pages = 2
+        seg = Segment(id=uuid.uuid4(), paper_id=pid, page=1, idx=0, bbox=[0, 0, 10, 10],
+                      image_sha256="7" * 64)  # fmt: skip
+        s.add(seg)
+        s.flush()
+        s.add(Curation(segment_id=seg.id, status="unchecked"))
+        s.add(Prediction(segment_id=seg.id, engine="decimer", engine_version="t", smiles="OCC",
+                         valid=True, ms=1, rgroups=[], inchikey=ETHANOL))  # fmt: skip
+        return seg.id
+
+    repeat = await db.run_sync(add_repeat)
+    await db.commit()
+    async with make_client(app, token) as client:
+        assert (await client.put(f"/api/v2/papers/{pid}/main-figure", json={"page": 0})).is_success
+    # the main-figure structure the repeat links to: the one read as CCO (same InChIKey)
+    main = await db.scalar(
+        select(Prediction.segment_id).where(
+            Prediction.segment_id.in_(seeded.segment_ids), Prediction.smiles == "CCO"
+        )
+    )
+    assert (await _put(app, token, main, "accepted")).status_code == 200
+    occ = await _frozen(db, repeat)
+    assert (await db.get(Prediction, occ)).smiles == "OCC"
+
+    def later(s):
+        for engine in ("molnextr", "molscribe"):
+            s.add(Prediction(segment_id=repeat, engine=engine, engine_version="t",
+                             smiles="CCN", valid=True, ms=1, rgroups=[],
+                             inchikey=inchikey_of("CCN", True)))  # fmt: skip
+
+    await db.run_sync(later)
+    await db.commit()
+    async with make_client(app, token) as client:
+        assert (await client.put(f"/api/v2/papers/{pid}/main-figure", json={"page": None})).is_success
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    card = next(s for s in paper["segments"] if s["id"] == str(repeat))
+    assert card["curation"]["status"] == "unchecked"  # stale
+    shown = next(p for p in card["predictions"] if p["id"] == card["default_prediction_id"])
+    assert shown["smiles"] == "CCN"
+    async with make_client(app, token) as client:
+        r = await client.get(f"/api/v2/papers/{pid}/export", params={"format": "json"})
+    exported = {s["segment_id"]: s["smiles"] for s in json.loads(r.content)["segments"]}
+    assert exported[str(repeat)] == "CCN"
+    assert (await _put(app, token, repeat, "accepted", shown["id"])).status_code == 200
+    assert await _frozen(db, repeat) == uuid.UUID(shown["id"])
