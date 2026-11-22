@@ -69,13 +69,16 @@ async def _curate(db, seg, *, status="unchecked", smiles=None, molfile=None) -> 
     await db.commit()
 
 
-async def _predict(db, seg, engine: str, smiles: str, valid: bool = True) -> None:
+async def _predict(
+    db, seg, engine: str, smiles: str, valid: bool = True, molfile: str | None = None
+) -> None:
     db.add(
         Prediction(
             segment_id=seg,
             engine=engine,
             engine_version="t1",
             smiles=smiles,
+            molfile=molfile,
             valid=valid,
             ms=1,
         )
@@ -503,3 +506,83 @@ async def test_depiction_chem_pool_busy_503_has_retry_after(
         r = await c.get(url(seg))
     assert r.status_code == 503 and r.headers["retry-after"] == "5"
     assert draws.seen == []
+
+
+# --- the paper's orientation: MolNexTR's (else MolScribe's) molfile is the template --------
+
+NEXTR_MOLFILE = "molnextr molfile\n  with the image's atom positions"
+SCRIBE_MOLFILE = "molscribe molfile"
+
+
+async def test_depiction_follows_molnextrs_positions(app, async_db_session, draws):
+    """Every drawing of the segment (the shown one, another engine's) goes with MolNexTR's
+    molfile as the template, and is stored under its own key (SMILES and template)."""
+    db = async_db_session
+    owner, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _predict(db, seg, "molscribe", "CCN", molfile=SCRIBE_MOLFILE)
+    await _predict(db, seg, "molnextr", "CCC", molfile=NEXTR_MOLFILE)
+    async with make_client(app, token) as c:
+        shown = await c.get(url(seg))
+        other = await c.get(url(seg, "?engine=molscribe"))
+        again = await c.get(url(seg))
+    assert shown.status_code == other.status_code == again.status_code == 200
+    assert [k["template"] for _, k, _ in draws.seen] == [NEXTR_MOLFILE, NEXTR_MOLFILE]
+    want = {**depiction.DEPICT_OPTIONS, "smiles": "CCO", "template": NEXTR_MOLFILE}
+    assert draws.seen[0][1] == want
+    path = storage.depiction_path(owner.id, depiction.drawing_key("CCO", NEXTR_MOLFILE))
+    assert path.read_bytes() == shown.content
+    assert not storage.depiction_path(owner.id, sha("CCO")).exists()
+
+
+async def test_depiction_template_falls_back_to_molscribe(app, async_db_session, draws):
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _predict(db, seg, "molnextr", "CCC", molfile=None)  # no molfile: no positions
+    await _predict(db, seg, "molnextr", "CCC", valid=False, molfile=NEXTR_MOLFILE)  # invalid
+    await _predict(db, seg, "molscribe", "CCN", molfile=SCRIBE_MOLFILE)
+    async with make_client(app, token) as c:
+        assert (await c.get(url(seg))).status_code == 200
+    assert draws.seen[0][1]["template"] == SCRIBE_MOLFILE
+
+
+async def test_depiction_without_a_template_is_drawn_as_before(app, async_db_session, draws):
+    db = async_db_session
+    owner, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _predict(db, seg, "decimer-hand", "CCCl", molfile="hand molfile")  # not a template
+    async with make_client(app, token) as c:
+        assert (await c.get(url(seg))).status_code == 200
+    assert "template" not in draws.seen[0][1]
+    assert storage.depiction_path(owner.id, sha("CCO")).exists()
+
+
+async def test_a_newer_template_draws_again(app, async_db_session, draws):
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _predict(db, seg, "molnextr", "CCC", molfile=NEXTR_MOLFILE)
+    async with make_client(app, token) as c:
+        await c.get(url(seg))
+        await _predict(db, seg, "molnextr", "CCC", molfile="a newer reading")
+        await c.get(url(seg))
+    assert [k["template"] for _, k, _ in draws.seen] == [NEXTR_MOLFILE, "a newer reading"]
+
+
+async def test_a_curated_structure_follows_the_template_too(app, async_db_session, draws):
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db)
+    seg = seeded.segment_ids[0]
+    await _predict(db, seg, "molnextr", "CCC", molfile=NEXTR_MOLFILE)
+    await _curate(db, seg, smiles="CCCO")
+    async with make_client(app, token) as c:
+        assert (await c.get(url(seg))).status_code == 200
+    assert draws.seen[0][1]["smiles"] == "CCCO"
+    assert draws.seen[0][1]["template"] == NEXTR_MOLFILE
+
+
+def test_drawing_key_is_the_smiles_hash_without_a_template():
+    assert depiction.drawing_key("CCO", None) == sha("CCO")
+    other = depiction.drawing_key("CCO", "u")
+    assert depiction.drawing_key("CCO", "t") not in (sha("CCO"), other)

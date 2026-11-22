@@ -9,6 +9,7 @@ import { useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
+import { orientationTemplate } from "../api/engines";
 import { createQueryClient } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
@@ -328,6 +329,68 @@ describe("Compare", () => {
       api.depictionUrl("s1", p.id, "molnextr"),
     );
     expect(api.depict).not.toHaveBeenCalled();
+  });
+
+  it("the paper's orientation: a segment's stored drawings change with MolNexTR's positions", () => {
+    const decimer = prediction({ engine: "decimer", smiles: "CCO" });
+    const nextr = prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" });
+    renderCompare({ predictions: [nextr, decimer] });
+    // the server draws it oriented; the key names the template so a new one is drawn again
+    expect(screen.getByRole("img", { name: "Structure, DECIMER" })).toHaveAttribute(
+      "src",
+      api.depictionUrl("s1", `${decimer.id}.${nextr.id}`, "decimer"),
+    );
+    expect(api.depict).not.toHaveBeenCalled();
+  });
+
+  it("the paper's orientation: an image job's drawings send MolNexTR's molfile (MolScribe's without one)", async () => {
+    const decimer = prediction({ engine: "decimer", smiles: "CCO" });
+    const scribe = prediction({ engine: "molscribe", smiles: "CCN", molfile: "<scribe>" });
+    const nextr = prediction({ engine: "molnextr", smiles: "CCC", molfile: "<nextr>" });
+    const view = renderCompare({ target: { kind: "image", id: "img1" }, predictions: [decimer, scribe] });
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<scribe>" }));
+    expect(client.getQueryData(["depict", "CCO", null, scribe.id])).toBeDefined();
+    view.unmount();
+    renderCompare({ target: { kind: "image", id: "img1" }, predictions: [nextr, decimer, scribe] });
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<nextr>" }));
+  });
+
+  it("the paper's orientation goes with the common part too", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.spyOn(api, "mcs").mockResolvedValue({
+      mcs_smarts: "[#6]-[#6]",
+      atom_count: 2,
+      bond_count: 1,
+      original_molecules: [],
+      highlight_token: "tok-1",
+    });
+    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" }),
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
+    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1", template: "<nextr>" };
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", lit));
+    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
+  });
+
+  it("orientationTemplate: the newest valid MolNexTR prediction with a molfile, else MolScribe's", () => {
+    const old = prediction({ engine: "molnextr", molfile: "<old>" });
+    const invalid = prediction({ engine: "molnextr", molfile: "<bad>", valid: false });
+    const bare = prediction({ engine: "molnextr", molfile: null });
+    const scribe = prediction({ engine: "molscribe", molfile: "<scribe>" });
+    const hand = prediction({ engine: "decimer-hand", molfile: "<hand>" });
+    expect(orientationTemplate([invalid, bare, scribe, old])).toBe(old);
+    expect(orientationTemplate([invalid, bare, hand, scribe])).toBe(scribe);
+    expect(orientationTemplate([hand, prediction()])).toBeNull();
   });
 
   it("shows Tanimoto with two decimals", async () => {

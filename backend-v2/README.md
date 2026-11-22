@@ -235,6 +235,20 @@ page names (all of them when it names none, or for a paper read before migration
 image job). `placeholder` in the API says whether a structure has placeholder atoms whatever is
 shown: COCONUT holds every one that has.
 
+### Drawings in the paper's orientation
+
+MolNexTR and MolScribe write the image's atom positions into their molfile. A segment's stored
+depiction (`GET /segments/{id}/depiction`) uses the molfile of its newest valid MolNexTR
+prediction (else MolScribe's) as a template: the common part (MCS) of the drawn structure and
+the template keeps the template's positions, RDKit lays out the rest, CDK draws it
+(`marcus.workers.orient`, `marcus.workers.tools.depict`). Every engine's structure of that
+segment, and a curated one, is drawn that way; it is stored under the SMILES and the template
+together. `POST /tools/depict` takes the same template as `template` (a molfile, at most
+200,000 bytes; Compare and image jobs send it). The y axis needs no flip (the libraries write
+(x, 1 - y)); the image's width:height squeeze is undone from the template's bond lengths. No
+template, an unreadable one, or a common part under 3 atoms or half the structure: the normal
+layout.
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,

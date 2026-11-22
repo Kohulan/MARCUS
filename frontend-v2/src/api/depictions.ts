@@ -21,7 +21,7 @@
 // private, max-age=86400 and the `v=<depictionKey>` in the URL).
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, isGone, ownerReady, svgBlobUrl, toApiError } from "./client";
-import type { DepictReply } from "./types";
+import type { DepictReply, PredictionOut } from "./types";
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const DEFAULT_WAIT_S = 5;
@@ -244,18 +244,27 @@ export type Highlight = { smarts: string; token: string };
 export type RenewHighlight = (stale: string) => Promise<Highlight | null>;
 
 /**
- * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing). The token
- * is not in the key: a new token for the same SMARTS draws the same picture. A highlighted
- * drawing refused with a 422 (the token expired, or the key rotated) asks `renew` for a new
- * token once and draws once more with it; a second refusal is the answer (no loop).
+ * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing), then the
+ * template prediction's id when the drawing follows the paper's orientation (`template`:
+ * orientationTemplate, its molfile is sent). The token is not in the key: a new token for the
+ * same SMARTS draws the same picture. A highlighted drawing refused with a 422 (the token
+ * expired, or the key rotated) asks `renew` for a new token once and draws once more with it;
+ * a second refusal is the answer (no loop).
  */
-export function depictQuery(smiles: string, highlight: Highlight | null, renew?: RenewHighlight) {
+export function depictQuery(
+  smiles: string,
+  highlight: Highlight | null,
+  renew?: RenewHighlight,
+  template?: Pick<PredictionOut, "id" | "molfile"> | null,
+) {
+  const oriented = template?.molfile ? { template: template.molfile } : {};
   const draw = (h: Highlight) =>
-    api.depict(smiles, { highlight: h.smarts, highlightToken: h.token });
+    api.depict(smiles, { highlight: h.smarts, highlightToken: h.token, ...oriented });
+  const key = ["depict", smiles, highlight?.smarts ?? null] as const;
   return {
-    queryKey: ["depict", smiles, highlight?.smarts ?? null] as const,
+    queryKey: template?.molfile ? [...key, template.id] : key,
     queryFn: async (): Promise<DepictReply> => {
-      if (highlight === null) return api.depict(smiles);
+      if (highlight === null) return template?.molfile ? api.depict(smiles, oriented) : api.depict(smiles);
       try {
         return await draw(highlight);
       } catch (err) {

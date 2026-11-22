@@ -2,7 +2,7 @@ import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
-import { asEngine, firstRunNote } from "../api/engines";
+import { asEngine, firstRunNote, orientationTemplate } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { DepictReply, Engine, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
@@ -99,13 +99,18 @@ export default function Compare({
   const part = useCommonPart(valid, common);
 
   // Drawings from /tools/depict: every one with the common part, and an image job's always
-  // (a segment's plain drawing is its stored depiction, free of the tools bucket).
+  // (a segment's plain drawing is its stored depiction, free of the tools bucket). Each in the
+  // paper's orientation when MolNexTR or MolScribe gave the image's atom positions (the
+  // server does the same for a stored depiction).
+  const template = orientationTemplate(predictions);
   const viaTools = (r: EngineRow) =>
     r.prediction?.valid === true &&
     (part.highlight !== null || target.kind === "image" || asEngine(r.engine) === null);
   const drawn = rows.filter(viaTools);
   const depicts = useQueries({
-    queries: drawn.map((r) => depictQuery(r.prediction!.smiles, part.highlight, part.renew)),
+    queries: drawn.map((r) =>
+      depictQuery(r.prediction!.smiles, part.highlight, part.renew, template),
+    ),
   });
   const depictOf = (r: EngineRow) => {
     const i = drawn.indexOf(r);
@@ -171,7 +176,7 @@ export default function Compare({
               </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
-                  <Drawing row={r} target={target} depict={depictOf(r)} />
+                  <Drawing row={r} target={target} depict={depictOf(r)} templateId={template?.id} />
                 </td>
               ))}
             </tr>
@@ -338,10 +343,13 @@ function Drawing({
   row,
   target,
   depict,
+  templateId,
 }: {
   row: EngineRow;
   target: CompareTarget;
   depict: UseQueryResult<DepictReply> | undefined;
+  /** The orientation template's prediction: a new one draws the stored depiction again. */
+  templateId: string | undefined;
 }) {
   const p = row.prediction;
   // Not read yet: the word in the blank too (the Result row says it to a screen reader).
@@ -357,7 +365,14 @@ function Drawing({
     );
   if (!p.valid) return <Structure src={null} failed alt="" />;
   if (depict) return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
-  return <StoredDrawing segmentId={target.id} prediction={p} alt={`Structure, ${row.label}`} />;
+  return (
+    <StoredDrawing
+      segmentId={target.id}
+      prediction={p}
+      templateId={templateId}
+      alt={`Structure, ${row.label}`}
+    />
+  );
 }
 
 function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt: string }) {
@@ -368,14 +383,17 @@ function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt:
 function StoredDrawing({
   segmentId,
   prediction,
+  templateId,
   alt,
 }: {
   segmentId: string;
   prediction: PredictionOut;
+  templateId: string | undefined;
   alt: string;
 }) {
   const engine = asEngine(prediction.engine) ?? undefined;
-  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, prediction.id, engine));
+  const key = templateId ? `${prediction.id}.${templateId}` : prediction.id;
+  const { src, failed, retry } = useDepiction(api.depictionUrl(segmentId, key, engine));
   return <Structure src={src} failed={failed} onRetry={retry ?? undefined} alt={alt} />;
 }
 

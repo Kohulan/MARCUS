@@ -158,6 +158,17 @@ describe("ImageResult", () => {
       created_at: "2026-11-18T10:02:00Z",
     });
 
+    it("draws the main structure in the image's orientation once MolNexTR gave its positions", async () => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ predictions: [{ ...molnextr, molfile: "<nextr>" }, pred()] }),
+      );
+      renderPage();
+      await screen.findByRole("img", { name: "Structure read from the image" });
+      await waitFor(() =>
+        expect(api.depict).toHaveBeenCalledWith(CAFFEINE, { template: "<nextr>" }),
+      );
+    });
+
     it("stays on the job engine's structure when Compare's engines finish later", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
         job({
