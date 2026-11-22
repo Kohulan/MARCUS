@@ -17,8 +17,9 @@ length (printed structures draw every bond about the same length); a template wh
 cannot tell (all along two mirrored directions, or a single bond) keeps the factor 1.
 
 Everything here is a fallback to the normal layout: any input it cannot use, a common part
-under MIN_COMMON_ATOMS atoms or under MIN_COMMON_SHARE of the structure's heavy atoms, or a
-structure or template over MAX_ATOMS atoms, gives None.
+under MIN_COMMON_ATOMS atoms or under MIN_COMMON_SHARE of the structure's heavy atoms, a
+structure or template over MAX_ATOMS atoms, or a double bond the template would draw against
+the structure's own E/Z (the template carries no stereo), gives None.
 """
 
 import math
@@ -59,13 +60,6 @@ def _template(molfile: str):
     positions, or None."""
     with BlockLogs():
         mol = Chem.MolFromMolBlock(molfile, sanitize=True)
-        if mol is None:
-            mol = Chem.MolFromMolBlock(molfile, sanitize=False)
-            if mol is not None:
-                try:
-                    Chem.SanitizeMol(mol)
-                except (ValueError, RuntimeError):
-                    return None
     if mol is None or mol.GetNumConformers() == 0 or not 0 < mol.GetNumAtoms() <= MAX_ATOMS:
         return None
     conf = mol.GetConformer()
@@ -148,6 +142,33 @@ def oriented_coords(smiles: str, template_molfile: str) -> list[tuple[float, flo
     except (ValueError, RuntimeError):
         return None
     conf = mol.GetConformer()
-    return [
+    coords = [
         (conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y) for i in range(mol.GetNumAtoms())
     ]
+    # The template carries no stereo (the MCS ignores it): a double bond it drew the other way
+    # round would show Z where the structure says E. Its own E/Z wins: the normal layout then.
+    return coords if _double_bonds_as_written(mol, coords) else None
+
+
+_CIS = (Chem.BondStereo.STEREOZ, Chem.BondStereo.STEREOCIS)
+_TRANS = (Chem.BondStereo.STEREOE, Chem.BondStereo.STEREOTRANS)
+
+
+def _double_bonds_as_written(mol, coords) -> bool:
+    """Every double bond with E/Z in the structure is drawn that way round at `coords`."""
+    for bond in mol.GetBonds():
+        stereo = bond.GetStereo()
+        if stereo not in _CIS + _TRANS or len(bond.GetStereoAtoms()) != 2:
+            continue
+        a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        c, d = bond.GetStereoAtoms()
+        (ax, ay), (bx, by) = coords[a], coords[b]
+
+        def side(i: int) -> float:
+            x, y = coords[i]
+            return (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+
+        cis = side(c) * side(d) > 0
+        if cis != (stereo in _CIS):
+            return False
+    return True
