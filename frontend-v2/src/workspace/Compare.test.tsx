@@ -236,6 +236,21 @@ describe("Compare", () => {
     expect(api.runPrediction).toHaveBeenCalledTimes(1);
   });
 
+  it("Hand-drawn starts on where the upload chose DECIMER hand-drawn (and starts it if not read)", async () => {
+    const { props } = renderCompare({
+      handDrawn: true,
+      predictions: [prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })],
+    });
+    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    expect(cell("Result", "DECIMER hand-drawn")).toBeDefined();
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1])).toEqual(["decimer-hand"]);
+    // off: normal DECIMER, started then (it is not read)
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
+    expect(cell("Result", "DECIMER")).toHaveTextContent("Not read yet");
+  });
+
   it("Hand-drawn on an already read hand-drawn model starts nothing; the similarity uses what the columns show", async () => {
     const cmp = vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
@@ -831,6 +846,21 @@ describe("Compare in the workspace", () => {
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
     expect(api.runPrediction).toHaveBeenCalledTimes(2);
     expect(EventSourceSpy).not.toHaveBeenCalled();
+  });
+
+  it("a paper uploaded with DECIMER hand-drawn opens Compare with Hand-drawn on; another engine with it off", async () => {
+    const hand = { ...paper([segment("s1", { predictions: [prediction({ engine: "decimer-hand" })] })]), engine: "decimer-hand" };
+    const first = renderWorkspace(hand, "?s=s1&focus=1");
+    await screen.findByRole("region", { name: /^Focus/ });
+    press("c");
+    let dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    first.unmount();
+    renderWorkspace(paper([segment("s1")]), "?s=s1&focus=1");
+    await screen.findByRole("region", { name: /^Focus/ });
+    press("c");
+    dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("a card's engine menu and a To check card open Compare in the grid", async () => {

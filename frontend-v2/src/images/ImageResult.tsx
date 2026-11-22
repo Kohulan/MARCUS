@@ -46,6 +46,8 @@ export type ImageCompareProps = {
   onStarted: () => void;
   /** The section's Close, at the end of Compare's head. */
   headAction?: ReactNode;
+  /** The image was read with DECIMER hand-drawn: Hand-drawn starts on. */
+  handDrawn?: boolean;
 };
 
 // F10's Compare, as a page section (no onClose): this page renders it below the sheet.
@@ -346,6 +348,7 @@ function Result({
               setEdit(null);
             }}
             onStarted={live.reconnect}
+            handDrawn={job.engine === "decimer-hand"}
             headAction={
               <GlassButton ref={closeCompare} tint="clear" size="sm" onClick={endCompare}>
                 Close
