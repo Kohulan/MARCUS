@@ -11,6 +11,9 @@ export function rgroupsOf(row: { rgroups?: string[] | undefined } | null | undef
   return (row?.rgroups ?? NONE) as string[];
 }
 
+/** The label of an unlabelled attachment point (a dummy atom without a drawn label). */
+export const UNLABELLED = "*";
+
 /** "R1, R2" */
 export const labelList = (labels: readonly string[]): string => labels.join(", ");
 

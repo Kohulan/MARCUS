@@ -246,6 +246,12 @@ def test_an_unlabelled_point_is_not_asked_for(stub):
     assert out["labels"] == ["R1", "R2"]
 
 
+def test_a_structure_with_only_unlabelled_points_is_bad_input(stub):
+    with pytest.raises(BadInput, match="no labelled R-groups"):
+        read_scaffold(get_reader(), _paper(), 0, ["*"])
+    assert stub.requests == []
+
+
 def test_an_answer_outside_the_schema_is_a_final_engine_error(stub):
     stub.content = _answer(("1", {"R9": "H"}))
     with pytest.raises(BadResult):

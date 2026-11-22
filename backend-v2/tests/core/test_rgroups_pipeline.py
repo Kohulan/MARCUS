@@ -124,6 +124,18 @@ def test_refusals(db_session):
     assert s.execute(select(RgroupExtraction)).first() is None
 
 
+def test_a_structure_whose_only_label_is_unlabelled_is_refused(db_session):
+    """`*` alone: nothing the model was trained to be asked for. Rows read before stay."""
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    finish(s, request_rgroups(s, scaffold.id), result())
+    s.execute(update(Prediction).where(Prediction.id == scaffold.id).values(rgroups=["*"]))
+    with pytest.raises(RgroupsNotAllowed):
+        request_rgroups(s, scaffold.id, rerun=True)
+    row = row_of(s, scaffold)
+    assert (row.status, row.labels, row.rows) == ("done", ["R1", "R2"], ROWS)
+
+
 def test_result_is_stored_and_a_rerun_replaces_it(db_session):
     s = db_session
     paper, scaffold, _ = done_paper(s)

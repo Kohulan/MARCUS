@@ -256,7 +256,6 @@ def test_the_text_still_decides_among_the_labelled_ones():
     assert rg.labels_to_ask(["R1", "R2", "Z", "*"], STYLISSA) == ["R1", "R2"]
 
 
-def test_a_structure_with_only_unlabelled_points_is_asked_as_before():
-    """Nothing labelled to ask for: the request stays as it was (an open question for the
-    owner, not decided here)."""
-    assert rg.labels_to_ask(["*"], "R1 = H *") == ["*"]
+def test_a_structure_with_only_unlabelled_points_has_nothing_to_ask():
+    """Owner decision 2026-11-22: such a structure is refused like one without R-groups."""
+    assert rg.labels_to_ask(["*"], "R1 = H *") == []

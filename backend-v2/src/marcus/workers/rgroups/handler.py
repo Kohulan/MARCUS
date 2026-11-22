@@ -84,6 +84,8 @@ def read_scaffold(reader, paper_id: uuid.UUID, page: int, labels: list[str]) -> 
     extra label); the result's `labels` are those."""
     context = _context(paper_id, page)
     labels = labels_to_ask(labels, context)
+    if not labels:
+        raise BadInput("the structure has no labelled R-groups")
     image = _image(paper_id, page)
     start = time.monotonic()
     raw, cut = reader.read(labels, context, image)
