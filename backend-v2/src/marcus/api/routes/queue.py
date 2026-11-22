@@ -4,8 +4,9 @@ This is an estimate, not a promise (the dispatcher is fair, not first-in-first-o
 
 - For each of my active papers and each queue it has waiting (pending/queued) steps in,
   `steps_ahead_by_queue[q]` = waiting steps in `q`, of any owner, created before this
-  paper's oldest waiting step in `q`. Background OCSR steps (the other engines, which the
-  dispatcher sends after every paper's own steps) count on neither side.
+  paper's oldest waiting step in `q`. Background OCSR steps (the other engines) count on
+  neither side: the dispatcher sends every paper's own steps before any of them, whatever the
+  owner's priority class.
 - `median_s[q]` = median of (finished_at - started_at) over `q`'s steps finished in the last
   hour; `DEFAULT_STEP_S` when there are none.
 - A paper's `estimate_s` = sum over q of steps_ahead[q] x median_s[q].

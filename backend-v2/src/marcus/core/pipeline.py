@@ -1102,7 +1102,9 @@ def request_ocsr(
     """Create a pending `ocsr` step for one segment with the given engine. Caller commits.
     A `done` paper becomes active again, with `started_ip` (the requesting address bucket).
     A step of that engine still waiting or running for the segment is returned instead (repeat
-    requests never queue a second one).
+    requests never queue a second one); a background one becomes the paper's own (its
+    background_steps row goes): the user asked for it, so it counts in the read and the
+    dispatcher sends it with the paper's own steps.
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
@@ -1115,6 +1117,15 @@ def request_ocsr(
         raise ValueError("paper is deleted")
     waiting = _waiting_ocsr(session, Step.segment_id == segment.id, engine)
     if waiting is not None:
+        promoted = session.execute(
+            delete(BackgroundStep)
+            .where(BackgroundStep.step_id == waiting.id)
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        if promoted and paper.status == PaperStatus.DONE.value:
+            paper.status = PaperStatus.PROCESSING.value
+            keep_address(paper, started_ip)
+        session.flush()
         return waiting
     step = _new_step(
         paper,

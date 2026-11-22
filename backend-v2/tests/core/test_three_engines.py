@@ -131,3 +131,64 @@ def test_the_dispatcher_sends_a_papers_own_steps_before_background_ones(db_sessi
     assert step.id not in background_ids(s)
     s.rollback()
     assert older.id != newer.id
+
+
+def test_background_steps_wait_behind_every_owners_own_steps(db_session):
+    """A browser owner (priority class 0) outranks an API-key owner (1), but not with a
+    background step: on q.molnextr the API owner's own read goes first."""
+    from marcus.core.enums import OwnerKind
+
+    s = db_session
+    browser = segmented(s, owner=make_owner(s))
+    api = segmented(s, engine=Engine.MOLNEXTR, owner=make_owner(s, OwnerKind.API_KEY))
+    s.commit()
+    step = pick_next(s, "q.molnextr")
+    assert step is not None and step.paper_id == api.id
+    assert step.id not in background_ids(s)
+    s.rollback()
+    assert browser.id != api.id
+
+
+def _age(s, paper, engine, seconds):
+    from datetime import UTC, datetime, timedelta
+
+    for st in steps(s, paper, "ocsr"):
+        if st.engine == engine:
+            st.created_at = datetime.now(UTC) - timedelta(seconds=seconds)
+    s.commit()
+
+
+def test_waiting_background_steps_expire_without_failing_anything(db_session):
+    """No live worker on q.molscribe: its background steps are cancelled once past the queue's
+    wait allowance; MolNexTR's (served) wait up to BACKGROUND_MAX_WAIT_S. Cancelled, not
+    failed: the paper stays done."""
+    from marcus.dispatcher.pick import BACKGROUND_MAX_WAIT_S, watchdog_once
+
+    s = db_session
+    paper = segmented(s)
+    for st in steps(s, paper, "ocsr", "pending"):
+        if st.engine == "decimer":
+            finish(s, st, OCSR)
+    _age(s, paper, "molscribe", 400)
+    _age(s, paper, "molnextr", 400)
+    live = {"q.decimer", "q.molnextr", "q.cpu"}
+    watchdog_once(s, live_queues=lambda: live)
+    by_engine = {st.engine: st.status for st in steps(s, paper, "ocsr")}
+    assert by_engine == {"decimer": "done", "molnextr": "pending", "molscribe": "cancelled"}
+    _age(s, paper, "molnextr", BACKGROUND_MAX_WAIT_S + 60)
+    watchdog_once(s)  # no liveness known: only the time limit
+    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molnextr"} == {
+        "cancelled"
+    }
+    s.refresh(paper)
+    assert paper.status == "done" and paper.error is None
+
+
+def test_a_young_background_step_is_left_alone(db_session):
+    from marcus.dispatcher.pick import watchdog_once
+
+    s = db_session
+    paper = segmented(s)
+    s.commit()
+    watchdog_once(s, live_queues=lambda: set())
+    assert {st.status for st in steps(s, paper, "ocsr")} == {"pending"}

@@ -74,7 +74,8 @@ class PaperCounts(NamedTuple):
 
 async def waiting_ocsr_step(db: AsyncSession, where, engine: Engine) -> uuid.UUID | None:
     """The OCSR step of `engine` still waiting or running for `where` (a segment's or an image
-    job's steps): a repeat click gets it back instead of queueing another one."""
+    job's steps): a repeat click gets it back instead of queueing another one. A background
+    step is left to pipeline.request_ocsr, which makes it the paper's own."""
     return await db.scalar(
         select(Step.id)
         .where(
@@ -82,6 +83,7 @@ async def waiting_ocsr_step(db: AsyncSession, where, engine: Engine) -> uuid.UUI
             Step.kind == StepKind.OCSR.value,
             Step.engine == engine.value,
             Step.status.in_(ACTIVE),
+            ~is_background(),
         )
         .limit(1)
     )
