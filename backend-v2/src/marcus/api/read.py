@@ -20,8 +20,16 @@ from marcus.core.enums import (
     StepKind,
     StepStatus,
 )
-from marcus.core.main_figure import CountFix, Entry, count_fix, link_repeats
-from marcus.core.models import Curation, MainFigure, Paper, Prediction, Segment, Step
+from marcus.core.main_figure import CountFix, Entry, count_fix, link_repeats, stale_members
+from marcus.core.models import (
+    Curation,
+    InheritedStatus,
+    MainFigure,
+    Paper,
+    Prediction,
+    Segment,
+    Step,
+)
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
 from marcus.core.rgroup_labels import shown_labels
 
@@ -89,7 +97,8 @@ async def paper_counts(
     `fix`: the linked groups of main-figure structures and their repeats (list_count_fix,
     segments_out) count once, under the group's status (core.main_figure.group_status), as the
     workspace shows them: repeats are not counted, a main with an accepted repeat counts as
-    accepted, a rejected main with a repeat not rejected as to review.
+    accepted, a rejected main with a repeat not rejected as to review; an inherited status that
+    no longer holds (stale) as to review.
     structures = segments; accepted / rejected = curations with that status; failed = the
     undecided ones whose read failed (_failed_structure); to_review = the rest (every segment
     has a curation row). failed_pages = distinct pages whose newest
@@ -103,6 +112,9 @@ async def paper_counts(
     accepted = Curation.status == "accepted"
     rejected = Curation.status == "rejected"
     failed = _failed_structure()
+    if fix.stale:  # an inherited status that no longer holds: to review
+        accepted = and_(accepted, Segment.id.not_in(fix.stale))
+        rejected = and_(rejected, Segment.id.not_in(fix.stale))
     if fix.promote:
         accepted = or_(accepted, Segment.id.in_(fix.promote))
         rejected = and_(rejected, Segment.id.not_in(fix.promote))
@@ -464,24 +476,46 @@ async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
     return segments, curations, predictions
 
 
+async def inherited_of(
+    db: AsyncSession, paper_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, dict[uuid.UUID, uuid.UUID]]:
+    """Per paper: its structures with an inherited status -> the main structure it came from
+    (InheritedStatus). One query; papers without any are left out."""
+    rows = await db.execute(
+        select(Segment.paper_id, InheritedStatus.segment_id, InheritedStatus.main_id)
+        .join(Segment, Segment.id == InheritedStatus.segment_id)
+        .where(Segment.paper_id.in_(paper_ids))
+    )
+    out: dict[uuid.UUID, dict[uuid.UUID, uuid.UUID]] = defaultdict(dict)
+    for paper_id, segment_id, main_id in rows.all():
+        out[paper_id][segment_id] = main_id
+    return out
+
+
 async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
-    """How the paper list counts the linked groups of `papers` (core.main_figure.count_fix).
-    Only papers with a main figure cost anything: one query for the main pages, three light ones
-    for their segments (_load_light), chem trips only for structures not cached. A paper whose
-    keys are not all known (the chem process busy) counts as if it had no links."""
+    """How the paper list counts the linked groups of `papers` (core.main_figure.count_fix),
+    and their stale inherited statuses. Only papers with a main figure cost much: one query for
+    the main pages, one for the inherited statuses, three light ones for the marked papers'
+    segments (_load_light), chem trips only for structures not cached. A paper whose keys are
+    not all known (the chem process busy) counts as if it had no links, every inherited status
+    to review."""
     if not papers:
         return CountFix()
+    ids = [p.id for p in papers]
     mains = dict(
         (
             await db.execute(
-                select(MainFigure.paper_id, MainFigure.page).where(
-                    MainFigure.paper_id.in_([p.id for p in papers])
-                )
+                select(MainFigure.paper_id, MainFigure.page).where(MainFigure.paper_id.in_(ids))
             )
         ).all()
     )
+    inherited = await inherited_of(db, ids)
+    fix = CountFix()
+    for pid, members in inherited.items():
+        if pid not in mains:  # no main figure: no group holds
+            fix |= CountFix(stale=stale_members(members, {}))
     if not mains:
-        return CountFix()
+        return fix
     segments, curations, predictions = await _load_light(db, list(mains))
     by_paper: dict[uuid.UUID, list] = defaultdict(list)
     for seg in segments:
@@ -497,28 +531,37 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
         ]
     )
     status_of = _statuses(curations)
-    fix = CountFix()
     for p in marked:
         links = await repeat_links(
             p, mains[p.id], by_paper[p.id], curations, predictions, known=known
         )
-        if links:
-            fix |= count_fix(links, status_of)
+        stale = stale_members(inherited.get(p.id, {}), links)
+        fix |= CountFix(stale=stale) if links is None else count_fix(links, status_of, stale)
     return fix
 
 
 async def segments_out(
     db: AsyncSession, paper: Paper, main_page: int | None
-) -> tuple[list[SegmentOut], CountFix | None]:
+) -> tuple[list[SegmentOut], CountFix, bool]:
     """The paper's segments; each structure shows the R-group labels its page's text names,
     and a repeat of a main-figure structure (`main_page`: main_figure_page) names it
-    (repeat_links). With them, how paper_counts counts the linked groups; None when the links
-    could not be computed (the chem process busy: no repeat_of at all)."""
+    (repeat_links); an inherited status that no longer holds shows as unchecked. With them,
+    how paper_counts counts the linked groups, and whether the links could be computed (not:
+    the chem process busy; no repeat_of at all, every inherited status unchecked)."""
     segments, curations, predictions = await load_segments(db, paper.id)
     index = paper.rgroup_text_labels
     links = await repeat_links(paper, main_page, segments, curations, predictions)
-    fix = None if links is None else count_fix(links, _statuses(curations))
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
+    stale = stale_members(inherited, links)
+    fix = CountFix(stale=stale) if links is None else count_fix(links, _statuses(curations), stale)
     repeats = links or {}
+
+    def curation_out(seg: Segment) -> CurationOut:
+        out = structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
+        if seg.id in stale:
+            out.status = "unchecked"
+        return out
+
     out = [
         SegmentOut(
             id=seg.id,
@@ -526,11 +569,7 @@ async def segments_out(
             idx=seg.idx,
             bbox=list(seg.bbox),
             repeat_of=repeats.get(seg.id),
-            curation=(
-                structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
-                if seg.id in curations
-                else None
-            ),
+            curation=curation_out(seg) if seg.id in curations else None,
             predictions=[
                 structure_out(PredictionOut, p, named_on(index, seg.page))
                 for p in predictions[seg.id]
@@ -538,7 +577,7 @@ async def segments_out(
         )
         for seg in segments
     ]
-    return out, fix
+    return out, fix, links is not None
 
 
 async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
+from marcus.api.decisions import record_decisions
 from marcus.api.depiction import draw_or_read, orientation_templates, shown_structure
 from marcus.api.deps import (
     current_owner,
@@ -110,6 +111,7 @@ async def run_prediction(
 async def put_curation(
     segment_id: uuid.UUID,
     body: CurationIn,
+    decision: bool = False,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
@@ -134,5 +136,13 @@ async def put_curation(
     curation.note = body.note
     curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)
+    # ?decision=true: the status is a decision made now on this card (not a note or structure
+    # edit that keeps it); on a main-figure structure it goes to its repeats.
+    if decision:
+        try:
+            await record_decisions(db, paper, {segment.id: body.status})
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
     return structure_out(CurationOut, curation, named)

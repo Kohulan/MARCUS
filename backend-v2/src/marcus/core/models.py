@@ -351,3 +351,18 @@ class MainFigure(Base):
     )
     page: Mapped[int] = mapped_column(Integer)  # 0-based, as Segment.page
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class InheritedStatus(Base):
+    """A curation status a structure got from a decision on its main-figure structure
+    (marcus.api.decisions); `main_id`: that structure (no foreign key: the row outlives it). Read
+    as "unchecked" while the structure is not a repeat of it (core.main_figure.stale_members).
+    A decision on the structure itself deletes the row."""
+
+    __tablename__ = "inherited_statuses"
+
+    segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )
+    main_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)

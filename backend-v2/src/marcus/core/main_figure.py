@@ -11,6 +11,10 @@ A main structure and its repeats are one group with one status (group_status): a
 member is, rejected only if all are, else to review. An accepted group exports and sends the
 structure of an accepted member (chosen_member), so a decision on a repeat is never lost.
 
+A decision on a main structure goes to its repeats (api.decisions), marked inherited. An
+inherited status holds only while the structure is still a repeat of that main one; else it
+reads as unchecked (stale_members), so it is never exported unreviewed.
+
 The compound ID is the number or name printed under a drawing (phase B item 4). It is not read
 yet, so every Entry has compound_id None and only InChIKeys link today. When it is read, fill
 Entry.compound_id (api.read.repeat_links builds the entries) and the match below uses it.
@@ -89,28 +93,53 @@ def chosen_member(
     return next((r for r in repeats if status_of.get(r) == ACCEPTED), main)
 
 
+def stale_members(
+    inherited: dict[uuid.UUID, uuid.UUID], links: dict[uuid.UUID, uuid.UUID] | None
+) -> frozenset[uuid.UUID]:
+    """The structures whose inherited status (`inherited`: structure -> the main structure it
+    came from) no longer holds: not a repeat of that main one now. `links` None (not known):
+    all of them. Their status reads as unchecked (effective_statuses)."""
+    if links is None:
+        return frozenset(inherited)
+    return frozenset(m for m, main in inherited.items() if links.get(m) != main)
+
+
+def effective_statuses(
+    status_of: dict[uuid.UUID, str | None], stale: frozenset[uuid.UUID]
+) -> dict[uuid.UUID, str | None]:
+    """The statuses as reads, counts and exports use them: a stale inherited one is unchecked."""
+    return {sid: (UNCHECKED if sid in stale else st) for sid, st in status_of.items()}
+
+
 @dataclass(frozen=True)
 class CountFix:
     """How the structure counts treat linked groups (api.read.paper_counts): `hidden` repeats
     are not counted; a main in `promote` counts as accepted (an accepted repeat); a rejected main
-    in `unreject` counts as to review (a repeat not rejected)."""
+    in `unreject` counts as to review (a repeat not rejected); a `stale` inherited status counts
+    as to review."""
 
     hidden: frozenset[uuid.UUID] = frozenset()
     promote: frozenset[uuid.UUID] = frozenset()
     unreject: frozenset[uuid.UUID] = frozenset()
+    stale: frozenset[uuid.UUID] = frozenset()
 
     def __or__(self, other: "CountFix") -> "CountFix":
         return CountFix(
             self.hidden | other.hidden,
             self.promote | other.promote,
             self.unreject | other.unreject,
+            self.stale | other.stale,
         )
 
 
 def count_fix(
-    links: dict[uuid.UUID, uuid.UUID], status_of: dict[uuid.UUID, str | None]
+    links: dict[uuid.UUID, uuid.UUID],
+    status_of: dict[uuid.UUID, str | None],
+    stale: frozenset[uuid.UUID] = frozenset(),
 ) -> CountFix:
-    """The CountFix of one paper's links: each group counts once, under group_status."""
+    """The CountFix of one paper's links: each group counts once, under group_status (of the
+    effective statuses: `stale` inherited ones are unchecked)."""
+    status_of = effective_statuses(status_of, stale)
     promote, unreject = set(), set()
     for main, repeats in groups_of(links).items():
         status = group_status([status_of.get(m) for m in [main, *repeats]])
@@ -118,4 +147,4 @@ def count_fix(
             promote.add(main)
         elif status == UNCHECKED and status_of.get(main) == REJECTED:
             unreject.add(main)
-    return CountFix(frozenset(links), frozenset(promote), frozenset(unreject))
+    return CountFix(frozenset(links), frozenset(promote), frozenset(unreject), stale)

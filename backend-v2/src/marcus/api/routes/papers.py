@@ -24,6 +24,7 @@ from marcus.api import annotation as annotations
 from marcus.api import export
 from marcus.api import rgroups as rgroup_reads
 from marcus.api.chempool import CHEM
+from marcus.api.decisions import record_decisions
 from marcus.api.deps import (
     client_ip,
     current_owner,
@@ -36,6 +37,7 @@ from marcus.api.deps import (
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import (
     IMAGE_HEADERS,
+    inherited_of,
     list_count_fix,
     load_segments,
     main_figure_page,
@@ -63,6 +65,7 @@ from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
+from marcus.core.main_figure import stale_members
 from marcus.core.models import Curation, MainFigure, Owner, Paper, Segment
 from marcus.core.pipeline import (
     RetryNotAllowed,
@@ -133,11 +136,11 @@ async def get_paper(
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     counts = await steps_by_status(db, paper.id)
     main_page = await main_figure_page(db, paper.id)
-    segments, fix = await segments_out(db, paper, main_page)
+    segments, fix, links_ready = await segments_out(db, paper, main_page)
     return PaperDetail(
         **paper_summary(paper, (await paper_counts(db, [paper.id], fix))[paper.id]).model_dump(),
         main_figure_page=main_page,
-        links_ready=fix is not None,
+        links_ready=links_ready,
         counts=Counts(steps_by_status=counts),
         segments=segments,
     )
@@ -191,6 +194,12 @@ async def put_bulk_curation(
         if "note" in item.model_fields_set:
             cur.note = item.note
         cur.updated_at = now
+    # A bulk status is a decision: on a main-figure structure it goes to its repeats.
+    try:
+        await record_decisions(db, paper, {item.segment_id: item.status for item in body.items})
+    except HTTPException:
+        await db.rollback()
+        raise
     await db.commit()
     return BulkCurationOut(updated=len(ids))
 
@@ -326,10 +335,11 @@ async def export_paper(
     rows = await rgroup_reads.for_export(db, paper.id, paper.rgroup_text_labels)
     main_page = await main_figure_page(db, paper.id)
     repeats = await repeat_links(paper, main_page, segments, curations, predictions, strict=True)
+    stale = stale_members((await inherited_of(db, [paper.id])).get(paper.id, {}), repeats)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
         export.build, format, paper, segments, curations, predictions, status, annotation, rows,
-        repeats, main_page,
+        repeats, main_page, stale,
     )  # fmt: skip
     return Response(
         content=content,
