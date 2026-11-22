@@ -59,11 +59,19 @@ def agree_count(predictions: Iterable[_Prediction]) -> int:
     return len(majority(predictions))
 
 
-def pick_prediction(predictions: Sequence[_Prediction], paper_engine: str):
+def pick_prediction(
+    predictions: Sequence[_Prediction], paper_engine: str, frozen: object | None = None
+):
     """The prediction shown and exported when nothing is curated (`predictions`: the segment's,
-    newest first): the majority's (the paper's engine's when it is in it, else the first engine
-    of it), else the newest valid one of the paper's engine, else the newest valid one; None
-    without a valid one."""
+    newest first): the one a decision was made on (`frozen`: Curation.shown_prediction_id,
+    while the segment has it), else the majority's (the paper's engine's when it is in it, else
+    the first engine of it), else the newest valid one of the paper's engine, else the newest
+    valid one; None without a valid one. A decided card never changes its structure when other
+    engines land later."""
+    if frozen is not None:
+        held = next((p for p in predictions if getattr(p, "id", None) == frozen), None)
+        if held is not None:
+            return held
     group = majority(predictions)
     if group:
         return next((p for p in group if p.engine == paper_engine), group[0])

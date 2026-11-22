@@ -142,7 +142,8 @@ def _record(
         "status": status,
         "note": cur.note if cur is not None else None,
     }
-    pick = pick_prediction(predictions.get(seg.id, []), paper.engine)
+    frozen = cur.shown_prediction_id if cur is not None else None
+    pick = pick_prediction(predictions.get(seg.id, []), paper.engine, frozen)
     if cur is not None and (cur.smiles or cur.molfile):
         labels = _labels(cur, named)
         return Chosen(

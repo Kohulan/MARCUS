@@ -350,7 +350,8 @@ def shown_source(
         if curation.rgroups:
             return None
         return ("smiles", curation.smiles) if curation.smiles else ("molfile", curation.molfile)
-    pick = pick_prediction(predictions, paper_engine)
+    frozen = curation.shown_prediction_id if curation is not None else None
+    pick = pick_prediction(predictions, paper_engine, frozen)
     if pick is None or not pick.smiles or pick.rgroups:
         return None
     return "smiles", pick.smiles
@@ -532,6 +533,7 @@ async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
                     Curation.smiles,
                     case((Curation.smiles.is_(None), Curation.molfile)).label("molfile"),
                     Curation.rgroups,
+                    Curation.shown_prediction_id,
                 )
                 .join(Segment, Segment.id == Curation.segment_id)
                 .where(of_papers)
@@ -542,6 +544,7 @@ async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
     for p in (
         await db.execute(
             select(
+                Prediction.id,
                 Prediction.segment_id,
                 Prediction.engine,
                 Prediction.smiles,
@@ -643,16 +646,21 @@ async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, 
     return out
 
 
-def agreement_out(paper_engine: str, predictions: list[Prediction], ran: dict[str, bool]) -> dict:
+def agreement_out(
+    paper_engine: str,
+    predictions: list[Prediction],
+    ran: dict[str, bool],
+    frozen: uuid.UUID | None = None,
+) -> dict:
     """SegmentOut's agreement fields (marcus.core.agreement). `predictions` newest first; `ran`:
     engines_run of the segment. The badge waits until no agreement engine is still reading. It
     counts the engines that read (a failed one too, not one that never ran): "3 agree", "2
     agree" or differ of three; "2 of 2 agree" or "2 differ" of two (owner decision
     2026-11-22). No badge with fewer than two engines read, with fewer than two newest
     predictions that have an InChIKey (older predictions have none: no backfill), or for an
-    R-group scaffold shown."""
+    R-group scaffold shown. `frozen`: Curation.shown_prediction_id (pick_prediction)."""
     group = majority(predictions)
-    pick = pick_prediction(predictions, paper_engine)
+    pick = pick_prediction(predictions, paper_engine, frozen)
     newest = newest_by_engine(predictions)
     engines = set(ran) | set(newest)
     keyed = [p for p in newest.values() if p.valid and p.inchikey]
@@ -719,7 +727,12 @@ async def segments_out(
             compound_id=ids.get(seg.id),
             compound_name=names.get(ids[seg.id]) if seg.id in ids else None,
             same_id_pages=sorted({page_of[o] for o in conflicts.get(seg.id, [])}),
-            **agreement_out(paper.engine, predictions[seg.id], ran.get(seg.id, {})),
+            **agreement_out(
+                paper.engine,
+                predictions[seg.id],
+                ran.get(seg.id, {}),
+                curations[seg.id].shown_prediction_id if seg.id in curations else None,
+            ),
             curation=curation_out(seg) if seg.id in curations else None,
             predictions=[
                 structure_out(PredictionOut, p, named_on(index, seg.page))

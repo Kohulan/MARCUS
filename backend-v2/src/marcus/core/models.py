@@ -239,6 +239,11 @@ class Curation(Base):
     # R-group labels of the curated structure (marcus.core.rgroups); NULL without one
     rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    # The prediction shown when an accept or reject without a structure of its own was saved
+    # (marcus.api.decisions): shown from then on (agreement.pick_prediction). NULL: none.
+    shown_prediction_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("predictions.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 def _owner_pk() -> Mapped[uuid.UUID]:

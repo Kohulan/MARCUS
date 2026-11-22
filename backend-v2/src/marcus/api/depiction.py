@@ -121,7 +121,8 @@ async def shown_structure(
             raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
     own = [p for p in predictions if p.segment_id == segment.id]
-    pick = pick_prediction(own, paper.engine)
+    frozen = curation.shown_prediction_id if curation is not None else None
+    pick = pick_prediction(own, paper.engine, frozen)
     return (pick.smiles, "predicted") if pick is not None and pick.smiles else None
 
 
