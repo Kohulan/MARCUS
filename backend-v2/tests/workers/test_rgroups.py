@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from marcus.core import annotation as ann
+from marcus.core import page_text
 from marcus.core import rgroup_extraction as rg
 from marcus.core.enums import ErrorClass, StepKind
 from marcus.core.pipeline import BadResult
@@ -73,7 +74,7 @@ def test_page_context_reads_pages_around_the_scaffold_captions_and_tables_first(
 
 
 def test_page_context_stops_before_the_part_that_would_pass_the_cap(monkeypatch):
-    monkeypatch.setattr(inputs, "MAX_CHARS", 90)
+    monkeypatch.setattr(page_text, "MAX_CHARS", 90)
     assert inputs.page_context(DOC, 3) == (
         "CAPTION (page 3): Figure 2. Structures 3a: R1 = OMe, R2 = H; 3b: R1 = H, R2 = OMe"
     )
@@ -217,6 +218,39 @@ def test_request_is_the_trained_one(stub):
         "ms": out["ms"],
     }
     assert isinstance(out["ms"], int) and out["ms"] >= 0
+
+
+def test_a_label_the_page_text_never_names_is_not_asked_for(stub):
+    """OCSR's extra label (DECIMER's Z beside R1, R2) is no column: the model is asked for the
+    labels the page text names, and the result says which those were."""
+    stub.content = _answer(("3a", {"R1": "OMe", "R2": "H"}))
+    out = read_scaffold(get_reader(), _paper(page=2), 2, ["R1", "R2", "Z"])
+    (req,) = stub.requests
+    body = req["body"]
+    assert body["messages"][1]["content"][1]["text"].startswith(
+        "The structure has these R-groups: R1, R2.\n\n"
+    )
+    assert body["response_format"]["json_schema"]["schema"] == rg.schema_for(["R1", "R2"])
+    assert out["labels"] == ["R1", "R2"]
+    assert out["rows"] == [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}]
+
+
+def test_an_unlabelled_point_is_not_asked_for(stub):
+    """`*` (a dummy atom without a label) is no label the model was trained on: the request
+    names the labelled ones only, as the trained requests did."""
+    stub.content = _answer(("3a", {"R1": "OMe", "R2": "H"}))
+    doc = {**DOC, "texts": [*DOC["texts"], _text("text", "Liang Xiong 1,2, *", 3)]}
+    out = read_scaffold(get_reader(), _paper(page=2, doc=doc), 2, ["R1", "R2", "*"])
+    (req,) = stub.requests
+    text = req["body"]["messages"][1]["content"][1]["text"]
+    assert text.startswith("The structure has these R-groups: R1, R2.\n\n")
+    assert out["labels"] == ["R1", "R2"]
+
+
+def test_a_structure_with_only_unlabelled_points_is_bad_input(stub):
+    with pytest.raises(BadInput, match="no labelled R-groups"):
+        read_scaffold(get_reader(), _paper(), 0, ["*"])
+    assert stub.requests == []
 
 
 def test_an_answer_outside_the_schema_is_a_final_engine_error(stub):

@@ -194,6 +194,19 @@ describe("RgroupRows", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
+  it("offers no reading for a structure whose only label is *, but shows rows read before", async () => {
+    const get = vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true));
+    const only = render(wrap(<RgroupRows predictionId={PRED} labels={["*"]} tag="[03]" />));
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(only.container).toBeEmptyDOMElement();
+    only.unmount();
+    get.mockResolvedValue(list(true, extraction({ labels: ["*"], rows: [{ compound: "3a", groups: { "*": "H" } }] })));
+    client = createQueryClient();
+    render(wrap(<RgroupRows predictionId={PRED} labels={["*"]} tag="[03]" />));
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("keeps earlier rows over a failed re-run", async () => {
     vi.spyOn(api, "getPaperRgroups").mockResolvedValue(
       list(true, extraction({ status: "failed", error: "timeout" })),

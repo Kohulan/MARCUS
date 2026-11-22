@@ -1060,14 +1060,16 @@ def test_llama_rgroup_is_internal_read_only_and_mounts_model_and_projector_read_
 
 def test_llama_server_shares_its_own_internal_network_only_with_worker_llm():
     """A-M8: no other container (not even one on `internal`) can reach llama-server or
-    llama-rgroup."""
+    llama-rgroup. Each model server has its own network with its own worker only."""
     config = _compose_config("docker-compose.yml", GPU)
-    assert config["networks"]["llm"]["internal"] is True
-    members = {name for name, svc in config["services"].items() if "llm" in svc.get("networks", {})}
-    assert members == {"llama-server", "llama-rgroup", "worker-llm"}
-    assert set(config["services"]["llama-server"]["networks"]) == {"llm"}
-    assert set(config["services"]["llama-rgroup"]["networks"]) == {"llm"}
-    assert set(config["services"]["worker-llm"]["networks"]) == {"internal", "llm"}
+    services = config["services"]
+    for net, server, worker in (("llm", "llama-server", "worker-llm"),
+                                ("rgroup", "llama-rgroup", "worker-rgroup")):  # fmt: skip
+        assert config["networks"][net]["internal"] is True
+        members = {name for name, svc in services.items() if net in svc.get("networks", {})}
+        assert members == {server, worker}, net
+        assert set(services[server]["networks"]) == {net}
+        assert set(services[worker]["networks"]) == {"internal", net}
 
 
 def test_llama_image_is_built_at_the_pinned_commit_for_the_v100():
@@ -1085,54 +1087,89 @@ def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
     worker = services["worker-llm"]
     cmd = worker["command"]
     assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
-    assert _arg(cmd, "--include") == "marcus.workers.annotate,marcus.workers.rgroups"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate"
     assert set(worker["networks"]) == {"internal", "llm"} and worker["read_only"] is True
     (vol,) = worker["volumes"]
     assert vol["target"] == "/data" and vol["read_only"] is True
+    assert set(worker["depends_on"]) >= {"llama-server"}
+    assert "llama-rgroup" not in worker["depends_on"]  # the R-group model is not its business
     assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"
-    assert worker["depends_on"]["llama-rgroup"]["condition"] == "service_healthy"
     env = worker["environment"]
     assert env["MARCUS_ANNOTATOR"] == "llama"
     assert env["MARCUS_ANNOTATOR_URL"] == "http://llama-server:8080"
-    assert env["MARCUS_RGROUP_READER"] == "llama"
-    assert env["MARCUS_RGROUP_URL"] == "http://llama-rgroup:8080"
-    assert env["MARCUS_RGROUP_MODEL"] == "nuextract3-rgroup-v1"
-    assert env["MARCUS_RGROUP_MODEL_VERSION"] == "vision Q8_0 llama.cpp b12554"
+    assert not any(key.startswith("MARCUS_RGROUP_") for key in env)
     assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
     from marcus.core.queues import SLOTS
 
     assert SLOTS["q.llm"] == 1
 
 
+def test_worker_rgroup_serves_q_rgroup_with_one_process_and_reads_data_only():
+    """The R-group model has its own queue and worker: an annotation run never holds back an
+    R-group reading, and the other way round (two llama-servers, one slot each)."""
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    worker = services["worker-rgroup"]
+    cmd = worker["command"]
+    assert _arg(cmd, "-Q") == "q.rgroup" and _arg(cmd, "-c") == "1"
+    assert _arg(cmd, "--include") == "marcus.workers.rgroups"
+    assert set(worker["networks"]) == {"internal", "rgroup"} and worker["read_only"] is True
+    assert worker["image"] == services["worker-llm"]["image"]
+    (vol,) = worker["volumes"]
+    assert vol["target"] == "/data" and vol["read_only"] is True
+    assert worker["depends_on"]["llama-rgroup"]["condition"] == "service_healthy"
+    assert "llama-server" not in worker["depends_on"]
+    env = worker["environment"]
+    assert env["MARCUS_RGROUP_READER"] == "llama"
+    assert env["MARCUS_RGROUP_URL"] == "http://llama-rgroup:8080"
+    assert env["MARCUS_RGROUP_MODEL"] == "nuextract3-rgroup-v1"
+    assert env["MARCUS_RGROUP_MODEL_VERSION"] == "vision Q8_0 llama.cpp b12554"
+    assert not any(key.startswith("MARCUS_ANNOTAT") for key in env)
+    assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
+    from marcus.core.queues import SLOTS
+
+    assert SLOTS["q.rgroup"] == 1
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    assert "worker-rgroup" not in base
+
+
 def test_annotation_is_offered_only_where_q_llm_is_served():
     base = _compose_config("docker-compose.yml")["services"]["api"]["environment"]
     assert base.get("MARCUS_ANNOTATE_ENABLED", "0") in ("0", "false", "")
     assert base.get("MARCUS_RGROUP_ENABLED", "0") in ("0", "false", "")
-    assert "q.llm" not in base["MARCUS_EXPECTED_QUEUES"].split(",")
-    for files, worker in (
-        ((GPU,), "worker-llm"),
-        (("docker-compose.fake.yml",), "worker-fake-annotate"),
+    assert not {"q.llm", "q.rgroup"} & set(base["MARCUS_EXPECTED_QUEUES"].split(","))
+    for files, workers in (
+        ((GPU,), ("worker-llm", "worker-rgroup")),
+        (("docker-compose.fake.yml",), ("worker-fake-annotate", "worker-fake-rgroup")),
     ):
         services = _compose_config("docker-compose.yml", *files)["services"]
         api = services["api"]["environment"]
         assert api["MARCUS_ANNOTATE_ENABLED"] == "1", files
         assert api["MARCUS_RGROUP_ENABLED"] == "1", files
-        assert "q.llm" in api["MARCUS_EXPECTED_QUEUES"].split(","), files
-        assert worker in services, files
+        expected = api["MARCUS_EXPECTED_QUEUES"].split(",")
+        assert "q.llm" in expected and "q.rgroup" in expected, files
+        for worker in workers:
+            assert worker in services, files
 
 
-def test_fake_stack_runs_the_fake_annotator():
+def test_fake_stack_runs_the_fake_annotator_and_the_fake_rgroup_reader():
     services = _compose_config("docker-compose.yml", "docker-compose.fake.yml")["services"]
     worker = services["worker-fake-annotate"]
     cmd = worker["command"]
     assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
-    assert _arg(cmd, "--include") == "marcus.workers.annotate,marcus.workers.rgroups"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate"
     env = worker["environment"]
     assert env["MARCUS_ANNOTATOR"] == "fake" and env["MARCUS_ENABLE_FAKE_ENGINES"] == "1"
-    assert env["MARCUS_RGROUP_READER"] == "fake"
-    assert "llama-server" not in services and "llama-rgroup" not in services
     (vol,) = worker["volumes"]
     assert vol["read_only"] is True
+    worker = services["worker-fake-rgroup"]
+    cmd = worker["command"]
+    assert _arg(cmd, "-Q") == "q.rgroup" and _arg(cmd, "-c") == "1"
+    assert _arg(cmd, "--include") == "marcus.workers.rgroups"
+    env = worker["environment"]
+    assert env["MARCUS_RGROUP_READER"] == "fake" and env["MARCUS_ENABLE_FAKE_ENGINES"] == "1"
+    (vol,) = worker["volumes"]
+    assert vol["read_only"] is True
+    assert "llama-server" not in services and "llama-rgroup" not in services
 
 
 # --- the COCONUT relay (owner decision 2026-11-20) ---------------------------------------------

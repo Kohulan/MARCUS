@@ -142,3 +142,81 @@ def test_plain_molecules_never_reach_rdkit(monkeypatch):
     monkeypatch.setattr(rgroups, "_parsed_labels", boom)
     molfile = Chem.MolToMolBlock(Chem.MolFromSmiles("CC(=O)Oc1ccccc1C(=O)O"))
     assert rgroup_labels("CC(=O)Oc1ccccc1C(=O)O", molfile) == []
+
+
+# --- only labels that look like R-group labels (owner decision 2026-11-22) -----------------------
+# MolScribe writes a group it did not expand (OAc, BnO, MeO, CO2H...) as an atom alias, and also
+# numbers and element counts it misread (555, S7, N3).
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["R", "R1", "R10", "R'", "R′", "R″", "R1′", "R′1", "R6″", "Ra", "Rf", "R1a",
+     "X", "X1", "Y", "Z", "Z2", "Ar", "Ar1", "n", "m", "Q", "*"],
+)  # fmt: skip
+def test_rgroup_like_labels_stay(label):
+    assert rgroups.as_label(label) == label
+
+
+@pytest.mark.parametrize(
+    ("alias", "label"),
+    [("OR", "R"), ("OR3", "R3"), ("R2O", "R2"), ("RaO", "Ra"), ("RO", "R"), ("OR′", "R′")],
+)
+def test_an_o_linked_label_is_its_r_group(alias, label):
+    """MolScribe keeps the linking O in the alias (R2O, OR3): the drawn label is R2, R3."""
+    assert rgroups.as_label(alias) == label
+
+
+@pytest.mark.parametrize(
+    ("alias", "label"),
+    [("CO2R", "R"), ("COOR", "R"), ("NHR", "R"), ("SR", "R"), ("CH2R", "R"), ("CH2OR1", "R1"),
+     ("NR2", "R2"), ("CO2R′", "R′"), ("N(R)2", "R"), ("OCOR3", "R3")],
+)  # fmt: skip
+def test_an_alias_carrying_one_r_group_is_that_label(alias, label):
+    """Review finding 4: MolScribe writes the group around an R as one alias (CO2R, NHR): the
+    placeholder is the R in it."""
+    assert rgroups.as_label(alias) == label
+
+
+@pytest.mark.parametrize("alias", ["Br", "Bz", "TMSO", "OTBS", "NR1R2", "CF3", "Ph", "PrO"])
+def test_an_alias_without_exactly_one_r_group_is_no_label(alias):
+    assert rgroups.as_label(alias) is None
+
+
+def test_a_co2r_only_structure_keeps_its_label():
+    molfile = _molfile("*c1ccccc1", {0: "CO2R"})
+    assert rgroup_labels("*c1ccccc1", molfile) == ["R"]
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ["OAc", "AcO", "BnO", "MeO", "OMe", "OCH3", "H3CO", "CO2H", "COOH", "Me", "Ac", "Bz",
+     "BzO", "Boc", "OTMS", "TMSO", "CF3", "CN", "C2H5", "NMe", "N3", "S7", "O3", "F2", "Br",
+     "555", "12", "0", "1*", "Ring A", "aa1", "X-Y", ""],
+)  # fmt: skip
+def test_abbreviations_numbers_and_atoms_are_no_labels(alias):
+    assert rgroups.as_label(alias) is None
+
+
+def test_an_expanded_abbreviation_leaves_no_placeholder():
+    """MolScribe wrote OMe as an aliased dummy atom in the molfile but expanded it in the
+    SMILES: the SMILES is a whole compound, no scaffold."""
+    molfile = _molfile("*c1ccccc1", {0: "OMe"})
+    assert rgroup_labels("COc1ccccc1", molfile) == []
+
+
+def test_an_abbreviation_on_a_wildcard_atom_stays_a_placeholder():
+    """The SMILES still has the wildcard: never a finished compound (COCONUT stays blocked)."""
+    molfile = _molfile("*c1ccccc1", {0: "OTMS"})
+    assert rgroup_labels("*c1ccccc1", molfile) == ["*"]
+    assert rgroup_labels(None, molfile) == ["*"]  # no SMILES to tell: kept as a placeholder
+
+
+def test_real_labels_beside_abbreviations_stay():
+    smiles = "[1*]c1ccc(OC)cc1[2*]"
+    molfile = _molfile("[1*]c1ccc(*)cc1[2*]", {0: "R1", 5: "MeO", 8: "R2O"})
+    assert rgroup_labels(smiles, molfile) == ["R1", "R2"]
+
+
+def test_a_smiles_wildcard_is_always_a_placeholder():
+    assert rgroup_labels("[555*]CC") == ["*"]

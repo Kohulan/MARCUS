@@ -1,5 +1,5 @@
-"""R-group package: importing it registers the `rgroups` handler (worker-llm and, in the fake
-stack, worker-fake-annotate: `celery ... --include marcus.workers.annotate,marcus.workers.rgroups`).
+"""R-group package: importing it registers the `rgroups` handler (worker-rgroup and, in the fake
+stack, worker-fake-rgroup: `celery ... -Q q.rgroup --include marcus.workers.rgroups`).
 A worker set to the fake reader stops at start where fake engines are disabled (a config error),
 never at the first step."""
 

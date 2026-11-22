@@ -449,3 +449,26 @@ def test_docling_cap_is_at_least_one(monkeypatch):
     assert queues.docling_slots() == 1
     monkeypatch.setitem(queues.SLOTS, "q.cpu", 6)
     assert queues.docling_slots() == 4
+
+
+def test_an_annotation_run_does_not_hold_back_an_rgroups_step(db_session):
+    """The two models run on two llama-servers: a running annotate step (q.llm) leaves the
+    rgroups step its own slot (q.rgroup)."""
+    from marcus.core.queues import queue_for
+
+    s = db_session
+    paper = paper_at(s, make_owner(s), minutes_ago=1)
+    s.add_all([
+        Step(paper_id=paper.id, kind=StepKind.ANNOTATE.value, seq=100_001, status="running",
+             queue=queue_for(StepKind.ANNOTATE, None), started_at=datetime.now(UTC)),
+        Step(paper_id=paper.id, kind=StepKind.ANNOTATE.value, seq=100_002, status="pending",
+             queue=queue_for(StepKind.ANNOTATE, None)),
+        Step(paper_id=paper.id, kind=StepKind.RGROUPS.value, seq=100_003, status="pending",
+             queue=queue_for(StepKind.RGROUPS, None)),
+    ])  # fmt: skip
+    s.commit()
+    sent = Sent()
+    dispatch_once(s, sent)
+    assert [(q, kind) for q, _, kind, _ in sent.calls if kind != StepKind.CHECK_PDF] == [
+        ("q.rgroup", StepKind.RGROUPS)
+    ]

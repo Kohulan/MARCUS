@@ -81,6 +81,7 @@ async def test_get_paper_shape(app, async_db_session):
     assert segs[0]["id"] == str(seg0) and segs[0]["bbox"] == [0, 0, 10, 10]
     assert segs[0]["curation"] == {
         "status": "unchecked", "smiles": None, "molfile": None, "note": None, "rgroups": [],
+        "placeholder": False,
     }  # fmt: skip
     preds = segs[0]["predictions"]
     assert [p["smiles"] for p in preds] == ["CCN", "CCO"]  # newest first
@@ -209,7 +210,7 @@ async def test_curation_saves_valid_values(app, async_db_session):
     body = {"status": "accepted", "smiles": "c1ccccc1", "note": "checked by hand"}
     r = await _curate(app, token, seg, body)
     assert r.status_code == 200
-    assert r.json() == {**body, "molfile": None, "rgroups": []}
+    assert r.json() == {**body, "molfile": None, "rgroups": [], "placeholder": False}
     cur = await _curation_row(db, seg)
     assert (cur.status, cur.smiles, cur.note) == ("accepted", "c1ccccc1", "checked by hand")
     # status only: the other fields are cleared (PUT replaces)
@@ -392,6 +393,41 @@ async def test_predictions_expose_rgroups(app, async_db_session):
     segs = {s["id"]: s for s in r.json()["segments"]}
     assert [p["rgroups"] for p in segs[str(seg0)]["predictions"]] == [["R1", "R2"], []]
     assert [p["rgroups"] for p in segs[str(seg1)]["predictions"]] == [[]]
+
+
+async def test_the_labels_shown_are_those_the_page_text_names(app, async_db_session):
+    """Owner decision 2026-11-22: a structure shows the labels its page's text names (the
+    paper's page label index from docling), all of them when it names none or there is no
+    index. `placeholder` says it has placeholder atoms whatever is shown (COCONUT holds it)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    seg0, seg1 = seeded.segment_ids
+    await db.execute(update(Prediction).where(Prediction.segment_id == seg0)
+                     .values(smiles="[R1]c1ccc([Z])cc1[R2]", rgroups=["R1", "R2", "Z"]))  # fmt: skip
+    await db.execute(update(Prediction).where(Prediction.segment_id == seg1)
+                     .values(smiles="[Z]c1ccccc1", rgroups=["Z"]))  # fmt: skip
+    await db.commit()
+
+    async def read():
+        async with make_client(app, token) as c:
+            r = await c.get(f"/api/v2/papers/{seeded.paper_id}/segments")
+        return {s["id"]: s["predictions"][0] for s in r.json()["segments"]}
+
+    got = await read()  # no index yet (text not read, or a paper from before): all shown
+    assert got[str(seg0)]["rgroups"] == ["R1", "R2", "Z"]
+    await db.execute(update(Paper).where(Paper.id == seeded.paper_id)
+                     .values(rgroup_text_labels={"0": ["R1", "R2", "X"]}))  # fmt: skip
+    await db.commit()
+    got = await read()
+    assert (got[str(seg0)]["rgroups"], got[str(seg0)]["placeholder"]) == (["R1", "R2"], True)
+    # the page names none of its labels: all of them stay
+    assert (got[str(seg1)]["rgroups"], got[str(seg1)]["placeholder"]) == (["Z"], True)
+
+    async with make_client(app, token) as c:
+        r = await c.put(f"/api/v2/segments/{seg0}/curation",
+                        json={"status": "accepted", "smiles": "[1*]c1ccc([9*])cc1"})  # fmt: skip
+    assert (r.json()["rgroups"], r.json()["placeholder"]) == (["R1"], True)
 
 
 def test_check_curation_in_the_worker_process():

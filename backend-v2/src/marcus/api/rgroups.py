@@ -5,9 +5,11 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.api.read import named_on
 from marcus.api.schemas import RgroupExtractionOut, RgroupRow
 from marcus.core.enums import StepStatus
-from marcus.core.models import Prediction, RgroupExtraction, Segment, Step
+from marcus.core.models import Paper, Prediction, RgroupExtraction, Segment, Step
+from marcus.core.rgroup_labels import shown_labels
 from marcus.core.settings import get_settings
 
 
@@ -34,14 +36,20 @@ def _status(row: RgroupExtraction, step_status: str | None) -> str:
 
 
 def extraction_out(
-    row: RgroupExtraction, segment_id: uuid.UUID, step_status: str | None
+    row: RgroupExtraction,
+    segment_id: uuid.UUID,
+    step_status: str | None,
+    named: list[str] | None = None,
 ) -> RgroupExtractionOut:
+    """`named`: the labels the structure's page names (read.named_on). Before any rows the
+    labels are the structure's shown ones (as on the card); with rows, those of the rows."""
     rows = _rows(row)
+    labels = list(row.labels) if row.rows is not None else shown_labels(list(row.labels), named)
     return RgroupExtractionOut(
         prediction_id=row.prediction_id,
         segment_id=segment_id,
         status=_status(row, step_status),  # type: ignore[arg-type]
-        labels=list(row.labels),
+        labels=labels,
         rows=[RgroupRow(**r) for r in rows] if rows is not None else None,
         truncated=row.truncated,
         error=row.error if row.status == "failed" else None,
@@ -53,13 +61,13 @@ def extraction_out(
     )
 
 
-def none_out(prediction: Prediction) -> RgroupExtractionOut:
-    """A prediction never asked for."""
+def none_out(prediction: Prediction, named: list[str] | None = None) -> RgroupExtractionOut:
+    """A prediction never asked for (its shown labels, as on the card)."""
     return RgroupExtractionOut(
         prediction_id=prediction.id,
         segment_id=prediction.segment_id,  # type: ignore[arg-type]
         status="none",
-        labels=list(prediction.rgroups or []),
+        labels=shown_labels(list(prediction.rgroups or []), named),
         rows=None,
         truncated=False,
         error=None,
@@ -73,9 +81,16 @@ def none_out(prediction: Prediction) -> RgroupExtractionOut:
 
 def _query(where):
     return (
-        select(RgroupExtraction, Prediction.segment_id, Step.status)
+        select(
+            RgroupExtraction,
+            Prediction.segment_id,
+            Step.status,
+            Segment.page,
+            Paper.rgroup_text_labels,
+        )
         .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
         .join(Segment, Segment.id == Prediction.segment_id)
+        .join(Paper, Paper.id == Segment.paper_id)
         .outerjoin(Step, Step.id == RgroupExtraction.step_id)
         .where(where)
         .execution_options(populate_existing=True)
@@ -89,7 +104,10 @@ async def for_paper(db: AsyncSession, paper_id: uuid.UUID) -> list[RgroupExtract
             Segment.page, Segment.idx, RgroupExtraction.created_at, RgroupExtraction.prediction_id
         )
     )
-    return [extraction_out(r, seg, status) for r, seg, status in rows.all()]
+    return [
+        extraction_out(r, seg, status, named_on(index, page))
+        for r, seg, status, page, index in rows.all()
+    ]
 
 
 async def for_prediction(db: AsyncSession, prediction: Prediction) -> RgroupExtractionOut:
@@ -97,9 +115,18 @@ async def for_prediction(db: AsyncSession, prediction: Prediction) -> RgroupExtr
         await db.execute(_query(RgroupExtraction.prediction_id == prediction.id))
     ).one_or_none()
     if found is None:
-        return none_out(prediction)
-    row, seg, status = found
-    return extraction_out(row, seg, status)
+        where = (
+            await db.execute(
+                select(Segment.page, Paper.rgroup_text_labels)
+                .join(Paper, Paper.id == Segment.paper_id)
+                .where(Segment.id == prediction.segment_id)
+            )
+        ).one_or_none()
+        return none_out(
+            prediction, named_on(where.rgroup_text_labels, where.page) if where else None
+        )
+    row, seg, status, page, index = found
+    return extraction_out(row, seg, status, named_on(index, page))
 
 
 async def for_export(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, dict]:

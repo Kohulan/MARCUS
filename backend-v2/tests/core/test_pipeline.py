@@ -160,6 +160,30 @@ def test_doi_and_docling_results(db_session):
     assert paper.doi == "10.1000/xyz"
 
 
+def test_docling_stores_the_page_label_index(db_session):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    (docling,) = steps(s, paper, "docling")
+    index = {"0": ["R1", "R2"], "1": ["X"]}
+    assert finish(s, docling, {"text_path": "text.json", "rgroup_text_labels": index}) == []
+    s.refresh(paper)
+    assert paper.rgroup_text_labels == index
+
+
+@pytest.mark.parametrize("bad", [{"2": ["R1"]}, {"0": ["OAc"]}, ["R1"], {"0": "R1"}])
+def test_a_malformed_page_label_index_is_refused(db_session, bad):
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=2)
+    (docling,) = steps(s, paper, "docling")
+    s.commit()
+    run(s, docling)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, docling.id, {"text_path": "text.json", "rgroup_text_labels": bad})
+
+
 def test_after_doi_stores_title(db_session):
     s = db_session
     paper = make_paper(s)

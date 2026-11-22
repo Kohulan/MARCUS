@@ -158,7 +158,8 @@ def fill(path: str) -> str:
 
 async def test_headers_on_every_route(app, monkeypatch):
     env(monkeypatch, annotate_enabled="1", rgroup_enabled="1")  # else POST is a deliberate 503
-    monkeypatch.setattr(health_route, "inspect_live_queues", lambda: {"q.llm"})  # as above
+    live = {"q.llm", "q.rgroup"}  # as above
+    monkeypatch.setattr(health_route, "inspect_live_queues", lambda: live)
     monkeypatch.setattr(health_route, "_live_queues", health_route.LiveQueues())
     async with client(app) as c:
         assert (await c.get("/api/v2/papers")).status_code == 200  # owner cookie first

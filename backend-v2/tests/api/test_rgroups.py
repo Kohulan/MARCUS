@@ -6,9 +6,9 @@ import uuid
 
 import pytest
 from rdkit import Chem
-from sqlalchemy import select
+from sqlalchemy import select, update
 
-from marcus.core.models import Prediction, Segment, Step
+from marcus.core.models import Paper, Prediction, Segment, Step
 from tests.api.conftest import (
     finish,
     make_client,
@@ -75,12 +75,12 @@ async def run_rgroups(db, paper_id, result) -> None:
 
 @pytest.fixture
 def enabled(monkeypatch, clear_settings_cache):
-    """R-groups offered, and a live q.llm consumer (the /ready consumer check, faked)."""
+    """R-groups offered, and a live q.rgroup consumer (the /ready consumer check, faked)."""
     from marcus.api.routes import health
 
     monkeypatch.setenv("MARCUS_RGROUP_ENABLED", "1")
     clear_settings_cache()
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.rgroup"})
     monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
 
 
@@ -121,12 +121,13 @@ async def test_start_is_503_where_it_is_not_available(app, async_db_session):
     assert own.json() == missing.json() == {"detail": "R-group reading is not available"}
 
 
-async def test_start_is_503_while_no_worker_serves_q_llm(
+async def test_start_is_503_while_no_worker_serves_q_rgroup(
     app, async_db_session, enabled, monkeypatch
 ):
+    """The annotation worker (q.llm) does not count: it does not run the R-group model."""
     from marcus.api.routes import health
 
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
     monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
     db = async_db_session
     alice, token = await new_owner(db)
@@ -208,6 +209,39 @@ async def test_a_structure_without_rgroups_is_refused(app, async_db_session, rea
     async with make_client(app, token) as c:
         r = await c.post(f"/api/v2/predictions/{plain}/rgroups")
     assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+
+
+async def test_the_rgroup_api_shows_the_labels_the_card_shows(app, async_db_session, ready):
+    """Review finding 10: before any rows (status none, queued, a failed first run) the entry's
+    labels are the structure's shown labels (those its page's text names), as on the card."""
+    token, paper_id, scaffold, _, segment, _ = ready
+    db = async_db_session
+    await db.execute(update(Prediction).where(Prediction.id == scaffold)
+                     .values(rgroups=["R1", "Z"]))  # fmt: skip
+    await db.execute(update(Paper).where(Paper.id == paper_id)
+                     .values(rgroup_text_labels={"0": ["R1", "R2"]}))  # fmt: skip
+    await db.commit()
+    async with make_client(app, token) as c:
+        none = (await c.get(f"/api/v2/predictions/{scaffold}/rgroups")).json()
+        card = (await c.get(f"/api/v2/papers/{paper_id}/segments")).json()
+        await c.post(f"/api/v2/predictions/{scaffold}/rgroups")
+        queued = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()["extractions"][0]
+    shown = [s for s in card["segments"] if s["id"] == str(segment)][0]["predictions"][0]
+    assert shown["rgroups"] == ["R1"]
+    assert none["labels"] == ["R1"] and queued["labels"] == ["R1"]
+
+
+async def test_a_structure_whose_only_label_is_unlabelled_is_refused(app, async_db_session, ready):
+    """`*` alone (a dummy atom without a drawn label) is refused like no R-groups."""
+    token, _, scaffold, _, _, _ = ready
+    db = async_db_session
+    await db.execute(update(Prediction).where(Prediction.id == scaffold).values(rgroups=["*"]))
+    await db.commit()
+    async with make_client(app, token) as c:
+        r = await c.post(f"/api/v2/predictions/{scaffold}/rgroups")
+        one = await c.get(f"/api/v2/predictions/{scaffold}/rgroups")
+    assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+    assert one.status_code == 200 and one.json()["status"] == "none"
 
 
 async def test_other_owners_and_missing_predictions_are_404(app, async_db_session, ready):

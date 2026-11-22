@@ -114,6 +114,37 @@ def test_docling_goes_through_isolated_child(monkeypatch):
     assert calls == [(pdf_path(pid), paper_dir(pid), 280, 32768)]
 
 
+def _docling_writes(doc):
+    def fake_run_docling(path, out_dir, timeout_s, mem_mb=32768):
+        (out_dir / "text.json").write_text(json.dumps(doc))
+
+    return fake_run_docling
+
+
+def test_docling_returns_the_labels_each_pages_text_names(monkeypatch):
+    """The page label index (marcus.core.rgroup_labels): what the tag and the exports show of a
+    scaffold's labels."""
+    pid = make_paper_with("two_page.pdf")
+    doc = {"texts": [{"label": "caption", "text": "3a: R1 = OMe; X = Cl", "prov": [{"page_no": 2}]}]}
+    monkeypatch.setattr(cpu.pdfsafe, "run_docling", _docling_writes(doc))
+    assert cpu.docling(view(pid), _FakeSession(2)) == {
+        "text_path": "text.json",
+        "rgroup_text_labels": {"0": ["R1", "X"], "1": ["R1", "X"]},
+    }
+    assert cpu.docling(view(pid), None)["rgroup_text_labels"] == {"0": ["R1", "X"], "1": ["R1", "X"]}
+
+
+@pytest.mark.parametrize("raw", ["{broken", "[1, 2]"])
+def test_docling_without_a_readable_text_has_no_index(monkeypatch, raw):
+    pid = make_paper_with("two_page.pdf")
+
+    def fake_run_docling(path, out_dir, timeout_s, mem_mb=32768):
+        (out_dir / "text.json").write_text(raw)
+
+    monkeypatch.setattr(cpu.pdfsafe, "run_docling", fake_run_docling)
+    assert cpu.docling(view(pid), _FakeSession(2)) == {"text_path": "text.json"}
+
+
 class _FakeSession:
     def __init__(self, pages):
         self.pages = pages

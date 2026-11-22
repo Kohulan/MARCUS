@@ -378,3 +378,133 @@ def test_migration_0012_rgroup_extractions_up_down(migrated_db):
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))
         command.upgrade(cfg, "head")
+
+
+def test_migration_0013_moves_rgroups_steps_to_their_own_queue(migrated_db):
+    """0013 moves rgroups steps from q.llm to q.rgroup (annotate steps stay); a step already
+    sent to q.llm goes back to pending, so the dispatcher sends it again on q.rgroup and the
+    old message is dropped as stale. The downgrade moves them back the same way."""
+    from sqlalchemy import text
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+
+    def rows(conn):
+        return sorted(
+            conn.execute(
+                text(
+                    "SELECT kind, status, queue, queued_at IS NULL FROM steps "
+                    "WHERE kind IN ('rgroups', 'annotate')"
+                )
+            ).all()
+        )
+
+    try:
+        command.downgrade(cfg, "0012")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            for kind, seq, status in (("rgroups", 1, "pending"), ("rgroups", 2, "queued"),
+                                      ("rgroups", 3, "done"), ("annotate", 4, "queued")):  # fmt: skip
+                s.execute(
+                    text("INSERT INTO steps (paper_id, kind, queue, seq, status, queued_at, id) "
+                         "VALUES (:p, :k, 'q.llm', :seq, :st, "
+                         "CASE WHEN :st = 'queued' THEN now() END, gen_random_uuid())"),
+                    {"p": paper.id, "k": kind, "seq": seq, "st": status},
+                )  # fmt: skip
+            s.commit()
+        command.upgrade(cfg, "0013")
+        with engine.connect() as conn:
+            assert rows(conn) == sorted([
+                ("rgroups", "pending", "q.rgroup", True),
+                ("rgroups", "pending", "q.rgroup", True),
+                ("rgroups", "done", "q.rgroup", True),
+                ("annotate", "queued", "q.llm", False),
+            ])  # fmt: skip
+        command.downgrade(cfg, "0012")
+        with engine.connect() as conn:
+            assert rows(conn) == sorted([
+                ("rgroups", "pending", "q.llm", True),
+                ("rgroups", "pending", "q.llm", True),
+                ("rgroups", "done", "q.llm", True),
+                ("annotate", "queued", "q.llm", False),
+            ])  # fmt: skip
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0014_computes_the_labels_again(migrated_db):
+    """0014: rows with labels get them again from marcus.core.rgroups (MolScribe's OMe alias is
+    no label, R2O is R2, CO2R is R); rows without labels are not touched."""
+    from rdkit import Chem
+    from sqlalchemy import text
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from marcus.core.models import Segment
+    from tests.factories import make_paper
+
+    def molfile(smiles, aliases):
+        mol = Chem.MolFromSmiles(smiles)
+        for idx, alias in aliases.items():
+            mol.GetAtomWithIdx(idx).SetProp("molFileAlias", alias)
+        return Chem.MolToMolBlock(mol)
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.downgrade(cfg, "0013")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            segs = [
+                Segment(paper_id=paper.id, page=0, idx=i, bbox=[0, 0, 1, 1], image_sha256="c" * 64)
+                for i in range(4)
+            ]
+            s.add_all(segs)
+            s.flush()
+            ids = [seg.id for seg in segs]
+            for seg, smiles, mol, old in [
+                (ids[0], "COc1ccccc1", molfile("*c1ccccc1", {0: "OMe"}), ["OMe"]),
+                (ids[1], "[2*]Oc1ccccc1", molfile("[2*]c1ccccc1", {0: "R2O"}), ["R2O"]),
+                (ids[2], "CCO", None, []),
+                (ids[3], "*c1ccccc1", molfile("*c1ccccc1", {0: "CO2R"}), ["CO2R"]),
+            ]:
+                s.execute(
+                    text(
+                        "INSERT INTO predictions (id, segment_id, engine, engine_version, smiles,"
+                        " molfile, valid, ms, rgroups) VALUES (gen_random_uuid(), :s,"
+                        " 'molscribe', 'v', :smi, :mf, true, 1, :old)"
+                    ),
+                    {"s": seg, "smi": smiles, "mf": mol, "old": old},
+                )
+            s.commit()
+        command.upgrade(cfg, "0014")
+        with engine.connect() as conn:
+            preds = dict(conn.execute(text("SELECT segment_id, rgroups FROM predictions")).all())
+        assert preds == {ids[0]: [], ids[1]: ["R2"], ids[2]: [], ids[3]: ["R"]}
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0015_page_label_index_up_down(migrated_db):
+    """0015 adds papers.rgroup_text_labels (NULL: no index, every label shown)."""
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("papers")}
+        assert cols["rgroup_text_labels"]["nullable"] is True
+        command.downgrade(cfg, "0014")
+        assert "rgroup_text_labels" not in _columns(engine, "papers")
+    finally:
+        command.upgrade(cfg, "head")
