@@ -13,8 +13,10 @@ A drawing with R1, X, Ar... stands for several compounds, not one. What the engi
   an R token only next to another R token in a SMILES that RDKit cannot parse.
 
 Labels: the molfile alias (R1, X, Ar...), else Ketcher's R-group number (R1), else `R` + the
-isotope or atom-map number, else the dummy's own label when it is not `*`, else `*`. Sorted
-(R, R', R1, R2, R10, X, ...; `*` last), each once.
+isotope or atom-map number, else the dummy's own label when it is not `*`, else `*`. Only a label
+with the form of one counts (marcus.core.rgroup_labels: not OAc, MeO, 555...; R2O is R2); a
+molfile whose aliases are all no labels is a placeholder `*` only while its SMILES keeps the
+wildcard. Sorted (R, R', R1, R2, R10, X, ...; `*` last), each once.
 
 Cheap first: `rgroup_labels` scans the strings, and only a SMILES with `*` or an R token, or a
 molfile with an atom that is no element, is parsed with RDKit. Called where RDKit may run (the
@@ -27,6 +29,10 @@ from functools import lru_cache
 
 from rdkit import Chem
 from rdkit.rdBase import BlockLogs
+
+from marcus.core.rgroup_labels import as_label
+
+UNLABELLED = "*"
 
 # SMILES: a dummy atom is `*`, bare or in brackets ([*], [1*], [*:1]); nothing else in SMILES
 # uses `*` (a CXSMILES extension starts after whitespace and is cut off first).
@@ -122,18 +128,33 @@ def _unparsed_smiles_labels(smiles: str) -> list[str]:
     return [_token_label(t) for t in tokens] + dummies
 
 
+def _placeholders(raw: list[str]) -> list[str]:
+    """The R-group labels among a SMILES's dummy-atom labels: a wildcard is always a
+    placeholder, so one whose label has not the form of a label counts as `*`."""
+    return [as_label(lab) or UNLABELLED for lab in raw]
+
+
 @lru_cache(maxsize=2048)
-def _parsed_labels(smiles: str, molfile: str) -> tuple[str, ...]:
+def _parsed_labels(smiles: str, molfile: str, has_smiles: bool = False) -> tuple[str, ...]:
     """The RDKit part, for strings that passed the cheap check (cached: a scaffold's molfile is
-    read once per process, not again on each cache hit or backfill of the same output)."""
+    read once per process, not again on each cache hit or backfill of the same output).
+    `smiles` is "" when it passed the cheap check as plain; `has_smiles` says whether there is
+    one at all."""
     labels: list[str] = []
     if molfile:
         with BlockLogs():
-            labels = _mol_labels(Chem.MolFromMolBlock(molfile, sanitize=False))
+            raw = _mol_labels(Chem.MolFromMolBlock(molfile, sanitize=False))
+        labels = [lab for lab in map(as_label, raw) if lab is not None]
+        if raw and not labels:
+            # Only aliases that are no labels (OMe, OAc, 555...): a placeholder only if the
+            # SMILES still has the wildcard (or there is none to tell); MolScribe expands a
+            # group it knows in the SMILES, which is then a whole compound.
+            return (UNLABELLED,) if not has_smiles or _SMILES_DUMMY.search(smiles) else ()
     if not labels and smiles:
         with BlockLogs():
             mol = Chem.MolFromSmiles(smiles)
-        labels = _mol_labels(mol) if mol is not None else _unparsed_smiles_labels(smiles)
+        raw = _mol_labels(mol) if mol is not None else _unparsed_smiles_labels(smiles)
+        labels = _placeholders(raw)
     return tuple(_ordered(labels))
 
 
@@ -145,4 +166,6 @@ def rgroup_labels(smiles: str | None, molfile: str | None = None) -> list[str]:
     check_molfile = _molfile_may_have_dummies(molfile)
     if not check_smiles and not check_molfile:
         return []
-    return list(_parsed_labels(core if check_smiles else "", molfile if check_molfile else ""))
+    return list(
+        _parsed_labels(core if check_smiles else "", molfile if check_molfile else "", bool(core))
+    )
