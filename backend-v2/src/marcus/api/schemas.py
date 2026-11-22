@@ -112,6 +112,11 @@ class SegmentOut(BaseModel):
     # The crop is not a clean drawing (NMR marks, an X-ray / 3D picture): "check this drawing"
     # (a drawing_flags row; false for a clean one, and for segments from before the check).
     check_drawing: bool = False
+    # The compound ID printed by the drawing ("12", "8a"; marcus.core.compound_ids, from the
+    # paper's Docling text), and the name the text gives it ("salsubstolin A (12)"); None
+    # without one.
+    compound_id: str | None = None
+    compound_name: str | None = None
     # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ; None while an
     # engine is still reading, or with fewer than two read.
     agree: int | None = None

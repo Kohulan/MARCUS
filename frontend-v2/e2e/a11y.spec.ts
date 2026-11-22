@@ -212,6 +212,42 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     await expectNoA11yViolations(page);
   });
 
+  test("phase B cards: Check this drawing, the engines' badge, the compound ID", async ({
+    page,
+  }) => {
+    const shown = structuredClone(paper) as unknown as {
+      segments: {
+        check_drawing?: boolean;
+        agree?: number | null;
+        agree_engines?: string[];
+        compound_id?: string | null;
+        compound_name?: string | null;
+      }[];
+    };
+    Object.assign(shown.segments[0]!, {
+      check_drawing: true,
+      agree: 0,
+      agree_engines: [],
+      compound_id: "12",
+      compound_name: "salsubstolin A",
+    });
+    Object.assign(shown.segments[1]!, { agree: 3, agree_engines: ["decimer", "molnextr", "molscribe"] });
+    Object.assign(shown.segments[2]!, { agree: 2, agree_engines: ["molnextr", "molscribe"] });
+    await page.route(`**/api/v2/papers/${PID}`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(shown) }),
+    );
+    await page.goto(`/app/papers/${PID}`);
+    const first = page.getByRole("article").first();
+    await expect(first.getByText("Check this drawing")).toBeVisible();
+    await expect(first.getByText("Compound 12 · salsubstolin A")).toBeVisible();
+    await expect(first.getByText("Differ")).toBeVisible();
+    await expect(page.getByText("3 agree")).toBeVisible();
+    await expect(page.getByText("2 agree")).toBeVisible();
+    await expectNoA11yViolations(page);
+    await first.getByRole("button", { name: "Edit [01]" }).click();
+    await expect(page.getByRole("dialog", { name: "Edit structure" })).toBeVisible();
+  });
+
   test("compare", async ({ page }) => {
     await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
     await expect(page.getByRole("region", { name: "Focus [01]" })).toBeVisible();

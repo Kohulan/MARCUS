@@ -209,7 +209,8 @@ async def test_inchikeys_are_cached_per_structure(app, async_db_session, monkeyp
     asked: list[int] = []
 
     async def counting(fn, items):
-        asked.append(len(items))
+        if fn is read.inchikeys:  # not the paper text's compound IDs (read.figure_labels)
+            asked.append(len(items))
         return await real(fn, items)
 
     monkeypatch.setattr(read.CHEM, "run", counting)
@@ -266,7 +267,8 @@ async def test_list_counts_ask_the_chem_process_only_for_papers_with_a_main_figu
     asked: list[int] = []
 
     async def counting(fn, items):
-        asked.append(len(items))
+        if fn is read.inchikeys:  # not the paper text's compound IDs (read.figure_labels)
+            asked.append(len(items))
         return await real(fn, items)
 
     monkeypatch.setattr(read.CHEM, "run", counting)
@@ -390,6 +392,8 @@ async def test_keys_come_in_chunks_and_a_failed_trip_keeps_what_came_before(
     fail_second = True
 
     async def flaky(fn, items):
+        if fn is not read.inchikeys:  # the paper text's compound IDs: always answered
+            return await real(fn, items)
         trips.append(len(items))
         if fail_second and len(trips) >= 2:  # the chem process stays busy after one trip
             raise HTTPException(status_code=503, detail="busy, try again")
