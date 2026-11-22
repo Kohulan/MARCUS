@@ -116,9 +116,10 @@ async def test_steps_list_background_steps_marked(app, async_db_session):
     assert paper["structures_total"] == 2  # background steps are no structures of the read
 
 
-async def test_a_background_step_is_returned_to_a_repeat_request(app, async_db_session):
-    """Compare asks for an engine already running in the background: it gets that step, and
-    the done paper is not reopened."""
+async def test_a_background_step_asked_for_becomes_the_papers_own(app, async_db_session):
+    """Compare (or "Run MolScribe") asks for an engine still waiting in the background: it gets
+    that step, promoted to the paper's own (no background row: it counts in the read and is
+    sent with the paper's own steps), and the done paper is busy again until it ends."""
     db = async_db_session
     alice, token = await new_owner(db)
     seeded = await seed_paper(db, alice, ocsr=False)
@@ -128,10 +129,15 @@ async def test_a_background_step_is_returned_to_a_repeat_request(app, async_db_s
     async with make_client(app, token) as client:
         r = await client.post(f"/api/v2/segments/{seg}/predictions", json={"engine": "molscribe"})
     assert r.status_code == 202
-    step = await db.get(Step, uuid.UUID(r.json()["step_id"]))
+    step_id = uuid.UUID(r.json()["step_id"])
+    step = await db.get(Step, step_id)
     assert step is not None and step.engine == "molscribe" and step.status == "pending"
+    rows = await db.scalars(select(BackgroundStep.step_id).where(BackgroundStep.step_id == step_id))
+    assert list(rows) == []
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
-    assert paper["status"] == "done"
+    assert paper["status"] == "processing"
+    listed = (await _get(app, token, f"/api/v2/papers/{pid}/steps"))["steps"]
+    assert [st["background"] for st in listed if st["id"] == str(step_id)] == [False]
 
 
 

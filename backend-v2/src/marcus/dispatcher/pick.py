@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from marcus.core.enums import WAITING_STEPS, ErrorClass, StepKind, StepStatus
 from marcus.core.models import Paper, Step
-from marcus.core.pipeline import fail_step, lock_parent, parent_gone
+from marcus.core.pipeline import fail_step, is_background, lock_parent, parent_gone
 from marcus.core.queues import (
     DOCLING_FIXED_S,
     DOCLING_HARD_EXTRA_S,
@@ -36,6 +36,10 @@ from marcus.core.settings import get_settings
 log = logging.getLogger(__name__)
 
 GRACE_S = 30  # watchdog: a step may run for its hard limit plus this
+# A background OCSR step (another engine beside a paper's read) waits at most this long; one on a
+# queue with no live worker, at most its queue's wait allowance. Then it is cancelled: no
+# failure, the engine simply did not read (expire_background).
+BACKGROUND_MAX_WAIT_S = 30 * 60
 
 # send(queue, step_id, kind, attempts, pages, engine): `attempts` is the step's attempts value
 # read in the transaction that set it queued; the runtime uses it to drop stale duplicate
@@ -50,9 +54,10 @@ LiveQueues = Callable[[], "set[str] | frozenset[str] | None"]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 
-# Order: priority class, then a paper's own steps before background OCSR steps (the other
-# engines, marcus.core.pipeline.background_engines: they fill in after the paper is done), then
-# owner usage on this queue in the fair window (steps busy now
+# Order: every paper's own steps before any background OCSR step (the other engines,
+# marcus.core.pipeline.background_engines: they fill in after the paper is done), whatever the
+# owner's priority class; then priority class, then owner usage on this queue in the fair
+# window (steps busy now
 # or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
 # the oldest paper / image job, then step order. One statement; the chosen row is locked, rows another
 # dispatcher (or the planner) holds are skipped. `docling_ok` false leaves docling steps out (the
@@ -72,9 +77,8 @@ _PICK_SQL = text(
       JOIN owners o ON o.id = COALESCE(p.owner_id, j.owner_id)
       LEFT JOIN usage u ON u.owner_id = o.id
     WHERE s.queue = :q AND s.status = 'pending' AND (s.kind <> 'docling' OR :docling_ok)
-    ORDER BY o.priority_class,
-             EXISTS (SELECT 1 FROM background_steps b WHERE b.step_id = s.id),
-             COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
+    ORDER BY EXISTS (SELECT 1 FROM background_steps b WHERE b.step_id = s.id),
+             o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
              s.seq, s.created_at
     LIMIT 1 FOR UPDATE OF s SKIP LOCKED
     """
@@ -310,9 +314,14 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
     """
     rows = session.execute(select(Step.id, Step.status, Step.queue).where(_stuck())).all()
     waiting_model_steps = _unserved_model_steps(session) if live_queues is not None else []
+    waiting_background = _waiting_background(session)
     session.rollback()
     live: set[str] | frozenset[str] | None = None
-    needs_live = any(r.status == StepStatus.QUEUED.value for r in rows) or waiting_model_steps
+    needs_live = (
+        any(r.status == StepStatus.QUEUED.value for r in rows)
+        or waiting_model_steps
+        or waiting_background
+    )
     if live_queues is not None and needs_live:
         try:
             live = live_queues()
@@ -359,4 +368,49 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
             except Exception:
                 log.exception("watchdog: could not fail %s step %s", kind, step_id)
                 session.rollback()
+    done += expire_background(session, waiting_background, live)
+    return done
+
+
+def _waiting_background(session: Session) -> list[tuple[uuid.UUID, str, float]]:
+    """(id, queue, seconds waited) of the background OCSR steps still waiting (pending, queued)
+    longer than their queue's wait allowance (QUEUE_WAIT_S: a worker restart takes that long)."""
+    waited = func.extract("epoch", func.now() - Step.created_at)
+    rows = session.execute(
+        select(Step.id, Step.queue, waited).where(Step.status.in_(WAITING_STEPS), is_background())
+    ).all()
+    return [(i, q, float(w)) for i, q, w in rows if w > QUEUE_WAIT_S.get(q, 300)]
+
+
+def expire_background(
+    session: Session,
+    waiting: list[tuple[uuid.UUID, str, float]],
+    live: set[str] | frozenset[str] | None,
+) -> int:
+    """Cancel the background steps of `waiting` (_waiting_background) on a queue known to have no
+    live worker, or waiting longer than BACKGROUND_MAX_WAIT_S. Cancelled, not failed: the paper
+    (done long since) and its cards say nothing; the badge counts only the engines that read,
+    and the paper's event stream ends (api.routes.events). Returns the count."""
+    done = 0
+    for step_id, queue, waited in waiting:
+        unserved = live is not None and queue not in live
+        if not unserved and waited <= BACKGROUND_MAX_WAIT_S:
+            continue
+        try:
+            n = session.execute(
+                update(Step)
+                .where(Step.id == step_id, Step.status.in_(WAITING_STEPS))
+                .values(status=StepStatus.CANCELLED.value, finished_at=func.now(),
+                        error="background engine not served")
+                .execution_options(synchronize_session=False)
+            ).rowcount  # fmt: skip
+            session.commit()
+        except Exception:
+            log.exception("watchdog: could not expire background step %s", step_id)
+            session.rollback()
+            continue
+        if n:
+            done += 1
+            log.warning("watchdog: background step %s on %s expired (%s)", step_id, queue,
+                        "no live consumer" if unserved else "waited too long")  # fmt: skip
     return done
