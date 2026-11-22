@@ -248,7 +248,8 @@ asked and the manual action stays. Each is asked once (a paper with any annotate
 prediction with an `rgroup_extractions` row, is never asked again by itself) and only for work
 younger than `MARCUS_AUTO_WINDOW_S` (default 3600 s: no backfill of older papers). No rate
 limit is charged. Both run beside the read: they never reopen a paper, keep it busy, or show in
-its steps, step counts or progress; the GETs say `auto_pending` while a run is about to start.
+its steps, step counts or progress; the GETs say `auto_pending` for the 20 s after one became due (a few dispatcher passes; the same rule,
+`marcus.core.auto.candidates_query`, no broker call), then the real step or the manual action.
 
 ### Drawings in the paper's orientation
 

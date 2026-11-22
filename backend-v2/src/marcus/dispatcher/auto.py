@@ -26,7 +26,6 @@ from marcus.core.pipeline import (
     request_rgroups,
 )
 from marcus.core.queues import queue_for
-from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
 
@@ -79,12 +78,15 @@ def _ask(session: Session, request, item, refused) -> bool:
         return False
 
 
+def _ids(session: Session, query) -> list:
+    return [] if query is None else list(session.execute(query).scalars())
+
+
 def auto_once(session: Session, live_queues: LiveQueues) -> int:
     """Ask for every candidate whose feature is on and whose queue is served. Returns the
     number of steps made."""
-    settings = get_settings()
-    annotate = auto.annotation_candidates(session) if settings.annotate_enabled else []
-    rgroups = auto.rgroup_candidates(session) if settings.rgroup_enabled else []
+    annotate = _ids(session, auto.candidates_query(StepKind.ANNOTATE))
+    rgroups = _ids(session, auto.candidates_query(StepKind.RGROUPS))
     session.rollback()  # end the read; each request below has its own transaction
     if not annotate and not rgroups:
         return 0

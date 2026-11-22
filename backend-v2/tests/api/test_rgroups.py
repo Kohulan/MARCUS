@@ -126,15 +126,31 @@ async def test_the_list_names_the_scaffolds_about_to_be_read_by_themselves(
     assert db is not None
 
 
-async def test_no_auto_pending_without_a_worker(app, async_db_session, ready, monkeypatch):
-    from marcus.api.routes import health
+async def test_auto_pending_is_only_the_moment_before_it_starts(app, async_db_session, ready):
+    """Past the few dispatcher passes after the scaffold and the text were read, nothing is
+    listed: the card offers its action again (the dispatcher skipped it)."""
+    from datetime import UTC, datetime, timedelta
 
-    token, paper_id, _, _, _, _ = ready
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
-    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    db = async_db_session
+    token, paper_id, scaffold, _, _, _ = ready
+    old = datetime.now(UTC) - timedelta(seconds=120)
+    await db.execute(update(Step).where(Step.paper_id == paper_id).values(finished_at=old))
+    await db.execute(update(Prediction).where(Prediction.id == scaffold).values(created_at=old))
+    await db.commit()
     async with make_client(app, token) as c:
         listed = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
     assert listed["auto_pending"] == []
+
+
+async def test_the_polled_list_never_asks_the_broker(app, async_db_session, ready, monkeypatch):
+    async def boom():
+        raise AssertionError("GET must not wait on the consumer broadcast")
+
+    token, paper_id, scaffold, _, _, _ = ready
+    monkeypatch.setattr(app.state, "live_queues", boom)
+    async with make_client(app, token) as c:
+        r = await c.get(f"/api/v2/papers/{paper_id}/rgroups")
+    assert r.status_code == 200 and r.json()["auto_pending"] == [str(scaffold)]
 
 
 async def test_start_is_503_where_it_is_not_available(app, async_db_session):

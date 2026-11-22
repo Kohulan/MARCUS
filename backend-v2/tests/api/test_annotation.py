@@ -168,7 +168,9 @@ async def test_an_annotation_run_is_outside_the_papers_read(app, async_db_sessio
         async def seen() -> tuple:
             listed = (await c.get("/api/v2/papers")).json()["papers"]
             detail = (await c.get(f"/api/v2/papers/{paper_id}")).json()
-            kinds = [s["kind"] for s in (await c.get(f"/api/v2/papers/{paper_id}/steps")).json()["steps"]]
+            kinds = [
+                s["kind"] for s in (await c.get(f"/api/v2/papers/{paper_id}/steps")).json()["steps"]
+            ]
             return (
                 listed[0]["annotating"], detail["annotating"], detail["status"],
                 "annotate" in kinds, sum(detail["counts"]["steps_by_status"].values()),
@@ -194,20 +196,45 @@ async def test_get_says_when_the_annotation_will_start_by_itself(app, async_db_s
     assert after["auto_pending"] is False and after["status"] == "pending"
 
 
-async def test_no_auto_pending_without_a_worker_or_the_feature(
+async def _age_docling(db, paper_id, seconds: float) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    await db.execute(
+        update(Step)
+        .where(Step.paper_id == paper_id, Step.kind == "docling")
+        .values(finished_at=datetime.now(UTC) - timedelta(seconds=seconds))
+    )
+    await db.commit()
+
+
+async def test_auto_pending_is_only_the_moment_before_it_starts(
     app, async_db_session, ready, monkeypatch, clear_settings_cache
 ):
-    from marcus.api.routes import health
-
+    """`auto_pending` covers the few dispatcher passes after the text was read. If nothing
+    started by then (the dispatcher skipped it: no worker, the feature off there), the manual
+    action shows again, never a "Annotating…" that waits for nothing."""
+    db = async_db_session
     token, paper_id, _ = ready
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
-    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
     async with make_client(app, token) as c:
-        unserved = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
+        url = f"/api/v2/papers/{paper_id}/annotation"
+        assert (await c.get(url)).json()["auto_pending"] is True
+        await _age_docling(db, paper_id, 120)
+        assert (await c.get(url)).json()["auto_pending"] is False
+        await _age_docling(db, paper_id, 0)
         monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "0")
         clear_settings_cache()
-        off = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
-    assert unserved["auto_pending"] is False and off["auto_pending"] is False
+        assert (await c.get(url)).json()["auto_pending"] is False
+
+
+async def test_a_polled_get_never_asks_the_broker(app, async_db_session, ready, monkeypatch):
+    async def boom():
+        raise AssertionError("GET must not wait on the consumer broadcast")
+
+    token, paper_id, _ = ready
+    monkeypatch.setattr(app.state, "live_queues", boom)
+    async with make_client(app, token) as c:
+        r = await c.get(f"/api/v2/papers/{paper_id}/annotation")
+    assert r.status_code == 200 and r.json()["auto_pending"] is True
 
 
 async def test_a_paper_still_being_read_is_not_annotating(app, async_db_session):
