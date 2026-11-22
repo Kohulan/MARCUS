@@ -1,5 +1,5 @@
-// Compare engines: "Run all engines" (one prediction per engine not read and not running,
-// then onStarted once, no stream of its own), live states per engine, Tanimoto with two
+// Compare engines: opening starts every engine not read and not running (one prediction
+// each, then onStarted once, no stream of its own), a failed engine's Retry, live states per engine, Tanimoto with two
 // decimals once per pair of distinct SMILES (cached), the common part (molfile → mcs →
 // depict with highlight), 429 text, "Use this one" (accept keeping the note, molfile
 // replaced), and the dialog in focus mode (review keys held, Esc closes Compare first).
@@ -65,6 +65,8 @@ beforeEach(() => {
     revokeObjectURL: vi.fn(),
   });
   vi.spyOn(api, "depict").mockResolvedValue({ format: "svg", data: "<svg/>" });
+  vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
 });
 
 afterEach(() => {
@@ -101,24 +103,46 @@ function cell(row: string, engine: string): HTMLElement {
 }
 
 describe("Compare", () => {
-  it("Run all engines starts the three others, then onStarted once, and opens no stream", async () => {
-    const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("opening starts the three engines not read, then onStarted once, and opens no stream", async () => {
     const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    const run = vi.mocked(api.runPrediction);
     expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["decimer-hand", "molnextr", "molscribe"]);
     expect(run.mock.calls.every((c) => c[0] === "s1")).toBe(true);
     expect(EventSourceSpy).not.toHaveBeenCalled();
     // Started engines read as Reading… until their steps arrive.
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
-    expect(screen.getByRole("button", { name: "Run all engines" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Run all engines" })).toBeNull();
   });
 
-  it("Run all engines shows its progress: engines read of those started, with the percentage; full for a moment, then gone", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("starts once: a later render with new rows asks nothing more", async () => {
     const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
-    const bar = await screen.findByRole("progressbar", { name: "Run all engines" });
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    rerender(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Compare {...props} predictions={[prediction({ engine: "decimer" })]} steps={[]} />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).toHaveBeenCalledTimes(3);
+  });
+
+  it("everything read: nothing is started", async () => {
+    const { props } = renderCompare({
+      predictions: ["decimer", "decimer-hand", "molnextr", "molscribe"].map((engine) =>
+        prediction({ engine }),
+      ),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    expect(props.onStarted).not.toHaveBeenCalled();
+  });
+
+  it("the opening start shows its progress: engines read of those started; full for a moment, then gone", async () => {
+    const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    const bar = await screen.findByRole("progressbar", { name: "Engines" });
     expect(bar).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText("Running engines 0/3")).toBeInTheDocument();
     // an engine reading has the calm indeterminate bar under its word
@@ -143,14 +167,12 @@ describe("Compare", () => {
       [step("molnextr", "done"), step("molscribe", "done"), step("decimer-hand", "failed", "timeout")],
     );
     expect(bar).toHaveAttribute("aria-valuenow", "100");
-    await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Run all engines" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Engines" })).toBeNull());
   });
 
   it("DECIMER hand-drawn reading says its first run loads the model; the others do not", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
     const first = [prediction({ engine: "decimer" })];
     const { props, rerender } = renderCompare({ predictions: first });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     const note = "The first run can take about 30 s";
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
@@ -175,29 +197,52 @@ describe("Compare", () => {
   });
 
   it("does not ask again for an engine with an active step", async () => {
-    const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
     const { props } = renderCompare({
       predictions: [prediction({ engine: "decimer" })],
       steps: [step("molnextr", "running")],
     });
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["decimer-hand", "molscribe"]);
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1]).sort()).toEqual([
+      "decimer-hand",
+      "molscribe",
+    ]);
   });
 
   it("an image target starts image predictions", async () => {
-    const run = vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
-    const seg = vi.spyOn(api, "runPrediction");
+    const seg = vi.mocked(api.runPrediction);
     const { props } = renderCompare({
       target: { kind: "image", id: "img1" },
       predictions: [prediction({ engine: "decimer" })],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    const run = vi.mocked(api.runImagePrediction);
     expect(run).toHaveBeenCalledTimes(3);
     expect(run.mock.calls.every((c) => c[0] === "img1")).toBe(true);
     expect(seg).not.toHaveBeenCalled();
+  });
+
+  it("a failed engine is not started again on opening: its own Retry starts it", async () => {
+    const { props } = renderCompare({
+      predictions: ["decimer", "decimer-hand", "molnextr"].map((engine) => prediction({ engine })),
+      steps: [step("molscribe", "failed", "engine_error")],
+    });
+    expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    fireEvent.click(within(cell("Result", "MolScribe")).getByRole("button", { name: "Retry, MolScribe" }));
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(api.runPrediction).toHaveBeenCalledWith("s1", "molscribe");
+    expect(cell("Result", "MolScribe")).toHaveTextContent("Reading…");
+    expect(within(cell("Result", "MolNexTR")).queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
+
+  it("a refused start says so and leaves the engines not read", async () => {
+    vi.mocked(api.runPrediction).mockRejectedValue(new ApiError(503, "engine not available"));
+    const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    expect(await screen.findByText("Not started: engine not available")).toBeInTheDocument();
+    expect(props.onStarted).not.toHaveBeenCalled();
+    expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
   });
 
   it("an image job's drawings come from /tools/depict keyed with a null highlight", async () => {
@@ -436,17 +481,10 @@ describe("Compare", () => {
     expect(screen.queryByText(/boom/)).toBeNull();
   });
 
-  it("a failed engine shows its reason", () => {
-    renderCompare({
-      predictions: [prediction({ engine: "decimer" })],
-      steps: [step("molscribe", "failed", "engine_error")],
-    });
-    expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
-    expect(cell("Result", "MolNexTR")).toHaveTextContent("Not read yet");
-  });
-
-  it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", () => {
+  it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", async () => {
+    vi.mocked(api.runPrediction).mockRejectedValue(new ApiError(503, "busy"));
     renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    await screen.findByText("Not started: busy");
     expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
     const smiles = cell("SMILES", "MolNexTR");
     expect(smiles.textContent).toBe("–None");
@@ -660,13 +698,11 @@ describe("Compare in the workspace", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: /^Focus/ })).toBeNull());
   });
 
-  it("Run all engines from focus mode reopens the page's stream once", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("Compare from focus mode starts the engines and reopens the page's stream once", async () => {
     renderWorkspace(paper([segment("s1")]), "?s=s1&focus=1");
     await screen.findByRole("region", { name: /^Focus/ });
     press("c");
-    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Run all engines" }));
+    await screen.findByRole("dialog", { name: /Compare engines/ });
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
     expect(api.runPrediction).toHaveBeenCalledTimes(3);
     expect(EventSourceSpy).not.toHaveBeenCalled();
