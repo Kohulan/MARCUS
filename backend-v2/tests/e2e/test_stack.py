@@ -213,7 +213,7 @@ def test_upload_to_done_with_fake_engines():
 
 
 def test_rgroup_routes_on_the_fake_stack():
-    """R-group reading is offered on the fake stack (the fake reader on q.llm), and a
+    """R-group reading is offered on the fake stack (the fake reader on q.rgroup), and a
     structure without R-groups is refused. The fake OCSR engine draws benzene only, so no
     scaffold exists here to read: the reading itself is covered by tests/api/test_rgroups.py
     and tests/core/test_rgroups_pipeline.py (the fake reader through the real planner)."""

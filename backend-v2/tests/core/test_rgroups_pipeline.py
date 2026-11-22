@@ -17,6 +17,7 @@ from marcus.core.pipeline import (
     cancel_paper,
     complete_step,
     fail_step,
+    request_annotation,
     request_ocsr,
     request_rgroups,
 )
@@ -77,11 +78,11 @@ def row_of(s, prediction) -> RgroupExtraction | None:
     ).scalar_one_or_none()
 
 
-def test_request_creates_a_pending_llm_step_and_a_queued_row(db_session):
+def test_request_creates_a_pending_rgroup_step_and_a_queued_row(db_session):
     s = db_session
     paper, scaffold, _ = done_paper(s)
     step = request_rgroups(s, scaffold.id)
-    assert (step.kind, step.queue, step.status, step.seq) == ("rgroups", "q.llm", "pending",
+    assert (step.kind, step.queue, step.status, step.seq) == ("rgroups", "q.rgroup", "pending",
                                                               RGROUPS_SEQ)  # fmt: skip
     assert step.paper_id == paper.id and step.segment_id == scaffold.segment_id
     assert step.page is None and step.engine is None
@@ -246,12 +247,31 @@ def test_an_unserved_rgroups_step_fails_and_says_so(db_session):
     old = datetime.now(UTC) - timedelta(seconds=get_settings().annotate_max_wait_s + 30)
     s.execute(update(Step).where(Step.id == step.id).values(created_at=old))
     s.commit()
-    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM | {"q.llm"}) == 0
-    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM) == 1
+    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM | {"q.rgroup"}) == 0
+    # the annotation worker (q.llm) does not serve it: the R-group worker is missing
+    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM | {"q.llm"}) == 1
     s.expire_all()
-    assert s.get(Step, step.id).status == "failed"
+    failed = s.get(Step, step.id)
+    assert failed.status == "failed" and failed.error == "no R-group worker"
     row = row_of(s, scaffold)
     assert row.status == "failed" and row.error == "engine_error"
+
+
+def test_an_unserved_annotation_does_not_fail_a_served_rgroups_step(db_session):
+    """Each model service is judged on its own queue: q.rgroup live, q.llm not."""
+    from tests.core.test_annotate_pipeline import _done_paper
+
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    rg_step = request_rgroups(s, scaffold.id)
+    ann_step = request_annotation(s, _done_paper(s).id)
+    old = datetime.now(UTC) - timedelta(seconds=get_settings().annotate_max_wait_s + 30)
+    s.execute(update(Step).where(Step.id.in_([rg_step.id, ann_step.id])).values(created_at=old))
+    s.commit()
+    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM | {"q.rgroup"}) == 1
+    s.expire_all()
+    assert s.get(Step, ann_step.id).status == "failed"
+    assert s.get(Step, rg_step.id).status == "pending"
 
 
 def test_the_handler_reads_its_request_from_the_database(db_session, monkeypatch,

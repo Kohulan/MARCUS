@@ -195,7 +195,7 @@ GPU; about 70 s per paper on 16 CPU threads).
 
 On demand per prediction with R-group labels (`POST /api/v2/predictions/{id}/rgroups`; read with
 `GET /api/v2/papers/{id}/rgroups` or `GET /api/v2/predictions/{id}/rgroups`; routes in
-`marcus.api.routes.rgroups`): an `rgroups` step on q.llm sends the scaffold's labels, the text of
+`marcus.api.routes.rgroups`): an `rgroups` step on q.rgroup sends the scaffold's labels, the text of
 pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) to the R-group
 model (nuextract3-rgroup-v1, vision, Q8_0) in a second llama-server, `llama-rgroup`, and stores
 the rows (`rgroup_extractions`, one per prediction; a re-run replaces them). Of the labels, only
@@ -205,9 +205,10 @@ label the drawing does not have, and the model would fill that column too. An un
 one the model was trained on (`marcus.core.rgroup_extraction`, byte for byte the bake-off
 client's). The step never reopens the paper. Exports: JSON `rgroup_rows` per segment, SDF
 `MARCUS_RGROUP_ROWS`. The GPU override runs `llama-rgroup` beside `llama-server` (same image,
-same network `llm`, both GGUF files mounted read-only; 6.0 GB measured on a V100); the fake stack
-runs the fake reader in `worker-fake-annotate`. Without either, the API answers 503
-(`rgroup_enabled`). Real-model smoke test against a running server:
+its own internal network `rgroup`, both GGUF files mounted read-only; 6.0 GB measured on a V100)
+and `worker-rgroup` (one process) on its own queue q.rgroup, so an annotation run never holds back
+an R-group reading, nor the other way round; the fake stack runs the fake reader in
+`worker-fake-rgroup`. Without either, the API answers 503 (`rgroup_enabled`). Real-model smoke test against a running server:
 `python ops/rgroup_smoke.py --url http://127.0.0.1:8080 --pdf paper.pdf --page 3 --labels R1,R2 --text docling.json`.
 
 ### nginx and api restarts

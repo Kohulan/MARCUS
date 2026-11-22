@@ -3,7 +3,7 @@
 One chat request per scaffold, as the model was trained and tested (MARCUS-training
 models/nuextract3-rgroup-v1/README.md): marcus.core.rgroup_extraction.request_body, sent as
 json.dumps writes it (the bake-off client's bytes). llama-server runs with `--parallel 1`; the
-q.llm queue has one slot. Errors as marcus.workers.llamachat maps them (no connection or 5xx:
+q.rgroup queue has one slot. Errors as marcus.workers.llamachat maps them (no connection or 5xx:
 retried once; timeout: retried once; 4xx or no message: final).
 """
 
