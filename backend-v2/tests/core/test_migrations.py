@@ -378,3 +378,61 @@ def test_migration_0012_rgroup_extractions_up_down(migrated_db):
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))
         command.upgrade(cfg, "head")
+
+
+def test_migration_0013_moves_rgroups_steps_to_their_own_queue(migrated_db):
+    """0013 moves rgroups steps from q.llm to q.rgroup (annotate steps stay); a step already
+    sent to q.llm goes back to pending, so the dispatcher sends it again on q.rgroup and the
+    old message is dropped as stale. The downgrade moves them back the same way."""
+    from sqlalchemy import text
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+
+    def rows(conn):
+        return sorted(
+            conn.execute(
+                text(
+                    "SELECT kind, status, queue, queued_at IS NULL FROM steps "
+                    "WHERE kind IN ('rgroups', 'annotate')"
+                )
+            ).all()
+        )
+
+    try:
+        command.downgrade(cfg, "0012")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            for kind, seq, status in (("rgroups", 1, "pending"), ("rgroups", 2, "queued"),
+                                      ("rgroups", 3, "done"), ("annotate", 4, "queued")):  # fmt: skip
+                s.execute(
+                    text("INSERT INTO steps (paper_id, kind, queue, seq, status, queued_at, id) "
+                         "VALUES (:p, :k, 'q.llm', :seq, :st, "
+                         "CASE WHEN :st = 'queued' THEN now() END, gen_random_uuid())"),
+                    {"p": paper.id, "k": kind, "seq": seq, "st": status},
+                )  # fmt: skip
+            s.commit()
+        command.upgrade(cfg, "0013")
+        with engine.connect() as conn:
+            assert rows(conn) == sorted([
+                ("rgroups", "pending", "q.rgroup", True),
+                ("rgroups", "pending", "q.rgroup", True),
+                ("rgroups", "done", "q.rgroup", True),
+                ("annotate", "queued", "q.llm", False),
+            ])  # fmt: skip
+        command.downgrade(cfg, "0012")
+        with engine.connect() as conn:
+            assert rows(conn) == sorted([
+                ("rgroups", "pending", "q.llm", True),
+                ("rgroups", "pending", "q.llm", True),
+                ("rgroups", "done", "q.llm", True),
+                ("annotate", "queued", "q.llm", False),
+            ])  # fmt: skip
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")

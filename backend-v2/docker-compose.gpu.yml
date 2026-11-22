@@ -42,11 +42,12 @@
 # (the api image) consumes q.llm and calls it; the API offers annotation (MARCUS_ANNOTATE_ENABLED)
 # and /ready expects q.llm. A different model file means new MARCUS_ANNOTATE_MODEL(_VERSION).
 #
-# R-group rows (Markush Phase 2): llama-rgroup is a second llama-server on the same network `llm`,
-# the same image and the same hardening, serving the R-group model (MARCUS_RGROUP_GGUF and its
-# vision projector MARCUS_RGROUP_MMPROJ, both mounted read-only, readable by MARCUS_LLM_USER).
-# worker-llm also runs the rgroups step (marcus.workers.rgroups) and calls it; the API offers it
-# (MARCUS_RGROUP_ENABLED). A different model file means new MARCUS_RGROUP_MODEL(_VERSION).
+# R-group rows (Markush Phase 2): llama-rgroup is a second llama-server with the same image and the
+# same hardening on its own internal network `rgroup`, serving the R-group model
+# (MARCUS_RGROUP_GGUF and its vision projector MARCUS_RGROUP_MMPROJ, both mounted read-only,
+# readable by MARCUS_LLM_USER). worker-rgroup consumes q.rgroup, runs the rgroups step
+# (marcus.workers.rgroups) and calls it; the API offers it (MARCUS_RGROUP_ENABLED) and /ready
+# expects q.rgroup. A different model file means new MARCUS_RGROUP_MODEL(_VERSION).
 #
 # Host: NVIDIA driver with CUDA 12.8 support and the NVIDIA Container Toolkit; the card in compute
 # mode DEFAULT (several processes share it: ops/systemd/nvidia-compute-default.service).
@@ -120,7 +121,7 @@ services:
     environment:
       MARCUS_ANNOTATE_ENABLED: "1"
       MARCUS_RGROUP_ENABLED: "1"
-      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm}
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm,q.rgroup}
 
   # The MARCUS model: llama.cpp llama-server (docker/Dockerfile.llama, built at the commit the GGUF
   # was converted with). Greedy decoding and the 11-key grammar come with each request
@@ -180,7 +181,7 @@ services:
       - ALL
     user: ${MARCUS_LLM_USER:-10001:10001}
     networks:
-      - llm
+      - rgroup
     volumes:
       - type: bind
         source: ${MARCUS_RGROUP_GGUF:-/srv/marcus/models/nuextract3-rgroup-v1-vision-Q8_0.gguf}
@@ -206,9 +207,8 @@ services:
       retries: 3
     mem_limit: 10g
 
-  # annotate and rgroups steps (q.llm): ONE prefork process (= q.llm slots); it only reads the
-  # paper's text and page images and calls llama-server or llama-rgroup, so it runs the api image
-  # with the data volume read-only.
+  # annotate steps (q.llm): ONE prefork process (= q.llm slots); it only reads the paper's text and
+  # calls llama-server, so it runs the api image with the data volume read-only.
   worker-llm:
     image: marcus-v2-api:local
     restart: unless-stopped
@@ -233,11 +233,8 @@ services:
         condition: service_completed_successfully
       llama-server:
         condition: service_healthy
-      llama-rgroup:
-        condition: service_healthy
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
-              "-c", "1", "--pool", "prefork",
-              "--include", "marcus.workers.annotate,marcus.workers.rgroups",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
               "-n", "llm@%h", "--loglevel", "INFO"]
     environment:
       MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
@@ -247,6 +244,43 @@ services:
       MARCUS_ANNOTATOR_URL: http://llama-server:8080
       MARCUS_ANNOTATE_MODEL: ${MARCUS_ANNOTATE_MODEL:-qwen3.5-9b-marcus-v1}
       MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_ANNOTATE_MODEL_VERSION:-Q8_0 llama.cpp b12554}
+    mem_limit: 1g
+
+  # rgroups steps (q.rgroup): ONE prefork process (= q.rgroup slots), the same image and
+  # hardening as worker-llm; it reads the paper's text and page images and calls llama-rgroup.
+  # Its own queue and worker: an annotation run never holds back an R-group reading, nor the
+  # other way round (two llama-servers, one request at a time each).
+  worker-rgroup:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+      - rgroup
+    volumes:
+      - data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+      llama-rgroup:
+        condition: service_healthy
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
+              "-n", "rgroup@%h", "--loglevel", "INFO"]
+    environment:
+      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MARCUS_DATA_ROOT: /data
       MARCUS_RGROUP_READER: llama
       MARCUS_RGROUP_URL: http://llama-rgroup:8080
       MARCUS_RGROUP_MODEL: ${MARCUS_RGROUP_MODEL:-nuextract3-rgroup-v1}
@@ -254,6 +288,9 @@ services:
     mem_limit: 1g
 
 networks:
-  # llama-server, llama-rgroup and worker-llm only (tests/deploy): no route out, no other member.
+  # llama-server and worker-llm only (tests/deploy): no route out, no other member.
   llm:
+    internal: true
+  # llama-rgroup and worker-rgroup only, the same way.
+  rgroup:
     internal: true

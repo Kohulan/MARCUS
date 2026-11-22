@@ -75,12 +75,12 @@ async def run_rgroups(db, paper_id, result) -> None:
 
 @pytest.fixture
 def enabled(monkeypatch, clear_settings_cache):
-    """R-groups offered, and a live q.llm consumer (the /ready consumer check, faked)."""
+    """R-groups offered, and a live q.rgroup consumer (the /ready consumer check, faked)."""
     from marcus.api.routes import health
 
     monkeypatch.setenv("MARCUS_RGROUP_ENABLED", "1")
     clear_settings_cache()
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.rgroup"})
     monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
 
 
@@ -121,12 +121,13 @@ async def test_start_is_503_where_it_is_not_available(app, async_db_session):
     assert own.json() == missing.json() == {"detail": "R-group reading is not available"}
 
 
-async def test_start_is_503_while_no_worker_serves_q_llm(
+async def test_start_is_503_while_no_worker_serves_q_rgroup(
     app, async_db_session, enabled, monkeypatch
 ):
+    """The annotation worker (q.llm) does not count: it does not run the R-group model."""
     from marcus.api.routes import health
 
-    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu", "q.llm"})
     monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
     db = async_db_session
     alice, token = await new_owner(db)

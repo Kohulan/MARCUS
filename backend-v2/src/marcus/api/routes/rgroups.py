@@ -87,7 +87,7 @@ async def start_rgroups(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> RgroupStarted:
-    # Both before the owner check (no existence oracle). Offered, but no worker consumes q.llm:
+    # Both before the owner check (no existence oracle). Offered, but no worker consumes q.rgroup:
     # refuse instead of queueing a step nobody runs.
     if not reads.available():
         raise HTTPException(status_code=503, detail=NOT_AVAILABLE)

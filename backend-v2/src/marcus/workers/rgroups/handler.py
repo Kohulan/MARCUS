@@ -1,4 +1,4 @@
-"""The `rgroups` step handler (worker-llm, worker-fake-annotate): one scaffold's R-group rows.
+"""The `rgroups` step handler (worker-rgroup, worker-fake-rgroup): one scaffold's R-group rows.
 
 The step points at its request row (rgroup_extractions.step_id), and through it at the
 prediction (its R-group labels) and the segment (the page). Of the labels, only the drawn ones

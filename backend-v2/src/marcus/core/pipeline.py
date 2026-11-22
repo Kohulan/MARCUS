@@ -12,7 +12,7 @@ row. A re-run replaces the model's values and keeps the curator's. An annotate s
 decides whether the paper is done or failed.
 
 R-group rows (Markush Phase 2): on demand only, per prediction with R-group labels.
-request_rgroups adds one `rgroups` step (q.llm, the step's segment set, no page) and writes the
+request_rgroups adds one `rgroups` step (q.rgroup, the step's segment set, no page) and writes the
 prediction's `rgroup_extractions` row (status `queued`); the step's end sets it `done` with the
 rows or `failed` with the error class. An rgroups step is outside the paper's progress: it never
 reopens a paper, never keeps one busy (_finish_check, the read counts in marcus.api.read) and
