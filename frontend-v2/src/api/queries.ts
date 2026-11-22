@@ -332,14 +332,19 @@ export function useSaveCuration(paperId: string): {
           const optimistic = change.structure === undefined;
           // A decision on a main-figure structure goes to its repeats (the server writes it):
           // shown on them at once, taken back with the save.
-          const group = change.status !== undefined ? groupStatuses(client, key, segmentId) : null;
+          // A decision: a status given on its own (a button, a key), or one that changes the
+          // stored status with an edit. An edit that keeps the status is none.
+          const decision =
+            change.status !== undefined &&
+            (change.structure === undefined || change.status !== (before?.status ?? "unchecked"));
+          const group = decision ? groupStatuses(client, key, segmentId) : null;
           const setGroup = (statuses: Map<string, BulkStatus | null>) =>
             client.setQueryData<PaperDetail>(key, (old) => (old ? withStatuses(old, statuses) : old));
           const cancelled = optimistic ? await write(body) : false;
           if (group) setGroup(new Map([...group.keys()].map((id) => [id, body.status])));
           let out: CurationOut;
           try {
-            out = await api.putCuration(segmentId, body, change.status !== undefined);
+            out = await api.putCuration(segmentId, body, decision);
           } catch (err) {
             if (group) setGroup(group);
             if ((optimistic && (await write(before))) || cancelled) {

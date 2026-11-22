@@ -22,7 +22,7 @@ from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepA
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine
-from marcus.core.models import Curation, Owner, Prediction, Step
+from marcus.core.models import Curation, InheritedStatus, Owner, Prediction, Step
 from marcus.core.pipeline import request_ocsr
 
 router = APIRouter()
@@ -126,11 +126,16 @@ async def put_curation(
                 status_code=422,
                 detail=[{"type": "value_error", "loc": ["body", field], "msg": msg}],
             )
+    # A status inherited from a main-figure structure is shown as unchecked while it does not
+    # hold: a note or structure edit sends that back, so it keeps the stored status (and its
+    # mark). Only a decision on this card replaces it.
+    keep = not decision and await db.get(InheritedStatus, segment.id) is not None
     curation = await db.get(Curation, segment.id)
     if curation is None:
         curation = Curation(segment_id=segment.id)
         db.add(curation)
-    curation.status = body.status
+    if not keep or curation.status is None:
+        curation.status = body.status
     curation.smiles = body.smiles
     curation.molfile = body.molfile
     curation.note = body.note
@@ -145,4 +150,7 @@ async def put_curation(
             await db.rollback()
             raise
     await db.commit()
-    return structure_out(CurationOut, curation, named)
+    out = structure_out(CurationOut, curation, named)
+    if keep:
+        out.status = body.status  # as the client shows it (api.read masks it the same way)
+    return out

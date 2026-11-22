@@ -329,7 +329,7 @@ describe("segment caller (useSaveCuration + editorChange)", () => {
       smiles: "CCO",
       molfile: "M",
       note: "n",
-    }, true);
+    }, false);
   });
 
   it("an unchecked structure becomes accepted on save", async () => {
@@ -361,12 +361,13 @@ describe("segment caller (useSaveCuration + editorChange)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save SMILES" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    // the status is kept, not decided: no decision (a main card's repeats keep theirs)
     expect(put).toHaveBeenCalledWith("s1", {
       status: "rejected",
       smiles: "CCN",
       molfile: null,
       note: "why",
-    }, true);
+    }, false);
     await waitFor(() =>
       expect(client.getQueryData<PaperDetail>(keys.paper("p1"))?.segments[0]?.curation).toEqual({
         status: "rejected",
@@ -402,10 +403,8 @@ describe("editorChange", () => {
       status: "accepted",
       structure: s,
     });
-    expect(editorChange({ ...base, status: "rejected" }, s)).toEqual({
-      status: "rejected",
-      structure: s,
-    });
+    // a kept status is not in the change: an edit is no decision
+    expect(editorChange({ ...base, status: "rejected" }, s)).toEqual({ structure: s });
     // no note key: curationBody keeps the stored note
     expect("note" in editorChange({ ...base, status: "accepted" }, s)).toBe(false);
   });

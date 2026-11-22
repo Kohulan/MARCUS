@@ -414,6 +414,23 @@ describe("a decision on a main-figure structure covers its repeats", () => {
     expect(statuses()).toEqual(["unchecked", "accepted"]);
   });
 
+  it("an edit that keeps the status is no decision; one that changes it is", async () => {
+    const p = grouped();
+    p.segments[0] = {
+      ...p.segments[0]!,
+      curation: { status: "rejected", smiles: null, molfile: null, note: null },
+    };
+    client.setQueryData(keys.paper("p1"), p);
+    const put = vi.mocked(api.putCuration);
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    const structure = { smiles: "CCN", molfile: null };
+    await act(() => result.current.save("s1", { status: "rejected", structure }));
+    expect(put.mock.calls.at(-1)![2]).toBe(false);
+    expect(statuses()).toEqual(["rejected", "accepted"]); // the repeat keeps its own
+    await act(() => result.current.save("s1", { status: "accepted", structure }));
+    expect(put.mock.calls.at(-1)![2]).toBe(true);
+  });
+
   it("a bulk decision shows on the repeats at once, and a failure puts them back", async () => {
     client.setQueryData(keys.paper("p1"), grouped());
     const bulk = vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 1 });

@@ -569,3 +569,39 @@ async def test_a_decision_waits_when_the_chem_process_cannot_link(
     paper = await _paper(app, token, paper_id)
     assert _status(paper, s0) == "unchecked" and _status(paper, a) is None  # nothing written
     assert await _inherited(db) == {}
+
+
+async def test_a_structure_edit_that_keeps_the_status_is_no_decision(app, async_db_session):
+    """The editor fixing a rejected main structure into b's compound must not reject b."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, b, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    assert (await _put(app, token, s0, "rejected")).status_code == 200
+    await _decide(app, token, paper_id, **{str(b): "accepted"})  # CCN, on its own
+    edit = await _put(app, token, s0, "rejected", decision=False, smiles="CCN")
+    assert edit.status_code == 200
+    paper = await _paper(app, token, paper_id)
+    assert _repeats(paper)[str(b)] == str(s0) and _status(paper, b) == "accepted"
+    assert await _inherited(db) == {a: s0}  # b's own decision stands
+    accepted = await _export_json(app, token, paper_id, "accepted")
+    assert list(accepted) == [str(b)] and accepted[str(b)]["smiles"] == "CCN"
+
+
+async def test_a_note_save_keeps_an_inherited_status_shown_as_unchecked(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, _, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    assert (await _put(app, token, s0, "rejected")).status_code == 200
+    await _mark(app, token, paper_id, None)  # a's inherited "rejected" reads as unchecked now
+    assert _status(await _paper(app, token, paper_id), a) == "unchecked"
+
+    r = await _put(app, token, a, "unchecked", decision=False, note="seen")
+    assert r.status_code == 200 and r.json()["status"] == "unchecked"
+    assert await _inherited(db) == {a: s0}
+    await _mark(app, token, paper_id, 0)  # linked again: the inherited status holds again
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "rejected"
+    seg = next(s for s in paper["segments"] if s["id"] == str(a))
+    assert seg["curation"]["note"] == "seen"
