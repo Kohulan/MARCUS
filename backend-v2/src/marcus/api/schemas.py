@@ -117,6 +117,9 @@ class SegmentOut(BaseModel):
     # without one.
     compound_id: str | None = None
     compound_name: str | None = None
+    # Pages (0-based) of structures with the same compound ID but another InChIKey, not linked
+    # (marcus.core.main_figure.id_conflicts: the main-figure one, or its look-alikes): "check".
+    same_id_pages: list[int] = []
     # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ; None while an
     # engine is still reading, or with fewer than two read.
     agree: int | None = None

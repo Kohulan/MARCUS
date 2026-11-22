@@ -23,7 +23,14 @@ from marcus.core.enums import (
     StepKind,
     StepStatus,
 )
-from marcus.core.main_figure import CountFix, Entry, count_fix, link_repeats, stale_members
+from marcus.core.main_figure import (
+    CountFix,
+    Entry,
+    count_fix,
+    id_conflicts,
+    link_repeats,
+    stale_members,
+)
 from marcus.core.models import (
     Curation,
     DrawingFlag,
@@ -456,9 +463,27 @@ async def repeat_links(
     already asked for (_known_keys), else asked for here. A key missing (the chem process
     busy): 503 if `strict` (an export must not count a compound twice), else None (a read: the
     links are not ready). A repeat also links by the compound ID printed by its drawing
-    (`compound_id_of`: segment_ids; read here from the paper's text when not given)."""
+    (`compound_id_of`: segment_ids; read here from the paper's text when not given), where one
+    of the two has no InChIKey."""
     if main_page is None:
         return {}
+    entries = await link_entries(
+        paper, segments, curations, predictions, strict, known, compound_id_of
+    )
+    return None if entries is None else link_repeats(entries, main_page)
+
+
+async def link_entries(
+    paper: Paper,
+    segments: list[Segment],
+    curations: dict[uuid.UUID, Curation],
+    predictions: dict[uuid.UUID, list[Prediction]],
+    strict: bool = False,
+    known: dict[tuple[str, str], str | None] | None = None,
+    compound_id_of: dict[uuid.UUID, str] | None = None,
+) -> list[Entry] | None:
+    """The marcus.core.main_figure entries of the segments (InChIKey of the structure shown,
+    compound ID), as repeat_links takes them; None when not ready (repeat_links)."""
     if compound_id_of is None:
         labels = await figure_labels(paper.id, strict)
         if labels is None:
@@ -475,11 +500,10 @@ async def repeat_links(
         if strict:
             raise HTTPException(status_code=503, detail="busy, try again")
         return None
-    entries = [
+    return [
         Entry(s.id, s.page, known[src] if src is not None else None, ids.get(s.id))
         for s, src in zip(segments, sources, strict=True)
     ]
-    return link_repeats(entries, main_page)
 
 
 def _statuses(curations: dict) -> dict[uuid.UUID, str | None]:
@@ -645,13 +669,16 @@ async def segments_out(
     labels = await figure_labels(paper.id)
     boxes, names = labels if labels is not None else NO_LABELS
     ids = segment_ids(segments, boxes)
-    links = (
-        None  # the compound IDs are not known yet: the links are not ready
-        if labels is None and main_page is not None
-        else await repeat_links(
-            paper, main_page, segments, curations, predictions, compound_id_of=ids
+    entries: list[Entry] | None = []
+    if main_page is not None:
+        entries = (
+            None  # the compound IDs are not known yet: the links are not ready
+            if labels is None
+            else await link_entries(paper, segments, curations, predictions, compound_id_of=ids)
         )
-    )
+    links = None if entries is None else link_repeats(entries, main_page)
+    conflicts = id_conflicts(entries, main_page, links) if entries and links is not None else {}
+    page_of = {seg.id: seg.page for seg in segments}
     inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
     stale = stale_members(inherited, links)
     fix = CountFix(stale=stale) if links is None else count_fix(links, _statuses(curations), stale)
@@ -681,6 +708,7 @@ async def segments_out(
             check_drawing=seg.id in flagged,
             compound_id=ids.get(seg.id),
             compound_name=names.get(ids[seg.id]) if seg.id in ids else None,
+            same_id_pages=sorted({page_of[o] for o in conflicts.get(seg.id, [])}),
             **agreement_out(paper.engine, predictions[seg.id], ran.get(seg.id, {})),
             curation=curation_out(seg) if seg.id in curations else None,
             predictions=[

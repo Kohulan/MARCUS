@@ -144,6 +144,11 @@ export interface SegmentOut {
   compound_id?: string | null;
   /** The name the paper's text gives that compound ("salsubstolin A (12)"); null without. */
   compound_name?: string | null;
+  /**
+   * Pages (0-based) of structures with the same compound ID but another structure, not linked
+   * (the main-figure one, or its look-alikes): the card asks to check. [] or absent: none.
+   */
+  same_id_pages?: number[];
 }
 
 export interface SegmentList {

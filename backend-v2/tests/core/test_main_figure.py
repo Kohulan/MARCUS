@@ -3,7 +3,7 @@ import uuid
 from rdkit import Chem
 
 from marcus.api.chem import inchikey, inchikeys
-from marcus.core.main_figure import Entry, link_repeats
+from marcus.core.main_figure import Entry, id_conflicts, link_repeats
 
 
 def _ids(n):
@@ -33,15 +33,43 @@ def test_structures_without_a_key_never_link():
     assert link_repeats([Entry(m, 0, None), Entry(r, 1, None)], 0) == {}
 
 
-def test_a_compound_id_links_as_a_key_does():
-    """The hook for phase B item 4 (the compound ID read under the drawing)."""
-    m, r, other = _ids(3)
+def test_a_compound_id_links_only_where_one_side_has_no_key():
+    """Owner decision 2026-11-22: the same printed ID links a structure without an InChIKey (an
+    annotated drawing the engines misread) to its main structure, or the other way round; two
+    different InChIKeys are never linked by an ID, both cards say so instead."""
+    m, m2, r_nokey, r_other, r_none, r_main_nokey = _ids(6)
     entries = [
         Entry(m, 0, "A", compound_id="12"),
-        Entry(r, 1, "B", compound_id="12"),
-        Entry(other, 1, "C", compound_id=None),
+        Entry(m2, 0, None, compound_id="13"),
+        Entry(r_nokey, 1, None, compound_id="12"),  # no key: linked by the ID
+        Entry(r_other, 1, "B", compound_id="12"),  # two keys that differ: not linked
+        Entry(r_none, 1, "C", compound_id=None),
+        Entry(r_main_nokey, 2, "D", compound_id="13"),  # the main one has no key: linked
     ]
+    links = link_repeats(entries, 0)
+    assert links == {r_nokey: m, r_main_nokey: m2}
+    assert id_conflicts(entries, 0, links) == {r_other: [m], m: [r_other]}
+
+
+def test_an_id_printed_twice_on_the_main_page_links_nothing():
+    m1, m2, r, r2 = _ids(4)
+    entries = [
+        Entry(m1, 0, "A", compound_id="4"),
+        Entry(m2, 0, "B", compound_id="4"),  # "4" twice: an atom number, perhaps
+        Entry(r, 1, None, compound_id="4"),
+        Entry(r2, 1, "C", compound_id="4"),
+    ]
+    links = link_repeats(entries, 0)
+    assert links == {}
+    assert id_conflicts(entries, 0, links) == {}
+
+
+def test_the_same_key_links_before_any_id_and_conflicts_need_a_main_page():
+    m, r = _ids(2)
+    entries = [Entry(m, 0, "A", compound_id="1"), Entry(r, 1, "A", compound_id="2")]
     assert link_repeats(entries, 0) == {r: m}
+    assert id_conflicts(entries, 0, {r: m}) == {}
+    assert id_conflicts(entries, None, {}) == {}
 
 
 def test_inchikey_of_smiles_and_molfile():

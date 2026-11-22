@@ -7,6 +7,7 @@ import uuid
 
 from marcus.api import read
 from marcus.core import storage
+from marcus.core.agreement import inchikey_of
 from marcus.core.models import Paper, Prediction, Segment
 from tests.api.conftest import make_client, new_owner, seed_paper
 
@@ -60,9 +61,13 @@ async def test_no_text_no_ids(app, async_db_session):
     assert {(s["compound_id"], s["compound_name"]) for s in paper["segments"]} == {(None, None)}
 
 
-async def test_a_repeat_links_by_its_compound_id(app, async_db_session):
-    """Page 1 repeats compound 3 of the main figure (page 0) as an annotated drawing the engine
-    read as another structure: the same printed ID links it all the same."""
+async def test_a_compound_id_links_a_drawing_without_a_structure_and_flags_a_different_one(
+    app, async_db_session
+):
+    """Owner decision 2026-11-22. Page 1 prints compound 3 of the main figure (page 0) twice: an
+    annotated drawing no engine could read (no InChIKey) links to it by the ID; a drawing read
+    as another structure (another InChIKey) stays a card of its own, and both it and the main
+    card say "same ID"."""
     db = async_db_session
     alice, token = await new_owner(db)
     seeded = await seed_paper(db, alice)
@@ -70,19 +75,25 @@ async def test_a_repeat_links_by_its_compound_id(app, async_db_session):
 
     def add(s):
         s.get(Paper, seeded.paper_id).pages = 2
-        seg = Segment(
-            id=uuid.uuid4(), paper_id=seeded.paper_id, page=1, idx=0, bbox=[100, 100, 300, 300],
-            image_sha256="9" * 64,
-        )  # fmt: skip
-        s.add(seg)
-        s.flush()
-        s.add(Prediction(segment_id=seg.id, engine="decimer", engine_version="t", smiles="CCCN",
-                         valid=True, ms=1, rgroups=[]))  # fmt: skip
-        return seg.id
+        ids = []
+        for idx, (bbox, smiles, valid) in enumerate(
+            [([100, 100, 300, 300], "C(", False), ([400, 100, 600, 300], "CCCN", True)]
+        ):
+            seg = Segment(
+                id=uuid.uuid4(), paper_id=seeded.paper_id, page=1, idx=idx, bbox=bbox,
+                image_sha256=str(idx) * 64,
+            )  # fmt: skip
+            s.add(seg)
+            s.flush()
+            s.add(Prediction(segment_id=seg.id, engine="decimer", engine_version="t",
+                             smiles=smiles, valid=valid, ms=1, rgroups=[],
+                             inchikey=inchikey_of(smiles, valid)))  # fmt: skip
+            ids.append(seg.id)
+        return ids
 
-    repeat = await db.run_sync(add)
+    unread, other = await db.run_sync(add)
     await db.commit()
-    doc = document([id_box("3", 20, 70, 1), id_box("(3)", 190, 320, 2)])
+    doc = document([id_box("3", 20, 70, 1), id_box("(3)", 190, 320, 2), id_box("3", 490, 320, 2)])
     storage.text_path(seeded.paper_id).write_text(json.dumps(doc))
     read._LABELS.clear()
     async with make_client(app, token) as client:
@@ -90,12 +101,17 @@ async def test_a_repeat_links_by_its_compound_id(app, async_db_session):
     assert r.status_code == 200
     paper = await _paper(app, token, seeded.paper_id)
     by_id = {s["id"]: s for s in paper["segments"]}
-    assert by_id[str(repeat)]["compound_id"] == "3"
-    assert by_id[str(repeat)]["repeat_of"] == str(main)
-    # the paper list counts it once too (the same links)
+    assert by_id[str(unread)]["compound_id"] == "3"
+    assert by_id[str(unread)]["repeat_of"] == str(main)
+    assert by_id[str(unread)]["same_id_pages"] == []
+    assert by_id[str(other)]["compound_id"] == "3"
+    assert by_id[str(other)]["repeat_of"] is None
+    assert by_id[str(other)]["same_id_pages"] == [0]
+    assert by_id[str(main)]["same_id_pages"] == [1]
+    # the paper list counts the linked one once, the other one on its own (the same links)
     async with make_client(app, token) as client:
         listed = (await client.get("/api/v2/papers")).json()["papers"]
-    assert [p["structures"] for p in listed] == [2]
+    assert [p["structures"] for p in listed] == [3]
 
 
 async def test_the_text_is_read_once_and_a_busy_chem_process_shows_no_ids(
