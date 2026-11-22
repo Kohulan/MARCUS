@@ -191,7 +191,9 @@ Measured on a V100 (model README, 2026-11-22): about 6.5 GB of GPU memory with b
 (6.33 GB after load, 6.46 GB peak); about 2.4 s per paper and 4.5 s per scaffold one at a time,
 6.0 s for one of each at once. Stored results name the model (`model`, `model_version`), set for
 both jobs by `MARCUS_LLM_MODEL` and `MARCUS_LLM_MODEL_VERSION` (defaults
-`nuextract3-marcus-multi-v1`, `Q8_0 llama.cpp b12554`); change them with the model file. Results
+`nuextract3-marcus-multi-v1`, `Q8_0 llama.cpp b12554`); change them with the model file. Both
+workers call the server at `MARCUS_LLM_URL` with one request timeout, `MARCUS_LLM_TIMEOUT_S`
+(110 s). Results
 made before the switch keep the names of the two earlier models (`qwen3.5-9b-marcus-v1`,
 `nuextract3-rgroup-v1`).
 

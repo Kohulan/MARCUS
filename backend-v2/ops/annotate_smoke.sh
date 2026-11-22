@@ -97,6 +97,6 @@ pdfsafe.run_docling(pdf_path(p), paper_dir(p), timeout_s=900)
 
 echo "annotating (request timeout ${TIMEOUT} s)"
 docker run --rm --network "$NAME" --read-only --tmpfs /tmp -e MARCUS_DATA_ROOT=/data \
-  -e MARCUS_ANNOTATOR_URL="http://$NAME:8080" -e MARCUS_ANNOTATOR_TIMEOUT_S="$TIMEOUT" \
+  -e MARCUS_LLM_URL="http://$NAME:8080" -e MARCUS_LLM_TIMEOUT_S="$TIMEOUT" \
   -v "$WORK":/data:ro -v "$PWD/ops":/ops:ro marcus-v2-api:local python /ops/annotate_smoke.py "$PAPER"
 echo "annotate smoke test passed"

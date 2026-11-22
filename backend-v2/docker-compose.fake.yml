@@ -21,6 +21,35 @@
 # verification, SNI); nothing is ever sent to the real COCONUT: a request that somehow reached
 # it would fail certificate verification before any HTTP is sent.
 
+# The two fake model workers (worker-fake-annotate, worker-fake-rgroup): the same settings, each
+# with its own command and engine environment.
+x-llm-worker: &llm-worker
+  image: marcus-v2-api:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+  volumes:
+    - data:/data:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    api-migrate:
+      condition: service_completed_successfully
+  environment: &llm-env
+    MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+    MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    MARCUS_DATA_ROOT: /data
+    MARCUS_ENABLE_FAKE_ENGINES: "1"
+
 services:
   # The real DECIMER segmenter is replaced by worker-fake-segment below (both would consume
   # q.segment). A profile that is never activated keeps it from being built or started.
@@ -117,67 +146,23 @@ services:
       MARCUS_FAKE_OCSR_DELAY_S: "1"
 
   worker-fake-annotate:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
               "-n", "fake-annotate@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
-      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      <<: *llm-env
       MARCUS_ANNOTATOR: fake
       MARCUS_FAKE_ANNOTATE_DELAY_S: "2"
 
   # The fake R-group reader on its own queue, as worker-rgroup in the GPU override.
   worker-fake-rgroup:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
               "-n", "fake-rgroup@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
-      MARCUS_ENABLE_FAKE_ENGINES: "1"
+      <<: *llm-env
       MARCUS_RGROUP_READER: fake
       MARCUS_FAKE_RGROUP_DELAY_S: "2"
 

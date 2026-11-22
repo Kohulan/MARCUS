@@ -174,7 +174,7 @@ class Stub:
 @pytest.fixture
 def stub(monkeypatch, clear_settings_cache):
     s = Stub()
-    monkeypatch.setenv("MARCUS_RGROUP_URL", s.url)
+    monkeypatch.setenv("MARCUS_LLM_URL", s.url)
     clear_settings_cache()
     yield s
     s.close()
@@ -290,11 +290,11 @@ def test_a_4xx_is_final_and_a_5xx_is_retryable(stub):
 def test_no_server_is_retryable_and_a_slow_one_a_timeout(stub, monkeypatch, clear_settings_cache):
     pid = _paper()
     stub.delay = 1.0
-    monkeypatch.setenv("MARCUS_RGROUP_TIMEOUT_S", "0.2")
+    monkeypatch.setenv("MARCUS_LLM_TIMEOUT_S", "0.2")
     clear_settings_cache()
     with pytest.raises(StepTimeout):
         read_scaffold(get_reader(), pid, 0, ["R1"])
-    monkeypatch.setenv("MARCUS_RGROUP_URL", "http://127.0.0.1:9")  # discard port: refused
+    monkeypatch.setenv("MARCUS_LLM_URL", "http://127.0.0.1:9")  # discard port: refused
     clear_settings_cache()
     with pytest.raises(ModelUnavailable):
         read_scaffold(get_reader(), pid, 0, ["R1"])
