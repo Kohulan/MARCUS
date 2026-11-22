@@ -112,6 +112,14 @@ class SegmentOut(BaseModel):
     # The crop is not a clean drawing (NMR marks, an X-ray / 3D picture): "check this drawing"
     # (a drawing_flags row; false for a clean one, and for segments from before the check).
     check_drawing: bool = False
+    # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ; None while an
+    # engine is still reading, or with fewer than two read.
+    agree: int | None = None
+    # The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order.
+    agree_engines: list[str] = []
+    # The prediction shown when nothing is curated (agreement.pick_prediction); None without a
+    # valid one.
+    default_prediction_id: uuid.UUID | None = None
 
 
 class SegmentList(BaseModel):
@@ -129,6 +137,9 @@ class StepOut(_Orm):
     attempts: int
     error_class: str | None
     engine: str | None  # set for ocsr steps
+    # A background OCSR step (another engine, beside the paper's read): it never counts in the
+    # paper's progress, and its failure is no failure of the structure.
+    background: bool = False
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

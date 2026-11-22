@@ -46,7 +46,8 @@ async def seed_scaffold(db, owner):
         for kind in ("docling", "doi"):
             (step,) = steps_of(s, seeded.paper_id, kind)
             finish(s, step, {"text_path": "text.json"} if kind == "docling" else {"doi": None})
-        first, second = steps_of(s, seeded.paper_id, "ocsr")
+        # DECIMER, the paper's engine (the other two engines' steps stay pending)
+        first, second = [st for st in steps_of(s, seeded.paper_id, "ocsr") if st.engine == "decimer"]
         finish(s, first, ocsr_result(SCAFFOLD))
         finish(s, second, ocsr_result("CCO"))
         preds = s.execute(
@@ -325,7 +326,11 @@ async def test_rgroups_steps_are_not_part_of_the_paper_read(app, async_db_sessio
         paper = (await c.get(f"/api/v2/papers/{paper_id}")).json()
         listed = (await c.get("/api/v2/papers")).json()["papers"]
     assert after == before and all(s["kind"] != "rgroups" for s in after)
-    assert paper["status"] == "done" and "pending" not in paper["counts"]["steps_by_status"]
+    # pending: only the other engines' background steps the list shows, never the rgroups step
+    waiting = [s for s in after if s["status"] == "pending"]
+    assert waiting and all(s["background"] for s in waiting)
+    assert paper["status"] == "done"
+    assert paper["counts"]["steps_by_status"]["pending"] == len(waiting)
     (row,) = listed
     assert row["rereading"] is False
 

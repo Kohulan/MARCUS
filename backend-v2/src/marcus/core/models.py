@@ -216,6 +216,9 @@ class Prediction(Base):
     # R-group labels of the structure (marcus.core.rgroups; [] none, NULL not computed)
     rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    # InChIKey of a valid structure (marcus.core.agreement: the engines agree on its first
+    # block); NULL when invalid, an R-group scaffold, or made before 0019.
+    inchikey: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Curation(Base):
@@ -378,4 +381,17 @@ class DrawingFlag(Base):
 
     segment_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class BackgroundStep(Base):
+    """An OCSR step the planner added beside the paper's own read: the engines of
+    marcus.core.agreement other than the paper's (phase B item 3). It never keeps the paper busy,
+    counts in its progress or fails it (pipeline.in_paper_progress). A table of its own, not a
+    steps column: the migration tests of older revisions write steps through the ORM."""
+
+    __tablename__ = "background_steps"
+
+    step_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("steps.id", ondelete="CASCADE"), primary_key=True
     )

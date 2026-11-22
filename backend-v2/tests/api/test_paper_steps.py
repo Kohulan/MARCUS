@@ -8,7 +8,7 @@ from marcus.core.models import Paper, Step
 from tests.api.conftest import make_client, new_owner, seed_paper
 
 FIELDS = {"id", "kind", "page", "segment_id", "status", "attempts", "error_class",
-          "created_at", "started_at", "finished_at", "engine"}  # fmt: skip
+          "created_at", "started_at", "finished_at", "engine", "background"}  # fmt: skip
 
 
 async def test_steps_shape_and_order(app, async_db_session):
@@ -19,7 +19,8 @@ async def test_steps_shape_and_order(app, async_db_session):
         r = await c.get(f"/api/v2/papers/{seeded.paper_id}/steps")
     assert r.status_code == 200
     steps = r.json()["steps"]
-    assert len(steps) == 7  # check_pdf, render, segment, 2 ocsr, docling, doi
+    # check_pdf, render, segment, 2 ocsr, 4 background ocsr (the other engines), docling, doi
+    assert len(steps) == 11
     assert all(set(s) == FIELDS for s in steps)
     keys = [(s["created_at"], s) for s in steps]
     assert [k for k, _ in keys] == sorted(k for k, _ in keys)
@@ -76,5 +77,8 @@ async def test_step_out_has_engine(app, async_db_session):
     async with make_client(app, token) as c:
         steps = (await c.get(f"/api/v2/papers/{seeded.paper_id}/steps")).json()["steps"]
     ocsr = [s for s in steps if s["kind"] == "ocsr"]
-    assert ocsr and all(s["engine"] == "decimer" for s in ocsr)
+    assert sorted(s["engine"] for s in ocsr if not s["background"]) == ["decimer", "decimer"]
+    assert sorted(s["engine"] for s in ocsr if s["background"]) == [
+        "molnextr", "molnextr", "molscribe", "molscribe"
+    ]
     assert all(s["engine"] is None for s in steps if s["kind"] != "ocsr")

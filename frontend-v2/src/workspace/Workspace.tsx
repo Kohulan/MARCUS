@@ -331,7 +331,7 @@ function OpenDialog({
       paperId={paper.id}
       paperEngine={paper.engine}
       segment={segment}
-      steps={ws.steps}
+      steps={ws.allSteps}
       tag={structureTag(rows[at]?.n ?? at + 1)}
       onStarted={started}
       onClose={ws.closeDialog}

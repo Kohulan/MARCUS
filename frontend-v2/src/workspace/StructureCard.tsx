@@ -20,8 +20,8 @@ import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useDisclosure } from "../ui/useDisclosure";
 import {
+  agreeText,
   CARD_OPEN_HINT,
-  enginesDiffer,
   hasDrawing,
   metaText,
   scaffoldPrediction,
@@ -161,6 +161,7 @@ function StructureCard({
   const shown = shownStructure(segment, paperEngine);
   const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
+  const agree = agreeText(segment);
   const scaffold = scaffoldPrediction(shown);
   const note = curation?.note?.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const rejected = state === "rejected";
@@ -275,7 +276,14 @@ function StructureCard({
         {meta !== null && (
           <p className="card__meta">
             <span>{meta}</span>
-            {enginesDiffer(segment) && <span className="card__differ">Engines differ</span>}
+            {agree !== null && (
+              <span
+                className={segment.agree === 0 ? "card__differ" : "card__agree"}
+                title={agreeTitle(segment)}
+              >
+                {agree}
+              </span>
+            )}
           </p>
         )}
         {segment.check_drawing && (
@@ -337,6 +345,13 @@ function StructureCard({
 }
 
 export default memo(StructureCard);
+
+/** The badge's tooltip: which engines agree ("DECIMER, MolNexTR and MolScribe agree"). */
+function agreeTitle(segment: SegmentOut): string {
+  const names = (segment.agree_engines ?? []).map(engineName);
+  if (names.length < 2) return "The engines give different structures";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} agree`;
+}
 
 /** The flag of a crop that is not a clean drawing (SegmentOut.check_drawing). */
 export const CHECK_DRAWING = "Check this drawing";

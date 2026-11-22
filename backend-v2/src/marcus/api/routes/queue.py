@@ -4,7 +4,8 @@ This is an estimate, not a promise (the dispatcher is fair, not first-in-first-o
 
 - For each of my active papers and each queue it has waiting (pending/queued) steps in,
   `steps_ahead_by_queue[q]` = waiting steps in `q`, of any owner, created before this
-  paper's oldest waiting step in `q`.
+  paper's oldest waiting step in `q`. Background OCSR steps (the other engines, which the
+  dispatcher sends after every paper's own steps) count on neither side.
 - `median_s[q]` = median of (finished_at - started_at) over `q`'s steps finished in the last
   hour; `DEFAULT_STEP_S` when there are none.
 - A paper's `estimate_s` = sum over q of steps_ahead[q] x median_s[q].
@@ -15,7 +16,7 @@ This is an estimate, not a promise (the dispatcher is fair, not first-in-first-o
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -23,7 +24,8 @@ from marcus.api.deps import active, current_owner
 from marcus.api.schemas import QueueOut, QueuePaper
 from marcus.core.db import get_db
 from marcus.core.enums import WAITING_STEPS, StepStatus
-from marcus.core.models import Owner, Paper, Step
+from marcus.core.models import BackgroundStep, Owner, Paper, Step
+from marcus.core.pipeline import is_background
 
 router = APIRouter()
 
@@ -66,7 +68,7 @@ async def queue_position(
 
     mine = (
         select(Step.paper_id, Step.queue, func.min(Step.created_at).label("oldest"))
-        .where(Step.paper_id.in_(papers), Step.status.in_(WAITING_STEPS))
+        .where(Step.paper_id.in_(papers), Step.status.in_(WAITING_STEPS), ~is_background())
         .group_by(Step.paper_id, Step.queue)
         .subquery()
     )
@@ -80,6 +82,7 @@ async def queue_position(
                 other.queue == mine.c.queue,
                 other.status.in_(WAITING_STEPS),
                 other.created_at < mine.c.oldest,
+                ~exists().where(BackgroundStep.step_id == other.id),
             ),
         )
         .group_by(mine.c.paper_id, mine.c.queue)

@@ -104,6 +104,25 @@ describe("coconutStructures", () => {
     expect(list.send).toEqual([{ segmentId: "s1", n: 1, smiles: "CCC" }]);
   });
 
+  it("takes the server's pick: the engines' majority over the paper's engine", () => {
+    const own = prediction({ id: "d", engine: "decimer", smiles: "CCC" });
+    const majority = prediction({ id: "m", engine: "molnextr", smiles: "CCN" });
+    const list = coconutStructures(
+      [
+        {
+          ...segment("s1", { status: "accepted" }, [
+            prediction({ id: "s", engine: "molscribe", smiles: "NCC" }),
+            majority,
+            own,
+          ]),
+          default_prediction_id: "m",
+        },
+      ],
+      "decimer",
+    );
+    expect(list.send).toEqual([{ segmentId: "s1", n: 1, smiles: "CCN" }]);
+  });
+
   it("never sends a structure with R-groups: it is held, with its labels", () => {
     const list = coconutStructures(
       [

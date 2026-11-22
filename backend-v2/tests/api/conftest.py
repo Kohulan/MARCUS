@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from marcus.api.deps import COOKIE_NAME
@@ -18,7 +18,7 @@ from marcus.api.main import create_app
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, OwnerKind, PriorityClass
-from marcus.core.models import Owner, Paper, Segment, Step
+from marcus.core.models import BackgroundStep, Owner, Paper, Segment, Step
 from marcus.core.pipeline import complete_step
 from marcus.core.tokens import hash_token, new_token
 from tests.factories import make_paper
@@ -86,7 +86,9 @@ class Seeded:
     segment_ids: list[uuid.UUID] = field(default_factory=list)
 
 
-def _seed(s: Session, owner_id, engine: Engine, ocsr: bool, write_files: bool) -> Seeded:
+def _seed(
+    s: Session, owner_id, engine: Engine, ocsr: bool, write_files: bool, others: bool = True
+) -> Seeded:
     owner = s.get(Owner, owner_id)
     paper = make_paper(s, owner, engine=engine)
     (check,) = steps_of(s, paper.id, "check_pdf")
@@ -94,6 +96,16 @@ def _seed(s: Session, owner_id, engine: Engine, ocsr: bool, write_files: bool) -
     (render,) = steps_of(s, paper.id, "render_page")
     (seg_step,) = finish(s, render, {})
     ocsr_steps = finish(s, seg_step, {"segments": SEGS, "seg_version": "segv-test"})
+    if not others:
+        background = set(
+            s.execute(
+                select(BackgroundStep.step_id)
+                .join(Step, Step.id == BackgroundStep.step_id)
+                .where(Step.paper_id == paper.id)
+            ).scalars()
+        )
+        s.execute(delete(Step).where(Step.id.in_(background)))
+        ocsr_steps = [st for st in ocsr_steps if st.id not in background]
     if ocsr:
         for st in ocsr_steps:
             finish(s, st, ocsr_result())
@@ -120,9 +132,12 @@ async def seed_paper(
     engine: Engine = Engine.DECIMER,
     ocsr: bool = True,
     write_files: bool = True,
+    others: bool = True,
 ) -> Seeded:
-    """A 1-page paper with 2 segments (and one decimer prediction each when `ocsr`)."""
-    seeded = await db.run_sync(lambda s: _seed(s, owner.id, engine, ocsr, write_files))
+    """A 1-page paper with 2 segments (and, when `ocsr`, one prediction each of the paper's
+    engine and of the two others in the background, all "CCO"). `others` False: a paper read
+    before the three engines, by its own engine only (no background steps)."""
+    seeded = await db.run_sync(lambda s: _seed(s, owner.id, engine, ocsr, write_files, others))
     await db.commit()
     return seeded
 

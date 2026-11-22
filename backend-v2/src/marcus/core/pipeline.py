@@ -42,11 +42,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import annotation, rgroup_extraction, rgroup_labels, storage
+from marcus.core import agreement, annotation, rgroup_extraction, rgroup_labels, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -58,6 +58,7 @@ from marcus.core.enums import (
 )
 from marcus.core.models import (
     Annotation,
+    BackgroundStep,
     Curation,
     DrawingFlag,
     ImageJob,
@@ -361,10 +362,21 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
 OUTSIDE_PROGRESS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
 
 
-def in_paper_progress():
-    """SQL condition: the step counts in its paper's progress (every kind but `annotate` and
-    `rgroups`, which run beside the read)."""
+def is_background():
+    """SQL condition: the step is a background OCSR step (a background_steps row)."""
+    return exists().where(BackgroundStep.step_id == Step.id)
+
+
+def in_paper_steps():
+    """SQL condition: the step is one of the paper's read steps a client lists (every kind but
+    `annotate` and `rgroups`, which run beside the read), background OCSR steps included."""
     return Step.kind.not_in(OUTSIDE_PROGRESS)
+
+
+def in_paper_progress():
+    """SQL condition: the step counts in its paper's progress: in_paper_steps, background OCSR
+    steps aside (the other engines fill in after the paper is done)."""
+    return and_(in_paper_steps(), ~is_background())
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
@@ -606,17 +618,32 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
     if paper.ocsr_mode != "auto":
         return []
-    return [
-        _new_step(
-            paper,
-            StepKind.OCSR,
-            _ocsr_seq(seg.page, seg.idx),
-            engine=paper.engine,
-            page=seg.page,
-            segment_id=seg.id,
-        )
-        for seg in segments
-    ]
+    steps = []
+    for seg in segments:
+        for engine in [paper.engine, *background_engines(paper.engine)]:
+            step = _new_step(
+                paper,
+                StepKind.OCSR,
+                _ocsr_seq(seg.page, seg.idx),
+                engine=engine,
+                page=seg.page,
+                segment_id=seg.id,
+            )
+            steps.append(step)
+    # The steps go into the session now (their background_steps rows need them first).
+    session.add_all(steps)
+    session.flush()
+    session.add_all(BackgroundStep(step_id=st.id) for st in steps if st.engine != paper.engine)
+    return steps
+
+
+def background_engines(paper_engine: str) -> list[str]:
+    """The engines that read every new segment beside the paper's own (phase B item 3): those of
+    marcus.core.agreement but the paper's. None for the fake engine (tests and the fake stack,
+    which have no real engines)."""
+    if paper_engine == Engine.FAKE.value:
+        return []
+    return [e for e in agreement.ENGINES if e != paper_engine]
 
 
 def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
@@ -791,6 +818,7 @@ def _prediction(step: Step, result: dict) -> Prediction:
         ms=result["ms"],
         cached=bool(result.get("cached", False)),
         rgroups=rgroup_labels(result["smiles"], result.get("molfile")),
+        inchikey=agreement.inchikey_of(result["smiles"], result["valid"]),
     )
 
 

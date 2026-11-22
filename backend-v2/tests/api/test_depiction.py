@@ -196,7 +196,7 @@ async def test_depiction_rejected_segment_still_drawn(app, async_db_session, dra
 
 async def test_depiction_engine_param_picks_that_engine(app, async_db_session, draws):
     db = async_db_session
-    _, token, seeded = await _owner_paper(db)
+    _, token, seeded = await _owner_paper(db, others=False)
     seg = seeded.segment_ids[0]
     await _predict(db, seg, "molnextr", "CCCl")
     await _predict(db, seg, "molscribe", "CCBr", valid=False)

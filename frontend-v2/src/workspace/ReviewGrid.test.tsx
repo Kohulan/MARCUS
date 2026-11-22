@@ -197,22 +197,61 @@ describe("cards and their states", () => {
     expect(card("[03]").querySelector("kbd")).toBeNull();
   });
 
-  it("tags follow (page, idx) order, and two engines that differ say so", async () => {
-    renderGrid(
-      paper([
-        segment("s9", { page: 1, idx: 0 }),
-        segment("s1", {
-          page: 0,
-          idx: 0,
-          predictions: [prediction({ smiles: "CCO" }), prediction({ engine: "molnextr", smiles: "CCN" })],
-        }),
-      ]),
-    );
+  it("tags follow (page, idx) order", async () => {
+    renderGrid(paper([segment("s9", { page: 1, idx: 0 }), segment("s1", { page: 0, idx: 0 })]));
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(cards()[0]).toHaveTextContent("[01] · Page 1");
     expect(cards()[1]).toHaveTextContent("[02] · Page 2");
-    expect(within(cards()[0]!).getByText("Engines differ")).toBeInTheDocument();
-    expect(within(cards()[1]!).queryByText("Engines differ")).toBeNull();
+  });
+
+  it("the engines' badge: 3 agree, 2 agree naming both, Differ; nothing while they read", async () => {
+    const decimer = prediction({ smiles: "OCC" });
+    const molnextr = prediction({ engine: "molnextr", smiles: "CCO" });
+    const molscribe = prediction({ engine: "molscribe", smiles: "CCO" });
+    const three = [prediction({ engine: "molscribe" }), prediction({ engine: "molnextr" }), prediction()];
+    renderGrid(
+      paper([
+        segment("s1", { predictions: three, agree: 3, agree_engines: ["decimer", "molnextr", "molscribe"] }),
+        segment("s2", {
+          predictions: [molscribe, molnextr, decimer],
+          agree: 2,
+          agree_engines: ["molnextr", "molscribe"],
+          default_prediction_id: molnextr.id,
+        }),
+        segment("s3", { predictions: three, agree: 0, agree_engines: [] }),
+        segment("s4", { predictions: three, agree: null, agree_engines: ["molnextr", "molscribe"] }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(4));
+    expect(within(card("[01]")).getByText("3 agree")).toBeInTheDocument();
+    expect(within(card("[01]")).getByText("DECIMER · Valid")).toBeInTheDocument();
+    // The majority's structure is shown (the server's pick), naming its two engines.
+    expect(within(card("[02]")).getByText("2 agree")).toHaveAttribute(
+      "title",
+      "MolNexTR and MolScribe agree",
+    );
+    expect(within(card("[02]")).getByText("MolNexTR + MolScribe · Valid")).toBeInTheDocument();
+    expect(within(card("[02]")).getByText("CCO")).toBeInTheDocument();
+    expect(within(card("[03]")).getByText("Differ")).toBeInTheDocument();
+    for (const word of ["agree", "Differ"]) {
+      expect(within(card("[04]")).queryByText(new RegExp(word))).toBeNull();
+    }
+  });
+
+  it("a background engine that failed is no failure of the card", async () => {
+    renderGrid(paper([segment("s1", { predictions: [prediction({ valid: false, smiles: "C(" })] })]), [
+      step({ segment_id: "s1", status: "done", created_at: "2026-11-18T10:00:01Z" }),
+      step({
+        segment_id: "s1",
+        engine: "molscribe",
+        status: "failed",
+        background: true,
+        created_at: "2026-11-18T10:00:05Z",
+      }),
+    ]);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(card("[01]")).toHaveAccessibleName(/To check/);
+    expect(filter("Failed")).toHaveTextContent("0");
   });
 
   it("filter Accepted shows 1 card; each filter shows its count", async () => {
@@ -489,6 +528,21 @@ describe("Compare from a card (F10 review)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
     await waitFor(() => expect(card("[02]")).toHaveAttribute("aria-label", "[02] · Page 1, Accepted"));
     await waitFor(() => expect(card("[02]")).toHaveFocus());
+  });
+});
+
+describe("Compare and the background engines", () => {
+  it("shows a background engine still reading and starts only the idle one", async () => {
+    const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "x" });
+    renderGrid(paper([segment("s1")]), [
+      step({ segment_id: "s1", status: "done" }),
+      step({ segment_id: "s1", engine: "molnextr", status: "running", background: true }),
+    ]);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: "Compare [01]" }));
+    await screen.findByRole("dialog", { name: /Compare engines/ });
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(run).toHaveBeenCalledWith("s1", "molscribe");
   });
 });
 

@@ -8,6 +8,7 @@ from rdkit import Chem
 from sqlalchemy import delete, event, select, update
 
 from marcus.core import storage
+from marcus.core.enums import Engine
 from marcus.core.models import Curation, Paper, Prediction, Step
 from marcus.core.settings import get_settings
 from tests.api.conftest import (
@@ -52,7 +53,7 @@ async def test_list_for_new_visitor_is_empty_and_sets_cookie(app, async_db_sessi
 async def test_get_paper_shape(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)
     seg0 = seeded.segment_ids[0]
 
     def add_newer_prediction(s):
@@ -373,7 +374,7 @@ async def test_predictions_expose_rgroups(app, async_db_session):
     stored without (NULL)."""
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)
     seg0, seg1 = seeded.segment_ids
 
     def add(s):
@@ -454,7 +455,7 @@ def test_curation_check_in_the_worker_process():
 async def test_rerun_with_other_engine_creates_step(app, async_db_session, monkeypatch):
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)
     seg = seeded.segment_ids[1]
     async with make_client(app, token) as c:
         r = await c.post(f"/api/v2/segments/{seg}/predictions", json={"engine": "molscribe"})
@@ -572,6 +573,28 @@ async def test_queue_default_duration_and_no_foreign_papers(app, async_db_sessio
     assert body["estimate_s"] == 10.0
 
 
+async def test_queue_leaves_background_steps_out(app, async_db_session):
+    """Bob's paper waits for its other engines in the background: none of those steps stands
+    in front of my paper's own read on q.molnextr (the dispatcher sends them after it)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    bob, _ = await new_owner(db)
+    await seed_paper(db, bob, ocsr=False)  # its background steps wait on q.molnextr
+    mine = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
+    await db.execute(
+        update(Step)
+        .where(Step.paper_id == mine.paper_id, Step.status == "pending")
+        .values(created_at=datetime.now(UTC) + timedelta(minutes=1))
+    )
+    await db.commit()
+    async with make_client(app, token) as c:
+        body = (await c.get("/api/v2/queue")).json()
+    ahead = body["papers"][0]["steps_ahead_by_queue"]
+    # bob's two q.molnextr background steps are not ahead; my own background steps
+    # (q.decimer, q.molscribe) are not my paper's wait
+    assert ahead == {"q.cpu": 2, "q.molnextr": 0}
+
+
 async def test_queue_ignores_my_expired_papers(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)
@@ -591,7 +614,7 @@ async def test_queue_ignores_my_expired_papers(app, async_db_session):
 async def test_prediction_exposes_cached_flag(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)
     await db.execute(
         update(Prediction).where(Prediction.segment_id == seeded.segment_ids[0]).values(cached=True)
     )

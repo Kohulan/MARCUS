@@ -41,15 +41,31 @@ export function stateOf(segment: SegmentOut, ocsr: StepOut[], paper: PaperDetail
 }
 
 /**
- * The prediction the card shows, as the server picks the drawing (api/depiction.py
- * shown_structure; predictions come newest first): the newest valid one of the paper's
- * engine, else of any engine; with no valid one, the newest (shown as invalid).
+ * The prediction the card shows: the one the server picks (`default_prediction_id`, backend
+ * core/agreement.py pick_prediction: the engines' majority, else the newest valid one of the
+ * paper's engine, else of any engine). Without it (an older server, an optimistic update): the
+ * newest valid one of the paper's engine, else of any engine; with no valid one, the newest
+ * (shown as invalid). Predictions come newest first.
  */
 export function shownPrediction(segment: SegmentOut, paperEngine: string): PredictionOut | null {
+  const picked = segment.predictions.find((p) => p.id === segment.default_prediction_id);
+  if (picked) return picked;
   const valid = segment.predictions.filter((p) => p.valid);
   return (
     valid.find((p) => p.engine === paperEngine) ?? valid[0] ?? segment.predictions[0] ?? null
   );
+}
+
+/** The paper's read steps: background OCSR steps (other engines filling in) left out. */
+export function readSteps(steps: StepOut[]): StepOut[] {
+  return steps.some((s) => s.background) ? steps.filter((s) => !s.background) : steps;
+}
+
+/** The agreement badge: "3 agree", "2 agree", "Differ"; null while engines read, or without. */
+export function agreeText(segment: SegmentOut): string | null {
+  const n = segment.agree;
+  if (n === undefined || n === null) return null;
+  return n >= 2 ? `${n} agree` : "Differ";
 }
 
 /** The structure a segment shows (card, focus mode, editor start, COCONUT list). */
@@ -69,6 +85,11 @@ export type ShownStructure = {
   rgroups: string[];
   /** It has R-group placeholder atoms, whatever labels are shown (never sent to COCONUT). */
   placeholder: boolean;
+  /**
+   * The two engines whose shared structure is shown (the prediction is theirs, "2 agree");
+   * [] otherwise. The card names them.
+   */
+  agreeing: string[];
 };
 
 export function shownStructure(segment: SegmentOut, paperEngine: string): ShownStructure {
@@ -82,8 +103,14 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
       molfile: c.molfile ?? null,
       rgroups: rgroupsOf(c),
       placeholder: isPlaceholder(c),
+      agreeing: [],
     };
   }
+  const engines = segment.agree_engines ?? [];
+  const agreeing =
+    prediction !== null && engines.length === 2 && engines.includes(prediction.engine)
+      ? engines
+      : [];
   return {
     prediction,
     edited: false,
@@ -91,6 +118,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
     molfile: prediction?.molfile ?? null,
     rgroups: rgroupsOf(prediction),
     placeholder: isPlaceholder(prediction),
+    agreeing,
   };
 }
 
@@ -111,16 +139,18 @@ export const hasScaffold = (segment: SegmentOut, paperEngine: string): boolean =
   scaffoldPrediction(shownStructure(segment, paperEngine)) !== null;
 
 /**
- * "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. A
- * scaffold says so instead, with its labels ("DECIMER · R-group scaffold (R1, R2)"), never a
- * bare "Invalid" (DECIMER's R tokens) or "Valid" (a dummy atom).
+ * "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. The
+ * structure two engines agree on names both ("MolNexTR + MolScribe · Valid"). A scaffold says
+ * so instead, with its labels ("DECIMER · R-group scaffold (R1, R2)"), never a bare "Invalid"
+ * (DECIMER's R tokens) or "Valid" (a dummy atom).
  */
-export function metaText({ edited, prediction, rgroups }: ShownStructure): string | null {
+export function metaText({ edited, prediction, rgroups, agreeing }: ShownStructure): string | null {
   if (edited) {
     return rgroups.length > 0 ? `Edited · R-group scaffold (${labelList(rgroups)})` : "Edited";
   }
   if (!prediction) return null;
-  return `${engineName(prediction.engine)} · ${resultWord(prediction)}`;
+  const engines = agreeing.length > 0 ? agreeing : [prediction.engine];
+  return `${engines.map(engineName).join(" + ")} · ${resultWord(prediction)}`;
 }
 
 /** A reason as a sentence: "it took too long" → "It took too long." */
@@ -133,15 +163,6 @@ export function hasDrawing(segment: SegmentOut): boolean {
   return Boolean(
     segment.curation?.smiles || segment.curation?.molfile || segment.predictions.some((p) => p.valid),
   );
-}
-
-/** Two engines that differ: the newest valid predictions of two engines give different SMILES. */
-export function enginesDiffer(segment: SegmentOut): boolean {
-  const byEngine = new Map<string, string>();
-  for (const p of segment.predictions) {
-    if (p.valid && !byEngine.has(p.engine)) byEngine.set(p.engine, p.smiles);
-  }
-  return new Set(byEngine.values()).size > 1;
 }
 
 /** The state filters, and "rgroups": structures with R-groups, whatever their state. */

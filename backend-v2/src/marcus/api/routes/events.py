@@ -20,7 +20,7 @@ Limits:
   Redis the stream is allowed (it then fails at subscribe, below).
 - the paper status is re-read after each finished step event and on each ping; once the
   paper is done, failed or deleted the stream sends `event: end` (data: {"status"}) and
-  closes. A client should close its EventSource on `end`; it must not reconnect.
+  closes. A done paper whose background OCSR steps still run is not ended yet. A client should close its EventSource on `end`; it must not reconnect.
 - after `sse_max_duration_s` the stream closes without `end`; the client reconnects.
 - when Redis fails (subscribe or later), the stream sends `retry: 15000` and an
   `event: error` frame, then closes; the client reconnects after 15 s.
@@ -48,7 +48,8 @@ from marcus.api.redisutil import incr_with_ttl
 from marcus.core.db import get_db
 from marcus.core.enums import FINISHED_STEPS, ImageJobStatus, PaperStatus
 from marcus.core.events import image_channel, paper_channel
-from marcus.core.models import ImageJob, Owner, Paper
+from marcus.core.models import ImageJob, Owner, Paper, Step
+from marcus.core.pipeline import ACTIVE, is_background
 from marcus.core.settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -106,7 +107,18 @@ async def _paper_snapshot(db: AsyncSession, paper_id: uuid.UUID) -> dict:
 
 
 async def _paper_status(db: AsyncSession, paper_id: uuid.UUID) -> str:
+    """The paper's status, as the stream ends on it: a done paper whose background OCSR steps
+    (the other engines, marcus.core.pipeline.background_engines) still run counts as
+    `processing`, so the badges they fill in still arrive."""
     status = await db.scalar(select(Paper.status).where(Paper.id == paper_id))
+    if status == PaperStatus.DONE.value:
+        busy = await db.scalar(
+            select(Step.id)
+            .where(Step.paper_id == paper_id, Step.status.in_(ACTIVE), is_background())
+            .limit(1)
+        )
+        if busy is not None:
+            status = PaperStatus.PROCESSING.value
     await db.commit()
     return status or PaperStatus.DELETED.value  # purged rows count as deleted
 
@@ -178,8 +190,10 @@ async def _stream(
     try:
         await pubsub.subscribe(channel)
         snapshot = await snapshot_of(db, row_id)  # after subscribe: no event can fall between
+        # a done paper may still be filling in (background engines): it does not end yet
+        ended = snapshot["status"] in TERMINAL and await status_of(db, row_id) in TERMINAL
         yield f"event: snapshot\ndata: {json.dumps(snapshot)}\n\n"
-        if snapshot["status"] in TERMINAL:
+        if ended:
             yield _end_frame(snapshot["status"])
             return
         last_ping = time.monotonic()

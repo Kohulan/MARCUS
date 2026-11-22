@@ -127,6 +127,19 @@ export interface SegmentOut {
    * False or absent when not flagged, and for structures read before the check existed.
    */
   check_drawing?: boolean;
+  /**
+   * The engines' agreement (backend core/agreement.py): 3 or 2 engines agree on the structure
+   * (same InChIKey first block), 0 they differ. Null or absent while an engine is still
+   * reading, or with fewer than two engines read.
+   */
+  agree?: number | null;
+  /** The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order. */
+  agree_engines?: string[];
+  /**
+   * The prediction shown when nothing is curated: the engines' majority, else the newest valid
+   * one of the paper's engine, else of any engine. The server's one rule (exports, COCONUT).
+   */
+  default_prediction_id?: string | null;
 }
 
 export interface SegmentList {
@@ -144,6 +157,11 @@ export interface StepOut {
   error_class: string | null;
   /** Set for ocsr steps. */
   engine: string | null;
+  /**
+   * A background OCSR step: another engine reading beside the paper's own. It never counts in
+   * the paper's read, and its failure is no failure of the structure.
+   */
+  background?: boolean;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
