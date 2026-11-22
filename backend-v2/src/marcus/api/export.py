@@ -43,7 +43,7 @@ from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
 from marcus.api.read import named_on, pick_prediction
-from marcus.core.main_figure import chosen_member, group_status, groups_of
+from marcus.core.main_figure import chosen_member, effective_statuses, group_status, groups_of
 from marcus.core.models import Curation, Paper, Prediction, Segment
 from marcus.core.rgroup_labels import shown_labels
 from marcus.core.rgroups import rgroup_labels
@@ -92,17 +92,19 @@ def choose(
     include_rejected: bool = False,
     rgroup_rows: dict[uuid.UUID, dict] | None = None,
     repeat_of: dict[uuid.UUID, uuid.UUID] | None = None,
+    stale: frozenset[uuid.UUID] = frozenset(),
 ) -> list[Chosen]:
     """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
     per prediction id (api.rgroups.for_export); `repeat_of`: repeat segment id -> its
     main-figure segment id (api.read.repeat_links). A main structure and its repeats are one
     record, at the main one's place, with the group's status (core.main_figure.group_status);
-    an accepted group's record is its accepted member (chosen_member)."""
+    an accepted group's record is its accepted member (chosen_member). `stale`: inherited
+    statuses that no longer hold (core.main_figure.stale_members): unchecked."""
     rows_of = rgroup_rows or {}
     groups = groups_of(repeat_of or {})
     hidden = set(repeat_of or {})
     by_id = {seg.id: seg for seg in segments}
-    status_of = {sid: c.status for sid, c in curations.items()}
+    status_of = effective_statuses({sid: c.status for sid, c in curations.items()}, stale)
     out: list[Chosen] = []
     for seg in segments:
         if seg.id in hidden:
@@ -306,13 +308,14 @@ def build(
     rgroup_rows: dict[uuid.UUID, dict] | None = None,
     repeat_of: dict[uuid.UUID, uuid.UUID] | None = None,
     main_figure_page: int | None = None,
+    stale: frozenset[uuid.UUID] = frozenset(),
 ) -> bytes:
     """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
     marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
     status = status or ("accepted" if fmt == "sdf" else "all")
     chosen = choose(
         paper, segments, curations, predictions, include_rejected=status == "all",
-        rgroup_rows=rgroup_rows, repeat_of=repeat_of,
+        rgroup_rows=rgroup_rows, repeat_of=repeat_of, stale=stale,
     )  # fmt: skip
     if status == "accepted":
         chosen = [c for c in chosen if c.status == "accepted"]

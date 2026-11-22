@@ -359,8 +359,8 @@ async def test_a_group_is_rejected_only_when_every_member_is(app, async_db_sessi
     paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
     await _mark(app, token, paper_id, 0)
 
-    # the main one rejected, its repeat not decided: to review
-    await _decide(app, token, paper_id, **{str(s0): "rejected"})
+    # the main one rejected, its repeat to review by its own decision: to review
+    await _decide(app, token, paper_id, **{str(s0): "rejected", str(a): "unchecked"})
     assert (await _export_json(app, token, paper_id, "all"))[str(s0)]["status"] == "unchecked"
     assert _counts(await _listed(app, token, paper_id)) == (4, 0, 0, 4, 0)
 
@@ -434,3 +434,138 @@ async def test_list_counts_fall_back_per_paper_whose_keys_are_missing(
     monkeypatch.setattr(read.CHEM, "run", busy)
     assert _counts(await _listed(app, token, ready)) == (4, 0, 0, 4, 0)
     assert _counts(await _listed(app, token, late.paper_id)) == (2, 0, 0, 2, 0)
+
+
+# --- a decision on a main card goes to its group; an inherited status that leaves it -------
+
+
+async def _put(app, token, seg, status, decision=True, **extra):
+    body = {"status": status, "smiles": None, "molfile": None, "note": None, **extra}
+    query = "?decision=true" if decision else ""
+    async with make_client(app, token) as client:
+        return await client.put(f"/api/v2/segments/{seg}/curation{query}", json=body)
+
+
+def _status(paper: dict, seg) -> str | None:
+    s = next(s for s in paper["segments"] if s["id"] == str(seg))
+    return s["curation"]["status"] if s["curation"] else None
+
+
+async def _inherited(db) -> dict:
+    from sqlalchemy import select
+
+    from marcus.core.models import InheritedStatus
+
+    rows = await db.execute(select(InheritedStatus.segment_id, InheritedStatus.main_id))
+    return dict(rows.all())
+
+
+async def test_rejecting_the_main_card_rejects_the_whole_group(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    await _decide(app, token, paper_id, **{str(a): "accepted"})  # before any group decision
+    assert (await _put(app, token, s0, "rejected")).status_code == 200
+
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "rejected"
+    assert await _inherited(db) == {a: s0}
+    assert await _export_json(app, token, paper_id, "accepted") == {}
+    assert (await _export_json(app, token, paper_id, "all"))[str(s0)]["status"] == "rejected"
+    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 1, 3, 0)
+
+
+async def test_an_inherited_status_reads_as_to_review_once_the_group_is_gone(
+    app, async_db_session
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    assert (await _put(app, token, s0, "accepted")).status_code == 200
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "accepted"  # inherited from s0
+    assert list(await _export_json(app, token, paper_id, "accepted")) == [str(s0)]
+
+    # the page unmarked: a is a structure of its own again, its inherited status not reviewed
+    await _mark(app, token, paper_id, None)
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "unchecked" and _status(paper, s0) == "accepted"
+    assert list(await _export_json(app, token, paper_id, "accepted")) == [str(s0)]
+    assert _counts(await _listed(app, token, paper_id)) == (5, 1, 0, 4, 0)
+    assert _counts(paper) == (5, 1, 0, 4, 0)
+
+    # marked again: it is s0's repeat once more, and the inherited status holds again
+    await _mark(app, token, paper_id, 0)
+    assert _status(await _paper(app, token, paper_id), a) == "accepted"
+
+    # a decision on its own card sticks, whatever the group does after
+    await _mark(app, token, paper_id, None)
+    assert (await _put(app, token, a, "accepted")).status_code == 200
+    assert await _inherited(db) == {}
+    assert _status(await _paper(app, token, paper_id), a) == "accepted"
+    assert set(await _export_json(app, token, paper_id, "accepted")) == {str(s0), str(a)}
+
+
+async def test_an_edit_that_ends_the_group_drops_the_inherited_status(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, _, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    assert (await _put(app, token, s0, "accepted")).status_code == 200
+    # a note edit on a (no decision) keeps it; a new structure on a moves it out of the group
+    async with make_client(app, token) as client:
+        body = {"status": "accepted", "smiles": "CCCC", "molfile": None, "note": None}
+        assert (await client.put(f"/api/v2/segments/{a}/curation", json=body)).is_success
+    paper = await _paper(app, token, paper_id)
+    assert _repeats(paper)[str(a)] is None and _status(paper, a) == "unchecked"
+
+
+async def test_a_note_edit_on_the_main_card_is_not_a_decision(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, _, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    await _decide(app, token, paper_id, **{str(a): "accepted"})
+    assert (await _put(app, token, s0, "unchecked", decision=False, note="hi")).is_success
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "accepted" and await _inherited(db) == {}
+
+
+async def test_bulk_decisions_on_main_cards_cover_their_repeats(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    await _decide(app, token, paper_id, **{str(s0): "accepted", str(b): "rejected"})
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "accepted" and await _inherited(db) == {a: s0}
+    # a repeat decided in the same call keeps its own decision
+    await _decide(app, token, paper_id, **{str(s0): "rejected", str(a): "accepted"})
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, a) == "accepted" and await _inherited(db) == {}
+
+
+async def test_a_decision_waits_when_the_chem_process_cannot_link(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, _, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+
+    async def busy(fn, *args):
+        raise HTTPException(status_code=503, detail="busy, try again")
+
+    monkeypatch.setattr(read, "_KEYS", OrderedDict())
+    monkeypatch.setattr(read.CHEM, "run", busy)
+    assert (await _put(app, token, s0, "accepted")).status_code == 503
+    async with make_client(app, token) as client:
+        body = {"items": [{"segment_id": str(s0), "status": "accepted"}]}
+        r = await client.put(f"/api/v2/papers/{paper_id}/curation", json=body)
+    assert r.status_code == 503
+    monkeypatch.undo()
+    paper = await _paper(app, token, paper_id)
+    assert _status(paper, s0) == "unchecked" and _status(paper, a) is None  # nothing written
+    assert await _inherited(db) == {}

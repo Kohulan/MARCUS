@@ -6,6 +6,7 @@ from tests.conftest import _assert_test_database, alembic_config
 EXPECTED = {
     "owners", "papers", "steps", "segments", "predictions", "curation",
     "image_jobs", "seg_cache", "ocsr_cache", "annotations", "rgroup_extractions", "main_figures",
+    "inherited_statuses",
 }  # fmt: skip
 
 # 0002: column + index
@@ -560,5 +561,24 @@ def test_migration_0016_main_figures_up_down(migrated_db):
         assert "ck_main_figures_page" in checks
         command.downgrade(cfg, "0015")
         assert "main_figures" not in inspect(engine).get_table_names()
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0017_inherited_statuses_up_down(migrated_db):
+    """0017 adds inherited_statuses (one row per structure; main_id without a foreign key)."""
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        insp = inspect(engine)
+        assert insp.get_pk_constraint("inherited_statuses")["constrained_columns"] == ["segment_id"]
+        fks = insp.get_foreign_keys("inherited_statuses")
+        assert [fk["constrained_columns"] for fk in fks] == [["segment_id"]]
+        command.downgrade(cfg, "0016")
+        assert "inherited_statuses" not in inspect(engine).get_table_names()
     finally:
         command.upgrade(cfg, "head")
