@@ -11,7 +11,6 @@ import type {
   AnnotationValues,
   StepOut,
 } from "../api/types";
-import { newestFirst } from "./pageFailures";
 
 /** The positions of the values shown: the curator's once saved, else the model's. */
 export function shownPositions(a: AnnotationOut): AnnotationPositions {
@@ -207,11 +206,6 @@ export type HitAt = { field: string; value: string; index: number };
 export function nextHit(at: HitAt | null, field: string, value: string, count: number): number {
   if (!at || at.field !== field || at.value !== value || count === 0) return 0;
   return (at.index + 1) % count;
-}
-
-/** The paper's newest annotate step. */
-export function newestAnnotate(steps: StepOut[]): StepOut | undefined {
-  return newestFirst(steps.filter((s) => s.kind === "annotate"))[0];
 }
 
 /** Its only steps in flight are annotate steps (the server's `annotating`, from the steps). */

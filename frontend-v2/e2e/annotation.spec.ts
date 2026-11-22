@@ -1,6 +1,6 @@
 // Paper annotation with the fake annotator (worker-fake-annotate: values picked from the
-// title, abstract and introduction by fixed rules, 2 s a run). On demand from the Paper view:
-// Annotate, Annotating…, the fields, each value walking its occurrences in the text, the
+// title, abstract and introduction by fixed rules, 2 s a run). It runs by itself once the text
+// is read; Run again, Annotating…, the fields, each value walking its occurrences in the text, the
 // curator's corrections (kept, exported) and the reset; then the COCONUT form starting from
 // the annotation's organism. Needs the built UI and the fake stack (compose.e2e.yml); never
 // production.
@@ -79,28 +79,24 @@ test("annotate the sample: the values, their occurrences, corrections kept and e
 
   await page.goto(`/app/papers/${id}?view=paper`);
   const ann = page.getByRole("region", { name: "Annotation" });
-  await ann.getByRole("button", { name: "Annotate" }).focus();
+  // it ran by itself once the text was read: the values, without a click
+  await expect(ann.getByText("Model suggestion")).toBeVisible({ timeout: 60_000 });
+  await expect(ann.getByText("fake-annotator")).toBeVisible();
+  // Run again: Annotating… where the button was, the focus stays in the panel, the start is said
+  await ann.getByRole("button", { name: "Run again" }).focus();
   await page.keyboard.press("Enter");
   await expect(ann.locator(".state", { hasText: "Annotating…" })).toBeVisible();
-  // the button is gone: the focus stays in the panel, the start is said
   await expect(ann).toBeFocused();
   await expect(ann.getByRole("status")).toHaveText("Annotating…");
-  // the paper is busy only with its annotation: the status bar says so
-  await expect(page.getByRole("region", { name: "Status" }).getByText("Annotating…")).toBeVisible();
-  // the model reports no progress: both bars show the time-based estimate, said as one
+  // beside the read: the status bar never says Annotating… and shows no bar for it
+  await expect(page.getByRole("region", { name: "Status" }).getByText("Annotating…")).toHaveCount(0);
+  // the model reports no progress: the panel's bar shows the time-based estimate
   await expect(ann.getByRole("progressbar", { name: "Annotation progress" })).toHaveAttribute(
     "aria-valuetext",
     /^Annotating, (about \d+|100)%$/,
   );
-  await expect(page.getByRole("region", { name: "Status" }).getByRole("progressbar")).toHaveAttribute(
-    "aria-valuetext",
-    /^Annotating, (about \d+|100)%$/,
-  );
-
-  await expect(ann.getByText("Model suggestion")).toBeVisible({ timeout: 60_000 });
-  await expect(ann.getByText("fake-annotator")).toBeVisible();
   // the end is said, and Edit takes the focus
-  await expect(ann.getByRole("status")).toHaveText("Annotation ready");
+  await expect(ann.getByRole("status")).toHaveText("Annotation ready", { timeout: 60_000 });
   await expect(ann.getByRole("button", { name: "Edit" })).toBeFocused();
   await expect(page.getByRole("region", { name: "Status" }).getByText("Done")).toBeVisible({
     timeout: 30_000,
@@ -208,7 +204,7 @@ test("the COCONUT form starts from the annotation's organism, part and place", a
 
   await page.goto(`/app/papers/${id}?view=paper`);
   const ann = page.getByRole("region", { name: "Annotation" });
-  await ann.getByRole("button", { name: "Annotate" }).click();
+  // it ran by itself
   await expect(ann.getByText("Model suggestion")).toBeVisible({ timeout: 60_000 });
   await expect(ann.getByRole("button", { name: /^Taxus brevifolia/ })).toBeVisible();
   await expect(ann.getByRole("button", { name: /^bark/ })).toBeVisible();

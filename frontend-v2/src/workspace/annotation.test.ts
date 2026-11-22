@@ -8,7 +8,6 @@ import {
   hitsOf,
   linesOf,
   markLabel,
-  newestAnnotate,
   nextHit,
   isAnnotating,
   sameValues,
@@ -202,12 +201,10 @@ describe("annotation helpers", () => {
     expect(nextHit({ ...at, index: 2 }, "location", "bark", 3)).toBe(0);
   });
 
-  it("finds the newest annotate step and whether it is all the paper is doing", () => {
+  it("tells whether annotate steps are all the paper is doing", () => {
     const older = step({ id: "a1", created_at: "2026-11-20T09:00:00Z", status: "failed" });
     const newer = step({ id: "a2", created_at: "2026-11-20T10:00:00Z", status: "running" });
     const docling = step({ id: "d", kind: "docling", status: "done" });
-    expect(newestAnnotate([older, docling, newer])?.id).toBe("a2");
-    expect(newestAnnotate([docling])).toBeUndefined();
     const busy = { status: "processing" };
     expect(isAnnotating(busy, [older, docling, newer])).toBe(true);
     expect(isAnnotating(busy, [newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);

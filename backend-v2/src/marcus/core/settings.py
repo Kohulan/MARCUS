@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     rgroup_reader: Literal["llama", "fake"] = "llama"
     # per owner: POST /predictions/{id}/rgroups (a paper may have several scaffolds)
     rate_limit_rgroup_per_min: int = 20
+    # Annotation and R-group rows run by themselves (owner decision 2026-11-22; marcus.core.auto,
+    # started by the dispatcher where the feature is on and a worker serves its queue): for a
+    # paper whose text was read, or a scaffold read, within this many seconds. Older papers keep
+    # the manual action only (no backfill when the feature is switched on).
+    auto_window_s: int = Field(3600, gt=0)
 
     @model_validator(mode="after")
     def _sessions_default(self):

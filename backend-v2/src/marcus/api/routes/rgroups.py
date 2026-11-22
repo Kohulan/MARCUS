@@ -2,7 +2,7 @@
 
     GET  /papers/{id}/rgroups              the paper's readings and whether the feature is on
     GET  /predictions/{id}/rgroups         one prediction's reading (status "none": never asked)
-    POST /predictions/{id}/rgroups         start (on demand); {"rerun": true} runs it again
+    POST /predictions/{id}/rgroups         start by hand; {"rerun": true} runs it again
 
 Every route is owner-scoped (another owner's paper or prediction is the same 404 as a missing
 one; a prediction of an image job has no paper and is a 404 too). POST is rate-limited per
@@ -10,7 +10,8 @@ owner (`rate_limit_rgroup_per_min`, failing closed) and idempotent: a step still
 running is returned again, and a prediction that has rows gets 200 with no step unless `rerun`
 is asked for. A prediction without R-group labels is refused (409). The paper's status does not
 change, so there is no event stream for it: a client reads GET again while a reading is queued
-or running.
+or running, or `auto_pending` names a scaffold whose reading starts by itself (the dispatcher,
+marcus.core.auto; no rate limit is charged for that).
 """
 
 import uuid
@@ -24,6 +25,7 @@ from marcus.api.deps import current_owner, get_owned_paper, not_found, visible
 from marcus.api.read import named_on
 from marcus.api.schemas import RgroupExtractionOut, RgroupList, RgroupStart, RgroupStarted
 from marcus.api.security import rgroup_limit
+from marcus.core import auto
 from marcus.core.db import get_db
 from marcus.core.enums import StepKind
 from marcus.core.models import Owner, Paper, Prediction, Segment
@@ -35,6 +37,7 @@ router = APIRouter()
 NOT_AVAILABLE = "R-group reading is not available"
 NOT_RUNNING = "The R-group model is not running"
 NO_RGROUPS = "This structure has no R-groups"
+MAX_LISTED = 1000  # = the most structures a paper's pages can hold here, in practice
 
 
 async def get_owned_prediction(
@@ -58,13 +61,29 @@ async def get_owned_prediction(
 
 @router.get("/papers/{paper_id}/rgroups", response_model=RgroupList)
 async def get_paper_rgroups(
+    request: Request,
     paper_id: uuid.UUID,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> RgroupList:
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
-    extractions = await reads.for_paper(db, paper.id, paper.rgroup_text_labels)
-    return RgroupList(available=reads.available(), extractions=extractions)
+    return RgroupList(
+        available=reads.available(),
+        extractions=await reads.for_paper(db, paper.id, paper.rgroup_text_labels),
+        auto_pending=await _auto_pending(request, db, paper.id),
+    )
+
+
+async def _auto_pending(request: Request, db: AsyncSession, paper_id: uuid.UUID) -> list[uuid.UUID]:
+    """The paper's scaffolds the dispatcher will read by themselves: the feature is on, they
+    are candidates (marcus.core.auto) and a worker serves q.rgroup (the cached /ready check,
+    asked only when there is a candidate)."""
+    if not reads.available():
+        return []
+    found = list((await db.execute(auto.rgroup_query(paper_id, limit=MAX_LISTED))).scalars())
+    if not found or queue_for(StepKind.RGROUPS, None) not in await request.app.state.live_queues():
+        return []
+    return found
 
 
 @router.get("/predictions/{prediction_id}/rgroups", response_model=RgroupExtractionOut)

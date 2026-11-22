@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError, api, errorText } from "../api/client";
 import { keys, refreshPaper, useQueue, useSteps } from "../api/queries";
 import { reasonText } from "../api/reasons";
-import { isPaperBusy, isStepActive } from "../api/status";
+import { isPaperBusy } from "../api/status";
 import type { PaperDetail, StepOut } from "../api/types";
 import type { useLiveEvents } from "../api/useLiveEvents";
 import { GlassButton } from "../ui/GlassButton";
@@ -23,8 +23,6 @@ function queueText(seconds: number): string {
 type Props = {
   paper: PaperDetail;
   steps: StepOut[];
-  /** The paper's newest annotate step (newestAnnotate). */
-  annotateStep: StepOut | undefined;
   live: ReturnType<typeof useLiveEvents>;
 };
 
@@ -34,7 +32,7 @@ type Props = {
  * could not be read), the live note,
  * then one hatched line per failed page with its reason and a retry.
  */
-export default function StatusBar({ paper, steps, annotateStep, live }: Props) {
+export default function StatusBar({ paper, steps, live }: Props) {
   const client = useQueryClient();
   const toast = useToast();
   const waiting = isPaperBusy(paper.status);
@@ -58,10 +56,7 @@ export default function StatusBar({ paper, steps, annotateStep, live }: Props) {
     [checkFailure, status, pages, ocsrMode, counts],
   );
   // A paper read while it is open ends on a full bar; one opened done shows only its badge.
-  const shown = useShownProgress(reading, {
-    run: annotateStep && isStepActive(annotateStep.status) ? annotateStep.id : null,
-    keepDone: true,
-  });
+  const shown = useShownProgress(reading, { run: null, keepDone: true });
   // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
   // the line while nothing has started, then beside the stages when it is a minute or more.
   const queueNote =

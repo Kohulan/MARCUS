@@ -60,7 +60,7 @@ class PaperSummary(_Orm):
     to_review: int
     failed_pages: int
     failed: int
-    annotating: bool  # busy only with its annotation (its only step in flight is annotate)
+    annotating: bool  # always false: annotation runs beside the read (kept for older clients)
     # The read's coarse progress, for the tool home's row bar (frontend readingProgress.ts reads
     # the same from the steps): pages whose newest page step ended, structures with an OCSR step
     # and those read (or with nothing in flight), the text read (every docling step ended; with
@@ -335,6 +335,9 @@ class AnnotationOut(BaseModel):
     created_at: datetime | None
     updated_at: datetime | None
     curated_at: datetime | None
+    # GET only: the annotation starts by itself within seconds (the text is read, nothing was
+    # asked yet, a worker serves q.llm; marcus.core.auto): read GET again.
+    auto_pending: bool = False
 
 
 class AnnotationStart(BaseModel):
@@ -390,6 +393,9 @@ class RgroupList(BaseModel):
 
     available: bool  # this deployment can read R-groups (POST answers 503 otherwise)
     extractions: list[RgroupExtractionOut]
+    # predictions whose reading starts by itself within seconds (a worker serves q.rgroup;
+    # marcus.core.auto): read the list again
+    auto_pending: list[uuid.UUID] = []
 
 
 class RgroupStart(BaseModel):

@@ -1,52 +1,50 @@
-// The paper's annotation: read once with the paper, read again when an annotate step ends
-// (the live stream refreshes the steps), and the curator's three writes.
+// The paper's annotation: read with the paper, and again every ANNOTATION_POLL_MS while a run is
+// on its way (its step is active, or the server says one starts by itself: `auto_pending`). The
+// run is beside the paper's read, so the paper's steps and stream never show it. And the
+// curator's writes.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { api } from "../api/client";
 import { keys } from "../api/queries";
 import { isStepActive } from "../api/status";
-import type { AnnotationOut, AnnotationValues, StepOut } from "../api/types";
+import type { AnnotationOut, AnnotationValues } from "../api/types";
 
-/**
- * GET /papers/{id}/annotation. Read again (never cancelling a read on the wire) when the
- * paper's newest annotate step (`step`, newestAnnotate) has ended and the annotation was read before that: a run that
- * finished or failed while the paper is open. Asked once per difference, so an answer that
- * still differs does not loop.
- */
-export function useAnnotation(paperId: string, step: StepOut | undefined) {
-  const client = useQueryClient();
-  const query = useQuery({
+export const ANNOTATION_POLL_MS = 2000;
+
+/** A run is queued, running, or about to start by itself. */
+export function annotationBusy(a: AnnotationOut | undefined): boolean {
+  return a !== undefined && ((a.step !== null && isStepActive(a.step.status)) || a.auto_pending === true);
+}
+
+/** GET /papers/{id}/annotation, read again while a run is on its way. */
+export function useAnnotation(paperId: string) {
+  return useQuery({
     queryKey: keys.annotation(paperId),
     queryFn: ({ signal }) => api.getAnnotation(paperId, { signal }),
+    refetchInterval: (query) => (annotationBusy(query.state.data) ? ANNOTATION_POLL_MS : false),
   });
-  const ended = step && !isStepActive(step.status) ? `${step.id}:${step.status}` : null;
-  const read = query.data?.step ? `${query.data.step.id}:${query.data.step.status}` : null;
-  const stale = ended !== null && query.data !== undefined && read !== ended;
-  useEffect(() => {
-    if (!stale) return;
-    void client.invalidateQueries({ queryKey: keys.annotation(paperId) }, { cancelRefetch: false });
-  }, [stale, ended, read, client, paperId]);
-  return query;
 }
 
 /**
- * start: POST (a 202 reopens the paper's live stream through `onStarted`, the paper is
- * busy again until the step ends); save / reset: PUT / DELETE the curation, whose reply is
- * the annotation. Each rejects with the ApiError.
+ * start: POST (by hand: a first run where none started by itself, or `rerun`), then GET again
+ * (it polls from there); save / reset: PUT / DELETE the curation, whose reply is the
+ * annotation. Each rejects with the ApiError.
  */
-export function useAnnotationActions(paperId: string, onStarted: () => void) {
+export function useAnnotationActions(paperId: string) {
   const client = useQueryClient();
   const put = useCallback(
     (a: AnnotationOut) => client.setQueryData<AnnotationOut>(keys.annotation(paperId), a),
     [client, paperId],
   );
 
-  const start = useCallback(async () => {
-    const out = await api.startAnnotation(paperId);
-    if (out.step_id !== null) onStarted();
-    void client.invalidateQueries({ queryKey: keys.annotation(paperId) });
-    return out;
-  }, [client, paperId, onStarted]);
+  const start = useCallback(
+    async (rerun = false) => {
+      const out = await api.startAnnotation(paperId, rerun);
+      await client.invalidateQueries({ queryKey: keys.annotation(paperId) });
+      return out;
+    },
+    [client, paperId],
+  );
 
   const save = useCallback(
     async (values: AnnotationValues) => put(await api.saveAnnotation(paperId, values)),
