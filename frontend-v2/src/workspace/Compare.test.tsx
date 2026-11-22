@@ -358,16 +358,16 @@ describe("Compare", () => {
     expect(api.depict).not.toHaveBeenCalled();
   });
 
-  it("the paper's orientation: an image job's drawings send MolNexTR's molfile (MolScribe's without one)", async () => {
+  it("the paper's orientation: an image job's drawings send MolScribe's molfile (MolNexTR's without one)", async () => {
     const decimer = prediction({ engine: "decimer", smiles: "CCO" });
     const scribe = prediction({ engine: "molscribe", smiles: "CCN", molfile: "<scribe>" });
     const nextr = prediction({ engine: "molnextr", smiles: "CCC", molfile: "<nextr>" });
-    const view = renderCompare({ target: { kind: "image", id: "img1" }, predictions: [decimer, scribe] });
-    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<scribe>" }));
-    expect(client.getQueryData(["depict", "CCO", null, scribe.id])).toBeDefined();
+    const view = renderCompare({ target: { kind: "image", id: "img1" }, predictions: [decimer, nextr] });
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<nextr>" }));
+    expect(client.getQueryData(["depict", "CCO", null, nextr.id])).toBeDefined();
     view.unmount();
     renderCompare({ target: { kind: "image", id: "img1" }, predictions: [nextr, decimer, scribe] });
-    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<nextr>" }));
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<scribe>" }));
   });
 
   it("the paper's orientation goes with the common part too", async () => {
@@ -397,14 +397,14 @@ describe("Compare", () => {
     expect(api.depict).toHaveBeenCalledWith("CCN", lit);
   });
 
-  it("orientationTemplate: the newest valid MolNexTR prediction with a molfile, else MolScribe's", () => {
-    const old = prediction({ engine: "molnextr", molfile: "<old>" });
-    const invalid = prediction({ engine: "molnextr", molfile: "<bad>", valid: false });
-    const bare = prediction({ engine: "molnextr", molfile: null });
-    const scribe = prediction({ engine: "molscribe", molfile: "<scribe>" });
+  it("orientationTemplate: the newest valid MolScribe prediction with a molfile, else MolNexTR's", () => {
+    const old = prediction({ engine: "molscribe", molfile: "<old>" });
+    const invalid = prediction({ engine: "molscribe", molfile: "<bad>", valid: false });
+    const bare = prediction({ engine: "molscribe", molfile: null });
+    const nextr = prediction({ engine: "molnextr", molfile: "<nextr>" });
     const hand = prediction({ engine: "decimer-hand", molfile: "<hand>" });
-    expect(orientationTemplate([invalid, bare, scribe, old])).toBe(old);
-    expect(orientationTemplate([invalid, bare, hand, scribe])).toBe(scribe);
+    expect(orientationTemplate([invalid, bare, nextr, old])).toBe(old);
+    expect(orientationTemplate([invalid, bare, hand, nextr])).toBe(nextr);
     expect(orientationTemplate([hand, prediction()])).toBeNull();
   });
 

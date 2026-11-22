@@ -6,7 +6,7 @@ lazily, on its first request, by `marcus.tools.depict` on q.tools (the same draw
 SMILES (drawing_key). Later requests of that owner, for any segment with that SMILES, read the
 file.
 
-The paper's orientation: a segment with a valid MolNexTR (else MolScribe) prediction that has a
+The paper's orientation: a segment with a valid MolScribe (else MolNexTR) prediction that has a
 molfile draws every structure with that molfile as the template (orientation_template;
 marcus.workers.orient), so the drawing follows the image. Such a drawing is keyed by the SMILES
 and the template together. The template comes from the owner's own stored rows, like the
@@ -55,13 +55,15 @@ DEPICTION_MAX_BYTES = 512 * 1024
 DEPICT_TASK = "marcus.tools.depict"
 DEPICT_OPTIONS = {"fmt": "svg", "width": 512, "height": 512, "highlight": ""}
 Source = Literal["curated", "predicted"]
-# The engines whose molfile holds the image's atom positions, in the order they are preferred.
-TEMPLATE_ENGINES = (Engine.MOLNEXTR.value, Engine.MOLSCRIBE.value)
+# The engines whose molfile can hold the image's atom positions, in the order they are preferred.
+TEMPLATE_ENGINES = (Engine.MOLSCRIBE.value, Engine.MOLNEXTR.value)
 
 
 def orientation_template(segment: Segment, predictions: list[Prediction]) -> str | None:
     """The molfile to draw the segment's structures in the paper's orientation: of its newest
-    valid MolNexTR prediction that has one, else MolScribe's; None without one.
+    valid MolScribe prediction that has one, else MolNexTR's; None without one. (The worker
+    uses it only when its positions come from the image, marcus.workers.orient.image_layout:
+    the pinned MolNexTR's never do.)
     `predictions`: the segment's, newest first."""
     for engine in TEMPLATE_ENGINES:
         for p in predictions:

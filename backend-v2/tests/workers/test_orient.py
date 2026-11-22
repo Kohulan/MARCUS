@@ -1,14 +1,17 @@
 """Drawings in the paper's orientation (marcus.workers.orient): the common part keeps the
 template's positions, the y axis as the OCSR libraries write it, and every fallback."""
 
+import json
 import math
+import random
+from pathlib import Path
 
 import pytest
 from rdkit import Chem
 from rdkit.Chem import rdDepictor
 from rdkit.Geometry import Point3D
 
-from marcus.workers.orient import oriented_coords, width_factor
+from marcus.workers.orient import image_layout, oriented_coords, width_factor
 
 FERULIC = "COc1cc(/C=C/C(=O)O)ccc1O"  # no symmetry: every atom maps one way
 
@@ -26,10 +29,16 @@ def _layout(smiles: str, degrees: float) -> tuple[Chem.Mol, list[tuple[float, fl
     return mol, pos
 
 
-def _ocsr_molfile(mol: Chem.Mol, pos: list[tuple[float, float]], width: float, height: float):
+def _ocsr_molfile(
+    mol: Chem.Mol, pos: list[tuple[float, float]], width: float, height: float, jitter: float = 0.04
+):
     """The molfile an OCSR library writes for a crop of `width` x `height` in which the
     structure is drawn as `pos` (y up): image coordinates (y down) as fractions of the width
-    and height, then each atom at (x, 1 - y), as MolScribe/MolNexTR `_verify_chirality` do."""
+    and height, then each atom at (x, 1 - y), as MolScribe/MolNexTR `_verify_chirality` do.
+    Each atom is read `jitter` bond lengths off (a fixed seed), as a model reads a printed
+    drawing: no two bonds come out exactly one length."""
+    rng = random.Random(7)
+    pos = [(x + rng.uniform(-jitter, jitter), y + rng.uniform(-jitter, jitter)) for x, y in pos]
     xs = [x for x, _ in pos]
     ys = [y for _, y in pos]
     left, top = min(xs) - 1.0, max(ys) + 1.0  # a margin around the drawing
@@ -248,3 +257,57 @@ def test_an_unsanitizable_template_falls_back():
     pentavalent = Chem.MolFromSmiles("C(C)(C)(C)(C)C", sanitize=False)
     rdDepictor.Compute2DCoords(pentavalent)
     assert oriented_coords("CC(C)(C)C", Chem.MolToMolBlock(pentavalent, kekulize=False)) is None
+
+
+# --- real engine output: which molfile holds the image's positions ----------------------------
+# tests/fixtures/orient_engines.json: what DECIMER, MolNexTR (fb7505b) and MolScribe read from
+# five crops of one paper page (structures only). MolNexTR rewrites its molfile from its SMILES
+# (MolNexTR/chemical.py: MolFromSmiles, MolToMolBlock): a computed layout, every bond 1.5.
+# MolScribe keeps the image's positions when its structure sanitizes (p2_6, p2_10); when it
+# does not (p2_0, p2_2, p2_5), its _verify_chirality gives up before the positions are set and
+# MolToMolBlock lays the molecule out itself.
+
+REAL = json.loads((Path(__file__).parent.parent / "fixtures" / "orient_engines.json").read_text())
+FROM_IMAGE = {("p2_6", "molscribe"), ("p2_10", "molscribe")}
+
+
+@pytest.mark.parametrize("crop", sorted(REAL))
+@pytest.mark.parametrize("engine", ["molnextr", "molscribe"])
+def test_only_a_molfile_with_the_images_positions_is_a_template(crop, engine):
+    assert image_layout(REAL[crop][engine]["molfile"]) is ((crop, engine) in FROM_IMAGE)
+
+
+def test_a_computed_layout_is_no_template():
+    """RDKit's own layout (bonds all one length) says nothing about the image; read with a
+    model's small errors, the same drawing is a template."""
+    mol, pos = _layout(FERULIC, 70)
+    exact, _ = _ocsr_molfile(mol, pos, width=12.0, height=12.0, jitter=0.0)
+    read, _ = _ocsr_molfile(mol, pos, width=12.0, height=12.0)
+    assert not image_layout(exact) and oriented_coords(FERULIC, exact) is None
+    assert image_layout(read) and oriented_coords(FERULIC, read) is not None
+
+
+def _side(coords, a, b, c) -> float:
+    (ax, ay), (bx, by), (cx, cy) = coords[a], coords[b], coords[c]
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+
+@pytest.mark.parametrize("crop", ["p2_6", "p2_10"])
+def test_decimers_reading_follows_molscribes_positions(crop):
+    """DECIMER's structure, drawn on MolScribe's positions: turned and handed as the crop."""
+    template = REAL[crop]["molscribe"]["molfile"]
+    smiles = REAL[crop]["decimer"]["smiles"]
+    coords = oriented_coords(smiles, template)
+    assert coords is not None
+    tpl = Chem.MolFromMolBlock(template)
+    params = Chem.SmilesParserParams()
+    params.removeHs = False
+    drawn = Chem.MolFromSmiles(smiles, params)
+    on_drawn = drawn.GetSubstructMatch(tpl)
+    assert len(on_drawn) == tpl.GetNumAtoms()  # the same structure
+    conf = tpl.GetConformer()
+    pos = [(conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y) for i in range(tpl.GetNumAtoms())]
+    turn, _ = _turn(pos, [coords[j] for j in on_drawn])
+    assert abs(turn) < 5
+    a, b, c = 0, tpl.GetNumAtoms() // 2, tpl.GetNumAtoms() - 1
+    assert _side(pos, a, b, c) * _side(coords, on_drawn[a], on_drawn[b], on_drawn[c]) > 0
