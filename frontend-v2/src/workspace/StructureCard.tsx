@@ -24,11 +24,13 @@ import {
   enginesDiffer,
   hasDrawing,
   metaText,
+  scaffoldPrediction,
   sentence,
   shownStructure,
   STATE_WORD,
   type CardState,
 } from "./cardState";
+import RgroupRows from "./RgroupRows";
 import RgroupTag from "./RgroupTag";
 import { rgroupTag } from "./rgroups";
 import StructureActions, { type StructureActionsProps } from "./StructureActions";
@@ -156,6 +158,7 @@ function StructureCard({
   const shown = shownStructure(segment, paperEngine);
   const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
+  const scaffold = scaffoldPrediction(shown);
   const note = curation?.note?.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const rejected = state === "rejected";
 
@@ -271,6 +274,9 @@ function StructureCard({
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
         {state === "reading" && readingNote !== null && (
           <p className="card__reason">{readingNote}</p>
+        )}
+        {scaffold !== null && (
+          <RgroupRows predictionId={scaffold.id} labels={rgroups} tag={tag} compact />
         )}
         {/* Compact (Paper view): the stamp sits in the text column, clear of the drawing. */}
         {compact && stamp}

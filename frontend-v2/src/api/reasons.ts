@@ -6,11 +6,17 @@ const REASONS: Record<string, string> = {
   engine_error: "the engine failed",
 };
 
-/** A step kind's own words where the shared ones do not fit (an annotate step reads no page). */
+/** A step kind's own words where the shared ones do not fit (an annotate step reads no page; an
+ * rgroups step reads a page image). */
 const BY_KIND: Record<string, Record<string, string>> = {
   annotate: {
     worker_lost: "the worker stopped",
     bad_input: "no title, abstract or introduction was found",
+    engine_error: "the model failed",
+  },
+  rgroups: {
+    worker_lost: "the worker stopped",
+    bad_input: "the page image could not be read",
     engine_error: "the model failed",
   },
 };

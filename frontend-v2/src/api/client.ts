@@ -21,6 +21,8 @@ import type {
   PaperDetail,
   PaperList,
   QueueOut,
+  RgroupList,
+  RgroupStarted,
   StepAccepted,
   StepList,
   UploadImageReply,
@@ -285,6 +287,13 @@ export const api = {
   /** Back to the model's values. */
   resetAnnotation: (id: string) =>
     request<AnnotationOut>(`/papers/${enc(id)}/annotation/curation`, { method: "DELETE" }),
+
+  // R-group rows of a scaffold (the local R-group model)
+  getPaperRgroups: (id: string, opts?: ReadOpts) =>
+    get<RgroupList>(`/papers/${enc(id)}/rgroups`, opts),
+  /** 202 {step_id}: started or still running; 200 {step_id: null}: it has rows already. */
+  startRgroups: (predictionId: string, rerun = false) =>
+    sendJson<RgroupStarted>("POST", `/predictions/${enc(predictionId)}/rgroups`, { rerun }),
 
   // segments
   /** Only through useSaveCuration (curationBody builds the full record). */

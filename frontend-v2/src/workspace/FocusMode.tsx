@@ -27,12 +27,14 @@ import { useToast } from "../ui/Toasts";
 import {
   hasDrawing,
   metaText,
+  scaffoldPrediction,
   sentence,
   shownStructure,
   STATE_WORD,
   type CardState,
 } from "./cardState";
 import KeyHelp from "./KeyHelp";
+import RgroupRows from "./RgroupRows";
 import { boxStyle } from "./pageBox";
 import { resultWord, rgroupNotice } from "./rgroups";
 import StructureActions from "./StructureActions";
@@ -229,6 +231,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
   const shown = shownStructure(segment, paper.engine);
   const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
+  const scaffold = scaffoldPrediction(shown);
   const curation = segment.curation;
   const rejected = state === "rejected";
   // The text is asked for only for a structure with R-groups (it can be large).
@@ -347,6 +350,11 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
               Compare <Kbd>C</Kbd>
             </GlassButton>
           </div>
+
+          {/* Under the decision row: a long table never pushes it below the fold. */}
+          {scaffold !== null && (
+            <RgroupRows predictionId={scaffold.id} labels={rgroups} tag={tag} />
+          )}
 
           {segment.predictions.length > 0 && (
             <SpecimenLabel title="Engines" rows={engineRows(segment.predictions)} />
