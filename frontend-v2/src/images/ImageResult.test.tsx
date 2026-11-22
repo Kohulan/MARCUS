@@ -490,7 +490,7 @@ describe("ImageResult", () => {
       created_at: "2026-11-18T10:01:00Z",
     };
 
-    it("plugs in the real Compare: one Compare engines section, its Close, run all on this job", async () => {
+    it("plugs in the real Compare: one Compare engines section, its Close, its engines started on this job", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
         job({ predictions: [{ ...molnextr, engine: "decimer", engine_version: "2.7.1" }] }),
       );
@@ -502,7 +502,6 @@ describe("ImageResult", () => {
       const section = await screen.findByRole("region", { name: "Compare engines" });
       expect(within(section).getByRole("button", { name: "Close" })).toHaveFocus();
       expect(screen.getAllByRole("heading", { name: "Compare engines" })).toHaveLength(1);
-      fireEvent.click(within(section).getByRole("button", { name: "Run all engines" }));
       await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
       expect(run.mock.calls.map((c) => c[0])).toEqual([ID, ID, ID]);
       await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));

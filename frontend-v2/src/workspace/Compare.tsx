@@ -1,10 +1,10 @@
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { depictQuery, useDepiction, useReplyUrl } from "../api/depictions";
 import { asEngine, firstRunNote } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
-import type { DepictReply, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import type { DepictReply, Engine, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
 import ProgressBar, { useHeldAfter } from "../ui/ProgressBar";
@@ -20,7 +20,7 @@ import {
   enginesToRun,
   tooManyText,
   useCommonPart,
-  useRunAll,
+  useEngineRuns,
   useSimilarity,
   type CompareStep,
   type CompareTarget,
@@ -37,7 +37,7 @@ export type CompareProps = {
   steps: CompareStep[];
   /** "Use this one". */
   onPick: (p: PredictionOut) => void;
-  /** After "Run all engines" was accepted: the page reopens its own live stream. */
+  /** After an engine start was accepted: the page reopens its own live stream. */
   onStarted: () => void;
   /** Given: Compare is a modal dialog (Close, Esc, the backdrop). Without: a page section. */
   onClose?: (() => void) | undefined;
@@ -50,7 +50,8 @@ export type CompareProps = {
 /**
  * Compare engines: each engine's result side by side (drawing, SMILES, validity), the
  * pairwise Tanimoto similarity, "Show common part" (the MCS highlighted in every drawing),
- * "Run all engines" for the ones not read yet, and "Use this one".
+ * and "Use this one". Opening it starts every engine not read and not running, at once; a
+ * failed engine has its own Retry.
  */
 export default function Compare({
   target,
@@ -64,18 +65,24 @@ export default function Compare({
 }: CompareProps) {
   const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
-  const { requested, batch, sending, error: runError, runAll } = useRunAll(target, steps, onStarted);
+  const { requested, batch, sending, error: runError, run } = useEngineRuns(target, steps, onStarted);
   const rows = useMemo(
     () => engineRows(predictions, steps, requested),
     [predictions, steps, requested],
   );
-  // The last "Run all engines": engines read (or failed) of those it started; the bar stays on
-  // its full figure for a moment once every one has answered.
+  // Opening starts the engines not read yet, once (the ref holds across a strict-mode remount).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    run(enginesToRun(rows));
+  }, [run, rows]);
+  // The last start: engines read (or failed) of those it started; the bar stays on its full
+  // figure for a moment once every one has answered.
   const batchRows = rows.filter((r) => batch.includes(r.engine));
   const batchDone = batchRows.filter((r) => r.state !== "reading").length;
   const batchRunning = batch.length > 0 && (sending || batchDone < batchRows.length);
   const showBatch = useHeldAfter(batchRunning, END_HOLD_MS) && batchRows.length > 0;
-  const toRun = enginesToRun(rows);
   const pairs = useSimilarity(rows);
   const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
   const canCommon = new Set(valid.map((p) => p.smiles)).size >= 2;
@@ -162,6 +169,19 @@ export default function Compare({
               {rows.map((r) => (
                 <td key={r.engine} className={`cmp-result cmp-result--${resultTone(r)}`}>
                   {resultText(r)}
+                  {r.state === "failed" && asEngine(r.engine) !== null && (
+                    <span className="cmp-result__retry">
+                      <GlassButton
+                        tint="clear"
+                        size="sm"
+                        label={`Retry, ${r.label}`}
+                        disabled={sending}
+                        onClick={() => run([r.engine as Engine])}
+                      >
+                        Retry
+                      </GlassButton>
+                    </span>
+                  )}
                 </td>
               ))}
             </tr>
@@ -205,14 +225,6 @@ export default function Compare({
             <GlassButton
               tint="clear"
               size="sm"
-              disabled={toRun.length === 0 || sending}
-              onClick={() => runAll(toRun)}
-            >
-              Run all engines
-            </GlassButton>
-            <GlassButton
-              tint="clear"
-              size="sm"
               disabled={!canCommon}
               pressed={common && canCommon}
               onClick={() => setCommon((c) => !c)}
@@ -224,7 +236,7 @@ export default function Compare({
             <div className="cmp__run">
               <ProgressBar
                 value={batchDone / batchRows.length}
-                label="Run all engines"
+                label="Engines"
                 valueText={`Engines read, ${batchDone} of ${batchRows.length}`}
                 active={batchRunning}
                 size="sm"

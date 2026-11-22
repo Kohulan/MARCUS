@@ -230,7 +230,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The last Run all engines: its bar and its count, above the message. */
+/* The last engine start: its bar and its count, above the message. */
 .cmp__run {
   display: flex;
   flex-direction: column;
@@ -291,4 +291,10 @@
 .cmp__actions .glass[aria-pressed="true"]::before {
   border-color: var(--green);
   background-color: var(--green);
+}
+
+/* A failed engine's own Retry, under its reason. */
+.cmp-result__retry {
+  display: block;
+  margin-top: 8px;
 }
