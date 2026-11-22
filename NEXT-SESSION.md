@@ -1,7 +1,34 @@
-# Next session — written 2026-11-18 UTC, by session handoff
-- Milestone/phase: MARCUS v2 frontend build (plan docs/superpowers/plans/2026-11-17-marcus-frontend-v2.md), subagent-driven; backend v2 done.
-- Last commit: frontend-v2 455af74 "fix(frontend-v2): grid selection follows the visible cards" (worktree /home/kohulan/MARCUS-frontend-v2; pushed: no). Lane B frontend-v2-laneb 59a85c7 (worktree /home/kohulan/MARCUS-fe-laneb). Backend v2-backend 51072e0 (/home/kohulan/MARCUS).
-- Baseline: backend 854 passed (frontend-v2 branch); frontend 363 unit + e2e csp/landing/keyboard-review green; D5 gates Safe/Responsive/Robust PASS, Throughput FAIL (owner: 1 GPU slot, known limit).
-- NEXT task: review F8 (21bba5c, report task-F8-report.md) and scoped re-review of the F7 fix round (455af74) in the frontend ledger folder; then F9 (paper view), F10 (compare); merge frontend-v2-laneb into frontend-v2 and do the hook-ups (Editor → FocusMode `e` + card menu, StructureActions, COCONUT SubmitForm from "Send N to COCONUT" with default title, Compare into ImageResult `COMPARE` constant, decide F14 Retry per R-F16); then F15, F16, final whole-branch review, then run `/impeccable:impeccable audit`. Pipeline rule R-F11: review task N while N+1 builds; N's fixes go to N+1's implementer as a separate commit.
-- Read first: /home/kohulan/MARCUS-frontend-v2/.superpowers/sdd/2026-11-17-marcus-frontend-v2/progress.md (ledger, rulings), common-rules.md and reviewer-rules.md in that folder, laneb-rules.md + task-F1x-core-report.md hook-up steps in /home/kohulan/MARCUS-fe-laneb/.superpowers/sdd/2026-11-17-marcus-frontend-v2/, memory marcus-v2-status.
-- In flight / hazards: nothing running; trees clean. Known F8 concerns: grid buttons "Accept [nn]" vs visible "Accept A" (axe label-in-name), single save now updates paper counts in api/queries.ts, M1 menu fix unverified in a browser. Test Postgres/Redis (marcus-v2-test-*) shared: one pytest run at a time. Fake stack needs --env-file /home/kohulan/MARCUS/backend-v2/.env. Owner rules: minimal copy, short replies, no commit trailers, never push, ask only big decisions. v1 prod stays stopped behind marcus-maintenance. Worktree /home/kohulan/MARCUS-v2-fixes is merged and can be removed.
+# Next session — written 2026-11-22 (updated after the ~20:10 UTC deploy), by session handoff
+- Milestone/phase: tester feedback, phase B (brief /home/kohulan/MARCUS-training/review-feedback/PHASE-B-BRIEF.md). LIVE on jarvis: Markush Phase 2, the Phase 2 follow-ups, one model for annotation and R-groups, MolNexTR image coordinates. Markush Phase 3 (enumeration) is not started and not decided.
+- Last commit: main 86ea787 "Merge pull request #55 from Kohulan/feature/molnextr-coords" (pushed: yes; it includes #51 to #54). Local /home/kohulan/MARCUS main is at a9009ca, 44 commits behind origin/main. Pull with care: NEXT-SESSION.md is modified and stays uncommitted (owner choice).
+- Baseline:
+  - Backend: 1597 passed, 1 skipped (`-m "not ml and not e2e"`). Frontend: vitest 980, Playwright @mocked 48.
+  - One model nuextract3-marcus-multi-v1 (annotation and R-groups): annotation test F1 0.711; R-group text 0.933, image 0.621; it invented 0 rows. Report: /home/kohulan/MARCUS-training/multitask/REPORT.md.
+  - Live smoke after the deploy passed: ready 200, public 200, rgroup_smoke acer p9 3 rows correct, sample upload 15/15 valid.
+- NEXT task: phase B, items 1 to 4 in the brief. Start the branch from main. Items 1 and 3 say "pick from data": measure before you build. The "all info in one place" view waits for the owner's in-person talk.
+- Read first:
+  - Brief: /home/kohulan/MARCUS-training/review-feedback/PHASE-B-BRIEF.md
+  - Memory: /home/kohulan/.claude/projects/-home-kohulan-MARCUS/memory/markush-plan.md (newest entries)
+  - Memory: marcus-v2-status.md (newest UPDATE) in the same folder
+  - Memory: feedback-ask-big-decisions.md in the same folder
+- In flight / hazards:
+  - jarvis is production; confirm with the owner before any change.
+  - Deploy with DCP: `. ~/Project_MARCUS/switch-day/dc.sh` in ~/Project_MARCUS/MARCUS-v2/backend-v2.
+  - One llama-server (2 slots x 10240). The .env sets MARCUS_LLM_GGUF and MARCUS_LLM_MMPROJ. The old MARCUS_RGROUP_* rows and model files stay for rollback; removing them is an owner decision (deploy doc 10.7).
+  - Rollback: images `marcus-v2-<svc>:rollback-edfe5ae` (6), ~/Project_MARCUS/backups/env-before-one-model-edfe5ae, docker-compose.gpu-before-one-model-edfe5ae.yml, DB dump marcus-v2-before-one-model-2026-11-22.dump.
+  - The rollback steps (deploy doc 10.6) are in docs/DEPLOY-v2-jarvis.md (gitignored, local only; copied from worktree agent-aa5b096aeb8292c47 on 2026-11-22).
+  - GPU memory on jarvis is 14.9 of 32 GB.
+  - Over ssh: `docker exec -T` inside `ssh 'bash -s' <<EOF` eats the script stdin; use a script file or `</dev/null`. rgroup_smoke needs `--user $(id -u):$(id -g)`.
+  - CI runner flake: the `test` job can fail at container start with "port 55432 in use". Rerun the failed job.
+- Owner items:
+  - PR #47 (release 0.2.0) is open; the owner chose to keep it.
+  - Remote branch feature/molnextr-coords is merged and can be deleted. Keep `development` and the release-please branch.
+  - 8 old agent worktrees are in .claude/worktrees, plus /home/kohulan/MARCUS-frontend-v2.
+  - The container marcus-llm-cpu is stopped.
+- Owner rules:
+  - Write ELI5 / ASD-STE100 replies and minimal UI copy.
+  - Ask only big decisions (production, money, deletion, what users see), always through AskUserQuestion. Decide technical details yourself.
+  - No commit trailers. Never push unless told. Never print .env values.
+  - Run one pytest at a time. The hook forbids `git add -A`.
+  - Cloud: Spot VMs only, EU region, budget cap €150 (about €30.5 used), delete resources with proof.
+  - User data stays local.
