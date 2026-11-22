@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.chem import inchikeys
 from marcus.api.chempool import CHEM
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
+from marcus.core.agreement import ENGINES as AGREE_ENGINES
+from marcus.core.agreement import majority, pick_prediction
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -31,7 +33,14 @@ from marcus.core.models import (
     Segment,
     Step,
 )
-from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
+from marcus.core.pipeline import (
+    ACTIVE,
+    PAGE_KINDS,
+    in_paper_progress,
+    in_paper_steps,
+    is_background,
+    page_step_order,
+)
 from marcus.core.rgroup_labels import shown_labels
 
 log = logging.getLogger(__name__)
@@ -73,7 +82,7 @@ async def waiting_ocsr_step(db: AsyncSession, where, engine: Engine) -> uuid.UUI
 def _failed_structure():
     """True for a segment the workspace shows as Failed (frontend cardState): no decision, no
     valid prediction, no OCSR step in flight, and its newest OCSR step failed."""
-    ocsr = and_(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
+    ocsr = and_(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value, ~is_background())
     newest = (
         select(Step.status)
         .where(ocsr)
@@ -215,6 +224,7 @@ def _step_counts(paper_ids: list[uuid.UUID]):
             Step.paper_id.in_(paper_ids),
             Step.kind == StepKind.OCSR.value,
             Step.segment_id.is_not(None),
+            ~is_background(),
         )
         .group_by(Step.paper_id, Step.segment_id)
         .subquery()
@@ -257,10 +267,11 @@ def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
 
 
 async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, int]:
-    """The paper's steps per status (rgroups steps aside: they are not part of its read)."""
+    """The paper's steps per status, as steps_out lists them (annotate and rgroups steps aside:
+    they are not part of its read; background OCSR steps in)."""
     rows = await db.execute(
         select(Step.status, func.count())
-        .where(Step.paper_id == paper_id, in_paper_progress())
+        .where(Step.paper_id == paper_id, in_paper_steps())
         .group_by(Step.status)
     )
     return {status: n for status, n in rows.all()}
@@ -319,13 +330,6 @@ def structure_out(model: type[_Structure], row: object, named: list[str] | None)
     return out
 
 
-def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
-    """The prediction shown and exported when nothing is curated: of `valid` (newest first),
-    the newest of the paper's engine, else the newest of any engine. The one rule; the stored
-    depiction (api.depiction.shown_structure) and the UI (cardState shownPrediction) agree."""
-    return next((p for p in valid if p.engine == paper_engine), None) or next(iter(valid), None)
-
-
 def shown_source(
     paper_engine: str, curation: Curation | None, predictions: list[Prediction]
 ) -> tuple[str, str] | None:
@@ -338,7 +342,7 @@ def shown_source(
         if curation.rgroups:
             return None
         return ("smiles", curation.smiles) if curation.smiles else ("molfile", curation.molfile)
-    pick = pick_prediction([p for p in predictions if p.valid], paper_engine)
+    pick = pick_prediction(predictions, paper_engine)
     if pick is None or not pick.smiles or pick.rgroups:
         return None
     return "smiles", pick.smiles
@@ -467,6 +471,7 @@ async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
                 Prediction.smiles,
                 Prediction.valid,
                 Prediction.rgroups,
+                Prediction.inchikey,  # agreement.pick_prediction
             )
             .join(Segment, Segment.id == Prediction.segment_id)
             .where(of_papers)
@@ -541,6 +546,40 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
     return fix
 
 
+async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, dict[str, bool]]:
+    """Per segment, the agreement engines that have an OCSR step: engine -> True while one of its
+    steps is pending, queued or running, else False."""
+    rows = await db.execute(
+        select(Step.segment_id, Step.engine, func.bool_or(Step.status.in_(ACTIVE)))
+        .where(
+            Step.paper_id == paper_id,
+            Step.kind == StepKind.OCSR.value,
+            Step.segment_id.is_not(None),
+            Step.engine.in_(AGREE_ENGINES),
+        )
+        .group_by(Step.segment_id, Step.engine)
+    )
+    out: dict[uuid.UUID, dict[str, bool]] = defaultdict(dict)
+    for segment_id, engine, active in rows.all():
+        out[segment_id][engine] = active
+    return out
+
+
+def agreement_out(paper_engine: str, predictions: list[Prediction], ran: dict[str, bool]) -> dict:
+    """SegmentOut's agreement fields (marcus.core.agreement). `predictions` newest first; `ran`:
+    engines_run of the segment. The badge (`agree`) waits until no agreement engine is still
+    reading and at least two have read (a paper from before the three engines has one)."""
+    group = majority(predictions)
+    pick = pick_prediction(predictions, paper_engine)
+    read = set(ran) | {p.engine for p in predictions if p.engine in AGREE_ENGINES}
+    settled = not any(ran.values()) and len(read) >= 2
+    return {
+        "agree": len(group) if settled else None,
+        "agree_engines": [p.engine for p in group],
+        "default_prediction_id": pick.id if pick is not None else None,
+    }
+
+
 async def segments_out(
     db: AsyncSession, paper: Paper, main_page: int | None
 ) -> tuple[list[SegmentOut], CountFix, bool]:
@@ -570,6 +609,7 @@ async def segments_out(
             .where(Segment.paper_id == paper.id)
         )
     )
+    ran = await engines_run(db, paper.id)
     out = [
         SegmentOut(
             id=seg.id,
@@ -578,6 +618,7 @@ async def segments_out(
             bbox=list(seg.bbox),
             repeat_of=repeats.get(seg.id),
             check_drawing=seg.id in flagged,
+            **agreement_out(paper.engine, predictions[seg.id], ran.get(seg.id, {})),
             curation=curation_out(seg) if seg.id in curations else None,
             predictions=[
                 structure_out(PredictionOut, p, named_on(index, seg.page))
@@ -590,13 +631,17 @@ async def segments_out(
 
 
 async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:
-    """The paper's steps, oldest first (created_at, seq). Rgroups steps are left out: they are
-    not part of the paper's read (their state is served by marcus.api.routes.rgroups)."""
-    rows = (
-        await db.execute(
-            select(Step)
-            .where(Step.paper_id == paper_id, in_paper_progress())
-            .order_by(Step.created_at, Step.seq, Step.id)
-        )
-    ).scalars()
-    return [StepOut.model_validate(s) for s in rows]
+    """The paper's steps, oldest first (created_at, seq). Annotate and rgroups steps are left
+    out: they are not part of the paper's read (their state is served by their own routes).
+    Background OCSR steps are in, marked `background`."""
+    rows = await db.execute(
+        select(Step, is_background().label("background"))
+        .where(Step.paper_id == paper_id, in_paper_steps())
+        .order_by(Step.created_at, Step.seq, Step.id)
+    )
+    out = []
+    for step, background in rows.all():
+        item = StepOut.model_validate(step)
+        item.background = background
+        out.append(item)
+    return out

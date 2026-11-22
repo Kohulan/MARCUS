@@ -145,7 +145,8 @@ def test_same_pdf_twice_same_owner_two_papers_second_from_cache(db_session):
     s.refresh(b)
     assert a.id != b.id and b.status == "done"
     assert "segment_page" not in ran and steps(s, b, "segment_page") == []
-    assert ran.count("render_page") == 2 and ran.count("ocsr") == 4
+    # 4 segments, each read by the three engines (phase B item 3)
+    assert ran.count("render_page") == 2 and ran.count("ocsr") == 12
     seg_a, seg_b = segments_of(s, a), segments_of(s, b)
     assert len(seg_b) == len(seg_a) == 4
     key = lambda g: (g.page, g.idx, g.bbox, g.image_sha256)  # noqa: E731

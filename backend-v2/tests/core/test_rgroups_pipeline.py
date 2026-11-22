@@ -57,7 +57,11 @@ def done_paper(s):
     finish(s, steps(s, paper, "doi")[0], {"doi": None})
     finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    first, second = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    # the paper's own engine (the other two read in the background, phase B item 3)
+    first, second = [
+        st for st in finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+        if st.engine == paper.engine
+    ]
     finish(s, first, SCAFFOLD)
     finish(s, second, PLAIN)
     s.refresh(paper)
@@ -227,7 +231,8 @@ def test_an_rgroups_step_never_keeps_a_paper_busy(db_session):
     s = db_session
     paper, scaffold, _ = done_paper(s)
     rg_step = request_rgroups(s, scaffold.id)
-    ocsr = request_ocsr(s, scaffold.segment_id, "molscribe")
+    # decimer-hand: no background step of it waits already (that one would be returned)
+    ocsr = request_ocsr(s, scaffold.segment_id, "decimer-hand")
     s.refresh(paper)
     assert paper.status == "processing"
     finish(s, ocsr, PLAIN)

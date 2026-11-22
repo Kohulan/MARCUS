@@ -50,7 +50,9 @@ LiveQueues = Callable[[], "set[str] | frozenset[str] | None"]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 
-# Order: priority class, then owner usage on this queue in the fair window (steps busy now
+# Order: priority class, then a paper's own steps before background OCSR steps (the other
+# engines, marcus.core.pipeline.background_engines: they fill in after the paper is done), then
+# owner usage on this queue in the fair window (steps busy now
 # or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
 # the oldest paper / image job, then step order. One statement; the chosen row is locked, rows another
 # dispatcher (or the planner) holds are skipped. `docling_ok` false leaves docling steps out (the
@@ -70,7 +72,9 @@ _PICK_SQL = text(
       JOIN owners o ON o.id = COALESCE(p.owner_id, j.owner_id)
       LEFT JOIN usage u ON u.owner_id = o.id
     WHERE s.queue = :q AND s.status = 'pending' AND (s.kind <> 'docling' OR :docling_ok)
-    ORDER BY o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
+    ORDER BY o.priority_class,
+             EXISTS (SELECT 1 FROM background_steps b WHERE b.step_id = s.id),
+             COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
              s.seq, s.created_at
     LIMIT 1 FOR UPDATE OF s SKIP LOCKED
     """

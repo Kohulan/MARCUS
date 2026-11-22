@@ -306,6 +306,10 @@
   color: var(--orange-ink);
 }
 
+.card__agree {
+  color: var(--accepted);
+}
+
 .card .card__note {
   overflow-wrap: anywhere;
   color: var(--muted);

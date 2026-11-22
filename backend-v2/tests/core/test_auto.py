@@ -126,7 +126,11 @@ def test_only_unlabelled_points_or_no_text_are_not_read_by_itself(db_session):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    first, second = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    # the paper's own engine (the other two read in the background, phase B item 3)
+    first, second = [
+        st for st in finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+        if st.engine == paper.engine
+    ]
     finish(s, first, {**SCAFFOLD, "smiles": "*c1ccccc1"})  # an unlabelled point only
     finish(s, second, SCAFFOLD)
     assert auto.rgroup_candidates(s) == []  # the text is not read yet

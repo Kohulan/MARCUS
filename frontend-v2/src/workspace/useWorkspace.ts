@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, snapshotIsCached, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
+import { readSteps } from "./cardState";
 import { mainFirst } from "./mainFigure";
 
 export type WorkspaceView = "review" | "paper";
@@ -27,7 +28,10 @@ export type Workspace = {
    * (listedSegments).
    */
   segments: SegmentOut[];
+  /** The paper's read steps: background OCSR steps left out (readSteps). */
   steps: StepOut[];
+  /** Every step, background OCSR steps too (Compare shows those engines reading). */
+  allSteps: StepOut[];
   /** The focused segment id (`?s=`; a repeat's main-figure structure for a repeat). */
   selection: string | null;
   /** Replaces the URL entry by default (moving between cards makes no history); `push` adds one. */
@@ -53,7 +57,8 @@ export type Workspace = {
 export function useWorkspace(id: string): Workspace {
   const client = useQueryClient();
   const paper = usePaper(id).data;
-  const steps = useSteps(id).data?.steps ?? NO_STEPS;
+  const allSteps = useSteps(id).data?.steps ?? NO_STEPS;
+  const steps = useMemo(() => readSteps(allSteps), [allSteps]);
   // The stream's first snapshot comes right after the paper and its steps were read: when
   // it says what they say, the refetch is skipped (a later one, a reconnect, never is).
   const firstSnapshot = useRef(true);
@@ -161,6 +166,7 @@ export function useWorkspace(id: string): Workspace {
     paper,
     segments,
     steps,
+    allSteps,
     selection,
     setSelection,
     focus,
