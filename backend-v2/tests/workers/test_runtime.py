@@ -290,6 +290,33 @@ def test_missing_handler_is_final_engine_error(db_session, bus):
     assert row.error_class == "engine_error" and row.error == "no handler for check_pdf"
 
 
+def test_a_message_from_another_queue_than_the_steps_is_stale(db_session, bus):
+    """Review finding 3: migration 0013 moved rgroups steps from q.llm to q.rgroup and put the
+    sent ones back to pending; once re-sent, the old q.llm message carries the same attempt
+    token. worker-llm (no rgroups handler) must drop it, not claim and fail the step."""
+    s = db_session
+    _, step = queued_check_pdf(s)  # a q.cpu step
+    register(StepKind.CHECK_PDF, lambda view, session: {"pages": 1})
+
+    runtime.execute(step.id, 0, "w", queue="q.llm")
+    row = reload(s, step.id)
+    assert (row.status, row.attempts) == ("queued", 0)
+    assert bus() == []
+    runtime.execute(step.id, 0, "w", queue="q.cpu")
+    assert reload(s, step.id).status == "done"
+
+
+def test_run_step_passes_the_queue_it_was_delivered_on(monkeypatch):
+    seen = []
+    monkeypatch.setattr(runtime, "execute", lambda sid, tok, worker, queue=None: seen.append(queue))
+    run_step.push_request(hostname="h", delivery_info={"routing_key": "q.rgroup"})
+    try:
+        run_step(str(uuid.uuid4()), 0)
+    finally:
+        run_step.pop_request()
+    assert seen == ["q.rgroup"]
+
+
 def test_unknown_or_malformed_step_id_is_ignored(db_session, bus):
     run_step("not-a-uuid", 0)
     run_step("00000000-0000-0000-0000-000000000000", 0)
