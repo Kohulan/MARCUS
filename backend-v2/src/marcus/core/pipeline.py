@@ -534,13 +534,6 @@ def _check_nothing(result: dict) -> None:
     pass
 
 
-def _check_docling_result(result: dict) -> None:
-    if "rgroup_text_labels" in result:
-        error = rgroup_labels.index_error(result["rgroup_text_labels"], get_settings().max_pages)
-        if error:
-            raise BadResult(f"docling: {error}")
-
-
 _CHECK = {
     StepKind.CHECK_PDF.value: _check_pdf_result,
     StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
@@ -548,7 +541,6 @@ _CHECK = {
     StepKind.DOI.value: _check_doi_result,
     StepKind.ANNOTATE.value: _check_annotate_result,
     StepKind.RGROUPS.value: _check_rgroups_result,
-    StepKind.DOCLING.value: _check_docling_result,
 }
 
 
@@ -848,16 +840,18 @@ def _rgroups_failed(session: Session, step: Step) -> None:
 
 def _after_docling(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     """The text file already sits in the paper dir; the page label index goes on the paper
-    (only pages the paper has: checked against its page count here)."""
+    (checked here, where the paper's page count is known: only pages the paper has)."""
     index = result.get("rgroup_text_labels")
-    if index is not None and rgroup_labels.index_error(index, paper.pages or 0):
-        raise BadResult("docling: the page label index names pages the paper does not have")
+    if "rgroup_text_labels" in result:
+        error = rgroup_labels.index_error(index, paper.pages or 0)
+        if error:
+            raise BadResult(f"docling: {error}")
     paper.rgroup_text_labels = index
     return []
 
 
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    # docling: the text file already sits in the paper dir; nothing to store.
+    # Fallback for a step kind with no entry in _AFTER: nothing to store, no successors.
     return []
 
 
@@ -1200,7 +1194,7 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper not found")
     labels = list(found.rgroups or [])
-    if not [lab for lab in labels if lab != rgroup_labels.UNLABELLED]:
+    if not rgroup_labels.drawn_labels(labels):
         raise RgroupsNotAllowed("no_rgroups")  # none, or only unlabelled points (`*`)
     row = session.execute(
         select(RgroupExtraction)
