@@ -382,11 +382,14 @@ def test_migration_0012_rgroup_extractions_up_down(migrated_db):
 
 def test_migration_0013_moves_rgroups_steps_to_their_own_queue(migrated_db):
     """0013 moves rgroups steps from q.llm to q.rgroup (annotate steps stay); a step already
-    sent to q.llm goes back to pending, so the dispatcher sends it again on q.rgroup and the
-    old message is dropped as stale. The downgrade moves them back the same way."""
-    from sqlalchemy import text
+    sent or started goes back to pending with one more attempt, so the dispatcher sends it again
+    on q.rgroup with a new attempt token and the old q.llm message is dropped as stale, even
+    once the step is queued again. The downgrade moves them back the same way."""
+    from sqlalchemy import text, update
 
     from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from marcus.core.models import Step
+    from marcus.workers import runtime
     from tests.factories import make_paper
 
     _assert_test_database()
@@ -397,40 +400,70 @@ def test_migration_0013_moves_rgroups_steps_to_their_own_queue(migrated_db):
         return sorted(
             conn.execute(
                 text(
-                    "SELECT kind, status, queue, queued_at IS NULL FROM steps "
+                    "SELECT kind, status, queue, attempts, queued_at IS NULL FROM steps "
                     "WHERE kind IN ('rgroups', 'annotate')"
                 )
             ).all()
         )
 
+    def state(step_id):
+        with engine.connect() as conn:
+            return tuple(
+                conn.execute(
+                    text("SELECT status, attempts FROM steps WHERE id = :i"), {"i": step_id}
+                ).one()
+            )
+
     try:
         command.downgrade(cfg, "0012")
+        ids = {}
         with get_sync_sessionmaker()() as s:
             paper = make_paper(s)
-            for kind, seq, status in (("rgroups", 1, "pending"), ("rgroups", 2, "queued"),
-                                      ("rgroups", 3, "done"), ("annotate", 4, "queued")):  # fmt: skip
-                s.execute(
-                    text("INSERT INTO steps (paper_id, kind, queue, seq, status, queued_at, id) "
-                         "VALUES (:p, :k, 'q.llm', :seq, :st, "
-                         "CASE WHEN :st = 'queued' THEN now() END, gen_random_uuid())"),
-                    {"p": paper.id, "k": kind, "seq": seq, "st": status},
-                )  # fmt: skip
+            for kind, seq, status, attempts in (
+                ("rgroups", 1, "pending", 0), ("rgroups", 2, "queued", 0),
+                ("rgroups", 3, "running", 1), ("rgroups", 4, "done", 1),
+                ("annotate", 5, "queued", 0),
+            ):  # fmt: skip
+                ids[seq] = s.execute(
+                    text("INSERT INTO steps (paper_id, kind, queue, seq, status, attempts, "
+                         "queued_at, id) VALUES (:p, :k, 'q.llm', :seq, :st, :a, "
+                         "CASE WHEN :st IN ('queued', 'running') THEN now() END, "
+                         "gen_random_uuid()) RETURNING id"),
+                    {"p": paper.id, "k": kind, "seq": seq, "st": status, "a": attempts},
+                ).scalar_one()  # fmt: skip
             s.commit()
         command.upgrade(cfg, "0013")
         with engine.connect() as conn:
             assert rows(conn) == sorted([
-                ("rgroups", "pending", "q.rgroup", True),
-                ("rgroups", "pending", "q.rgroup", True),
-                ("rgroups", "done", "q.rgroup", True),
-                ("annotate", "queued", "q.llm", False),
+                ("rgroups", "pending", "q.rgroup", 0, True),
+                ("rgroups", "pending", "q.rgroup", 1, True),
+                ("rgroups", "pending", "q.rgroup", 2, True),
+                ("rgroups", "done", "q.rgroup", 1, True),
+                ("annotate", "queued", "q.llm", 0, False),
             ])  # fmt: skip
+        # The dispatcher sends both again (new tokens 1 and 2); the old q.llm messages
+        # (tokens 0: sent once, and redelivered after the lost worker) are stale.
+        with get_sync_sessionmaker()() as s:
+            s.execute(update(Step).where(Step.id.in_([ids[2], ids[3]])).values(status="queued"))
+            s.commit()
+        assert runtime.claim(ids[2], 0, "w") is None
+        assert runtime.claim(ids[3], 0, "w") is None
+        assert [state(ids[2]), state(ids[3])] == [("queued", 1), ("queued", 2)]
+        assert runtime.claim(ids[3], 2, "w") is not None  # the new message runs it
+        assert state(ids[3]) == ("running", 3)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE steps SET status = 'pending', attempts = 2, "
+                              "started_at = NULL, worker_name = NULL WHERE id = :i"),
+                         {"i": ids[3]})  # fmt: skip
+            conn.execute(text("UPDATE steps SET status = 'pending' WHERE id = :i"), {"i": ids[2]})
         command.downgrade(cfg, "0012")
         with engine.connect() as conn:
             assert rows(conn) == sorted([
-                ("rgroups", "pending", "q.llm", True),
-                ("rgroups", "pending", "q.llm", True),
-                ("rgroups", "done", "q.llm", True),
-                ("annotate", "queued", "q.llm", False),
+                ("rgroups", "pending", "q.llm", 0, True),
+                ("rgroups", "pending", "q.llm", 1, True),
+                ("rgroups", "pending", "q.llm", 2, True),
+                ("rgroups", "done", "q.llm", 1, True),
+                ("annotate", "queued", "q.llm", 0, False),
             ])  # fmt: skip
     finally:
         with engine.begin() as conn:
