@@ -1200,7 +1200,7 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper not found")
     labels = list(found.rgroups or [])
-    if not [lab for lab in labels if lab != rgroup_extraction.UNLABELLED]:
+    if not [lab for lab in labels if lab != rgroup_labels.UNLABELLED]:
         raise RgroupsNotAllowed("no_rgroups")  # none, or only unlabelled points (`*`)
     row = session.execute(
         select(RgroupExtraction)

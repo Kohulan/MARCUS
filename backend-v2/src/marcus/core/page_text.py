@@ -13,6 +13,23 @@ from __future__ import annotations
 
 MAX_CHARS = 16000  # markush_eval.MAX_CHARS
 
+# What reading a paper's Docling document, or working through a malformed one, may raise when
+# the text cannot be used (too large, not JSON, not a Docling document). FileNotFoundError (no
+# text) is an OSError too: catch it first where it means something else.
+UNUSABLE_TEXT = (ValueError, OSError, KeyError, TypeError, AttributeError, RecursionError)
+
+
+def read_paper_document(paper_id) -> dict:
+    """The paper's Docling document (its text.json, under marcus.core.annotation's size cap).
+    FileNotFoundError without one; one of UNUSABLE_TEXT when it cannot be used."""
+    from marcus.core import annotation
+    from marcus.core.storage import text_path
+
+    doc = annotation.read_document(text_path(paper_id))  # TextTooLarge is a ValueError
+    if not isinstance(doc, dict):
+        raise ValueError("not a Docling document")
+    return doc
+
 
 def _page(item) -> int | None:
     prov = item.get("prov") or []

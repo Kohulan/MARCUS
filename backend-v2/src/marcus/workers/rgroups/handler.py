@@ -21,13 +21,13 @@ import uuid
 
 from sqlalchemy import select
 
-from marcus.core import annotation as ann
 from marcus.core.enums import StepKind
 from marcus.core.models import Prediction, RgroupExtraction, Segment
+from marcus.core.page_text import UNUSABLE_TEXT, read_paper_document
 from marcus.core.pipeline import BadResult
 from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
 from marcus.core.settings import fake_enabled, get_settings
-from marcus.core.storage import page_image_path, text_path
+from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
 from marcus.workers.rgroups.inputs import page_context, page_image_uri
 from marcus.workers.rgroups.llama import LlamaRgroupReader
@@ -56,14 +56,10 @@ def _context(paper_id: uuid.UUID, page: int) -> str:
     """The page text for a scaffold on `page` (0-based, as the API counts; Docling counts from
     1). "" when the paper's text is missing, too large or not a Docling document."""
     try:
-        doc = ann.read_document(text_path(paper_id))
-        if not isinstance(doc, dict):
-            raise ValueError("not a Docling document")
-        return page_context(doc, page + 1)
+        return page_context(read_paper_document(paper_id), page + 1)
     except FileNotFoundError:
         log.info("paper %s: no text; R-groups read from the page image only", paper_id)
-    except (ann.TextTooLarge, OSError, ValueError, KeyError, TypeError, AttributeError,
-            RecursionError) as exc:  # fmt: skip
+    except UNUSABLE_TEXT as exc:
         log.warning("paper %s: text not usable (%s); R-groups read from the page image only",
                     paper_id, type(exc).__name__)  # fmt: skip
     return ""

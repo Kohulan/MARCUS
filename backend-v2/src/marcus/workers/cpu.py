@@ -110,17 +110,13 @@ def _page_label_index(paper_id, pages: int | None) -> dict | None:
     """Per page, the R-group labels its text names (marcus.core.rgroup_labels.page_label_index),
     from the text docling just wrote; None when that text cannot be read (every label is then
     shown)."""
-    from marcus.core import annotation
+    from marcus.core.page_text import UNUSABLE_TEXT, read_paper_document
     from marcus.core.rgroup_labels import page_label_index
-    from marcus.core.storage import text_path
 
     try:
-        doc = annotation.read_document(text_path(paper_id))
-        if not isinstance(doc, dict):
-            raise ValueError("not a Docling document")
+        doc = read_paper_document(paper_id)
         return page_label_index(doc, pages or _doc_pages(doc))
-    except (annotation.TextTooLarge, OSError, ValueError, KeyError, TypeError, AttributeError,
-            RecursionError) as exc:  # fmt: skip
+    except UNUSABLE_TEXT as exc:  # FileNotFoundError too: no text, no index
         log.warning("paper %s: no page label index (%s)", paper_id, type(exc).__name__)
         return None
 

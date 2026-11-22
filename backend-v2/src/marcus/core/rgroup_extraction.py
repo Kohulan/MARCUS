@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import unicodedata
 
-from marcus.core.rgroup_labels import shown_labels, text_labels
+from marcus.core.rgroup_labels import UNLABELLED, shown_labels, text_labels
 
 MAX_VALUE = 80  # markush_eval.MAX_VALUE: a substituent's maxLength in the schema
 MAX_COMPOUND = 40  # the compound label's maxLength in the schema
@@ -93,7 +93,6 @@ def named_labels(labels: list[str], context: str) -> list[str]:
     return shown_labels(labels, text_labels(context))
 
 
-UNLABELLED = "*"  # marcus.core.rgroups: a dummy atom without a drawn label
 
 
 def labels_to_ask(labels: list[str], context: str) -> list[str]:
