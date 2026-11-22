@@ -67,8 +67,10 @@ async def test_badge_waits_for_the_engines_then_says_how_many_agree(app, async_d
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     by_id = {s["id"]: s for s in paper["segments"]}
     first, second = by_id[str(segs[0])], by_id[str(segs[1])]
-    assert (first["agree"], first["agree_engines"]) == (3, ["decimer", "molnextr", "molscribe"])
-    assert (second["agree"], second["agree_engines"]) == (0, [])
+    assert (first["agree"], first["agree_of"]) == (3, 3)
+    assert first["agree_engines"] == ["decimer", "molnextr", "molscribe"]
+    # MolScribe failed: it read, so this is "Differ" of three, never "2 of 2"
+    assert (second["agree"], second["agree_of"], second["agree_engines"]) == (0, 3, [])
     shown = {p["id"]: p["engine"] for p in second["predictions"]}
     assert shown[second["default_prediction_id"]] == "decimer"
     # a failed background engine is no failed structure
@@ -131,3 +133,75 @@ async def test_a_background_step_is_returned_to_a_repeat_request(app, async_db_s
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     assert paper["status"] == "done"
 
+
+
+ETHANOL = "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+PROPANOL = "BDERNNFJNOPAEC-UHFFFAOYSA-N"
+
+
+def _p(engine, key, valid=True, rgroups=()):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(id=uuid.uuid4(), engine=engine, inchikey=key, valid=valid,
+                           rgroups=list(rgroups), smiles="CCO")  # fmt: skip
+
+
+def _badge(predictions, ran):
+    from marcus.api.read import agreement_out
+
+    out = agreement_out("decimer", predictions, ran)
+    return out["agree"], out["agree_of"]
+
+
+def test_badge_counts_the_engines_that_read():
+    """Owner decision 2026-11-22: "3 agree" / "2 agree" / differ of three; "2 of 2 agree" /
+    "2 differ" when only two engines read; nothing while one still reads."""
+    done3 = {"decimer": False, "molnextr": False, "molscribe": False}
+    three = [_p("molscribe", ETHANOL), _p("molnextr", ETHANOL), _p("decimer", PROPANOL)]
+    assert _badge(three, done3) == (2, 3)
+    assert _badge(three, {**done3, "molscribe": True}) == (None, None)
+    # one engine failed (a step, no prediction): still of three
+    assert _badge(three[1:], done3) == (0, 3)
+    assert _badge([_p("molnextr", ETHANOL), _p("decimer", ETHANOL)], done3) == (2, 3)
+    # only two engines ever ran (an older paper, a second engine run in Compare)
+    two = {"decimer": False, "molscribe": False}
+    assert _badge([_p("molscribe", ETHANOL), _p("decimer", ETHANOL)], two) == (2, 2)
+    assert _badge([_p("molscribe", PROPANOL), _p("decimer", ETHANOL)], two) == (0, 2)
+    assert _badge([_p("decimer", ETHANOL)], {"decimer": False}) == (None, None)
+
+
+def test_no_badge_without_two_inchikeys_or_for_a_scaffold():
+    done3 = {"decimer": False, "molnextr": False, "molscribe": False}
+    # predictions from before 0019 have no InChIKey: they can never agree, so no false "Differ"
+    old = [_p("molscribe", None), _p("molnextr", ETHANOL), _p("decimer", None)]
+    assert _badge(old, done3) == (None, None)
+    invalid = [_p("molscribe", None, valid=False), _p("molnextr", None), _p("decimer", ETHANOL)]
+    assert _badge(invalid, done3) == (None, None)
+    scaffold = [
+        _p("molscribe", ETHANOL), _p("molnextr", ETHANOL), _p("decimer", None, rgroups=["R1"])
+    ]  # fmt: skip
+    from marcus.api.read import agreement_out
+
+    shown = agreement_out("decimer", scaffold, done3)
+    assert shown["agree"] == 2  # the majority is a plain structure, shown
+    scaffold_shown = [_p("decimer", ETHANOL, rgroups=["R1"]), _p("molnextr", PROPANOL)]
+    assert _badge(scaffold_shown, done3) == (None, None)
+
+
+async def test_an_engine_whose_step_never_ran_does_not_count(app, async_db_session):
+    """A background step cancelled before it ran (expired: no worker) is no engine that read."""
+    from sqlalchemy import update
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("decimer", "molnextr")})
+    await db.execute(
+        update(Step).where(Step.paper_id == pid, Step.engine == "molscribe").values(
+            status="cancelled"
+        )
+    )
+    await db.commit()
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    assert {(s["agree"], s["agree_of"]) for s in paper["segments"]} == {(2, 2)}

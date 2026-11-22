@@ -120,9 +120,11 @@ class SegmentOut(BaseModel):
     # Pages (0-based) of structures with the same compound ID but another InChIKey, not linked
     # (marcus.core.main_figure.id_conflicts: the main-figure one, or its look-alikes): "check".
     same_id_pages: list[int] = []
-    # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ; None while an
-    # engine is still reading, or with fewer than two read.
+    # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ, of `agree_of`
+    # engines that read (3, or 2 for a structure only two engines read); None while an engine is
+    # still reading, with fewer than two read or two with an InChIKey, and for a scaffold.
     agree: int | None = None
+    agree_of: int | None = None
     # The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order.
     agree_engines: list[str] = []
     # The prediction shown when nothing is curated (agreement.pick_prediction); None without a

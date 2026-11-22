@@ -61,10 +61,14 @@ export function readSteps(steps: StepOut[]): StepOut[] {
   return steps.some((s) => s.background) ? steps.filter((s) => !s.background) : steps;
 }
 
-/** The agreement badge: "3 agree", "2 agree", "Differ"; null while engines read, or without. */
+/**
+ * The agreement badge: "3 agree", "2 agree" or "Differ" when the three engines read; "2 of 2
+ * agree" or "2 differ" when only two did; null while engines read, or without.
+ */
 export function agreeText(segment: SegmentOut): string | null {
   const n = segment.agree;
   if (n === undefined || n === null) return null;
+  if (segment.agree_of === 2) return n >= 2 ? "2 of 2 agree" : "2 differ";
   return n >= 2 ? `${n} agree` : "Differ";
 }
 

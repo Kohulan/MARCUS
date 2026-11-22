@@ -133,6 +133,8 @@ export interface SegmentOut {
    * reading, or with fewer than two engines read.
    */
   agree?: number | null;
+  /** Of how many engines that read: 3, or 2 when only two did. Null with `agree` null. */
+  agree_of?: number | null;
   /** The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order. */
   agree_engines?: string[];
   /**

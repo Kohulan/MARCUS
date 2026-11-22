@@ -16,7 +16,7 @@ from marcus.api.chempool import CHEM
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
 from marcus.core import compound_ids, storage
 from marcus.core.agreement import ENGINES as AGREE_ENGINES
-from marcus.core.agreement import majority, pick_prediction
+from marcus.core.agreement import majority, newest_by_engine, pick_prediction
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -624,7 +624,8 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
 
 async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, dict[str, bool]]:
     """Per segment, the agreement engines that have an OCSR step: engine -> True while one of its
-    steps is pending, queued or running, else False."""
+    steps is pending, queued or running, else False (it ran: done or failed). Cancelled steps
+    are left out: an engine whose step never ran (an expired background step) did not read."""
     rows = await db.execute(
         select(Step.segment_id, Step.engine, func.bool_or(Step.status.in_(ACTIVE)))
         .where(
@@ -632,6 +633,7 @@ async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, 
             Step.kind == StepKind.OCSR.value,
             Step.segment_id.is_not(None),
             Step.engine.in_(AGREE_ENGINES),
+            Step.status != StepStatus.CANCELLED.value,
         )
         .group_by(Step.segment_id, Step.engine)
     )
@@ -643,14 +645,22 @@ async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, 
 
 def agreement_out(paper_engine: str, predictions: list[Prediction], ran: dict[str, bool]) -> dict:
     """SegmentOut's agreement fields (marcus.core.agreement). `predictions` newest first; `ran`:
-    engines_run of the segment. The badge (`agree`) waits until no agreement engine is still
-    reading and at least two have read (a paper from before the three engines has one)."""
+    engines_run of the segment. The badge waits until no agreement engine is still reading. It
+    counts the engines that read (a failed one too, not one that never ran): "3 agree", "2
+    agree" or differ of three; "2 of 2 agree" or "2 differ" of two (owner decision
+    2026-11-22). No badge with fewer than two engines read, with fewer than two newest
+    predictions that have an InChIKey (older predictions have none: no backfill), or for an
+    R-group scaffold shown."""
     group = majority(predictions)
     pick = pick_prediction(predictions, paper_engine)
-    read = set(ran) | {p.engine for p in predictions if p.engine in AGREE_ENGINES}
-    settled = not any(ran.values()) and len(read) >= 2
+    newest = newest_by_engine(predictions)
+    engines = set(ran) | set(newest)
+    keyed = [p for p in newest.values() if p.valid and p.inchikey]
+    scaffold = pick is not None and bool(pick.rgroups)
+    shown = not any(ran.values()) and len(engines) >= 2 and len(keyed) >= 2 and not scaffold
     return {
-        "agree": len(group) if settled else None,
+        "agree": len(group) if shown else None,
+        "agree_of": len(engines) if shown else None,
         "agree_engines": [p.engine for p in group],
         "default_prediction_id": pick.id if pick is not None else None,
     }

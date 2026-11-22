@@ -211,14 +211,20 @@ describe("cards and their states", () => {
     const three = [prediction({ engine: "molscribe" }), prediction({ engine: "molnextr" }), prediction()];
     renderGrid(
       paper([
-        segment("s1", { predictions: three, agree: 3, agree_engines: ["decimer", "molnextr", "molscribe"] }),
+        segment("s1", {
+          predictions: three,
+          agree: 3,
+          agree_of: 3,
+          agree_engines: ["decimer", "molnextr", "molscribe"],
+        }),
         segment("s2", {
           predictions: [molscribe, molnextr, decimer],
           agree: 2,
+          agree_of: 3,
           agree_engines: ["molnextr", "molscribe"],
           default_prediction_id: molnextr.id,
         }),
-        segment("s3", { predictions: three, agree: 0, agree_engines: [] }),
+        segment("s3", { predictions: three, agree: 0, agree_of: 3, agree_engines: [] }),
         segment("s4", { predictions: three, agree: null, agree_engines: ["molnextr", "molscribe"] }),
       ]),
     );
@@ -236,6 +242,19 @@ describe("cards and their states", () => {
     for (const word of ["agree", "Differ"]) {
       expect(within(card("[04]")).queryByText(new RegExp(word))).toBeNull();
     }
+  });
+
+  it("two engines only: 2 of 2 agree, 2 differ", async () => {
+    const two = [prediction({ engine: "molscribe" }), prediction()];
+    renderGrid(
+      paper([
+        segment("s1", { predictions: two, agree: 2, agree_of: 2, agree_engines: ["decimer", "molscribe"] }),
+        segment("s2", { predictions: two, agree: 0, agree_of: 2, agree_engines: [] }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(card("[01]")).getByText("2 of 2 agree")).toBeInTheDocument();
+    expect(within(card("[02]")).getByText("2 differ")).toBeInTheDocument();
   });
 
   it("a background engine that failed is no failure of the card", async () => {
