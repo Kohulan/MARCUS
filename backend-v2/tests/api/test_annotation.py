@@ -160,7 +160,7 @@ async def test_start_progress_and_result(app, async_db_session, ready):
 
 async def test_an_annotation_run_is_outside_the_papers_read(app, async_db_session, ready):
     """Annotation runs beside the read (it starts by itself): it never makes the paper busy,
-    is not in its steps or step counts (the progress bar), and `annotating` stays false."""
+    is not in its steps or step counts (the progress bar), and no paper field says it."""
     db = async_db_session
     token, paper_id, _ = ready
     async with make_client(app, token) as c:
@@ -171,13 +171,14 @@ async def test_an_annotation_run_is_outside_the_papers_read(app, async_db_sessio
             kinds = [
                 s["kind"] for s in (await c.get(f"/api/v2/papers/{paper_id}/steps")).json()["steps"]
             ]
+            assert "annotating" not in listed[0] and "annotating" not in detail
             return (
-                listed[0]["annotating"], detail["annotating"], detail["status"],
+                listed[0]["status"], detail["status"],
                 "annotate" in kinds, sum(detail["counts"]["steps_by_status"].values()),
             )  # fmt: skip
 
         before = await seen()
-        assert before[:4] == (False, False, "done", False)
+        assert before[:3] == ("done", "done", False)
         assert (await c.post(f"/api/v2/papers/{paper_id}/annotation")).status_code == 202
         assert await seen() == before
         await run_annotate(db, paper_id, model_result())
@@ -235,17 +236,6 @@ async def test_a_polled_get_never_asks_the_broker(app, async_db_session, ready, 
     async with make_client(app, token) as c:
         r = await c.get(f"/api/v2/papers/{paper_id}/annotation")
     assert r.status_code == 200 and r.json()["auto_pending"] is True
-
-
-async def test_a_paper_still_being_read_is_not_annotating(app, async_db_session):
-    db = async_db_session
-    alice, token = await new_owner(db)
-    await seed_paper(db, alice)  # docling still pending
-    await db.execute(update(Paper).values(status="processing"))
-    await db.commit()
-    async with make_client(app, token) as c:
-        listed = (await c.get("/api/v2/papers")).json()["papers"]
-    assert listed[0]["annotating"] is False
 
 
 async def test_annotated_paper_is_kept_unless_a_rerun_is_asked(app, async_db_session, ready):

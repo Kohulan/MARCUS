@@ -45,7 +45,6 @@ export interface PaperSummary {
   /** Undecided structures whose read failed (not in to_review). */
   failed: number;
   /** Busy only with its annotation (its only step in flight is annotate). */
-  annotating: boolean;
   /**
    * The read's coarse progress, as the workspace reads it from the steps (readCounts): pages
    * whose newest page step ended, structures with an OCSR step and those read (or with nothing

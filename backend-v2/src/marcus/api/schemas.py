@@ -60,7 +60,6 @@ class PaperSummary(_Orm):
     to_review: int
     failed_pages: int
     failed: int
-    annotating: bool  # always false: annotation runs beside the read (kept for older clients)
     # The read's coarse progress, for the tool home's row bar (frontend readingProgress.ts reads
     # the same from the steps): pages whose newest page step ended, structures with an OCSR step
     # and those read (or with nothing in flight), the text read (every docling step ended; with
