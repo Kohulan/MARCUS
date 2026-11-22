@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from marcus.core import annotation as ann
 from marcus.core.enums import Engine
-from marcus.core.rgroup_labels import shown_labels
 
 MAX_MOLFILE_BYTES = 200 * 1024
 MAX_SMILES_CHARS = 2000  # as the tools routes; RDKit parses run in marcus.api.chempool
@@ -39,11 +38,6 @@ class _RGroups(BaseModel):
     @model_validator(mode="after")
     def _placeholder(self):
         self.placeholder = self.placeholder or bool(self.rgroups)
-        return self
-
-    def shown_for(self, page_labels: list[str] | None):
-        """The labels the structure's page names (`page_labels`, from the paper's index)."""
-        self.rgroups = shown_labels(self.rgroups, page_labels)
         return self
 
 
