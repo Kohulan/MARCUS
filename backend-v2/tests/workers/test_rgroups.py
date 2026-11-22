@@ -204,11 +204,11 @@ def test_request_is_the_trained_one(stub):
     image = body["messages"][1]["content"][0]["image_url"]["url"]
     assert _decode(image).size == (500, 600)  # the 150 dpi size of the 300 dpi page
     context = inputs.page_context(DOC, 3)  # API page 2 = Docling page 3
-    expected = rg.request_body("nuextract3-rgroup-v1", ["R1", "R2"], context, image)
+    expected = rg.request_body("nuextract3-marcus-multi-v1", ["R1", "R2"], context, image)
     assert req["raw"] == json.dumps(expected).encode()  # the bytes json.dumps writes
     assert out == {
-        "model": "nuextract3-rgroup-v1",
-        "model_version": "vision Q8_0 llama.cpp b12554",
+        "model": "nuextract3-marcus-multi-v1",
+        "model_version": "Q8_0 llama.cpp b12554",
         "labels": ["R1", "R2"],
         "rows": [
             {"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}},

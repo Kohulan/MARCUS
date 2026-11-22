@@ -7,7 +7,8 @@
 # rows 2 s per scaffold (the fake reader: "3a: R1 = OMe, R2 = H" definitions from the page text).
 # The fake workers run the api image (it already has everything they import) with exactly
 # their own handler module (--include). Concurrency 1 each = the q.segment / q.fake / q.llm /
-# q.rgroup slots.
+# q.rgroup slots. No model server: the GPU stack's one llama-server (two slots, one per queue)
+# is stood in for by worker-fake-annotate (q.llm) and worker-fake-rgroup (q.rgroup).
 #
 # Test-only relaxations on the API: all e2e traffic comes from one client IP (the Docker
 # gateway), so the per-IP limits (new owners per hour, active papers, requests per minute)

@@ -1,8 +1,9 @@
 """R-group definitions of a scaffold, read by the local vision model (Markush Phase 2).
 
 A structure with R-group placeholders (marcus.core.rgroups) stands for several compounds. On
-request, worker-rgroup asks the R-group model (nuextract3-rgroup-v1, vision variant, behind its own
-llama-server `llama-rgroup`) which compounds the scaffold stands for and what each R-group is:
+request, worker-rgroup asks the MARCUS model (nuextract3-marcus-multi-v1, with its vision
+projector, on the one llama-server `llama-server`; trained from nuextract3-rgroup-v1's R-group
+data) which compounds the scaffold stands for and what each R-group is:
 
     {"rows": [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}, ...]}
 

@@ -452,7 +452,7 @@ def test_docling_cap_is_at_least_one(monkeypatch):
 
 
 def test_an_annotation_run_does_not_hold_back_an_rgroups_step(db_session):
-    """The two models run on two llama-servers: a running annotate step (q.llm) leaves the
+    """One llama-server with a slot per queue: a running annotate step (q.llm) leaves the
     rgroups step its own slot (q.rgroup)."""
     from marcus.core.queues import queue_for
 

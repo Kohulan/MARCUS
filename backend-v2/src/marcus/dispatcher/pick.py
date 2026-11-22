@@ -259,8 +259,8 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     return True
 
 
-# Step kinds that depend on an optional model service, each on its own queue: annotation (q.llm,
-# llama-server) and R-group rows (q.rgroup, llama-rgroup). A waiting step fails when its own
+# Step kinds that depend on an optional model service, each on its own queue: annotation (q.llm)
+# and R-group rows (q.rgroup), both on llama-server. A waiting step fails when its own
 # queue has no live consumer, whatever the other's. Value: the step's error then.
 NO_ANNOTATOR = "no annotation worker"
 NO_RGROUP_READER = "no R-group worker"
@@ -337,7 +337,7 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
         except Exception:
             log.exception("watchdog: could not fail step %s", step_id)
             session.rollback()
-    # Annotation and R-group rows depend on optional services (llama-server, llama-rgroup): with
+    # Annotation and R-group rows depend on an optional service (llama-server): with
     # no live consumer on the step's own queue (known, not just unknown) an old waiting annotate
     # or rgroups step fails, so its paper is done again and its request row says failed.
     if live is not None:
