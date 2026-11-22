@@ -327,7 +327,7 @@ async def test_rgroups_steps_are_not_part_of_the_paper_read(app, async_db_sessio
     assert after == before and all(s["kind"] != "rgroups" for s in after)
     assert paper["status"] == "done" and "pending" not in paper["counts"]["steps_by_status"]
     (row,) = listed
-    assert row["annotating"] is False and row["rereading"] is False
+    assert row["rereading"] is False
 
 
 async def test_exports_carry_the_rows(app, async_db_session, ready):

@@ -29,9 +29,6 @@ class PaperCounts(NamedTuple):
     to_review: int
     failed_pages: int
     failed: int
-    # always false: an annotation runs beside the read, never keeping the paper busy (kept in the
-    # API for older clients)
-    annotating: bool = False
     # the read's coarse progress, as the workspace reads it from the steps (readingProgress.ts)
     pages_read: int = 0  # pages whose newest render_page/segment_page step has ended
     structures_total: int = 0  # structures with an OCSR step

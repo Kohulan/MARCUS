@@ -22,7 +22,7 @@ function step(over: Partial<StepOut>): StepOut {
   };
 }
 
-const busy = (pages: number | null, over: Partial<{ ocsr_mode: string; annotating: boolean }> = {}) => ({
+const busy = (pages: number | null, over: Partial<{ ocsr_mode: string }> = {}) => ({
   status: "processing",
   pages,
   ocsr_mode: "auto",
@@ -231,18 +231,6 @@ describe("readingProgress", () => {
     );
   });
 
-  it("an annotate-only run has no figure and says Annotating", () => {
-    const steps = [
-      checkDone(),
-      ...pageRead(0),
-      step({ kind: "annotate", page: null, status: "running" }),
-    ];
-    const r = readingProgress(busy(1), steps)!;
-    expect(r).toMatchObject({ stage: "annotating", fraction: null, valueText: "Annotating" });
-    // the list's flag says so too, before any steps are known
-    expect(readingProgress(busy(1, { annotating: true }), [])!.stage).toBe("annotating");
-  });
-
   it("is done and full for a done paper", () => {
     const r = readingProgress({ status: "done", pages: 2, ocsr_mode: "auto" }, [checkDone(), ...pageRead(0), ...pageRead(1)])!;
     expect(r).toMatchObject({ stage: "done", fraction: 1, valueText: "Done" });
@@ -263,7 +251,6 @@ describe("readingProgress", () => {
 
   it("reads the papers list's counts as the steps (the tool home's rows poll no steps)", () => {
     const counts = {
-      annotating: false,
       pages_read: 2,
       structures_total: 3,
       structures_read: 1,
@@ -277,17 +264,9 @@ describe("readingProgress", () => {
       valueText: "Reading pages, 2 of 4",
       line: "Reading pages 2/4",
       said: "Reading pages",
-      estimated: false,
     });
     const steps = [checkDone(), ...pageRead(0), ...pageRead(1), ocsr("g1"), ocsr("g2", "running"), ocsr("g3", "queued")];
     expect(readingProgress(busy(4), steps)).toEqual(row);
-    expect(progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts, annotating: true })).toMatchObject({
-      stage: "annotating",
-      line: "",
-      said: "",
-      estimated: true,
-      stages: [],
-    });
     expect(progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts, rereading: true })).toBeNull();
   });
 });

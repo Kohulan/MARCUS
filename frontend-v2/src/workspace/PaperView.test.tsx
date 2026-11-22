@@ -77,7 +77,6 @@ function paper(segments: SegmentOut[], over: Partial<PaperDetail> = {}): PaperDe
     to_review: segments.length,
     failed_pages: 0,
     failed: 0,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,

@@ -46,17 +46,17 @@ export default function StatusBar({ paper, steps, live }: Props) {
   // Once per steps change, not on every workspace render (each ← / → in focus mode is one).
   const failedPages = useMemo(() => pageFailures(steps), [steps]);
   const checkFailure = useMemo(() => checkFailureOf(steps), [steps]);
-  const { status, pages, ocsr_mode: ocsrMode, annotating: flagged } = paper;
+  const { status, pages, ocsr_mode: ocsrMode } = paper;
   const counts = useMemo(
-    () => readCounts({ status, pages, ocsr_mode: ocsrMode, annotating: flagged }, steps),
-    [status, pages, ocsrMode, flagged, steps],
+    () => readCounts({ status, pages, ocsr_mode: ocsrMode }, steps),
+    [status, pages, ocsrMode, steps],
   );
   const reading = useMemo(
     () => (checkFailure === null ? progressOf({ status, pages, ocsr_mode: ocsrMode, ...counts }) : null),
     [checkFailure, status, pages, ocsrMode, counts],
   );
   // A paper read while it is open ends on a full bar; one opened done shows only its badge.
-  const shown = useShownProgress(reading, { run: null, keepDone: true });
+  const shown = useShownProgress(reading, { keepDone: true });
   // The wait in the queues (PDF check, segmentation, OCSR) for as long as the paper is in them:
   // the line while nothing has started, then beside the stages when it is a minute or more.
   const queueNote =
@@ -100,11 +100,7 @@ export default function StatusBar({ paper, steps, live }: Props) {
     <section className="ws-status" aria-label="Status">
       <div className="ws-status__line">
         <span className="ws-status__cell">
-          <ItemState
-            status={paper.status}
-            notRead={paper.ocsr_mode === "off"}
-            annotating={counts.annotating}
-          />
+          <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
         </span>
         {checkFailure !== null && (
           <p className="ws-status__cell ws-status__problem hatch">
