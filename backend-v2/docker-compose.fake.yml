@@ -76,6 +76,13 @@ services:
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
 
+  # Annotation and R-group rows run by themselves (marcus.dispatcher.auto): the dispatcher asks
+  # for them where the API offers them, and only while a worker serves q.llm / q.rgroup.
+  dispatcher:
+    environment:
+      MARCUS_ANNOTATE_ENABLED: "1"
+      MARCUS_RGROUP_ENABLED: "1"
+
   worker-cpu:
     environment:
       MARCUS_SEG_VERSION: fake-1

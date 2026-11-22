@@ -76,7 +76,6 @@ function paper(over: Partial<PaperDetail> = {}): PaperDetail {
     to_review: 4,
     failed_pages: 0,
     failed: 0,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,
@@ -778,27 +777,16 @@ describe("status bar", () => {
     expect(bar).toHaveAttribute("aria-valuetext", "Done, 100%");
   });
 
-  it("an annotate-only run has its estimate (about n%) beside its Annotating… badge, then a full bar for a moment", async () => {
+  it("a done paper whose annotation runs shows Done and no bar: the run is beside the read", async () => {
     const before = [step({ kind: "check_pdf", page: null }), step({ kind: "segment_page", page: 0 })];
     renderWorkspace({
-      paper: paper({ status: "processing", pages: 1 }),
+      paper: paper({ status: "done", pages: 1 }),
       steps: [...before, step({ kind: "annotate", page: null, status: "running" })],
     });
     const status = await screen.findByRole("region", { name: "Status" });
-    await within(status).findByText("Annotating…");
-    const bar = within(status).getByRole("progressbar");
-    expect(bar).toHaveAttribute("aria-valuetext", expect.stringMatching(/^Annotating, about \d+%$/));
-    expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThan(100);
-    expect(within(status).queryByRole("list", { name: "Stages" })).toBeNull();
-    act(() => {
-      client.setQueryData(keys.steps(ID), {
-        steps: [...before, step({ kind: "annotate", page: null, status: "done" })],
-      });
-      client.setQueryData(keys.paper(ID), paper({ status: "done", pages: 1 }));
-    });
-    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "100"));
-    expect(bar).toHaveAttribute("aria-valuetext", "Annotating, 100%");
-    await waitFor(() => expect(within(status).queryByRole("progressbar")).toBeNull());
+    expect(await within(status).findByText("Done")).toBeInTheDocument();
+    expect(within(status).queryByText("Annotating…")).toBeNull();
+    expect(within(status).queryByRole("progressbar")).toBeNull();
   });
 
   it("while waiting, shows this paper's queue estimate in whole minutes", async () => {

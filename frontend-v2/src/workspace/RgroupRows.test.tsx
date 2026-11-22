@@ -105,6 +105,25 @@ describe("RgroupRows", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Queued");
   });
 
+  it("a reading about to start by itself shows Queued where the button was, then the rows without a click", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue({ ...list(true), auto_pending: [PRED] });
+    const start = vi.spyOn(api, "startRgroups");
+    show();
+    expect(await screen.findByText("Queued", { selector: ".badge" })).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+    vi.mocked(api.getPaperRgroups).mockResolvedValue(list(true, extraction()));
+    await client.invalidateQueries({ queryKey: ["rgroups", PAPER] });
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("another scaffold about to be read leaves this one's button", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue({ ...list(true), auto_pending: ["other"] });
+    show();
+    expect(await screen.findByRole("button", { name: "Extract R-groups" })).toBeInTheDocument();
+  });
+
   it("says why a start was refused", async () => {
     vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true));
     vi.spyOn(api, "startRgroups").mockRejectedValue(
@@ -140,7 +159,7 @@ describe("RgroupRows", () => {
     ]);
     expect(within(table).getAllByRole("rowheader").map((h) => h.textContent)).toEqual(["3a", "3b"]);
     expect(screen.getByRole("region", { name: "R-group table of [03]" })).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("button", { name: "Read again" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("R-groups read: 2 compounds");
   });
 
@@ -148,7 +167,7 @@ describe("RgroupRows", () => {
     vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
     const start = vi.spyOn(api, "startRgroups").mockResolvedValue({ step_id: "st" });
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "Read again" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run again" }));
     await waitFor(() => expect(start).toHaveBeenCalledWith(PRED, true));
   });
 
@@ -216,7 +235,7 @@ describe("RgroupRows", () => {
     expect(
       screen.getByText("R-groups not read: it took too long.", { selector: ".rg__problem" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read again" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
   });
 
   it("scrolls inside the card", async () => {
@@ -246,6 +265,23 @@ describe("useRgroupList", () => {
     const calls = get.mock.calls.length;
     await act(() => vi.advanceTimersByTimeAsync(RGROUP_POLL_MS * 3));
     expect(get.mock.calls.length).toBe(calls); // done: no more reads
+  });
+
+  it("reads the list again while a reading is about to start by itself", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const get = vi
+      .spyOn(api, "getPaperRgroups")
+      .mockResolvedValueOnce({ ...list(true), auto_pending: [PRED] })
+      .mockResolvedValue(list(true, extraction()));
+    const { result } = renderHook(() => useRgroupList(PAPER, true), {
+      wrapper: ({ children }) => wrap(children),
+    });
+    await waitFor(() => expect(result.current.data?.auto_pending).toEqual([PRED]));
+    await act(() => vi.advanceTimersByTimeAsync(RGROUP_POLL_MS));
+    await waitFor(() => expect(result.current.data?.extractions[0]?.status).toBe("done"));
+    const calls = get.mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(RGROUP_POLL_MS * 3));
+    expect(get.mock.calls.length).toBe(calls);
   });
 
   it("never asks for a paper without a scaffold", async () => {

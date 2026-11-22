@@ -1,5 +1,5 @@
-// Compare engines: "Run all engines" (one prediction per engine not read and not running,
-// then onStarted once, no stream of its own), live states per engine, Tanimoto with two
+// Compare engines: opening starts every engine not read and not running (one prediction
+// each, then onStarted once, no stream of its own), a failed engine's Retry, live states per engine, Tanimoto with two
 // decimals once per pair of distinct SMILES (cached), the common part (molfile → mcs →
 // depict with highlight), 429 text, "Use this one" (accept keeping the note, molfile
 // replaced), and the dialog in focus mode (review keys held, Esc closes Compare first).
@@ -9,6 +9,7 @@ import { useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
+import { orientationTemplate } from "../api/engines";
 import { createQueryClient } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
@@ -65,6 +66,8 @@ beforeEach(() => {
     revokeObjectURL: vi.fn(),
   });
   vi.spyOn(api, "depict").mockResolvedValue({ format: "svg", data: "<svg/>" });
+  vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
 });
 
 afterEach(() => {
@@ -97,30 +100,81 @@ function cell(row: string, engine: string): HTMLElement {
   const heads = [...table.tHead!.rows[0]!.cells].map((c) => c.textContent ?? "");
   const col = heads.findIndex((h) => h.startsWith(engine));
   const tr = [...table.tBodies[0]!.rows].find((r) => r.cells[0]!.textContent === row)!;
-  return tr.cells[col] as HTMLElement;
+  // The source column's one cell spans the body: only the Drawing row has it.
+  return tr.cells[row === "Drawing" ? col : col - 1] as HTMLElement;
 }
 
 describe("Compare", () => {
-  it("Run all engines starts the three others, then onStarted once, and opens no stream", async () => {
-    const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("three columns: DECIMER, MolNexTR, MolScribe; a hand-drawn reading is not a column", () => {
+    renderCompare({
+      predictions: [prediction({ engine: "decimer-hand" }), prediction({ engine: "decimer" })],
+    });
+    const table = screen.getByRole("table", { name: "Engines" }) as HTMLTableElement;
+    const heads = [...table.tHead!.rows[0]!.cells].slice(1).map((c) => c.querySelector(".cmp-table__name")?.textContent);
+    expect(heads).toEqual(["Paper", "DECIMER", "MolNexTR", "MolScribe"]);
+  });
+
+  it("shows the paper's crop the engines read beside the drawings", () => {
+    renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    const crop = screen.getByRole("img", { name: "Crop from the paper" });
+    expect(crop).toHaveAttribute("src", api.segmentImageUrl("s1"));
+    // in the Drawing row, before the engines' drawings
+    const row = crop.closest("tr")!;
+    expect(row.cells[0]).toHaveTextContent("Drawing");
+    expect(row.cells[1]).toContainElement(crop);
+  });
+
+  it("an image job shows the uploaded image", () => {
+    renderCompare({ target: { kind: "image", id: "img1" }, predictions: [] });
+    expect(screen.getByRole("img", { name: "The uploaded image" })).toHaveAttribute(
+      "src",
+      api.imageUrl("img1"),
+    );
+    expect(screen.getByRole("columnheader", { name: "Image" })).toBeInTheDocument();
+  });
+
+  it("opening starts the main engines not read (never hand-drawn), then onStarted once, and opens no stream", async () => {
     const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["decimer-hand", "molnextr", "molscribe"]);
+    const run = vi.mocked(api.runPrediction);
+    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["molnextr", "molscribe"]);
     expect(run.mock.calls.every((c) => c[0] === "s1")).toBe(true);
     expect(EventSourceSpy).not.toHaveBeenCalled();
     // Started engines read as Reading… until their steps arrive.
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
-    expect(screen.getByRole("button", { name: "Run all engines" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Run all engines" })).toBeNull();
   });
 
-  it("Run all engines shows its progress: engines read of those started, with the percentage; full for a moment, then gone", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("starts once: a later render with new rows asks nothing more", async () => {
     const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
-    const bar = await screen.findByRole("progressbar", { name: "Run all engines" });
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    rerender(
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Compare {...props} predictions={[prediction({ engine: "decimer" })]} steps={[]} />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).toHaveBeenCalledTimes(2);
+  });
+
+  it("everything read: nothing is started", async () => {
+    const { props } = renderCompare({
+      predictions: ["decimer", "molnextr", "molscribe"].map((engine) =>
+        prediction({ engine }),
+      ),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    expect(props.onStarted).not.toHaveBeenCalled();
+  });
+
+  it("the opening start shows its progress: engines read of those started; full for a moment, then gone", async () => {
+    const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    const bar = await screen.findByRole("progressbar", { name: "Engines" });
     expect(bar).toHaveAttribute("aria-valuenow", "0");
-    expect(screen.getByText("Running engines 0/3")).toBeInTheDocument();
+    expect(screen.getByText("Running engines 0/2")).toBeInTheDocument();
     // an engine reading has the calm indeterminate bar under its word
     expect(within(cell("Result", "MolNexTR")).getByRole("progressbar", { name: "Reading, MolNexTR" })).not.toHaveAttribute(
       "aria-valuenow",
@@ -135,31 +189,29 @@ describe("Compare", () => {
         </QueryClientProvider>,
       );
     const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" })];
-    again(first, [step("molnextr", "done"), step("molscribe", "running"), step("decimer-hand", "running")]);
-    expect(bar).toHaveAttribute("aria-valuenow", "33");
-    expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 3, 33%");
-    again(
-      [...first, prediction({ engine: "molscribe" })],
-      [step("molnextr", "done"), step("molscribe", "done"), step("decimer-hand", "failed", "timeout")],
-    );
+    again(first, [step("molnextr", "done"), step("molscribe", "running")]);
+    expect(bar).toHaveAttribute("aria-valuenow", "50");
+    expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 2, 50%");
+    again(first, [step("molnextr", "done"), step("molscribe", "failed", "timeout")]);
     expect(bar).toHaveAttribute("aria-valuenow", "100");
-    await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Run all engines" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Engines" })).toBeNull());
   });
 
-  it("DECIMER hand-drawn reading says its first run loads the model; the others do not", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
-    const first = [prediction({ engine: "decimer" })];
+  it("Hand-drawn (off by default) reads DECIMER hand-drawn in the DECIMER column; its first run says it loads the model", async () => {
+    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
     const { props, rerender } = renderCompare({ predictions: first });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
+    const toggle = screen.getByRole("button", { name: "Hand-drawn" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(api.runPrediction).toHaveBeenCalledWith("s1", "decimer-hand");
     const note = "The first run can take about 30 s";
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
     expect(cell("Result", "MolNexTR")).not.toHaveTextContent(note);
-    // MolNexTR and MolScribe are back; the hand-drawn model is still loading.
-    const steps = [step("decimer-hand", "running"), step("molnextr", "done"), step("molscribe", "done")];
-    const two = [...first, prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
-    const again = (predictions: PredictionOut[], s: typeof steps) =>
+    const again = (predictions: PredictionOut[], s: ReturnType<typeof step>[]) =>
       rerender(
         <QueryClientProvider client={client}>
           <ToastProvider>
@@ -167,37 +219,108 @@ describe("Compare", () => {
           </ToastProvider>
         </QueryClientProvider>,
       );
-    again(two, steps);
+    again(first, [step("decimer-hand", "running")]);
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
-    again([prediction({ engine: "decimer-hand" }), ...two], [step("decimer-hand", "done"), ...steps.slice(1)]);
+    const hand = prediction({ engine: "decimer-hand", smiles: "CCCl" });
+    again([hand, ...first], [step("decimer-hand", "done")]);
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Valid");
     expect(cell("Result", "DECIMER hand-drawn")).not.toHaveTextContent(note);
+    expect(cell("SMILES", "DECIMER hand-drawn")).toHaveTextContent("CCCl");
+    // Use this one takes what the column shows
+    fireEvent.click(screen.getByRole("button", { name: "Use this one, DECIMER hand-drawn" }));
+    expect(props.onPick).toHaveBeenCalledWith(hand);
+    // Off: normal DECIMER again, nothing started
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    expect(cell("SMILES", "DECIMER")).toHaveTextContent("c1ccccc1");
+    expect(screen.queryByRole("button", { name: "Use this one, DECIMER hand-drawn" })).toBeNull();
+    expect(api.runPrediction).toHaveBeenCalledTimes(1);
+  });
+
+  it("Hand-drawn starts on where the upload chose DECIMER hand-drawn (and starts it if not read)", async () => {
+    const { props } = renderCompare({
+      handDrawn: true,
+      predictions: [prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })],
+    });
+    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    expect(cell("Result", "DECIMER hand-drawn")).toBeDefined();
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1])).toEqual(["decimer-hand"]);
+    // off: normal DECIMER, started then (it is not read)
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
+    expect(cell("Result", "DECIMER")).toHaveTextContent("Not read yet");
+  });
+
+  it("Hand-drawn on an already read hand-drawn model starts nothing; the similarity uses what the columns show", async () => {
+    const cmp = vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer-hand", smiles: "CCN" }),
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molscribe", smiles: "CCO" }),
+      ],
+    });
+    const label = await screen.findByRole("table", { name: "Similarity" });
+    expect(within(label).getByRole("row", { name: /DECIMER · MolScribe/ })).toHaveTextContent("1.00");
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    await waitFor(() =>
+      expect(within(label).getByRole("row", { name: /DECIMER hand-drawn · MolNexTR/ })).toHaveTextContent("1.00"),
+    );
+    expect(within(label).queryByRole("row", { name: /^DECIMER · / })).toBeNull();
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    expect(cmp).toHaveBeenCalledWith("CCN", "CCO");
   });
 
   it("does not ask again for an engine with an active step", async () => {
-    const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
     const { props } = renderCompare({
       predictions: [prediction({ engine: "decimer" })],
       steps: [step("molnextr", "running")],
     });
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["decimer-hand", "molscribe"]);
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1]).sort()).toEqual(["molscribe"]);
   });
 
   it("an image target starts image predictions", async () => {
-    const run = vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
-    const seg = vi.spyOn(api, "runPrediction");
+    const seg = vi.mocked(api.runPrediction);
     const { props } = renderCompare({
       target: { kind: "image", id: "img1" },
       predictions: [prediction({ engine: "decimer" })],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    expect(run).toHaveBeenCalledTimes(3);
+    const run = vi.mocked(api.runImagePrediction);
+    expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls.every((c) => c[0] === "img1")).toBe(true);
     expect(seg).not.toHaveBeenCalled();
+  });
+
+  it("a failed engine is not started again on opening: its own Retry starts it", async () => {
+    const { props } = renderCompare({
+      predictions: ["decimer", "molnextr"].map((engine) => prediction({ engine })),
+      steps: [step("molscribe", "failed", "engine_error")],
+    });
+    expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    fireEvent.click(within(cell("Result", "MolScribe")).getByRole("button", { name: "Retry, MolScribe" }));
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(api.runPrediction).toHaveBeenCalledWith("s1", "molscribe");
+    expect(cell("Result", "MolScribe")).toHaveTextContent("Reading…");
+    expect(within(cell("Result", "MolNexTR")).queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
+
+  it("a refused start says so and leaves the engines not read", async () => {
+    vi.mocked(api.runPrediction).mockRejectedValue(new ApiError(503, "engine not available"));
+    const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    expect(await screen.findByText("Not started: engine not available")).toBeInTheDocument();
+    expect(props.onStarted).not.toHaveBeenCalled();
+    expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
   });
 
   it("an image job's drawings come from /tools/depict keyed with a null highlight", async () => {
@@ -221,6 +344,68 @@ describe("Compare", () => {
       api.depictionUrl("s1", p.id, "molnextr"),
     );
     expect(api.depict).not.toHaveBeenCalled();
+  });
+
+  it("the paper's orientation: a segment's stored drawings change with MolNexTR's positions", () => {
+    const decimer = prediction({ engine: "decimer", smiles: "CCO" });
+    const nextr = prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" });
+    renderCompare({ predictions: [nextr, decimer] });
+    // the server draws it oriented; the key names the template so a new one is drawn again
+    expect(screen.getByRole("img", { name: "Structure, DECIMER" })).toHaveAttribute(
+      "src",
+      api.depictionUrl("s1", `${decimer.id}.${nextr.id}`, "decimer"),
+    );
+    expect(api.depict).not.toHaveBeenCalled();
+  });
+
+  it("the paper's orientation: an image job's drawings send MolScribe's molfile (MolNexTR's without one)", async () => {
+    const decimer = prediction({ engine: "decimer", smiles: "CCO" });
+    const scribe = prediction({ engine: "molscribe", smiles: "CCN", molfile: "<scribe>" });
+    const nextr = prediction({ engine: "molnextr", smiles: "CCC", molfile: "<nextr>" });
+    const view = renderCompare({ target: { kind: "image", id: "img1" }, predictions: [decimer, nextr] });
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<nextr>" }));
+    expect(client.getQueryData(["depict", "CCO", null, nextr.id])).toBeDefined();
+    view.unmount();
+    renderCompare({ target: { kind: "image", id: "img1" }, predictions: [nextr, decimer, scribe] });
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: "<scribe>" }));
+  });
+
+  it("the paper's orientation goes with the common part too", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.spyOn(api, "mcs").mockResolvedValue({
+      mcs_smarts: "[#6]-[#6]",
+      atom_count: 2,
+      bond_count: 1,
+      original_molecules: [],
+      highlight_token: "tok-1",
+    });
+    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", molfile: "<nextr>" }),
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
+    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1", template: "<nextr>" };
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", lit));
+    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
+  });
+
+  it("orientationTemplate: the newest valid MolScribe prediction with a molfile, else MolNexTR's", () => {
+    const old = prediction({ engine: "molscribe", molfile: "<old>" });
+    const invalid = prediction({ engine: "molscribe", molfile: "<bad>", valid: false });
+    const bare = prediction({ engine: "molscribe", molfile: null });
+    const nextr = prediction({ engine: "molnextr", molfile: "<nextr>" });
+    const hand = prediction({ engine: "decimer-hand", molfile: "<hand>" });
+    expect(orientationTemplate([invalid, bare, nextr, old])).toBe(old);
+    expect(orientationTemplate([invalid, bare, hand, nextr])).toBe(nextr);
+    expect(orientationTemplate([hand, prediction()])).toBeNull();
   });
 
   it("shows Tanimoto with two decimals", async () => {
@@ -254,16 +439,16 @@ describe("Compare", () => {
     });
     const predictions = [
       prediction({ engine: "decimer", smiles: "CCO" }),
-      prediction({ engine: "decimer-hand", smiles: "CCO" }),
       prediction({ engine: "molnextr", smiles: "CCN" }),
       prediction({ engine: "molscribe", smiles: "CCC" }),
+      prediction({ engine: "fake", smiles: "CCO" }),
     ];
     const first = renderCompare({ predictions });
     await waitFor(() => expect(cmp).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(screen.queryByText("…")).toBeNull());
     for (const [a, b] of cmp.mock.calls) expect(a < b).toBe(true);
-    // DECIMER and DECIMER hand-drawn read the same SMILES: 1.00 without a call.
-    expect(screen.getByRole("row", { name: /DECIMER · DECIMER hand-drawn/ })).toHaveTextContent(
+    // DECIMER and another engine read the same SMILES: 1.00 without a call.
+    expect(screen.getByRole("row", { name: /DECIMER · fake/ })).toHaveTextContent(
       "1.00",
     );
     first.unmount();
@@ -436,17 +621,10 @@ describe("Compare", () => {
     expect(screen.queryByText(/boom/)).toBeNull();
   });
 
-  it("a failed engine shows its reason", () => {
-    renderCompare({
-      predictions: [prediction({ engine: "decimer" })],
-      steps: [step("molscribe", "failed", "engine_error")],
-    });
-    expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
-    expect(cell("Result", "MolNexTR")).toHaveTextContent("Not read yet");
-  });
-
-  it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", () => {
+  it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", async () => {
+    vi.mocked(api.runPrediction).mockRejectedValue(new ApiError(503, "busy"));
     renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    await screen.findByText("Not started: busy");
     expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
     const smiles = cell("SMILES", "MolNexTR");
     expect(smiles.textContent).toBe("–None");
@@ -553,7 +731,6 @@ function paper(segments: SegmentOut[]): PaperDetail {
     to_review: segments.length,
     failed_pages: 0,
     failed: 0,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,
@@ -660,16 +837,29 @@ describe("Compare in the workspace", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: /^Focus/ })).toBeNull());
   });
 
-  it("Run all engines from focus mode reopens the page's stream once", async () => {
-    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+  it("Compare from focus mode starts the engines and reopens the page's stream once", async () => {
     renderWorkspace(paper([segment("s1")]), "?s=s1&focus=1");
     await screen.findByRole("region", { name: /^Focus/ });
     press("c");
-    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Run all engines" }));
+    await screen.findByRole("dialog", { name: /Compare engines/ });
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
-    expect(api.runPrediction).toHaveBeenCalledTimes(3);
+    expect(api.runPrediction).toHaveBeenCalledTimes(2);
     expect(EventSourceSpy).not.toHaveBeenCalled();
+  });
+
+  it("a paper uploaded with DECIMER hand-drawn opens Compare with Hand-drawn on; another engine with it off", async () => {
+    const hand = { ...paper([segment("s1", { predictions: [prediction({ engine: "decimer-hand" })] })]), engine: "decimer-hand" };
+    const first = renderWorkspace(hand, "?s=s1&focus=1");
+    await screen.findByRole("region", { name: /^Focus/ });
+    press("c");
+    let dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    first.unmount();
+    renderWorkspace(paper([segment("s1")]), "?s=s1&focus=1");
+    await screen.findByRole("region", { name: /^Focus/ });
+    press("c");
+    dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("a card's engine menu and a To check card open Compare in the grid", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AnnotationOut, StepOut } from "../api/types";
+import type { AnnotationOut } from "../api/types";
 import {
   blockRanges,
   FAMILIES,
@@ -8,9 +8,7 @@ import {
   hitsOf,
   linesOf,
   markLabel,
-  newestAnnotate,
   nextHit,
-  isAnnotating,
   sameValues,
   shownPositions,
   splitMarks,
@@ -32,23 +30,6 @@ const FIELDS = [
   "abbreviation",
   "iupac_like_name",
 ];
-
-function step(over: Partial<StepOut>): StepOut {
-  return {
-    id: "st",
-    kind: "annotate",
-    page: null,
-    segment_id: null,
-    status: "done",
-    attempts: 1,
-    error_class: null,
-    engine: null,
-    created_at: "2026-11-20T10:00:00Z",
-    started_at: null,
-    finished_at: null,
-    ...over,
-  };
-}
 
 function ann(over: Partial<AnnotationOut> = {}): AnnotationOut {
   return {
@@ -200,21 +181,6 @@ describe("annotation helpers", () => {
     // another value starts at its first occurrence
     expect(nextHit({ ...at, index: 2 }, "organism_part", "roots", 3)).toBe(0);
     expect(nextHit({ ...at, index: 2 }, "location", "bark", 3)).toBe(0);
-  });
-
-  it("finds the newest annotate step and whether it is all the paper is doing", () => {
-    const older = step({ id: "a1", created_at: "2026-11-20T09:00:00Z", status: "failed" });
-    const newer = step({ id: "a2", created_at: "2026-11-20T10:00:00Z", status: "running" });
-    const docling = step({ id: "d", kind: "docling", status: "done" });
-    expect(newestAnnotate([older, docling, newer])?.id).toBe("a2");
-    expect(newestAnnotate([docling])).toBeUndefined();
-    const busy = { status: "processing" };
-    expect(isAnnotating(busy, [older, docling, newer])).toBe(true);
-    expect(isAnnotating(busy, [newer, step({ id: "o", kind: "ocsr", status: "queued" })])).toBe(false);
-    expect(isAnnotating(busy, [older, docling])).toBe(false);
-    // the server's flag says so before any steps are known; a done paper is never annotating
-    expect(isAnnotating({ status: "processing", annotating: true })).toBe(true);
-    expect(isAnnotating({ status: "done", annotating: true }, [newer])).toBe(false);
   });
 
   it("edits a field as lines: one value a line, blanks and repeats out", () => {

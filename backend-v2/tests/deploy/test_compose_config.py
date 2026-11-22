@@ -1172,6 +1172,20 @@ def test_annotation_is_offered_only_where_q_llm_is_served():
             assert worker in services, files
 
 
+def test_the_dispatcher_starts_what_runs_by_itself_where_the_api_offers_it():
+    """The dispatcher's auto pass (marcus.dispatcher.auto) reads the same two flags as the API:
+    on where q.llm and q.rgroup are served, off in the base stack."""
+    base = _compose_config("docker-compose.yml")["services"]["dispatcher"]["environment"]
+    assert base.get("MARCUS_ANNOTATE_ENABLED", "0") in ("0", "false", "")
+    assert base.get("MARCUS_RGROUP_ENABLED", "0") in ("0", "false", "")
+    for files in ((GPU,), ("docker-compose.fake.yml",)):
+        services = _compose_config("docker-compose.yml", *files)["services"]
+        api = services["api"]["environment"]
+        dispatcher = services["dispatcher"]["environment"]
+        for flag in ("MARCUS_ANNOTATE_ENABLED", "MARCUS_RGROUP_ENABLED"):
+            assert dispatcher[flag] == api[flag] == "1", (files, flag)
+
+
 def test_fake_stack_runs_the_fake_annotator_and_the_fake_rgroup_reader():
     services = _compose_config("docker-compose.yml", "docker-compose.fake.yml")["services"]
     worker = services["worker-fake-annotate"]

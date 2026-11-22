@@ -1,5 +1,5 @@
-// Compare engines (spec §6): one engine per column, the pairwise Tanimoto similarity, the
-// common part (MCS) highlighted, and "Run all engines". Every chemistry answer comes from the
+// Compare engines (spec §6): one engine per column, started when Compare opens, the pairwise
+// Tanimoto similarity, the common part (MCS) highlighted. Every chemistry answer comes from the
 // /tools routes (per-owner bucket of 60/min); each is a TanStack Query entry keyed by its
 // inputs with staleTime Infinity, so a second look at the same structures costs nothing.
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,18 +27,28 @@ export type EngineRow = {
   reason: string | null;
 };
 
+/** The three main engines, Compare's columns. DECIMER hand-drawn is the DECIMER column's toggle. */
+export const MAIN_ENGINES: readonly Engine[] = ["decimer", "molnextr", "molscribe"];
+const HAND: Engine = "decimer-hand";
+
 /**
- * The columns: the four engines in menu order, then any other engine a prediction came
- * from (as sent). `requested` maps an engine started here to its step count at that moment:
- * it reads as "Reading…" until a newer step of it (or a prediction) arrives.
+ * The columns: the three main engines, then any other engine a prediction came from (as
+ * sent; never DECIMER hand-drawn). `hand`: the DECIMER column shows the hand-drawn model.
+ * `requested` maps an engine started here to its step count at that moment: it reads as
+ * "Reading…" until a newer step of it (or a prediction) arrives.
  */
 export function engineRows(
   predictions: PredictionOut[],
   steps: CompareStep[],
   requested: ReadonlyMap<string, number>,
+  hand = false,
 ): EngineRow[] {
-  const names = ENGINES.map((e) => e.value as string);
-  for (const p of predictions) if (!names.includes(p.engine)) names.push(p.engine);
+  const names: string[] = MAIN_ENGINES.map((e) => (hand && e === "decimer" ? HAND : e));
+  for (const p of predictions) {
+    if (!names.includes(p.engine) && p.engine !== HAND && p.engine !== "decimer") {
+      names.push(p.engine);
+    }
+  }
   return names.map((engine) => {
     const prediction = predictions.find((p) => p.engine === engine) ?? null;
     const own = steps.filter((s) => s.engine === engine);
@@ -55,11 +65,15 @@ export function engineRows(
   });
 }
 
-/** The engines "Run all engines" starts: offered ones with no prediction and nothing running. */
+/**
+ * The engines of these columns to start: offered ones not read and not running (Compare's
+ * opening start; the hand-drawn toggle's). A failed one is left for its own Retry (an engine
+ * that just failed would likely fail again).
+ */
 export function enginesToRun(rows: EngineRow[]): Engine[] {
   return ENGINES.map((e) => e.value).filter((engine) => {
     const row = rows.find((r) => r.engine === engine);
-    return row !== undefined && (row.state === "idle" || row.state === "failed");
+    return row !== undefined && row.state === "idle";
   });
 }
 
@@ -71,28 +85,28 @@ export function tooManyText(err: unknown): string | null {
 const sorted = <T>(list: T[]) => [...list].sort();
 
 /**
- * "Run all engines": a prediction for each engine of `enginesToRun`, all at once; once they
- * have answered, `onStarted()` once (when at least one was accepted), so the page's stream
- * opens again. Compare opens no stream of its own.
+ * Starts engines: a prediction for each engine given, all at once (Compare's opening start,
+ * or one engine's Retry); once they have answered, `onStarted()` once (when at least one was
+ * accepted), so the page's stream opens again. Compare opens no stream of its own.
  */
-export function useRunAll(
+export function useEngineRuns(
   target: CompareTarget,
   steps: CompareStep[],
   onStarted: () => void,
 ): {
   requested: ReadonlyMap<string, number>;
-  /** The engines the last "Run all engines" started (those refused taken out). */
+  /** The engines the last start started (those refused taken out). */
   batch: readonly string[];
   sending: boolean;
   error: unknown;
-  runAll: (engines: Engine[]) => void;
+  run: (engines: Engine[]) => void;
 } {
   const [requested, setRequested] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [batch, setBatch] = useState<readonly string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const runAll = useCallback(
+  const run = useCallback(
     (engines: Engine[]) => {
       if (engines.length === 0) return;
       setError(null);
@@ -128,7 +142,7 @@ export function useRunAll(
     [target.kind, target.id, steps, onStarted],
   );
 
-  return { requested, batch, sending, error, runAll };
+  return { requested, batch, sending, error, run };
 }
 
 export type Pair = {

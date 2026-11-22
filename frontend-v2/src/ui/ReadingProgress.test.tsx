@@ -1,10 +1,9 @@
 // The reading progress bar: the shared progress bar with its percentage and spoken value, the
 // stages in words, one polite announcement per stage (never per count or percent), no style
-// attribute (CSP), and an annotate run's time-based estimate.
-import { act, render, screen } from "@testing-library/react";
+// attribute (CSP).
+import { render, renderHook, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { ANNOTATE_TYPICAL_MS, END_HOLD_MS, FILL_MS } from "./progressMotion";
+import { describe, expect, it } from "vitest";
 import type { ReadingProgress as Model } from "../workspace/readingProgress";
 import ReadingProgress, { useShownProgress } from "./ReadingProgress";
 
@@ -24,7 +23,6 @@ const pages = (done: number, fraction: number): Model => ({
   valueText: `Reading pages, ${done} of 5`,
   line: `Reading pages ${done}/5`,
   said: "Reading pages",
-  estimated: false,
   stages: stagesAt(1, [null, `${done}/5`]),
 });
 
@@ -36,7 +34,6 @@ const structures = (done: number, total: number, fraction: number): Model => ({
   valueText: `Reading structures, ${done} of ${total}`,
   line: `Reading structures ${done}/${total}`,
   said: "Reading structures",
-  estimated: false,
   stages: stagesAt(2, [null, null, `${done}/${total}`]),
 });
 
@@ -48,7 +45,6 @@ const waiting: Model = {
   valueText: "Waiting",
   line: "Waiting",
   said: "Waiting",
-  estimated: false,
   stages: stagesAt(-1),
 };
 
@@ -131,83 +127,15 @@ describe("ReadingProgress", () => {
     expect(html).not.toMatch(/style=/);
   });
 
-  describe("an annotate run (no figure from the model): useShownProgress", () => {
-    const FAKE = [
-      "setInterval",
-      "clearInterval",
-      "setTimeout",
-      "clearTimeout",
-      "Date",
-      "requestAnimationFrame",
-      "cancelAnimationFrame",
-      "performance",
-    ] as const;
-    afterEach(() => {
-      vi.useRealTimers();
+  it("useShownProgress: a read seen here keeps its full bar once done (keepDone); one opened done has none", () => {
+    const done: Model = { ...pages(5, 1), stage: "done", line: "", said: "Done" };
+    const seen = renderHook(({ m }) => useShownProgress(m, { keepDone: true }), {
+      initialProps: { m: pages(3, 0.4) },
     });
-    const annotating: Model = {
-      ...waiting,
-      stage: "annotating",
-      valueText: "Annotating",
-      line: "",
-      said: "",
-      estimated: true,
-      stages: [],
-    };
-    const done: Model = { ...waiting, stage: "done", fraction: 1, valueText: "Done", line: "", said: "Done" };
-
-    function Shown({ model, keepDone }: { model: Model | null; keepDone?: boolean }) {
-      const shown = useShownProgress(model, { keepDone: keepDone ?? false });
-      return shown ? <ReadingProgress progress={shown} label="Reading progress" announce /> : null;
-    }
-
-    it("shows the time-based estimate, labelled as one, and never 100% while it runs", () => {
-      vi.useFakeTimers({ toFake: [...FAKE] });
-      render(<Shown model={annotating} />);
-      const bar = screen.getByRole("progressbar");
-      expect(bar).toHaveAttribute("aria-valuenow", "0");
-      expect(screen.queryByRole("list", { name: "Stages" })).toBeNull();
-      expect(screen.getByRole("status")).toHaveTextContent(/^$/); // the badge says Annotating
-      act(() => {
-        vi.advanceTimersByTime(ANNOTATE_TYPICAL_MS);
-      });
-      act(() => {
-        vi.advanceTimersByTime(FILL_MS); // the printed figure catches up with the fill
-      });
-      expect(bar).toHaveAttribute("aria-valuetext", "Annotating, about 90%");
-      // the printed figure follows the moving estimate a step behind
-      expect(document.querySelector(".pb__pct")!.textContent).toMatch(/^~(89|90)%$/);
-      act(() => {
-        vi.advanceTimersByTime(30 * 60_000);
-      });
-      expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(95);
-    });
-
-    it("ends on its full bar for a moment, then no bar for the done paper", () => {
-      vi.useFakeTimers({ toFake: [...FAKE] });
-      const { rerender } = render(<Shown model={annotating} />);
-      act(() => {
-        vi.advanceTimersByTime(2000);
-      });
-      rerender(<Shown model={done} />);
-      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "Annotating, 100%");
-      act(() => {
-        vi.advanceTimersByTime(END_HOLD_MS + 50);
-      });
-      expect(screen.queryByRole("progressbar")).toBeNull();
-    });
-
-    it("a read seen here keeps its full bar when it is done, if asked to", () => {
-      const { rerender } = render(<Shown model={pages(4, 0.8)} keepDone />);
-      rerender(<Shown model={done} keepDone />);
-      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
-      rerender(<Shown model={null} keepDone />);
-      expect(screen.queryByRole("progressbar")).toBeNull();
-    });
-
-    it("a paper opened done has no bar", () => {
-      render(<Shown model={done} keepDone />);
-      expect(screen.queryByRole("progressbar")).toBeNull();
-    });
+    seen.rerender({ m: done });
+    expect(seen.result.current).toBe(done);
+    const opened = renderHook(() => useShownProgress(done, { keepDone: true }));
+    expect(opened.result.current).toBeNull();
+    expect(renderHook(() => useShownProgress(null)).result.current).toBeNull();
   });
 });

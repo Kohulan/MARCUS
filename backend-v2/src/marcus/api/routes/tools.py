@@ -39,6 +39,10 @@ class DepictIn(BaseModel):
     highlight: str = Field("", max_length=MAX_SMILES)
     # Required with a highlight: the token /tools/mcs issued with that SMARTS (F5)
     highlight_token: str | None = Field(None, max_length=8192)
+    # An OCSR molfile with the image's atom positions: the drawing follows the paper's
+    # orientation where the worker can use it (marcus.workers.orient), else it is the normal one.
+    # Bounded like an MCS molfile; the worker's alignment has its own time and atom caps.
+    template: str | None = Field(None, max_length=MAX_MOLFILE_BYTES)
 
     @field_validator("highlight")
     @classmethod
@@ -99,6 +103,8 @@ async def depict(request: Request, body: DepictIn, _owner: Owner = Depends(curre
         "height": body.height,
         "highlight": body.highlight,
     }
+    if body.template:
+        kwargs["template"] = body.template
     data = await call_tool("marcus.tools.depict", kwargs)
     return {"format": body.format, "data": data}
 
