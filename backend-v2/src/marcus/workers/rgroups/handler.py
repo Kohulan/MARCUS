@@ -23,13 +23,13 @@ from sqlalchemy import select
 
 from marcus.core.enums import StepKind
 from marcus.core.models import Prediction, RgroupExtraction, Segment
-from marcus.core.page_text import UNUSABLE_TEXT, read_paper_document
+from marcus.core.page_text import UNUSABLE_TEXT, page_context, read_paper_document
 from marcus.core.pipeline import BadResult
 from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
 from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
-from marcus.workers.rgroups.inputs import page_context, page_image_uri
+from marcus.workers.rgroups.inputs import page_image_uri
 from marcus.workers.rgroups.llama import LlamaRgroupReader
 from marcus.workers.runtime import BadInput, register
 

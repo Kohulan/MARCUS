@@ -93,29 +93,17 @@ def docling(step, session) -> dict:
     return result
 
 
-def _doc_pages(doc: dict) -> int:
-    """The last page any text item or table of the document is on (Docling counts from 1)."""
-    found = [
-        prov.get("page_no")
-        for key in ("texts", "tables")
-        for item in doc.get(key) or []
-        if isinstance(item, dict)
-        for prov in (item.get("prov") or [])[:1]
-        if isinstance(prov, dict)
-    ]
-    return max((p for p in found if isinstance(p, int)), default=0)
-
-
 def _page_label_index(paper_id, pages: int | None) -> dict | None:
     """Per page, the R-group labels its text names (marcus.core.rgroup_labels.page_label_index),
-    from the text docling just wrote; None when that text cannot be read (every label is then
-    shown)."""
+    from the text docling just wrote; None when that text cannot be read or the page count is
+    unknown (every label is then shown)."""
     from marcus.core.page_text import UNUSABLE_TEXT, read_paper_document
     from marcus.core.rgroup_labels import page_label_index
 
+    if not pages:
+        return None
     try:
-        doc = read_paper_document(paper_id)
-        return page_label_index(doc, pages or _doc_pages(doc))
+        return page_label_index(read_paper_document(paper_id), pages)
     except UNUSABLE_TEXT as exc:  # FileNotFoundError too: no text, no index
         log.warning("paper %s: no page label index (%s)", paper_id, type(exc).__name__)
         return None

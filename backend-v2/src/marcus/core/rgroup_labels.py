@@ -114,11 +114,19 @@ def text_labels(text: str) -> set[str]:
     return found
 
 
+def drawn_labels(labels: list[str]) -> list[str]:
+    """The labels drawn on a structure, in their order: `*` (UNLABELLED, a point without a
+    label) left out. Only these can be asked of the R-group model."""
+    return [lab for lab in labels if lab != UNLABELLED]
+
+
 def shown_labels(labels: list[str], named: set[str] | list[str] | None) -> list[str]:
     """Of a structure's labels, those its page's text names (`named`: canonical spellings), in
     their order. All of them when the text names none of them, or only one-letter ones (WEAK:
     X, Y, Z, n, m, Q are also words and symbols), or there is no text (None). OCSR sometimes
     adds a label the drawing does not have (DECIMER's Z beside R1, R2)."""
+    if not labels:
+        return []
     if not named:
         return list(labels)
     names = set(named)
