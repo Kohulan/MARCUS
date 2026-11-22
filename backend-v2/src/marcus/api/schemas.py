@@ -235,6 +235,9 @@ class BulkCurationItem(BaseModel):
     segment_id: uuid.UUID
     status: CurationStatus
     note: str | None = Field(None, max_length=MAX_NOTE_CHARS)
+    # The prediction the card showed: frozen with the decision (marcus.api.decisions); it must be
+    # the segment's own. Absent: the server's pick.
+    shown_prediction_id: uuid.UUID | None = None
 
     @field_validator("note")
     @classmethod

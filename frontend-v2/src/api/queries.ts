@@ -267,6 +267,18 @@ async function currentCuration(
  * The repeats of a main-figure structure in the cached paper, with their statuses now (null:
  * no curation); null when it has none. A decision on the structure goes to them.
  */
+/**
+ * The prediction a segment's card shows, from the cached paper (the server's pick it was drawn
+ * with, SegmentOut.default_prediction_id); null when not known. Sent with a decision, so the
+ * server keeps the structure the user saw, not one that landed after the card was drawn.
+ */
+function shownPredictionId(client: QueryClient, paperId: string, segmentId: string): string | null {
+  const segment = client
+    .getQueryData<PaperDetail>(keys.paper(paperId))
+    ?.segments.find((s) => s.id === segmentId);
+  return segment?.default_prediction_id ?? null;
+}
+
 function groupStatuses(
   client: QueryClient,
   key: readonly unknown[],
@@ -310,6 +322,8 @@ export function useSaveCuration(paperId: string): {
       const key = keys.paper(paperId);
       const map = chainFor(client);
       const previous = map.get(segmentId) ?? Promise.resolve();
+      // Taken at the click: what the card shows now.
+      const shown = shownPredictionId(client, paperId, segmentId);
       const run = previous
         .catch(() => undefined) // a failed save does not block the next one
         .then(async () => {
@@ -344,7 +358,11 @@ export function useSaveCuration(paperId: string): {
           if (group) setGroup(new Map([...group.keys()].map((id) => [id, body.status])));
           let out: CurationOut;
           try {
-            out = await api.putCuration(segmentId, body, decision);
+            // A decision without a structure of its own is made on the prediction shown.
+            const onShown = decision && !body.smiles && !body.molfile ? shown : null;
+            out = onShown
+              ? await api.putCuration(segmentId, body, decision, onShown)
+              : await api.putCuration(segmentId, body, decision);
           } catch (err) {
             if (group) setGroup(group);
             if ((optimistic && (await write(before))) || cancelled) {
@@ -441,6 +459,13 @@ export function useBulkCuration(paperId: string): {
     (items: BulkCurationItem[]): Promise<void> => {
       const key = keys.paper(paperId);
       const map = chainFor(client);
+      // Each card's shown prediction, taken at the click (a decision is made on it).
+      items = items.map((i) => {
+        const shown = shownPredictionId(client, paperId, i.segment_id);
+        return shown && i.shown_prediction_id === undefined
+          ? { ...i, shown_prediction_id: shown }
+          : i;
+      });
       const ids = items.map((i) => i.segment_id);
       const wanted = new Set(ids);
       const cached = client.getQueryData<PaperDetail>(key);

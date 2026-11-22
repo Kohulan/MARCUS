@@ -179,6 +179,16 @@ describe("api", () => {
     expect(JSON.parse(calls[0]?.init.body as string)).toEqual({ smiles_a: "CCO", smiles_b: "CCN" });
   });
 
+  it("putCuration names the prediction shown with a decision only", async () => {
+    const body = { status: "accepted", smiles: null, molfile: null, note: null } as const;
+    reply = json(200, body);
+    await api.putCuration("s1", body, true, "pr7");
+    expect(calls[0]?.url).toBe("/api/v2/segments/s1/curation?decision=true&shown_prediction_id=pr7");
+    reply = json(200, body);
+    await api.putCuration("s1", body, false, "pr7");
+    expect(calls[1]?.url).toBe("/api/v2/segments/s1/curation");
+  });
+
   it("putCuration sends the full record as JSON", async () => {
     const body = { status: "accepted", smiles: "CCO", molfile: null, note: "n" } as const;
     reply = json(200, body);
