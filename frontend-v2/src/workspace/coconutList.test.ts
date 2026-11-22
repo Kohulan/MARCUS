@@ -31,6 +31,22 @@ function segment(id: string, curation: Partial<CurationOut> | null, predictions 
 }
 
 describe("coconutStructures", () => {
+  it("never sends a repeat of a main-figure structure, and numbers as the listed rows", () => {
+    const list = coconutStructures(
+      [
+        segment("main", { status: "accepted" }),
+        { ...segment("again", { status: "accepted" }), repeat_of: "main" }, // the same compound
+        segment("other", { status: "accepted", smiles: "CCN" }),
+      ],
+      "decimer",
+    );
+    expect(list.send).toEqual([
+      { segmentId: "main", n: 1, smiles: "CCO" },
+      { segmentId: "other", n: 2, smiles: "CCN" },
+    ]);
+    expect(list.held).toEqual([]);
+  });
+
   it("keeps accepted structures with a structure, numbered as their tags", () => {
     const list = coconutStructures(
       [

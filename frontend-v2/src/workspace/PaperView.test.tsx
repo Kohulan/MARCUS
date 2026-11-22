@@ -1096,3 +1096,63 @@ describe("Paper view: annotation", () => {
     expect(within(p).queryByText("Annotating…", { selector: "span" })).toBeNull();
   });
 });
+
+describe("Paper view: the main figure", () => {
+  it("marks a page with structures as the main figure from its caption; again clears it", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 1 })];
+    const put = vi.spyOn(api, "putMainFigure").mockResolvedValue({ main_figure_page: 1 });
+    renderAt(paper(segs));
+    const pages = await screen.findByRole("region", { name: "Pages" });
+    const mark = await within(pages).findByRole("button", { name: "Main figure: Page 2" });
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+    // a page without structures has no button
+    expect(within(pages).queryByRole("button", { name: "Main figure: Page 3" })).toBeNull();
+
+    vi.mocked(api.getPaper).mockResolvedValue(paper(segs, { main_figure_page: 1 }));
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenCalledWith(ID, 1));
+    await waitFor(() => expect(mark).toHaveAttribute("aria-pressed", "true"));
+
+    put.mockResolvedValue({ main_figure_page: null });
+    vi.mocked(api.getPaper).mockResolvedValue(paper(segs, { main_figure_page: null }));
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenLastCalledWith(ID, null));
+    await waitFor(() => expect(mark).toHaveAttribute("aria-pressed", "false"));
+  });
+
+  it("a mark that is not saved goes back and says why", async () => {
+    vi.spyOn(api, "putMainFigure").mockRejectedValue(new ApiError(503, "The server is busy."));
+    renderAt(paper([segment("s1", { page: 0 })]));
+    const mark = await screen.findByRole("button", { name: "Main figure: Page 1" });
+    fireEvent.click(mark);
+    expect(await screen.findByText("Not saved: The server is busy.")).toBeInTheDocument();
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("lists the main figure first and a repeat once, on its main card", async () => {
+    renderAt(
+      paper(
+        [
+          segment("s1", { page: 0 }),
+          segment("s2", { page: 1 }),
+          segment("s3", { page: 2, repeat_of: "s2" }), // s2's compound again
+        ],
+        { main_figure_page: 1 },
+      ),
+    );
+    const list = await screen.findByRole("region", { name: "Structures" });
+    const cards = await within(list).findAllByRole("article");
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual([
+      "[01] · Page 2, To check",
+      "[02] · Page 1, To check",
+    ]);
+    expect(within(cards[0]!).getByText("Also on page 3")).toBeInTheDocument();
+    expect(within(cards[1]!).queryByText(/Also on/)).toBeNull();
+    expect(screen.getByRole("list", { name: "Counts" })).toHaveTextContent("2 structures");
+
+    // the repeat's marker carries its main structure's tag and selects that card
+    await loadPage(3);
+    fireEvent.click(screen.getByRole("button", { name: "Structure [01] on page 3" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("s=s2");
+  });
+});

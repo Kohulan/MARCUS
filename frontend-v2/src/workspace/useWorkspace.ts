@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { refreshPaper, snapshotIsCached, usePaper, useSteps } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
+import { mainFirst } from "./mainFigure";
 
 export type WorkspaceView = "review" | "paper";
 
@@ -20,7 +21,11 @@ export type WorkspaceDialog = { kind: "compare" | "edit"; segmentId: string };
 export type Workspace = {
   /** Undefined only before the first answer (Workspace mounts this once the paper is in). */
   paper: PaperDetail | undefined;
-  /** In (page, idx) order: structure n is segments[n - 1]. */
+  /**
+   * In (page, idx) order, the main figure's page first (mainFirst). Repeats of main-figure
+   * structures are in it too; the listed structures (structure n is the n-th) leave them out
+   * (listedSegments).
+   */
   segments: SegmentOut[];
   steps: StepOut[];
   /** The focused segment id (`?s=`). */
@@ -66,8 +71,8 @@ export function useWorkspace(id: string): Workspace {
   entryState.current = location.state;
 
   const segments = useMemo(
-    () => [...(paper?.segments ?? [])].sort((a, b) => a.page - b.page || a.idx - b.idx),
-    [paper?.segments],
+    () => mainFirst(paper?.segments ?? [], paper?.main_figure_page),
+    [paper?.segments, paper?.main_figure_page],
   );
 
   const [open, setOpen] = useState<WorkspaceDialog | null>(null);

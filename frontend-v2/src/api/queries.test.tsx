@@ -12,6 +12,7 @@ import {
   SEGMENT_GONE,
   snapshotIsCached,
   useImages,
+  useMainFigure,
   usePapers,
   useSaveCuration,
 } from "./queries";
@@ -315,6 +316,51 @@ describe("useSaveCuration optimistic write", () => {
     });
     await vi.waitFor(() => expect(getPaper).toHaveBeenCalled(), { timeout: 3000 });
     stop();
+  });
+});
+
+describe("the main figure", () => {
+  it("a new structure on a paper with a main figure fetches it again (repeats may change)", async () => {
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    client.setQueryData(keys.paper("p1"), { ...paper(null), main_figure_page: 0 });
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    await act(() => result.current.save("s1", { status: "accepted" }));
+    expect(invalidate).not.toHaveBeenCalled(); // a status changes no structure
+    await act(() =>
+      result.current.save("s1", { status: "accepted", structure: { smiles: "CCO", molfile: null } }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.paper("p1") });
+  });
+
+  it("mark() shows the page at once without the old links, and a failure puts it back", async () => {
+    const before = paper(null);
+    before.segments[1] = { ...before.segments[1]!, repeat_of: "s1" };
+    client.setQueryData(keys.paper("p1"), { ...before, main_figure_page: 0 });
+    let answer: (v: { main_figure_page: number | null }) => void = () => undefined;
+    const put = vi
+      .spyOn(api, "putMainFigure")
+      .mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    vi.spyOn(api, "getPaper").mockResolvedValue({ ...before, main_figure_page: null });
+    const { result } = renderHook(() => useMainFigure("p1"), { wrapper });
+    let done: Promise<void> = Promise.resolve();
+    act(() => {
+      done = result.current.mark(null);
+    });
+    await vi.waitFor(() => expect(put).toHaveBeenCalledWith("p1", null));
+    const now = client.getQueryData<PaperDetail>(keys.paper("p1"));
+    expect(now?.main_figure_page).toBeNull();
+    expect(now?.segments.map((s) => s.repeat_of ?? null)).toEqual([null, null]);
+    await act(async () => {
+      answer({ main_figure_page: null });
+      await done;
+    });
+
+    put.mockRejectedValue(new ApiError(503, "busy"));
+    client.setQueryData(keys.paper("p1"), { ...before, main_figure_page: 0 });
+    await expect(result.current.mark(null)).rejects.toThrow("busy");
+    const back = client.getQueryData<PaperDetail>(keys.paper("p1"));
+    expect(back?.main_figure_page).toBe(0);
+    expect(back?.segments[1]?.repeat_of).toBe("s1");
   });
 });
 
