@@ -181,3 +181,61 @@ def test_rows_error():
         [good[0]] * (rg.MAX_ROWS + 1),
     ):
         assert rg.rows_error(bad, labels) is not None, bad
+
+
+# --- the labels asked for: only those the page text names ----------------------------------------
+# OCSR sometimes adds a label the drawing does not have (DECIMER read stylissa-bromopyrroles
+# page 6 as R1, R2, Z); the model then fills that column too.
+
+STYLISSA = "(page 6) 7. R1 = R2 = Br; 8. R1 = H, R2 = Br (page 6) CONH2"
+
+
+def test_a_label_the_text_never_names_is_left_out():
+    assert rg.named_labels(["R1", "R2", "Z"], STYLISSA) == ["R1", "R2"]
+
+
+@pytest.mark.parametrize(
+    ("label", "text"),
+    [
+        ("R1", "TABLE (page 3):\nCompound | R1 | R2"),
+        ("R1", "R 1 = OMe"),  # Docling spaces a subscript
+        ("R1", "R₁ = OMe"),
+        ("R2", "R1 = R² = CH3"),
+        ("R′", "R' = H"),
+        ("R′", "R’ = H"),
+        ("R″", 'R" = H'),
+        ("R″", "R′′ = H"),
+        ("R1′", "R 1 ′ = Glc"),
+        ("R′1", "R′ 1 = Glc"),
+        ("X", "3: X = Cl"),
+        ("n", "n = 2"),
+        ("Ar", "Ar = Ph"),
+    ],
+)
+def test_a_label_counts_as_written_in_the_text(label, text):
+    assert rg.named_labels([label, "Z9"], text) == [label]
+
+
+@pytest.mark.parametrize(
+    ("label", "text"),
+    [
+        ("R1", "R10 = H"),  # another label
+        ("R", "R1 = H"),
+        ("R1", "PAR1"),  # inside a word
+        ("R1", "R1′ = H"),
+        ("Z", "the (Z)-configured double bond"),  # a stereo descriptor
+        ("R", "C-7 is (R)"),
+    ],
+)
+def test_a_label_inside_another_token_does_not_count(label, text):
+    assert rg.named_labels([label, "R2"], f"{text}; R2 = H") == ["R2"]
+
+
+def test_a_text_that_names_no_label_keeps_them_all():
+    """No text (a page read from the image alone) or a raster figure: the text cannot tell."""
+    assert rg.named_labels(["R1", "Z"], "") == ["R1", "Z"]
+    assert rg.named_labels(["R9"], "(page 3) Compound 3 R1 = H") == ["R9"]
+
+
+def test_named_labels_keep_their_order():
+    assert rg.named_labels(["R1", "R2", "X"], "X = Cl, R2 = H, R1 = Me") == ["R1", "R2", "X"]

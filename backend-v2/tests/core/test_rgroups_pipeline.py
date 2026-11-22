@@ -146,6 +146,27 @@ def test_result_is_stored_and_a_rerun_replaces_it(db_session):
     assert paper.status == "done"
 
 
+def test_a_result_for_the_labels_the_text_names_keeps_only_those(db_session):
+    """The worker leaves out a label the page text never names (an OCSR extra): the stored
+    labels are the result's, and a re-run shows them with the old rows until it ends."""
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    one = [{"compound": "3a", "groups": {"R1": "OMe"}}]
+    finish(s, request_rgroups(s, scaffold.id), result(rows=one, labels=["R1"]))
+    row = row_of(s, scaffold)
+    assert (row.status, row.labels, row.rows) == ("done", ["R1"], one)
+    again = request_rgroups(s, scaffold.id, rerun=True)
+    row = row_of(s, scaffold)
+    assert (row.status, row.labels, row.rows) == ("queued", ["R1"], one)
+    run(s, again)
+    fail_step(s, again.id, ErrorClass.ENGINE_ERROR, "boom", retryable=False)
+    row = row_of(s, scaffold)
+    assert (row.status, row.labels, row.rows) == ("failed", ["R1"], one)
+    finish(s, request_rgroups(s, scaffold.id, rerun=True), result())
+    row = row_of(s, scaffold)
+    assert (row.status, row.labels, row.rows) == ("done", ["R1", "R2"], ROWS)
+
+
 def test_a_failed_run_keeps_earlier_rows_and_says_why(db_session):
     s = db_session
     _, scaffold, _ = done_paper(s)
@@ -172,6 +193,7 @@ def test_a_failed_run_keeps_earlier_rows_and_says_why(db_session):
         result(truncated="no"),
         result(ms=-1),
         result(labels=["R1", "X"], rows=[]),  # other labels than were asked for
+        result(labels=["R2", "R1"], rows=[]),  # not in the asked order
     ],
 )
 def test_a_malformed_result_is_refused_before_anything_changes(db_session, bad):
@@ -257,3 +279,28 @@ def test_the_handler_reads_its_request_from_the_database(db_session, monkeypatch
     complete_step(s, step.id, out)
     assert row_of(s, scaffold).rows == out["rows"]
     assert s.get(Paper, paper.id).status == "done"
+
+
+def test_a_rerun_asks_for_the_predictions_labels_again(db_session, monkeypatch,
+                                                       clear_settings_cache):  # fmt: skip
+    """The stored labels are those of the shown rows (R1 here); a re-run asks for the
+    prediction's own (R1, R2), and the page text decides again."""
+    from marcus.workers.rgroups.handler import extract_rgroups
+
+    monkeypatch.setenv("MARCUS_RGROUP_READER", "fake")
+    monkeypatch.setenv("MARCUS_ENABLE_FAKE_ENGINES", "1")
+    clear_settings_cache()
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    finish(s, request_rgroups(s, scaffold.id), result(rows=[], labels=["R1"]))
+    step = request_rgroups(s, scaffold.id, rerun=True)
+    s.commit()
+    doc = {
+        "texts": [{"label": "caption", "text": "3a: R1 = OMe, R2 = H", "prov": [{"page_no": 1}]}]
+    }
+    text_path(paper.id).parent.mkdir(parents=True, exist_ok=True)
+    text_path(paper.id).write_text(json.dumps(doc))
+    page_image_path(paper.id, 0).parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 140), "white").save(page_image_path(paper.id, 0))
+    out = extract_rgroups(s.get(Step, step.id), s)
+    assert out["labels"] == ["R1", "R2"]
