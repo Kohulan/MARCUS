@@ -109,6 +109,9 @@ class SegmentOut(BaseModel):
     # The main-figure structure this one repeats (same compound on another page:
     # marcus.core.main_figure); None for every other structure, and without a main figure.
     repeat_of: uuid.UUID | None = None
+    # The crop is not a clean drawing (NMR marks, an X-ray / 3D picture): "check this drawing"
+    # (a drawing_flags row; false for a clean one, and for segments from before the check).
+    check_drawing: bool = False
 
 
 class SegmentList(BaseModel):

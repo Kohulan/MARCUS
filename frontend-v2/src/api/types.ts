@@ -122,6 +122,11 @@ export interface SegmentOut {
    * InChIKey). Null or absent for every other structure, and without a main figure.
    */
   repeat_of?: string | null;
+  /**
+   * The crop is not a clean drawing (NMR marks, an X-ray or 3D picture): "Check this drawing".
+   * False or absent when not flagged, and for structures read before the check existed.
+   */
+  check_drawing?: boolean;
 }
 
 export interface SegmentList {

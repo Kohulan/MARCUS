@@ -6,7 +6,7 @@ from tests.conftest import _assert_test_database, alembic_config
 EXPECTED = {
     "owners", "papers", "steps", "segments", "predictions", "curation",
     "image_jobs", "seg_cache", "ocsr_cache", "annotations", "rgroup_extractions", "main_figures",
-    "inherited_statuses",
+    "inherited_statuses", "drawing_flags",
 }  # fmt: skip
 
 # 0002: column + index
@@ -580,5 +580,23 @@ def test_migration_0017_inherited_statuses_up_down(migrated_db):
         assert [fk["constrained_columns"] for fk in fks] == [["segment_id"]]
         command.downgrade(cfg, "0016")
         assert "inherited_statuses" not in inspect(engine).get_table_names()
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0018_drawing_flags_up_down(migrated_db):
+    """0018 adds the drawing_flags table (one row per flagged segment, keyed by it)."""
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        assert inspect(engine).get_pk_constraint("drawing_flags")["constrained_columns"] == [
+            "segment_id"
+        ]
+        command.downgrade(cfg, "0017")
+        assert "drawing_flags" not in inspect(engine).get_table_names()
     finally:
         command.upgrade(cfg, "head")

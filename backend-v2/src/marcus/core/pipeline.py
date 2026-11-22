@@ -59,6 +59,7 @@ from marcus.core.enums import (
 from marcus.core.models import (
     Annotation,
     Curation,
+    DrawingFlag,
     ImageJob,
     Owner,
     Paper,
@@ -441,7 +442,8 @@ def _check_pdf_result(result: dict) -> None:
 
 
 def _check_segments(segments: object) -> None:
-    """A list of {idx, bbox, image_sha256} with unique idx (one page's segments)."""
+    """A list of {idx, bbox, image_sha256, check_drawing?} with unique idx (one page's segments;
+    check_drawing: a bool or None, absent from older results and cache rows)."""
     if not isinstance(segments, list):
         raise BadResult("segment_page: 'segments' must be a list")
     seen: set[int] = set()
@@ -458,6 +460,9 @@ def _check_segments(segments: object) -> None:
             raise BadResult("segment_page: 'bbox' must be 4 non-negative ints")
         if not isinstance(sha, str) or not _SHA256_HEX.fullmatch(sha):
             raise BadResult("segment_page: 'image_sha256' must be 64 lowercase hex characters")
+        flag = item.get("check_drawing")
+        if flag is not None and not isinstance(flag, bool):
+            raise BadResult("segment_page: 'check_drawing' must be a bool or null")
 
 
 def _check_segment_page_result(result: dict) -> None:
@@ -593,6 +598,11 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     ]
     session.add_all(segments)
     session.flush()  # assigns segment ids
+    session.add_all(
+        DrawingFlag(segment_id=seg.id)
+        for seg, item in zip(segments, items, strict=True)
+        if item.get("check_drawing")
+    )
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
     if paper.ocsr_mode != "auto":
         return []
@@ -640,14 +650,27 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
     if set(versions) != set(range(paper.pages)) or set(versions.values()) != {seg_version}:
         return
     segments = session.execute(
-        select(Segment.page, Segment.idx, Segment.bbox, Segment.image_sha256)
+        select(
+            Segment.page,
+            Segment.idx,
+            Segment.bbox,
+            Segment.image_sha256,
+            DrawingFlag.segment_id.is_not(None).label("check_drawing"),
+        )
+        .outerjoin(DrawingFlag, DrawingFlag.segment_id == Segment.id)
         .where(Segment.paper_id == paper.id)
         .order_by(Segment.page, Segment.idx)
     ).all()
     payload = {
         "pages": paper.pages,
         "segments": [
-            {"page": g.page, "idx": g.idx, "bbox": list(g.bbox), "image_sha256": g.image_sha256}
+            {
+                "page": g.page,
+                "idx": g.idx,
+                "bbox": list(g.bbox),
+                "image_sha256": g.image_sha256,
+                "check_drawing": g.check_drawing,
+            }
             for g in segments
         ],
     }
@@ -693,7 +716,8 @@ def _cached_page(session: Session, paper: Paper, page: int) -> list[dict] | None
 
 def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
     """Validate a whole seg_cache payload (it is data: checked like worker results, every page)
-    and return one page's segments as {idx, bbox, image_sha256}."""
+    and return one page's segments as {idx, bbox, image_sha256, check_drawing} (None in a row
+    from before the drawing check)."""
     if not isinstance(payload, dict) or not _is_int(pages, 1) or payload.get("pages") != pages:
         raise BadResult("page count differs")
     segments = payload.get("segments")
@@ -708,6 +732,7 @@ def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
                 "idx": item.get("idx"),
                 "bbox": item.get("bbox"),
                 "image_sha256": item.get("image_sha256"),
+                "check_drawing": item.get("check_drawing"),
             }
         )
     for items in by_page.values():

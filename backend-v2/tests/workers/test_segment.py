@@ -42,6 +42,24 @@ def make_page(paper_id, page=0, size=(200, 300)):
     return path
 
 
+def test_segment_page_flags_each_crop(monkeypatch):
+    """Each crop gets its "check this drawing" flag (marcus.workers.drawing_check)."""
+    pid = uuid.uuid4()
+    make_page(pid, 0)
+    crops = [
+        (np.full((20, 30, 3), 10, np.uint8), (5, 6, 35, 26)),
+        (np.full((10, 10, 3), 200, np.uint8), (50, 60, 60, 70)),
+    ]
+    monkeypatch.setattr(segment, "get_segmenter", lambda: StubSegmenter(crops))
+    seen = []
+    monkeypatch.setattr(
+        segment, "check_drawing", lambda a: seen.append(a.shape) or a.shape == (20, 30, 3)
+    )
+    out = segment.segment_page(view(pid, page=0), None)
+    assert [s["check_drawing"] for s in out["segments"]] == [True, False]
+    assert seen == [(20, 30, 3), (10, 10, 3)]
+
+
 def test_handler_registered():
     assert HANDLERS[StepKind.SEGMENT_PAGE] is segment.segment_page
 
