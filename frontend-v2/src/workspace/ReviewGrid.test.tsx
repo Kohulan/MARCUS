@@ -424,6 +424,24 @@ describe("the compound ID", () => {
     expect(within(card("[02]")).getByText("Compound 8a")).toBeInTheDocument();
     expect(within(card("[03]")).queryByText(/^Compound/)).toBeNull();
   });
+
+  it("asks to check a structure that shares its ID with another structure", async () => {
+    renderGrid(
+      paper([
+        segment("s1", { compound_id: "12", same_id_pages: [3] }),
+        segment("s2", { page: 3, idx: 0, compound_id: "12", same_id_pages: [0] }),
+        segment("s3", { compound_id: "13", same_id_pages: [1, 4] }),
+        segment("s4", { compound_id: "14", same_id_pages: [] }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(4));
+    expect(within(card("[01]")).getByText("Same ID as compound 12, page 4. Check.")).toBeInTheDocument();
+    expect(within(card("[04]")).getByText("Same ID as compound 12, page 1. Check.")).toBeInTheDocument();
+    expect(
+      within(card("[02]")).getByText("Same ID as compound 13, pages 2, 5. Check."),
+    ).toBeInTheDocument();
+    expect(within(card("[03]")).queryByText(/Same ID/)).toBeNull();
+  });
 });
 
 describe("Check this drawing", () => {

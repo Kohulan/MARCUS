@@ -306,6 +306,11 @@ function StructureCard({
           </p>
         )}
         {alsoOn !== null && <p className="card__also">{alsoOn}</p>}
+        {segment.compound_id && (segment.same_id_pages?.length ?? 0) > 0 && (
+          <p className="card__reason">
+            {sameIdText(segment.compound_id, segment.same_id_pages!)}
+          </p>
+        )}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
         {state === "reading" && readingNote !== null && (
@@ -352,6 +357,12 @@ export default memo(StructureCard);
 /** "Compound 12 · salsubstolin A": the ID printed by the drawing, and its name when known. */
 export function compoundText(id: string, name: string | null | undefined): string {
   return name ? `Compound ${id} · ${name}` : `Compound ${id}`;
+}
+
+/** "Same ID as compound 12, page 1. Check.": another structure prints the same ID. */
+export function sameIdText(id: string, pages: number[]): string {
+  const where = pages.map((p) => p + 1).join(", ");
+  return `Same ID as compound ${id}, ${pages.length > 1 ? "pages" : "page"} ${where}. Check.`;
 }
 
 /** The badge's tooltip: which engines agree ("DECIMER, MolNexTR and MolScribe agree"). */

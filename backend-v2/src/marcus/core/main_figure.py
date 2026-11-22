@@ -3,9 +3,14 @@
 The user marks one page of a paper as its main figure, the figure that lists the compounds
 (papers.main_figure_page). A structure on another page is a repeat of a main-figure structure
 when both show the same compound: the same InChIKey of the structure shown (api.read
-shown_source), or the same compound ID. A repeat links to the first such main-figure structure
+shown_source), or the same compound ID when one of the two has no InChIKey (an annotated
+drawing the engines could not read, say). A repeat links to the first such main-figure structure
 in (page, idx) order; the workspace shows it once, and exports and COCONUT count it once.
 Structures on the main page itself are never repeats, even of each other.
+
+Owner decision 2026-11-22 (an ID read from an atom number must not hide a card): two structures
+with the same compound ID but two different InChIKeys are not linked; both cards say so
+(id_conflicts). An ID printed by two or more drawings of the main page links nothing.
 
 A main structure and its repeats are one group with one status (group_status): accepted if any
 member is, rejected only if all are, else to review. An accepted group exports and sends the
@@ -34,29 +39,58 @@ class Entry:
     compound_id: str | None = None
 
 
+def _main_ids(entries: list[Entry], main_page: int) -> dict[str, Entry]:
+    """Compound ID -> the main-page entry that prints it; an ID printed by two or more main
+    drawings is left out (it cannot tell which compound a repeat is)."""
+    seen: dict[str, list[Entry]] = {}
+    for e in entries:
+        if e.page == main_page and e.compound_id:
+            seen.setdefault(e.compound_id, []).append(e)
+    return {cid: found[0] for cid, found in seen.items() if len(found) == 1}
+
+
 def link_repeats(entries: list[Entry], main_page: int | None) -> dict[uuid.UUID, uuid.UUID]:
     """repeat segment id -> the main-figure segment id it repeats. `entries` in (page, idx)
     order. Empty without a main page."""
     if main_page is None:
         return {}
     by_key: dict[str, uuid.UUID] = {}
-    by_id: dict[str, uuid.UUID] = {}
     for e in entries:
-        if e.page != main_page:
-            continue
-        if e.inchikey:
+        if e.page == main_page and e.inchikey:
             by_key.setdefault(e.inchikey, e.segment_id)
-        if e.compound_id:
-            by_id.setdefault(e.compound_id, e.segment_id)
+    by_id = _main_ids(entries, main_page)
     out: dict[uuid.UUID, uuid.UUID] = {}
     for e in entries:
         if e.page == main_page:
             continue
-        main = (by_key.get(e.inchikey) if e.inchikey else None) or (
-            by_id.get(e.compound_id) if e.compound_id else None
-        )
+        main = by_key.get(e.inchikey) if e.inchikey else None
+        if main is None and e.compound_id in by_id:
+            other = by_id[e.compound_id]
+            if e.inchikey is None or other.inchikey is None:
+                main = other.segment_id
         if main is not None:
             out[e.segment_id] = main
+    return out
+
+
+def id_conflicts(
+    entries: list[Entry], main_page: int | None, links: dict[uuid.UUID, uuid.UUID]
+) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """segment id -> the structures it shares its compound ID with but not its InChIKey: a
+    structure on another page and the main-figure structure printing the same ID, both with an
+    InChIKey, not linked. Each card of such a pair names the other ("check"). Empty without a
+    main page."""
+    if main_page is None:
+        return {}
+    by_id = _main_ids(entries, main_page)
+    out: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for e in entries:
+        if e.page == main_page or e.segment_id in links or e.compound_id not in by_id:
+            continue
+        other = by_id[e.compound_id]
+        if e.inchikey and other.inchikey and e.inchikey != other.inchikey:
+            out.setdefault(e.segment_id, []).append(other.segment_id)
+            out.setdefault(other.segment_id, []).append(e.segment_id)
     return out
 
 
