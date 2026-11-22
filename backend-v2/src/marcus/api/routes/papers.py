@@ -353,8 +353,11 @@ async def export_paper(
     annotation = annotations.for_export(await annotations.load(db, paper.id))
     rows = await rgroup_reads.for_export(db, paper.id, paper.rgroup_text_labels)
     main_page = await main_figure_page(db, paper.id)
-    repeats = await repeat_links(paper, main_page, segments, curations, predictions, strict=True)
-    stale = stale_members((await inherited_of(db, [paper.id])).get(paper.id, {}), repeats)
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
+    repeats = await repeat_links(
+        paper, main_page, segments, curations, predictions, strict=True, inherited=inherited
+    )
+    stale = stale_members(inherited, repeats)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
         export.build, format, paper, segments, curations, predictions, status, annotation, rows,
