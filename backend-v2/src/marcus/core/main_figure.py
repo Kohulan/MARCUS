@@ -7,6 +7,10 @@ shown_source), or the same compound ID. A repeat links to the first such main-fi
 in (page, idx) order; the workspace shows it once, and exports and COCONUT count it once.
 Structures on the main page itself are never repeats, even of each other.
 
+A main structure and its repeats are one group with one status (group_status): accepted if any
+member is, rejected only if all are, else to review. An accepted group exports and sends the
+structure of an accepted member (chosen_member), so a decision on a repeat is never lost.
+
 The compound ID is the number or name printed under a drawing (phase B item 4). It is not read
 yet, so every Entry has compound_id None and only InChIKeys link today. When it is read, fill
 Entry.compound_id (api.read.repeat_links builds the entries) and the match below uses it.
@@ -51,3 +55,67 @@ def link_repeats(entries: list[Entry], main_page: int | None) -> dict[uuid.UUID,
         if main is not None:
             out[e.segment_id] = main
     return out
+
+
+ACCEPTED, REJECTED, UNCHECKED = "accepted", "rejected", "unchecked"
+
+
+def group_status(statuses: list[str | None]) -> str:
+    """One status for a linked group (a main-figure structure and its repeats): accepted if any
+    member is accepted; rejected only if every member is rejected; else unchecked (to review).
+    None (no curation row) counts as unchecked."""
+    if ACCEPTED in statuses:
+        return ACCEPTED
+    if statuses and all(s == REJECTED for s in statuses):
+        return REJECTED
+    return UNCHECKED
+
+
+def groups_of(links: dict[uuid.UUID, uuid.UUID]) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """main segment id -> its repeats, in the order of `links` (link_repeats keeps (page, idx))."""
+    out: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for repeat, main in links.items():
+        out.setdefault(main, []).append(repeat)
+    return out
+
+
+def chosen_member(
+    main: uuid.UUID, repeats: list[uuid.UUID], status_of: dict[uuid.UUID, str | None]
+) -> uuid.UUID:
+    """The member whose structure an accepted group exports and sends: the main one when it is
+    accepted, else the first accepted repeat; the main one for a group not accepted."""
+    if status_of.get(main) == ACCEPTED:
+        return main
+    return next((r for r in repeats if status_of.get(r) == ACCEPTED), main)
+
+
+@dataclass(frozen=True)
+class CountFix:
+    """How the structure counts treat linked groups (api.read.paper_counts): `hidden` repeats
+    are not counted; a main in `promote` counts as accepted (an accepted repeat); a rejected main
+    in `unreject` counts as to review (a repeat not rejected)."""
+
+    hidden: frozenset[uuid.UUID] = frozenset()
+    promote: frozenset[uuid.UUID] = frozenset()
+    unreject: frozenset[uuid.UUID] = frozenset()
+
+    def __or__(self, other: "CountFix") -> "CountFix":
+        return CountFix(
+            self.hidden | other.hidden,
+            self.promote | other.promote,
+            self.unreject | other.unreject,
+        )
+
+
+def count_fix(
+    links: dict[uuid.UUID, uuid.UUID], status_of: dict[uuid.UUID, str | None]
+) -> CountFix:
+    """The CountFix of one paper's links: each group counts once, under group_status."""
+    promote, unreject = set(), set()
+    for main, repeats in groups_of(links).items():
+        status = group_status([status_of.get(m) for m in [main, *repeats]])
+        if status == ACCEPTED and status_of.get(main) != ACCEPTED:
+            promote.add(main)
+        elif status == UNCHECKED and status_of.get(main) == REJECTED:
+            unreject.add(main)
+    return CountFix(frozenset(links), frozenset(promote), frozenset(unreject))
