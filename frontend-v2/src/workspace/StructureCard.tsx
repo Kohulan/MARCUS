@@ -272,6 +272,9 @@ function StructureCard({
       </div>
 
       <div className="card__body">
+        {segment.compound_id && (
+          <p className="card__compound">{compoundText(segment.compound_id, segment.compound_name)}</p>
+        )}
         {smiles !== null && <Smiles value={smiles} struck={rejected} />}
         {meta !== null && (
           <p className="card__meta">
@@ -345,6 +348,11 @@ function StructureCard({
 }
 
 export default memo(StructureCard);
+
+/** "Compound 12 · salsubstolin A": the ID printed by the drawing, and its name when known. */
+export function compoundText(id: string, name: string | null | undefined): string {
+  return name ? `Compound ${id} · ${name}` : `Compound ${id}`;
+}
 
 /** The badge's tooltip: which engines agree ("DECIMER, MolNexTR and MolScribe agree"). */
 function agreeTitle(segment: SegmentOut): string {

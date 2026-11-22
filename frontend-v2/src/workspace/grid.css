@@ -319,6 +319,15 @@
   color: var(--text-2);
 }
 
+.card .card__compound {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 /* "Check this drawing": the crop has NMR marks or is an X-ray / 3D picture. */
 .card .card__flag {
   display: flex;

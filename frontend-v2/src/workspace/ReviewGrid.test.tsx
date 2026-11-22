@@ -410,6 +410,22 @@ describe("the way into focus mode", () => {
   });
 });
 
+describe("the compound ID", () => {
+  it("shows the ID printed by the drawing, with its name when the text gives one", async () => {
+    renderGrid(
+      paper([
+        segment("s1", { compound_id: "12", compound_name: "salsubstolin A" }),
+        segment("s2", { compound_id: "8a", compound_name: null }),
+        segment("s3"),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(within(card("[01]")).getByText("Compound 12 · salsubstolin A")).toBeInTheDocument();
+    expect(within(card("[02]")).getByText("Compound 8a")).toBeInTheDocument();
+    expect(within(card("[03]")).queryByText(/^Compound/)).toBeNull();
+  });
+});
+
 describe("Check this drawing", () => {
   it("a flagged card says so and its Edit opens the editor on it; others say nothing", async () => {
     renderGrid(

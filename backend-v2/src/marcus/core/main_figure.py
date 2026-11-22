@@ -15,9 +15,8 @@ A decision on a main structure goes to its repeats (api.decisions), marked inher
 inherited status holds only while the structure is still a repeat of that main one; else it
 reads as unchecked (stale_members), so it is never exported unreviewed.
 
-The compound ID is the number or name printed under a drawing (phase B item 4). It is not read
-yet, so every Entry has compound_id None and only InChIKeys link today. When it is read, fill
-Entry.compound_id (api.read.repeat_links builds the entries) and the match below uses it.
+The compound ID is the number printed by a drawing (phase B item 4, marcus.core.compound_ids,
+from the paper's Docling text); api.read.repeat_links fills Entry.compound_id with it.
 """
 
 import uuid
@@ -31,7 +30,7 @@ class Entry:
     # InChIKey of the structure shown; None without one (no structure, an R-group scaffold, or a
     # structure RDKit cannot read).
     inchikey: str | None
-    # The compound ID printed by the drawing (phase B item 4); None until that is read.
+    # The compound ID printed by the drawing (phase B item 4); None without one.
     compound_id: str | None = None
 
 

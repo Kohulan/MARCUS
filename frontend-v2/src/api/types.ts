@@ -140,6 +140,10 @@ export interface SegmentOut {
    * one of the paper's engine, else of any engine. The server's one rule (exports, COCONUT).
    */
   default_prediction_id?: string | null;
+  /** The compound ID printed by the drawing ("12", "8a"); null or absent without one. */
+  compound_id?: string | null;
+  /** The name the paper's text gives that compound ("salsubstolin A (12)"); null without. */
+  compound_name?: string | null;
 }
 
 export interface SegmentList {
