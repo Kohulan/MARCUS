@@ -12,7 +12,8 @@ the gold labels of the test and training sets, MARCUS-training markush-eval/foll
 - n, m (repeat counts) and Q;
 - `*`: an unlabelled point.
 
-MolScribe keeps the linking O in an alias (OR, OR3, R2O, RaO): the label is the R-group in it.
+MolScribe writes the group around an R-group as one alias (OR3, R2O, RaO, CO2R, COOR, NHR, SR,
+CH2OR1, N(R)2): the label is the one R-group in it.
 """
 
 import re
@@ -20,18 +21,21 @@ import re
 _R = r"R[′″']*(?:\d{1,2})?[a-z]?[′″']*"
 _OTHER = r"[XYZ](?:\d{1,2})?[′″']*|Ar(?:\d{1,2})?|[nmQ]|\*"
 _LABEL = re.compile(rf"(?:{_R}|{_OTHER})")
-_O_LINKED = re.compile(rf"O({_R})|({_R})O")
+# An alias that carries one R-group in a small group written around it (OR3, R2O, CO2R, COOR,
+# NHR, SR, CH2OR1, N(R)2): only H, C, N, O, S, digits and brackets beside the R.
+_FRAGMENT = r"(?:[CHONS()][CHONS0-9()=]*)?"  # starts with an atom or a bracket, never a digit
+_CARRIED = re.compile(rf"({_FRAGMENT})({_R})({_FRAGMENT})")
 
 
 def as_label(text: str) -> str | None:
-    """`text` as an R-group label (an O-linked R-group as its R-group), or None when it has not
-    the form of one."""
+    """`text` as an R-group label (an alias carrying one R-group as that R-group), or None when
+    it has not the form of one."""
     text = text.strip()
     if _LABEL.fullmatch(text):
         return text
-    m = _O_LINKED.fullmatch(text)
-    if m:
-        return m.group(1) or m.group(2)
+    m = _CARRIED.fullmatch(text)
+    if m and (m.group(1) or m.group(3)):
+        return m.group(2)
     return None
 
 
@@ -61,29 +65,65 @@ def canonical(label: str) -> str:
     return "".join(_plain(label).split())
 
 
+# Ranges name every label in them: "R1–R4", "R1-R4", "R1-4", "R1 to R4", "R1~R4" (at most 20).
+_RANGE = re.compile(r"(?<!\w)R\s?(\d{1,2})\s*(?:[-–—~]|to)\s*(?:R\s?)?(\d{1,2})(?![\d′\w])")
+_MAX_RANGE = 20
+# Joined forms: a label right after another (R1R2), after a lone O, N or S (OR1, NR1R2, SR4),
+# or before O, N, S or Ph (R3O, R1R2N, R2Ph). Only numbered or primed R labels: a bare R or a
+# one-letter label joined to letters is a word.
+_R_INDEXED = r"R(?:′+\d{0,2}|\d{1,2}′*)"
+_JOIN_BEFORE = re.compile(rf"(?<![A-Za-z])([ONS])(?={_R_INDEXED})")
+_JOIN_CHAIN = re.compile(rf"({_R_INDEXED})(?={_R_INDEXED})")
+_JOIN_AFTER = re.compile(rf"({_R_INDEXED})(O|N|S|Ph)(?![a-z])")
+# A one-letter token that is the start of a word ("X-ray", "n-butyl", "m-CPBA", "Q-TOF",
+# "R-configured") or half of "E/Z".
+_ONE_LETTER = frozenset({"R", "X", "Y", "Z", "n", "m", "Q"})
+WEAK = frozenset({"X", "Y", "Z", "n", "m", "Q"})  # named alone, they decide nothing
+
+
+def _expand_range(m: re.Match) -> str:
+    first, last = int(m.group(1)), int(m.group(2))
+    if not first < last <= first + _MAX_RANGE:
+        return m.group()
+    return " ".join(f"R{i}" for i in range(first, last + 1))
+
+
 def text_labels(text: str) -> set[str]:
     """The labels `text` names, each as a token of its own (canonical spelling): not inside a
-    word or another label (R1 in R10 or R1′, R in R1), and not a stereo descriptor in brackets
-    ("(Z)", "(R)")."""
-    plain = _plain(text)
+    word or another label (R1 in R10 or R1′, R in R1), not a stereo descriptor in brackets
+    ("(Z)", "(R)"), not the first letter of a word ("X-ray", "n-butyl") or of "E/Z". A range
+    (R1–R4) names every label in it; joined forms (OR1, R1R2N, R2Ph) name their labels."""
+    plain = _RANGE.sub(_expand_range, _plain(text))
+    plain = _JOIN_BEFORE.sub(r"\1 ", plain)
+    plain = _JOIN_CHAIN.sub(r"\1 ", plain)
+    plain = _JOIN_AFTER.sub(r"\1 \2", plain)
     found: set[str] = set()
     for m in _TEXT_LABEL.finditer(plain):
         start, end = m.span()
-        if plain[start - 1 : start] == "(" and plain[end : end + 1] == ")":
+        before, after = plain[start - 1 : start], plain[end : end + 2]
+        if before == "(" and after[:1] == ")":
             continue
-        found.add("".join(m.group().split()))
+        token = "".join(m.group().split())
+        if token in _ONE_LETTER and (
+            (after[:1] == "-" and after[1:2].isalpha()) or "/" in (before, after[:1])
+        ):
+            continue
+        found.add(token)
     return found
 
 
 def shown_labels(labels: list[str], named: set[str] | list[str] | None) -> list[str]:
     """Of a structure's labels, those its page's text names (`named`: canonical spellings), in
-    their order; all of them when it names none or there is no text (None). OCSR sometimes adds
-    a label the drawing does not have (DECIMER's Z beside R1, R2)."""
+    their order. All of them when the text names none of them, or only one-letter ones (WEAK:
+    X, Y, Z, n, m, Q are also words and symbols), or there is no text (None). OCSR sometimes
+    adds a label the drawing does not have (DECIMER's Z beside R1, R2)."""
     if not named:
         return list(labels)
     names = set(named)
     hits = [lab for lab in labels if canonical(lab) in names]
-    return hits or list(labels)
+    if not any(canonical(lab) not in WEAK for lab in hits):
+        return list(labels)
+    return hits
 
 
 def page_label_index(doc: dict, pages: int) -> dict[str, list[str]]:

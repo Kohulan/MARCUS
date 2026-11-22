@@ -48,6 +48,61 @@ def test_a_document_without_text_has_an_empty_index(doc):
     assert rl.page_label_index(doc, 3) == {}
 
 
+# --- review findings 1 and 2 -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["single-crystal X-ray data", "n-butyl", "n-BuLi", "m-CPBA", "E/Z isomers", "Z/E", "Q-TOF MS",
+     "X-Ray", "R-configured"],
+)  # fmt: skip
+def test_chemistry_words_name_no_label(text):
+    assert rl.text_labels(text) == set()
+
+
+def test_a_word_hit_does_not_hide_the_real_labels():
+    """R1, R2 drawn only in the figure, "X-ray" in the text: nothing tells, so all stay."""
+    assert rl.shown_labels(["R1", "R2", "X"], rl.text_labels("from X-ray data")) == [
+        "R1", "R2", "X",
+    ]  # fmt: skip
+
+
+def test_only_a_named_label_beyond_one_letter_decides():
+    """A one-letter hit (X, Y, Z, n, m, Q) alone is weak evidence: it decides nothing; once
+    another label is named, the one-letter ones named are shown too."""
+    assert rl.shown_labels(["R1", "Z"], {"Z"}) == ["R1", "Z"]
+    assert rl.shown_labels(["R1", "X", "Z"], {"R1", "X"}) == ["R1", "X"]
+    assert rl.shown_labels(["X", "Y", "Z"], {"X", "Y"}) == ["X", "Y", "Z"]
+
+
+@pytest.mark.parametrize(
+    ("text", "labels"),
+    [
+        ("R1–R4 = H", {"R1", "R2", "R3", "R4"}),
+        ("R1-R3 are OMe", {"R1", "R2", "R3"}),
+        ("R1-3 = H", {"R1", "R2", "R3"}),
+        ("R 1 to R 4", {"R1", "R2", "R3", "R4"}),
+        ("R2~R5", {"R2", "R3", "R4", "R5"}),
+    ],
+)
+def test_a_range_names_every_label_in_it(text, labels):
+    assert rl.text_labels(text) == labels
+
+
+@pytest.mark.parametrize(
+    ("text", "labels"),
+    [("OR1", {"R1"}), ("NR1R2", {"R1", "R2"}), ("R1R2N", {"R1", "R2"}), ("R2Ph", {"R2"}),
+     ("R3O", {"R3"}), ("SR4", {"R4"})],
+)  # fmt: skip
+def test_joined_labels_are_named(text, labels):
+    assert rl.text_labels(text) == labels
+
+
+@pytest.mark.parametrize("text", ["PAR1", "MAJOR", "NMR", "SRB assay", "BR1A"])
+def test_joining_stays_safe(text):
+    assert not rl.text_labels(text) & {"R1", "R2", "R"}
+
+
 def test_index_error():
     assert rl.index_error({"0": ["R1", "X"], "4": ["R′"]}, pages=5) is None
     for bad in ([], {"x": ["R1"]}, {"5": ["R1"]}, {"-1": ["R1"]}, {"0": "R1"}, {"0": ["OAc"]},
