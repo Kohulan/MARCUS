@@ -168,6 +168,27 @@ def test_an_o_linked_label_is_its_r_group(alias, label):
 
 
 @pytest.mark.parametrize(
+    ("alias", "label"),
+    [("CO2R", "R"), ("COOR", "R"), ("NHR", "R"), ("SR", "R"), ("CH2R", "R"), ("CH2OR1", "R1"),
+     ("NR2", "R2"), ("CO2R′", "R′"), ("N(R)2", "R"), ("OCOR3", "R3")],
+)  # fmt: skip
+def test_an_alias_carrying_one_r_group_is_that_label(alias, label):
+    """Review finding 4: MolScribe writes the group around an R as one alias (CO2R, NHR): the
+    placeholder is the R in it."""
+    assert rgroups.as_label(alias) == label
+
+
+@pytest.mark.parametrize("alias", ["Br", "Bz", "TMSO", "OTBS", "NR1R2", "CF3", "Ph", "PrO"])
+def test_an_alias_without_exactly_one_r_group_is_no_label(alias):
+    assert rgroups.as_label(alias) is None
+
+
+def test_a_co2r_only_structure_keeps_its_label():
+    molfile = _molfile("*c1ccccc1", {0: "CO2R"})
+    assert rgroup_labels("*c1ccccc1", molfile) == ["R"]
+
+
+@pytest.mark.parametrize(
     "alias",
     ["OAc", "AcO", "BnO", "MeO", "OMe", "OCH3", "H3CO", "CO2H", "COOH", "Me", "Ac", "Bz",
      "BzO", "Boc", "OTMS", "TMSO", "CF3", "CN", "C2H5", "NMe", "N3", "S7", "O3", "F2", "Br",

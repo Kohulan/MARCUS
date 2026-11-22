@@ -440,7 +440,7 @@ def test_migration_0013_moves_rgroups_steps_to_their_own_queue(migrated_db):
 
 def test_migration_0014_computes_the_labels_again(migrated_db):
     """0014: rows with labels get them again from marcus.core.rgroups (MolScribe's OMe alias is
-    no label, R2O is R2); rows without labels are not touched."""
+    no label, R2O is R2, CO2R is R); rows without labels are not touched."""
     from rdkit import Chem
     from sqlalchemy import text
 
@@ -463,7 +463,7 @@ def test_migration_0014_computes_the_labels_again(migrated_db):
             paper = make_paper(s)
             segs = [
                 Segment(paper_id=paper.id, page=0, idx=i, bbox=[0, 0, 1, 1], image_sha256="c" * 64)
-                for i in range(3)
+                for i in range(4)
             ]
             s.add_all(segs)
             s.flush()
@@ -472,6 +472,7 @@ def test_migration_0014_computes_the_labels_again(migrated_db):
                 (ids[0], "COc1ccccc1", molfile("*c1ccccc1", {0: "OMe"}), ["OMe"]),
                 (ids[1], "[2*]Oc1ccccc1", molfile("[2*]c1ccccc1", {0: "R2O"}), ["R2O"]),
                 (ids[2], "CCO", None, []),
+                (ids[3], "*c1ccccc1", molfile("*c1ccccc1", {0: "CO2R"}), ["CO2R"]),
             ]:
                 s.execute(
                     text(
@@ -485,7 +486,7 @@ def test_migration_0014_computes_the_labels_again(migrated_db):
         command.upgrade(cfg, "0014")
         with engine.connect() as conn:
             preds = dict(conn.execute(text("SELECT segment_id, rgroups FROM predictions")).all())
-        assert preds == {ids[0]: [], ids[1]: ["R2"], ids[2]: []}
+        assert preds == {ids[0]: [], ids[1]: ["R2"], ids[2]: [], ids[3]: ["R"]}
     finally:
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))

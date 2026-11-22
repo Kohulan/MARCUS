@@ -213,7 +213,8 @@ def test_a_label_the_text_never_names_is_left_out():
     ],
 )
 def test_a_label_counts_as_written_in_the_text(label, text):
-    assert rg.named_labels([label, "Z9"], text) == [label]
+    # R7 is named too: a one-letter label named alone decides nothing (rgroup_labels.WEAK)
+    assert rg.named_labels([label, "R7", "Z9"], f"{text}; R7 = H") == [label, "R7"]
 
 
 @pytest.mark.parametrize(
