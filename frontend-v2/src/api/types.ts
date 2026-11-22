@@ -151,6 +151,11 @@ export interface StepList {
 export interface PaperDetail extends PaperSummary {
   /** The page (0-based) marked as the main figure, the paper's compound list; null: none. */
   main_figure_page?: number | null;
+  /**
+   * False when the server could not link the main figure's repeats this time (busy): no
+   * segment has repeat_of, so nothing may go to COCONUT until a read says true. Absent: true.
+   */
+  links_ready?: boolean;
   counts: Counts;
   segments: SegmentOut[];
 }

@@ -28,7 +28,7 @@ export type Workspace = {
    */
   segments: SegmentOut[];
   steps: StepOut[];
-  /** The focused segment id (`?s=`). */
+  /** The focused segment id (`?s=`; a repeat's main-figure structure for a repeat). */
   selection: string | null;
   /** Replaces the URL entry by default (moving between cards makes no history); `push` adds one. */
   setSelection: (segmentId: string | null, opts?: { push?: boolean }) => void;
@@ -85,7 +85,9 @@ export function useWorkspace(id: string): Workspace {
   const closeDialog = useCallback(() => setOpen(null), []);
 
   const view: WorkspaceView = params.get("view") === "paper" ? "paper" : "review";
-  const selection = params.get("s");
+  // A repeat of a main-figure structure has no card: `?s=` naming one selects its main one.
+  const asked = params.get("s");
+  const selection = segments.find((s) => s.id === asked)?.repeat_of ?? asked;
   const focus = view === "review" && selection !== null && params.get("focus") === "1";
 
   const setView = useCallback(

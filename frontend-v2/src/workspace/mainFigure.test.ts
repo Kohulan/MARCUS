@@ -1,7 +1,15 @@
 // The main figure's order and its repeats (the server links them: SegmentOut.repeat_of).
 import { describe, expect, it } from "vitest";
 import type { SegmentOut } from "../api/types";
-import { alsoOnText, listedSegments, mainFirst, repeatPages } from "./mainFigure";
+import {
+  alsoOnText,
+  chosenMember,
+  groupState,
+  listedSegments,
+  mainFirst,
+  repeatPages,
+  repeatsOf,
+} from "./mainFigure";
 
 const seg = (id: string, page: number, idx: number, repeat_of: string | null = null) =>
   ({ id, page, idx, bbox: [0, 0, 1, 1], curation: null, predictions: [], repeat_of }) as SegmentOut;
@@ -29,5 +37,31 @@ describe("mainFigure", () => {
     expect(alsoOnText([2])).toBe("Also on page 2");
     expect(alsoOnText(undefined)).toBeNull();
     expect(alsoOnText([])).toBeNull();
+  });
+
+  it("gives a main structure and its repeats one state", () => {
+    const decided = (id: string, status: "accepted" | "rejected" | "unchecked", of?: string) => ({
+      ...seg(id, of ? 2 : 1, 0, of ?? null),
+      curation: { status, smiles: null, molfile: null, note: null },
+    });
+    const main = seg("m", 1, 0);
+    // an accepted repeat, the main one not decided: accepted
+    expect(groupState("to-check", main, [decided("r", "accepted", "m")])).toBe("accepted");
+    // the main one rejected, a repeat accepted: accepted
+    const rejected = decided("m", "rejected");
+    expect(groupState("rejected", rejected, [decided("r", "accepted", "m")])).toBe("accepted");
+    // rejected only when every member is
+    expect(groupState("rejected", rejected, [decided("r", "rejected", "m")])).toBe("rejected");
+    expect(groupState("rejected", rejected, [seg("r", 2, 0, "m")])).toBe("to-check");
+    // nothing decided: the main card's own state; no repeats: its own state
+    expect(groupState("failed", main, [seg("r", 2, 0, "m")])).toBe("failed");
+    expect(groupState("rejected", rejected, [])).toBe("rejected");
+
+    const r1 = decided("r1", "rejected", "m");
+    const r2 = decided("r2", "accepted", "m");
+    expect(chosenMember(main, [r1, r2]).id).toBe("r2");
+    expect(chosenMember(decided("m", "accepted"), [r2]).id).toBe("m");
+    expect(chosenMember(main, [r1]).id).toBe("m");
+    expect(repeatsOf([main, r1, r2]).get("m")?.map((s) => s.id)).toEqual(["r1", "r2"]);
   });
 });

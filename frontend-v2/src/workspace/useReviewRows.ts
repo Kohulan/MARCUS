@@ -4,7 +4,7 @@ import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { shownStructure, stateOf, type CardState } from "./cardState";
-import { alsoOnText, listedSegments, repeatPages } from "./mainFigure";
+import { alsoOnText, groupState, listedSegments, repeatPages, repeatsOf } from "./mainFigure";
 import { newestFirst } from "./pageFailures";
 
 /** One structure of the paper as the review views show it. */
@@ -29,7 +29,8 @@ const NO_STEPS: StepOut[] = [];
 /**
  * The rows of the review grid and focus mode: one pass over the steps for the whole paper,
  * not one per card. `segments` in the workspace's order (useWorkspace sorts them). A repeat of
- * a main-figure structure has no row of its own: its main card says "Also on page N".
+ * a main-figure structure has no row of its own: its main card says "Also on page N", and its
+ * state is the group's (groupState).
  */
 export function useReviewRows(
   paper: PaperDetail,
@@ -51,9 +52,10 @@ export function useReviewRows(
 
   return useMemo<ReviewRow[]>(() => {
     const repeats = repeatPages(segments);
+    const groups = repeatsOf(segments);
     return listedSegments(segments).map((segment, i) => {
       const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
-      const state = stateOf(segment, own, paper);
+      const state = groupState(stateOf(segment, own, paper), segment, groups.get(segment.id) ?? []);
       const newest = state === "failed" ? own[0] : undefined;
       return {
         segmentId: segment.id,
