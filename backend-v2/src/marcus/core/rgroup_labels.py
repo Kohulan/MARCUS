@@ -129,12 +129,25 @@ def shown_labels(labels: list[str], named: set[str] | list[str] | None) -> list[
 def page_label_index(doc: dict, pages: int) -> dict[str, list[str]]:
     """Per page (0-based, as the API counts; key a string, for JSON), the labels the R-group
     model's context for a scaffold on it names (marcus.core.page_text.page_context: Docling
-    pages P..P+2). Pages that name none are left out."""
-    from marcus.core.page_text import page_context
+    pages P..P+2). Pages that name none are left out.
 
+    The items are grouped by page once, and each page's context is built from the items of its
+    three pages only (in document order, so the context is the same as over the whole
+    document): each item is read at most three times, not once per page."""
+    from marcus.core import page_text
+
+    by_page: dict[str, dict[int, list[tuple[int, dict]]]] = {"texts": {}, "tables": {}}
+    for key, groups in by_page.items():
+        for order, item in enumerate(doc.get(key) or []):
+            groups.setdefault(page_text.page_of(item), []).append((order, item))
     index: dict[str, list[str]] = {}
     for page in range(pages):
-        found = text_labels(page_context(doc, page + 1))
+        near = (page, page + 1, page + 2)  # Docling pages P-1..P+1 for API page P
+        part = {
+            key: [item for _, item in sorted(x for p in near for x in groups.get(p, []))]
+            for key, groups in by_page.items()
+        }
+        found = text_labels(page_text.page_context(part, page + 1))
         if found:
             index[str(page)] = sorted(found)[:MAX_PAGE_LABELS]
     return index

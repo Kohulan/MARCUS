@@ -19,6 +19,9 @@ def _page(item) -> int | None:
     return prov[0].get("page_no") if prov else None
 
 
+page_of = _page  # the Docling page (1-based) an item is on, None without one
+
+
 def _table_rows(table) -> list[str]:
     cells = (table.get("data") or {}).get("table_cells") or []
     grid: dict[int, dict[int, str]] = {}

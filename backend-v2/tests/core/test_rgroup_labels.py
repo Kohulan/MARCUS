@@ -43,6 +43,27 @@ def test_the_page_index_holds_each_pages_labels_from_the_models_context():
     assert rl.page_label_index(doc, 5) == {"0": ["R1"], "1": ["R1", "X"], "2": ["X"], "3": ["X"]}
 
 
+def test_the_page_index_reads_each_item_a_bounded_number_of_times(monkeypatch):
+    """Review finding 7: page_context once per page over the whole document is O(pages x
+    items). The index reads each page's items only for the three pages they belong to, and
+    gives the same labels as page_context over the whole document."""
+    from marcus.core import page_text
+
+    items = [_text(f"R{i % 7 + 1} = H", 1 + (i * 7) % 30) for i in range(300)]  # pages mixed
+    items.append({"label": "caption", "text": "X = Cl, R9", "prov": [{"page_no": 4}]})
+    doc = {"texts": items, "tables": []}
+    expected = {}
+    for page in range(30):
+        found = rl.text_labels(page_text.page_context(doc, page + 1))
+        if found:
+            expected[str(page)] = sorted(found)
+    seen = []
+    real = page_text.page_context
+    monkeypatch.setattr(page_text, "page_context", lambda d, p: seen.append(len(d["texts"])) or real(d, p))
+    assert rl.page_label_index(doc, 30) == expected
+    assert sum(seen) <= 3 * len(items)
+
+
 @pytest.mark.parametrize("doc", [{}, {"texts": []}])
 def test_a_document_without_text_has_an_empty_index(doc):
     assert rl.page_label_index(doc, 3) == {}
