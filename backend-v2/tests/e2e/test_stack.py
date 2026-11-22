@@ -212,6 +212,28 @@ def test_upload_to_done_with_fake_engines():
         owner.close()
 
 
+def test_rgroup_routes_on_the_fake_stack():
+    """R-group reading is offered on the fake stack (the fake reader on q.llm), and a
+    structure without R-groups is refused. The fake OCSR engine draws benzene only, so no
+    scaffold exists here to read: the reading itself is covered by tests/api/test_rgroups.py
+    and tests/core/test_rgroups_pipeline.py (the fake reader through the real planner)."""
+    owner = Owner()
+    try:
+        paper_id, _ = owner.upload("synth_015.pdf")
+        paper = owner.wait_terminal(paper_id, timeout_s=300)
+        assert paper["status"] == "done", paper
+        listed = owner.client.get(f"/api/v2/papers/{paper_id}/rgroups")
+        assert listed.status_code == 200 and listed.json() == {"available": True, "extractions": []}
+        prediction = paper["segments"][0]["predictions"][0]
+        assert prediction["rgroups"] == []
+        r = owner.client.post(f"/api/v2/predictions/{prediction['id']}/rgroups")
+        assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+        one = owner.client.get(f"/api/v2/predictions/{prediction['id']}/rgroups").json()
+        assert one["status"] == "none"
+    finally:
+        owner.close()
+
+
 def test_annotation_on_demand_with_the_fake_annotator():
     """Annotate after the paper is done: the step runs on q.llm (worker-fake-annotate), its
     progress arrives on the paper's event stream, the values come back with positions that

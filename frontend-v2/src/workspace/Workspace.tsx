@@ -21,11 +21,12 @@ import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
 import { newestAnnotate } from "./annotation";
 import { coconutStructures, submissionTitle } from "./coconutList";
-import { CARD_OPEN_HINT, filterCounts, segmentCard } from "./cardState";
+import { CARD_OPEN_HINT, filterCounts, hasScaffold, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
 import { useAnnotation } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
+import { RgroupPaper, useRgroupList } from "./useRgroupRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
 
@@ -158,10 +159,17 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const sendCount = toCoconut.send.length;
   const annotateStep = useMemo(() => newestAnnotate(ws.steps), [ws.steps]);
   const annotation = useAnnotation(paper.id, annotateStep).data;
+  // R-group rows: one list for the paper's scaffolds, polled while a reading is in flight
+  const scaffolds = useMemo(
+    () => ws.segments.some((s) => hasScaffold(s, paper.engine)),
+    [ws.segments, paper.engine],
+  );
+  useRgroupList(paper.id, scaffolds);
   if (sending?.waiting && annotation !== undefined) {
     setSending({ ...coconutStart(annotation), waiting: false });
   }
   return (
+    <RgroupPaper.Provider value={paper.id}>
     <main className="ws">
       <header className="ws-head">
         <div className="ws-head__title">
@@ -282,6 +290,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         />
       )}
     </main>
+    </RgroupPaper.Provider>
   );
 }
 

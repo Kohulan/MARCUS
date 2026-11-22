@@ -64,6 +64,9 @@ ALLOWED_ROUTES = {
     ("POST", "/api/v2/papers/{paper_id}/annotation"),
     ("PUT", "/api/v2/papers/{paper_id}/annotation/curation"),
     ("DELETE", "/api/v2/papers/{paper_id}/annotation/curation"),
+    ("GET", "/api/v2/papers/{paper_id}/rgroups"),
+    ("GET", "/api/v2/predictions/{prediction_id}/rgroups"),
+    ("POST", "/api/v2/predictions/{prediction_id}/rgroups"),
     ("POST", "/api/v2/images"),
     ("GET", "/api/v2/images"),
     ("GET", "/api/v2/images/{job_id}"),
@@ -154,7 +157,7 @@ def fill(path: str) -> str:
 
 
 async def test_headers_on_every_route(app, monkeypatch):
-    env(monkeypatch, annotate_enabled="1")  # else POST .../annotation is a deliberate 503
+    env(monkeypatch, annotate_enabled="1", rgroup_enabled="1")  # else POST is a deliberate 503
     monkeypatch.setattr(health_route, "inspect_live_queues", lambda: {"q.llm"})  # as above
     monkeypatch.setattr(health_route, "_live_queues", health_route.LiveQueues())
     async with client(app) as c:

@@ -261,17 +261,21 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
 
 
 ANNOTATE_QUEUE = queue_for(StepKind.ANNOTATE, None)
+assert queue_for(StepKind.RGROUPS, None) == ANNOTATE_QUEUE  # both models are served from q.llm
 NO_ANNOTATOR = "no annotation worker"
+# Step kinds that depend on an optional model service (q.llm): annotation and R-group rows.
+LLM_KINDS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
 
 
 def _unserved_annotations(session: Session) -> list[uuid.UUID]:
-    """Annotate steps still waiting (pending/queued) for longer than annotate_max_wait_s."""
+    """Annotate and rgroups steps still waiting (pending/queued) for longer than
+    annotate_max_wait_s."""
     wait = get_settings().annotate_max_wait_s
     old = func.now() - func.make_interval(0, 0, 0, 0, 0, 0, wait)
     return list(
         session.execute(
             select(Step.id).where(
-                Step.kind == StepKind.ANNOTATE.value,
+                Step.kind.in_(LLM_KINDS),
                 Step.status.in_(WAITING_STEPS),
                 Step.created_at < old,
             )
@@ -282,7 +286,8 @@ def _unserved_annotations(session: Session) -> list[uuid.UUID]:
 def fail_unserved_annotation(session: Session, step_id: uuid.UUID) -> bool:
     """In the current transaction, lock the step's parent then the step and, if it is still
     waiting, fail it for good as engine_error: the model service is not running, so the paper
-    goes back to done. Does not commit. True if failed."""
+    goes back to done (an rgroups step: its request row says failed). Does not commit. True if
+    failed."""
     if _lock_status(session, step_id, Step.status.in_(WAITING_STEPS)) is None:
         return False
     fail_step(session, step_id, ErrorClass.ENGINE_ERROR, NO_ANNOTATOR, retryable=False)
@@ -330,19 +335,20 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
         except Exception:
             log.exception("watchdog: could not fail step %s", step_id)
             session.rollback()
-    # Annotation depends on an optional service (llama-server): with no live q.llm consumer
-    # (known, not just unknown) an old waiting annotate step fails, so its paper is done again.
+    # Annotation and R-group rows depend on optional services (llama-server, llama-rgroup): with
+    # no live q.llm consumer (known, not just unknown) an old waiting annotate or rgroups step
+    # fails, so its paper is done again and its request row says failed.
     if live is not None and ANNOTATE_QUEUE not in live:
         for step_id in waiting_annotations:
             try:
                 if fail_unserved_annotation(session, step_id):
                     session.commit()
                     done += 1
-                    log.warning("watchdog: annotate step %s failed: no live q.llm consumer",
+                    log.warning("watchdog: q.llm step %s failed: no live q.llm consumer",
                                 step_id)  # fmt: skip
                 else:
                     session.rollback()
             except Exception:
-                log.exception("watchdog: could not fail annotate step %s", step_id)
+                log.exception("watchdog: could not fail q.llm step %s", step_id)
                 session.rollback()
     return done

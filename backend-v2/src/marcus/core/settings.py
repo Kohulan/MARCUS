@@ -96,11 +96,27 @@ class Settings(BaseSettings):
     annotate_model: str = Field("qwen3.5-9b-marcus-v1", min_length=1, max_length=200)
     annotate_model_version: str = Field("Q8_0 llama.cpp b12554", min_length=1, max_length=200)
     rate_limit_annotate_per_min: int = 5  # per owner: POST /papers/{id}/annotation
-    # An annotate step older than this while no worker consumes q.llm (the model service is
-    # down) fails as engine_error, so its paper is done again (dispatcher watchdog).
+    # An annotate or rgroups step older than this while no worker consumes q.llm (the model
+    # service is down) fails as engine_error, so its paper is done again (dispatcher watchdog).
     annotate_max_wait_s: int = Field(600, gt=0)
     # per owner: PUT and DELETE /papers/{id}/annotation/curation (each save locates values)
     rate_limit_curation_per_min: int = 30
+    # R-group definitions of a scaffold with the local R-group model (marcus.workers.rgroups,
+    # queue q.llm, its own llama-server `llama-rgroup`). Offered by the API only where a worker
+    # serves q.llm with that model: docker-compose.gpu.yml and docker-compose.fake.yml set it;
+    # elsewhere POST answers 503.
+    rgroup_enabled: bool = False
+    # Worker side: "llama" = llama-server at rgroup_url (internal network only); "fake" = the
+    # fake reader (refused unless enable_fake_engines).
+    rgroup_reader: Literal["llama", "fake"] = "llama"
+    rgroup_url: str = Field("http://llama-rgroup:8080", pattern=r"^https?://[^\s/]+(:\d+)?/?$")
+    # One model request; below the rgroups step's soft limit (120 s, marcus.core.queues).
+    rgroup_timeout_s: float = Field(110.0, gt=0)
+    # Stored with every result; change them with the model file (docker-compose.gpu.yml).
+    rgroup_model: str = Field("nuextract3-rgroup-v1", min_length=1, max_length=200)
+    rgroup_model_version: str = Field("vision Q8_0 llama.cpp b12554", min_length=1, max_length=200)
+    # per owner: POST /predictions/{id}/rgroups (a paper may have several scaffolds)
+    rate_limit_rgroup_per_min: int = 20
 
     @model_validator(mode="after")
     def _sessions_default(self):

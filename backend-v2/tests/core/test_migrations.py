@@ -5,7 +5,7 @@ from tests.conftest import _assert_test_database, alembic_config
 
 EXPECTED = {
     "owners", "papers", "steps", "segments", "predictions", "curation",
-    "image_jobs", "seg_cache", "ocsr_cache", "annotations",
+    "image_jobs", "seg_cache", "ocsr_cache", "annotations", "rgroup_extractions",
 }  # fmt: skip
 
 # 0002: column + index
@@ -319,4 +319,62 @@ def test_migration_0011_rgroups_up_down_and_backfill(migrated_db):
     finally:
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))  # papers, segments and the rest cascade
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0012_rgroup_extractions_up_down(migrated_db):
+    """0012 adds the table (one row per prediction, cascading) and the `rgroups` step kind; the
+    downgrade drops both, rgroups steps first."""
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("rgroup_extractions")}
+        assert set(cols) == {
+            "prediction_id", "step_id", "labels", "status", "error", "rows", "truncated",
+            "model", "model_version", "created_at", "updated_at", "finished_at",
+        }  # fmt: skip
+        nullable = {name for name, c in cols.items() if c["nullable"]}
+        assert nullable == {"step_id", "error", "rows", "model", "model_version", "finished_at"}
+        assert inspect(engine).get_pk_constraint("rgroup_extractions")["constrained_columns"] == [
+            "prediction_id"
+        ]
+        fks = {fk["referred_table"]: fk for fk in inspect(engine).get_foreign_keys(
+            "rgroup_extractions")}  # fmt: skip
+        assert fks["predictions"]["options"]["ondelete"] == "CASCADE"
+        assert fks["steps"]["options"]["ondelete"] == "SET NULL"
+        assert _indexes(engine)[("rgroup_extractions", "ix_rgroup_extractions_step_id")] == [
+            "step_id"
+        ]
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            s.execute(
+                text("INSERT INTO steps (paper_id, kind, queue, seq, status, id) VALUES "
+                     "(:p, 'rgroups', 'q.llm', 100003, 'pending', gen_random_uuid())"),
+                {"p": paper.id},
+            )  # fmt: skip
+            s.commit()
+            with pytest.raises(IntegrityError):
+                s.execute(
+                    text("INSERT INTO steps (paper_id, kind, queue, seq, status, id) VALUES "
+                         "(:p, 'nope', 'q.llm', 1, 'pending', gen_random_uuid())"),
+                    {"p": paper.id},
+                )  # fmt: skip
+            s.rollback()
+        command.downgrade(cfg, "0011")
+        assert "rgroup_extractions" not in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            kinds = conn.execute(text("SELECT count(*) FROM steps WHERE kind = 'rgroups'"))
+            assert kinds.scalar_one() == 0
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
         command.upgrade(cfg, "head")
