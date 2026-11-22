@@ -1,7 +1,7 @@
 """R-group definitions of a scaffold, read by the local vision model (Markush Phase 2).
 
 A structure with R-group placeholders (marcus.core.rgroups) stands for several compounds. On
-request, worker-llm asks the R-group model (nuextract3-rgroup-v1, vision variant, behind its own
+request, worker-rgroup asks the R-group model (nuextract3-rgroup-v1, vision variant, behind its own
 llama-server `llama-rgroup`) which compounds the scaffold stands for and what each R-group is:
 
     {"rows": [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}, ...]}
@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json
 import unicodedata
+
+from marcus.core.rgroup_labels import UNLABELLED, shown_labels, text_labels
 
 MAX_VALUE = 80  # markush_eval.MAX_VALUE: a substituent's maxLength in the schema
 MAX_COMPOUND = 40  # the compound label's maxLength in the schema
@@ -70,6 +72,40 @@ def schema_for(labels: list[str]) -> dict:
         "required": ["rows"],
         "additionalProperties": False,
     }  # fmt: skip
+
+
+# --- the labels to ask for --------------------------------------------------------------------
+
+def named_labels(labels: list[str], context: str) -> list[str]:
+    """The labels to ask the model for: those the page text (the model's `context`) names, in
+    their order; all of them when it names none (no text, or the definitions are only drawn).
+
+    The same rule as the labels shown for a structure (marcus.core.rgroup_labels.shown_labels).
+    OCSR sometimes adds a label the drawing does not have (DECIMER read stylissa-bromopyrroles
+    page 6 as R1, R2 and Z); asked for it, the model fills that column too. Measured on the
+    Phase 2 test set, DECIMER run as MARCUS runs it on all 42 gold scaffold pages (MARCUS-training
+    markush-eval/followups/): 33 crops match a gold scaffold, 7 of them with a label the gold
+    labels do not have; this drops 7 of those 8 labels and none of the 60 real ones. On the gold
+    labels themselves it keeps 164 of 164 (test set) and 1,770 of 1,778 (training set). A rule
+    on the answer instead (a column whose value differs between rows) would lose 19 of the 164
+    gold labels (stylissa's R2 is Br in both rows).
+    """
+    return shown_labels(labels, text_labels(context))
+
+
+
+
+def labels_to_ask(labels: list[str], context: str) -> list[str]:
+    """The labels of a request: `*` left out, then those the page text names (named_labels).
+
+    The model was trained and tested on the labels printed in the paper (the markush-train and
+    markush-testset gold labels: R, R1, R′, X, n, Ar...), never on `*`, and the trained requests
+    named only those. An unlabelled point is no column the paper fills; and the text's
+    asterisks (author marks, footnotes) would otherwise count as naming it. [] for a structure
+    with no label but `*`: there is no trained request for it (request_rgroups refuses it).
+    """
+    labelled = [lab for lab in labels if lab != UNLABELLED]
+    return named_labels(labelled, context) if labelled else []
 
 
 def user_prompt(labels: list[str], context: str) -> str:

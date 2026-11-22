@@ -12,7 +12,7 @@ row. A re-run replaces the model's values and keeps the curator's. An annotate s
 decides whether the paper is done or failed.
 
 R-group rows (Markush Phase 2): on demand only, per prediction with R-group labels.
-request_rgroups adds one `rgroups` step (q.llm, the step's segment set, no page) and writes the
+request_rgroups adds one `rgroups` step (q.rgroup, the step's segment set, no page) and writes the
 prediction's `rgroup_extractions` row (status `queued`); the step's end sets it `done` with the
 rows or `failed` with the error class. An rgroups step is outside the paper's progress: it never
 reopens a paper, never keeps one busy (_finish_check, the read counts in marcus.api.read) and
@@ -43,7 +43,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import annotation, rgroup_extraction, storage
+from marcus.core import annotation, rgroup_extraction, rgroup_labels, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -534,6 +534,13 @@ def _check_nothing(result: dict) -> None:
     pass
 
 
+def _check_docling_result(result: dict) -> None:
+    if "rgroup_text_labels" in result:
+        error = rgroup_labels.index_error(result["rgroup_text_labels"], get_settings().max_pages)
+        if error:
+            raise BadResult(f"docling: {error}")
+
+
 _CHECK = {
     StepKind.CHECK_PDF.value: _check_pdf_result,
     StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
@@ -541,6 +548,7 @@ _CHECK = {
     StepKind.DOI.value: _check_doi_result,
     StepKind.ANNOTATE.value: _check_annotate_result,
     StepKind.RGROUPS.value: _check_rgroups_result,
+    StepKind.DOCLING.value: _check_docling_result,
 }
 
 
@@ -791,18 +799,30 @@ def _after_annotate(session: Session, paper: Paper, step: Step, result: dict) ->
     return []
 
 
+def _ordered_subset(part: list[str], whole: list[str]) -> bool:
+    """Every label of `part` is in `whole`, in the same order."""
+    rest = iter(whole)
+    return all(label in rest for label in part)
+
+
 def _after_rgroups(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    """Store the rows on the step's request row (a re-run replaces them). The row is checked
-    for the labels it asked with: a result for other labels is refused."""
+    """Store the rows and their labels on the step's request row (a re-run replaces them). The
+    worker asks for the prediction's labels that the page text names: a result for labels the
+    prediction does not have, or in another order, is refused."""
     step.model_version = result["model_version"]
-    row = session.execute(
-        select(RgroupExtraction).where(RgroupExtraction.step_id == step.id).with_for_update()
-    ).scalar_one_or_none()
-    if row is None:
+    found = session.execute(
+        select(RgroupExtraction, Prediction.rgroups)
+        .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
+        .where(RgroupExtraction.step_id == step.id)
+        .with_for_update(of=RgroupExtraction)
+    ).one_or_none()
+    if found is None:
         return []  # the prediction is gone: nothing to store
-    if list(row.labels) != result["labels"]:
+    row, asked = found
+    if not _ordered_subset(result["labels"], list(asked or [])):
         raise BadResult("rgroups: the result is for other labels than were asked for")
     now = _now()
+    row.labels = result["labels"]
     row.status = "done"
     row.error = None
     row.rows = result["rows"]
@@ -826,6 +846,16 @@ def _rgroups_failed(session: Session, step: Step) -> None:
     )
 
 
+def _after_docling(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    """The text file already sits in the paper dir; the page label index goes on the paper
+    (only pages the paper has: checked against its page count here)."""
+    index = result.get("rgroup_text_labels")
+    if index is not None and rgroup_labels.index_error(index, paper.pages or 0):
+        raise BadResult("docling: the page label index names pages the paper does not have")
+    paper.rgroup_text_labels = index
+    return []
+
+
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     # docling: the text file already sits in the paper dir; nothing to store.
     return []
@@ -836,7 +866,7 @@ _AFTER = {
     StepKind.RENDER_PAGE.value: _after_render_page,
     StepKind.SEGMENT_PAGE.value: _after_segment_page,
     StepKind.OCSR.value: _after_ocsr,
-    StepKind.DOCLING.value: _no_successors,
+    StepKind.DOCLING.value: _after_docling,
     StepKind.DOI.value: _after_doi,
     StepKind.ANNOTATE.value: _after_annotate,
     StepKind.RGROUPS.value: _after_rgroups,
@@ -1150,14 +1180,14 @@ def request_annotation(
 
 def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = False) -> Step | None:
     """Ask for a scaffold's R-group rows: a new pending `rgroups` step for the prediction and its
-    `rgroup_extractions` row set `queued` (labels: the prediction's), or None when it already
-    has rows and `rerun` is false. An rgroups step of the prediction still pending, queued or
-    running is returned instead of a new one (repeat clicks). The paper's status does not change.
-    Caller commits.
+    `rgroup_extractions` row set `queued` (a new row's labels: the prediction's), or None when it
+    already has rows and `rerun` is false. An rgroups step of the prediction still pending,
+    queued or running is returned instead of a new one (repeat clicks). The paper's status does
+    not change. Caller commits.
 
     Locks the paper, then the row. Raises ValueError for a missing prediction, one not from a
     paper, or a deleted paper, and RgroupsNotAllowed("no_rgroups") for a prediction without
-    R-group labels.
+    R-group labels or with only unlabelled points (`*`: the model has no request for them).
     """
     found = session.execute(
         select(Prediction.rgroups, Segment.id, Segment.paper_id)
@@ -1170,8 +1200,8 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper not found")
     labels = list(found.rgroups or [])
-    if not labels:
-        raise RgroupsNotAllowed("no_rgroups")
+    if not [lab for lab in labels if lab != rgroup_labels.UNLABELLED]:
+        raise RgroupsNotAllowed("no_rgroups")  # none, or only unlabelled points (`*`)
     row = session.execute(
         select(RgroupExtraction)
         .where(RgroupExtraction.prediction_id == prediction_id)
@@ -1191,8 +1221,9 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if row is None:
         row = RgroupExtraction(prediction_id=prediction_id, labels=labels, status="queued")
         session.add(row)
+    # An existing row keeps its labels: they are those of the rows it shows (the worker asks
+    # for the prediction's labels again, and the result sets them).
     row.step_id = step.id
-    row.labels = labels
     row.status = "queued"
     row.error = None
     row.updated_at = _now()

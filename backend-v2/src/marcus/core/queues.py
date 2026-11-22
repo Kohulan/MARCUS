@@ -17,8 +17,12 @@ def queue_for(kind: StepKind, engine: Engine | None) -> str:
         return "q.cpu"
     if kind == StepKind.SEGMENT_PAGE:
         return "q.segment"
-    if kind in (StepKind.ANNOTATE, StepKind.RGROUPS):
+    if kind == StepKind.ANNOTATE:
         return "q.llm"
+    if kind == StepKind.RGROUPS:
+        # its own queue: the R-group model has its own llama-server (llama-rgroup), so an
+        # annotation run never holds back an R-group reading, nor the other way round
+        return "q.rgroup"
     if kind == StepKind.OCSR:
         if engine is None:
             raise ValueError("ocsr steps require an engine")
@@ -34,6 +38,7 @@ _DEFAULT_SLOTS = {
     "q.molscribe": 1,
     "q.fake": 1,
     "q.llm": 1,
+    "q.rgroup": 1,
 }
 
 
@@ -74,6 +79,7 @@ _DEFAULT_QUEUE_WAIT_S = {
     "q.molscribe": _MODEL_QUEUE_WAIT_S,
     "q.fake": 120,
     "q.llm": _MODEL_QUEUE_WAIT_S,
+    "q.rgroup": _MODEL_QUEUE_WAIT_S,
 }
 
 

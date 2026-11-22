@@ -37,7 +37,8 @@ def create_app(json_logs: bool = False) -> FastAPI:
     app.include_router(api)
     # image uploads: bounded CPU-bound decodes per process (routes/images.py decode_image)
     app.state.decode_slots = asyncio.Semaphore(settings.image_decode_concurrency)
-    # live Celery consumers, cached like /ready (the annotation and R-group routes check q.llm)
+    # live Celery consumers, cached like /ready (the annotation route checks q.llm, the R-group
+    # routes q.rgroup)
     app.state.live_queues = health.live_queues
     security.install(app, settings)
     return app

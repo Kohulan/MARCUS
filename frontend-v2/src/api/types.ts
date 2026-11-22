@@ -74,9 +74,12 @@ export interface CurationOut {
   note: string | null;
   /**
    * R-group labels of the curated structure (R1, X, Ar…), [] for none. Optional: absent in an
-   * optimistic update until the server answers, and from an older server.
+   * optimistic update until the server answers, and from an older server. In a paper: those
+   * the page's text names (all of them when it names none).
    */
   rgroups?: string[];
+  /** The structure has R-group placeholder atoms, whatever labels are shown (COCONUT holds it). */
+  placeholder?: boolean;
 }
 
 /** PUT /segments/{id}/curation replaces the whole record: all four keys, always. */
@@ -97,8 +100,13 @@ export interface PredictionOut {
   ms: number;
   cached: boolean;
   created_at: string;
-  /** R-group labels (R1, X, Ar…): a scaffold that stands for several compounds. [] for none. */
+  /**
+   * R-group labels (R1, X, Ar…): a scaffold that stands for several compounds. [] for none. In a
+   * paper: those the page's text names (all of them when it names none).
+   */
   rgroups?: string[];
+  /** The structure has R-group placeholder atoms, whatever labels are shown (COCONUT holds it). */
+  placeholder?: boolean;
 }
 
 export interface SegmentOut {

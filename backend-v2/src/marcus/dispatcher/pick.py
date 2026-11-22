@@ -30,7 +30,6 @@ from marcus.core.queues import (
     SLOTS,
     TIME_LIMITS,
     docling_slots,
-    queue_for,
 )
 from marcus.core.settings import get_settings
 
@@ -260,37 +259,40 @@ def fail_if_stuck(session: Session, step_id: uuid.UUID, served: bool = True) -> 
     return True
 
 
-ANNOTATE_QUEUE = queue_for(StepKind.ANNOTATE, None)
-assert queue_for(StepKind.RGROUPS, None) == ANNOTATE_QUEUE  # both models are served from q.llm
+# Step kinds that depend on an optional model service, each on its own queue: annotation (q.llm,
+# llama-server) and R-group rows (q.rgroup, llama-rgroup). A waiting step fails when its own
+# queue has no live consumer, whatever the other's. Value: the step's error then.
 NO_ANNOTATOR = "no annotation worker"
-# Step kinds that depend on an optional model service (q.llm): annotation and R-group rows.
-LLM_KINDS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
+NO_RGROUP_READER = "no R-group worker"
+_NO_WORKER = {StepKind.ANNOTATE.value: NO_ANNOTATOR, StepKind.RGROUPS.value: NO_RGROUP_READER}
 
 
-def _unserved_annotations(session: Session) -> list[uuid.UUID]:
-    """Annotate and rgroups steps still waiting (pending/queued) for longer than
-    annotate_max_wait_s."""
+def _unserved_annotations(session: Session) -> list[tuple[uuid.UUID, str, str]]:
+    """(id, kind, queue) of the annotate and rgroups steps still waiting (pending/queued) for
+    longer than annotate_max_wait_s."""
     wait = get_settings().annotate_max_wait_s
     old = func.now() - func.make_interval(0, 0, 0, 0, 0, 0, wait)
-    return list(
-        session.execute(
-            select(Step.id).where(
-                Step.kind.in_(LLM_KINDS),
+    return [
+        (row.id, row.kind, row.queue)
+        for row in session.execute(
+            select(Step.id, Step.kind, Step.queue).where(
+                Step.kind.in_(_NO_WORKER),
                 Step.status.in_(WAITING_STEPS),
                 Step.created_at < old,
             )
-        ).scalars()
-    )
+        )
+    ]
 
 
-def fail_unserved_annotation(session: Session, step_id: uuid.UUID) -> bool:
+def fail_unserved_annotation(session: Session, step_id: uuid.UUID,
+                             reason: str = NO_ANNOTATOR) -> bool:  # fmt: skip
     """In the current transaction, lock the step's parent then the step and, if it is still
     waiting, fail it for good as engine_error: the model service is not running, so the paper
     goes back to done (an rgroups step: its request row says failed). Does not commit. True if
     failed."""
     if _lock_status(session, step_id, Step.status.in_(WAITING_STEPS)) is None:
         return False
-    fail_step(session, step_id, ErrorClass.ENGINE_ERROR, NO_ANNOTATOR, retryable=False)
+    fail_step(session, step_id, ErrorClass.ENGINE_ERROR, reason, retryable=False)
     return True
 
 
@@ -336,19 +338,21 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
             log.exception("watchdog: could not fail step %s", step_id)
             session.rollback()
     # Annotation and R-group rows depend on optional services (llama-server, llama-rgroup): with
-    # no live q.llm consumer (known, not just unknown) an old waiting annotate or rgroups step
-    # fails, so its paper is done again and its request row says failed.
-    if live is not None and ANNOTATE_QUEUE not in live:
-        for step_id in waiting_annotations:
+    # no live consumer on the step's own queue (known, not just unknown) an old waiting annotate
+    # or rgroups step fails, so its paper is done again and its request row says failed.
+    if live is not None:
+        for step_id, kind, queue in waiting_annotations:
+            if queue in live:
+                continue
             try:
-                if fail_unserved_annotation(session, step_id):
+                if fail_unserved_annotation(session, step_id, _NO_WORKER[kind]):
                     session.commit()
                     done += 1
-                    log.warning("watchdog: q.llm step %s failed: no live q.llm consumer",
-                                step_id)  # fmt: skip
+                    log.warning("watchdog: %s step %s failed: no live %s consumer", kind,
+                                step_id, queue)  # fmt: skip
                 else:
                     session.rollback()
             except Exception:
-                log.exception("watchdog: could not fail q.llm step %s", step_id)
+                log.exception("watchdog: could not fail %s step %s", kind, step_id)
                 session.rollback()
     return done

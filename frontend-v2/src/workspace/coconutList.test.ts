@@ -95,6 +95,30 @@ describe("coconutStructures", () => {
       { segmentId: "s5", n: 5, rgroups: ["*"] },
     ]);
   });
+
+  it("holds any structure with placeholder atoms, whatever labels its page shows", () => {
+    // DECIMER read R1, R2 and Z; the page's text names R1 and R2, so Z is not shown. The
+    // SMILES has no "*" (DECIMER's tokens), so only the server's word can hold it.
+    const list = coconutStructures(
+      [
+        segment("s1", { status: "accepted" }, [
+          prediction({ smiles: "[R1]c1ccc([Z])cc1[R2]", rgroups: ["R1", "R2"], placeholder: true }),
+        ]),
+        // even with no label shown at all
+        segment("s2", { status: "accepted" }, [
+          prediction({ smiles: "[Z]c1ccccc1", rgroups: [], placeholder: true }),
+        ]),
+        segment("s3", { status: "accepted", smiles: "CC[R1]", rgroups: [], placeholder: true }),
+      ],
+      "decimer",
+    );
+    expect(list.send).toEqual([]);
+    expect(list.held).toEqual([
+      { segmentId: "s1", n: 1, rgroups: ["R1", "R2"] },
+      { segmentId: "s2", n: 2, rgroups: ["*"] },
+      { segmentId: "s3", n: 3, rgroups: ["*"] },
+    ]);
+  });
 });
 
 describe("submissionTitle", () => {

@@ -16,7 +16,7 @@ from marcus.api.deps import (
     require_engine_enabled,
     work_ip,
 )
-from marcus.api.read import IMAGE_HEADERS, waiting_ocsr_step
+from marcus.api.read import IMAGE_HEADERS, named_on, structure_out, waiting_ocsr_step
 from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
 from marcus.core import storage
 from marcus.core.db import get_db
@@ -110,7 +110,8 @@ async def put_curation(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
-    segment, _ = await get_owned_segment(db, owner, segment_id)
+    segment, paper = await get_owned_segment(db, owner, segment_id)
+    named = named_on(paper.rgroup_text_labels, segment.page)
     rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:
         error, rgroups = await CHEM.run(check_curation, body.smiles, body.molfile)
@@ -131,4 +132,4 @@ async def put_curation(
     curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)
     await db.commit()
-    return CurationOut.model_validate(curation)
+    return structure_out(CurationOut, curation, named)

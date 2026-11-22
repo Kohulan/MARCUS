@@ -5,8 +5,9 @@
 # Fake engines: segmentation 2 s per page (2 segments per page), OCSR 1 s per segment, paper
 # annotation 2 s per paper (the fake annotator: values picked from the text by fixed rules), R-group
 # rows 2 s per scaffold (the fake reader: "3a: R1 = OMe, R2 = H" definitions from the page text).
-# Both fake workers run the api image (it already has everything they import) with exactly
-# their own handler module (--include). Concurrency 1 each = the q.segment / q.fake slots.
+# The fake workers run the api image (it already has everything they import) with exactly
+# their own handler module (--include). Concurrency 1 each = the q.segment / q.fake / q.llm /
+# q.rgroup slots.
 #
 # Test-only relaxations on the API: all e2e traffic comes from one client IP (the Docker
 # gateway), so the per-IP limits (new owners per hour, active papers, requests per minute)
@@ -38,7 +39,7 @@ services:
       MARCUS_ENABLE_FAKE_ENGINES: "1"
       # The fake segmenter's version (FakeSegmenter.version): the segmentation cache key.
       MARCUS_SEG_VERSION: fake-1
-      MARCUS_EXPECTED_QUEUES: q.cpu,q.tools,q.segment,q.fake,q.llm
+      MARCUS_EXPECTED_QUEUES: q.cpu,q.tools,q.segment,q.fake,q.llm,q.rgroup
       MARCUS_ANNOTATE_ENABLED: "1"
       MARCUS_RGROUP_ENABLED: "1"
       MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
@@ -136,8 +137,7 @@ services:
       api-migrate:
         condition: service_completed_successfully
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
-              "-c", "1", "--pool", "prefork",
-              "--include", "marcus.workers.annotate,marcus.workers.rgroups",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
               "-n", "fake-annotate@%h", "--loglevel", "INFO"]
     environment:
       MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
@@ -146,6 +146,37 @@ services:
       MARCUS_ENABLE_FAKE_ENGINES: "1"
       MARCUS_ANNOTATOR: fake
       MARCUS_FAKE_ANNOTATE_DELAY_S: "2"
+
+  # The fake R-group reader on its own queue, as worker-rgroup in the GPU override.
+  worker-fake-rgroup:
+    image: marcus-v2-api:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    volumes:
+      - data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
+              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
+              "-n", "fake-rgroup@%h", "--loglevel", "INFO"]
+    environment:
+      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MARCUS_DATA_ROOT: /data
+      MARCUS_ENABLE_FAKE_ENGINES: "1"
       MARCUS_RGROUP_READER: fake
       MARCUS_FAKE_RGROUP_DELAY_S: "2"
 

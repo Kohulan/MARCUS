@@ -1,7 +1,8 @@
-"""The `rgroups` step handler (worker-llm, worker-fake-annotate): one scaffold's R-group rows.
+"""The `rgroups` step handler (worker-rgroup, worker-fake-rgroup): one scaffold's R-group rows.
 
-The step points at its request row (rgroup_extractions.step_id): the labels asked for (the
-prediction's R-group labels when it was requested) and, through the segment, the page. The
+The step points at its request row (rgroup_extractions.step_id), and through it at the
+prediction (its R-group labels) and the segment (the page). Of the labels, only the drawn ones
+(not `*`) that the page text names are asked for (marcus.core.rgroup_extraction.labels_to_ask). The
 handler builds the model's two inputs (marcus.workers.rgroups.inputs: the text of pages P-1..P+1
 of the paper's Docling document, and the page image at the size the model was trained on), asks
 the reader, and parses the answer (marcus.core.rgroup_extraction.parse_rows). The planner checks
@@ -20,13 +21,13 @@ import uuid
 
 from sqlalchemy import select
 
-from marcus.core import annotation as ann
 from marcus.core.enums import StepKind
-from marcus.core.models import RgroupExtraction, Segment
+from marcus.core.models import Prediction, RgroupExtraction, Segment
+from marcus.core.page_text import UNUSABLE_TEXT, read_paper_document
 from marcus.core.pipeline import BadResult
-from marcus.core.rgroup_extraction import BadRows, parse_rows, salvage_rows
+from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
 from marcus.core.settings import fake_enabled, get_settings
-from marcus.core.storage import page_image_path, text_path
+from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
 from marcus.workers.rgroups.inputs import page_context, page_image_uri
 from marcus.workers.rgroups.llama import LlamaRgroupReader
@@ -55,14 +56,10 @@ def _context(paper_id: uuid.UUID, page: int) -> str:
     """The page text for a scaffold on `page` (0-based, as the API counts; Docling counts from
     1). "" when the paper's text is missing, too large or not a Docling document."""
     try:
-        doc = ann.read_document(text_path(paper_id))
-        if not isinstance(doc, dict):
-            raise ValueError("not a Docling document")
-        return page_context(doc, page + 1)
+        return page_context(read_paper_document(paper_id), page + 1)
     except FileNotFoundError:
         log.info("paper %s: no text; R-groups read from the page image only", paper_id)
-    except (ann.TextTooLarge, OSError, ValueError, KeyError, TypeError, AttributeError,
-            RecursionError) as exc:  # fmt: skip
+    except UNUSABLE_TEXT as exc:
         log.warning("paper %s: text not usable (%s); R-groups read from the page image only",
                     paper_id, type(exc).__name__)  # fmt: skip
     return ""
@@ -78,8 +75,13 @@ def _image(paper_id: uuid.UUID, page: int) -> str:
 
 
 def read_scaffold(reader, paper_id: uuid.UUID, page: int, labels: list[str]) -> dict:
-    """Ask `reader` for the rows of a scaffold with `labels` on `page` (0-based)."""
+    """Ask `reader` for the rows of a scaffold with `labels` on `page` (0-based). Only the drawn
+    labels the page text names are asked for (rgroup_extraction.labels_to_ask: no `*`, no OCSR
+    extra label); the result's `labels` are those."""
     context = _context(paper_id, page)
+    labels = labels_to_ask(labels, context)
+    if not labels:
+        raise BadInput("the structure has no labelled R-groups")
     image = _image(paper_id, page)
     start = time.monotonic()
     raw, cut = reader.read(labels, context, image)
@@ -104,7 +106,9 @@ def extract_rgroups(step, session) -> dict:
     if step.paper_id is None or step.segment_id is None:
         raise BadInput("rgroups step has no structure")
     found = session.execute(
-        select(RgroupExtraction.labels, Segment.page)
+        select(Prediction.rgroups, Segment.page)
+        .select_from(RgroupExtraction)
+        .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
         .join(Segment, Segment.id == step.segment_id)
         .where(RgroupExtraction.step_id == step.id)
     ).one_or_none()
@@ -112,7 +116,7 @@ def extract_rgroups(step, session) -> dict:
     if found is None:
         raise BadInput("the structure is gone")
     reader = get_reader()
-    return read_scaffold(reader, step.paper_id, found.page, list(found.labels))
+    return read_scaffold(reader, step.paper_id, found.page, list(found.rgroups))
 
 
 register(StepKind.RGROUPS, extract_rgroups)

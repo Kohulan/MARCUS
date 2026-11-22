@@ -2,7 +2,7 @@
 
 import uuid
 from collections import defaultdict
-from typing import NamedTuple
+from typing import NamedTuple, TypeVar
 
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
@@ -18,6 +18,7 @@ from marcus.core.enums import (
 )
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
+from marcus.core.rgroup_labels import shown_labels
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
@@ -269,8 +270,28 @@ async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
     return segments, curations, predictions
 
 
-async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut]:
-    segments, curations, predictions = await load_segments(db, paper_id)
+_Structure = TypeVar("_Structure", CurationOut, PredictionOut)
+
+
+def named_on(index: dict | None, page: int) -> list[str] | None:
+    """The R-group labels a paper's page names (papers.rgroup_text_labels), None without an
+    index."""
+    return None if index is None else index.get(str(page), [])
+
+
+def structure_out(model: type[_Structure], row: object, named: list[str] | None) -> _Structure:
+    """A prediction or curation for the API, with the R-group labels shown for it: those its
+    page names (marcus.core.rgroup_labels.shown_labels), `placeholder` from all of them. Every
+    endpoint that returns a paper's structure goes through here."""
+    out = model.model_validate(row)
+    out.rgroups = shown_labels(out.rgroups, named)
+    return out
+
+
+async def segments_out(db: AsyncSession, paper: Paper) -> list[SegmentOut]:
+    """The paper's segments; each structure shows the R-group labels its page's text names."""
+    segments, curations, predictions = await load_segments(db, paper.id)
+    index = paper.rgroup_text_labels
     return [
         SegmentOut(
             id=seg.id,
@@ -278,9 +299,14 @@ async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut
             idx=seg.idx,
             bbox=list(seg.bbox),
             curation=(
-                CurationOut.model_validate(curations[seg.id]) if seg.id in curations else None
+                structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
+                if seg.id in curations
+                else None
             ),
-            predictions=[PredictionOut.model_validate(p) for p in predictions[seg.id]],
+            predictions=[
+                structure_out(PredictionOut, p, named_on(index, seg.page))
+                for p in predictions[seg.id]
+            ],
         )
         for seg in segments
     ]

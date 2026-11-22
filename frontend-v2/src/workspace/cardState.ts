@@ -68,6 +68,8 @@ export type ShownStructure = {
    * the prediction's. With labels it is a scaffold, not one compound.
    */
   rgroups: string[];
+  /** It has R-group placeholder atoms, whatever labels are shown (never sent to COCONUT). */
+  placeholder: boolean;
 };
 
 export function shownStructure(segment: SegmentOut, paperEngine: string): ShownStructure {
@@ -80,6 +82,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
       smiles: c.smiles || null,
       molfile: c.molfile ?? null,
       rgroups: rgroupsOf(c),
+      placeholder: c.placeholder === true || rgroupsOf(c).length > 0,
     };
   }
   return {
@@ -88,6 +91,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
     smiles: prediction?.smiles || null,
     molfile: prediction?.molfile ?? null,
     rgroups: rgroupsOf(prediction),
+    placeholder: prediction?.placeholder === true || rgroupsOf(prediction).length > 0,
   };
 }
 

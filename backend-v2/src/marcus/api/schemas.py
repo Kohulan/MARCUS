@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from marcus.core import annotation as ann
 from marcus.core.enums import Engine
@@ -21,15 +21,24 @@ class _Orm(BaseModel):
 
 
 class _RGroups(BaseModel):
-    """`rgroups`: the R-group labels of the structure (marcus.core.rgroups), [] for none. A
-    structure with labels stands for several compounds: it is not sent to COCONUT."""
+    """`rgroups`: the R-group labels of the structure (marcus.core.rgroups), [] for none; in a
+    paper, those its page's text names (marcus.core.rgroup_labels.shown_labels; all of them
+    when it names none). `placeholder`: the structure has R-group placeholder atoms, whatever
+    labels are shown. A structure with placeholders stands for several compounds: it is not
+    sent to COCONUT."""
 
     rgroups: list[str] = []
+    placeholder: bool = False
 
     @field_validator("rgroups", mode="before")
     @classmethod
     def _none_is_empty(cls, value: list[str] | None) -> list[str]:
         return value or []
+
+    @model_validator(mode="after")
+    def _placeholder(self):
+        self.placeholder = self.placeholder or bool(self.rgroups)
+        return self
 
 
 class PaperSummary(_Orm):

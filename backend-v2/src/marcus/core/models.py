@@ -101,6 +101,10 @@ class Paper(Base):
     started_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
     # When started_ip was last set (creation or reopen): the retention backstop ages it by this.
     started_ip_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+    # Per page (0-based, key a string), the R-group labels its text names (docling result,
+    # marcus.core.rgroup_labels.page_label_index): a structure shows only those of its labels.
+    # NULL: no index (text not read, unreadable, or a paper from before 0015): all shown.
+    rgroup_text_labels: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class ImageJob(Base):
