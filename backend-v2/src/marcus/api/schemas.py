@@ -138,6 +138,9 @@ class StepList(BaseModel):
 class PaperDetail(PaperSummary):
     # The page (0-based) marked as the main figure, the paper's compound list; None: none.
     main_figure_page: int | None
+    # False when the repeats of the main figure could not be linked (the chem process busy):
+    # no segment has repeat_of, so the client must not send structures to COCONUT yet.
+    links_ready: bool = True
     counts: Counts
     segments: list[SegmentOut]
 

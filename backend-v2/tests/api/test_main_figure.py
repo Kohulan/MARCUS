@@ -108,8 +108,9 @@ async def test_repeats_link_to_the_main_figure_by_inchikey(app, async_db_session
     db = async_db_session
     alice, token = await new_owner(db)
     paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
-    # no main figure: no links
-    assert set(_repeats(await _paper(app, token, paper_id)).values()) == {None}
+    # no main figure: no links, and nothing to wait for
+    paper = await _paper(app, token, paper_id)
+    assert set(_repeats(paper).values()) == {None} and paper["links_ready"] is True
 
     await _mark(app, token, paper_id, 0)
     links = _repeats(await _paper(app, token, paper_id))
@@ -189,8 +190,13 @@ async def test_busy_chem_process_a_read_shows_no_links_an_export_waits(
 
     monkeypatch.setattr(read, "_KEYS", OrderedDict())  # nothing known yet
     monkeypatch.setattr(read.CHEM, "run", busy)
-    assert set(_repeats(await _paper(app, token, paper_id)).values()) == {None}
+    paper = await _paper(app, token, paper_id)
+    assert set(_repeats(paper).values()) == {None}
+    assert paper["links_ready"] is False  # the client must not send to COCONUT on this read
     assert (await _export(app, token, paper_id, "json")).status_code == 503
+
+    monkeypatch.undo()
+    assert (await _paper(app, token, paper_id))["links_ready"] is True
 
 
 async def test_inchikeys_are_cached_per_structure(app, async_db_session, monkeypatch):
@@ -238,11 +244,11 @@ async def test_the_paper_list_leaves_repeats_out_of_its_counts(app, async_db_ses
     # the paper's own read counts the same
     assert _counts(await _paper(app, token, paper_id)) == (4, 0, 0, 4, 0)
 
-    # an accepted repeat leaves "accepted", not "to review"
+    # an accepted repeat makes its group accepted (the main one was to review)
     async with make_client(app, token) as client:
         body = {"items": [{"segment_id": str(a), "status": "accepted"}]}
         assert (await client.put(f"/api/v2/papers/{paper_id}/curation", json=body)).is_success
-    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 0, 4, 0)
+    assert _counts(await _listed(app, token, paper_id)) == (4, 1, 0, 3, 0)
 
     await _mark(app, token, paper_id, None)
     assert _counts(await _listed(app, token, paper_id)) == (5, 1, 0, 4, 0)
@@ -287,3 +293,144 @@ async def test_list_counts_with_a_busy_chem_process_count_every_structure(
     monkeypatch.setattr(read, "_KEYS", OrderedDict())
     monkeypatch.setattr(read.CHEM, "run", busy)
     assert _counts(await _listed(app, token, paper_id)) == (5, 0, 0, 5, 0)
+
+
+# --- one status per linked group (main structure + repeats) ---------------------------------
+
+
+async def _decide(app, token, paper_id, **statuses):
+    items = [{"segment_id": str(sid), "status": st} for sid, st in statuses.items()]
+    async with make_client(app, token) as client:
+        r = await client.put(f"/api/v2/papers/{paper_id}/curation", json={"items": items})
+    assert r.is_success
+
+
+async def _export_json(app, token, paper_id, status):
+    async with make_client(app, token) as client:
+        r = await client.get(
+            f"/api/v2/papers/{paper_id}/export", params={"format": "json", "status": status}
+        )
+    return {s["segment_id"]: s for s in json.loads(r.content)["segments"]}
+
+
+async def test_an_accepted_repeat_of_an_unchecked_main_is_exported_and_counted(
+    app, async_db_session
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    await _decide(app, token, paper_id, **{str(a): "accepted"})  # OCC on page 1; s0 unchecked
+
+    # the group is accepted: its record is the accepted repeat, at the main one's place
+    accepted = await _export_json(app, token, paper_id, "accepted")
+    assert list(accepted) == [str(a)]
+    assert accepted[str(a)]["status"] == "accepted" and accepted[str(a)]["smiles"] == "OCC"
+    assert accepted[str(a)]["also_on_pages"] == [0]
+    everything = await _export_json(app, token, paper_id, "all")
+    assert list(everything) == [str(a), str(s1), str(b), str(c)]
+
+    async with make_client(app, token) as client:
+        sdf = (await client.get(f"/api/v2/papers/{paper_id}/export?format=sdf")).content
+    names = [m.GetProp("segment_id") for m in Chem.ForwardSDMolSupplier(io.BytesIO(sdf)) if m]
+    assert names == [str(a)]  # SDF exports accepted structures by default
+
+    assert _counts(await _listed(app, token, paper_id)) == (4, 1, 0, 3, 0)
+    assert _counts(await _paper(app, token, paper_id)) == (4, 1, 0, 3, 0)
+
+
+async def test_an_accepted_repeat_of_a_rejected_main_is_kept(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    await _decide(app, token, paper_id, **{str(s0): "rejected", str(a): "accepted"})
+    everything = await _export_json(app, token, paper_id, "all")
+    assert everything[str(a)]["status"] == "accepted" and str(s0) not in everything
+    async with make_client(app, token) as client:
+        rows = (await client.get(f"/api/v2/papers/{paper_id}/export?format=csv")).text
+    assert str(a) in rows
+    assert _counts(await _listed(app, token, paper_id)) == (4, 1, 0, 3, 0)
+
+
+async def test_a_group_is_rejected_only_when_every_member_is(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, s1, a, b, c) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+
+    # the main one rejected, its repeat not decided: to review
+    await _decide(app, token, paper_id, **{str(s0): "rejected"})
+    assert (await _export_json(app, token, paper_id, "all"))[str(s0)]["status"] == "unchecked"
+    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 0, 4, 0)
+
+    # every member rejected: rejected, once
+    await _decide(app, token, paper_id, **{str(a): "rejected"})
+    everything = await _export_json(app, token, paper_id, "all")
+    assert everything[str(s0)]["status"] == "rejected" and str(a) not in everything
+    assert await _export_json(app, token, paper_id, "accepted") == {}
+    assert _counts(await _listed(app, token, paper_id)) == (4, 0, 1, 3, 0)
+    assert _counts(await _paper(app, token, paper_id)) == (4, 0, 1, 3, 0)
+
+
+# --- the InChIKeys: chunked trips, a partial result kept ------------------------------------
+
+
+async def test_keys_come_in_chunks_and_a_failed_trip_keeps_what_came_before(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, (s0, _, a, _, _) = await _three_pages(db, alice)
+    await _mark(app, token, paper_id, 0)
+    monkeypatch.setattr(read, "_KEYS", OrderedDict())
+    monkeypatch.setattr(read, "CHEM_CHUNK", 2)  # CCO, OCC | CCN
+    real = read.CHEM.run
+    trips: list[int] = []
+    fail_second = True
+
+    async def flaky(fn, items):
+        trips.append(len(items))
+        if fail_second and len(trips) >= 2:  # the chem process stays busy after one trip
+            raise HTTPException(status_code=503, detail="busy, try again")
+        return await real(fn, items)
+
+    monkeypatch.setattr(read.CHEM, "run", flaky)
+    paper = await _paper(app, token, paper_id)
+    assert trips == [2, 1] and paper["links_ready"] is False
+    assert len(read._KEYS) == 2  # the first trip's keys are kept
+    # the paper list falls back for this paper: every structure counted
+    assert _counts(await _listed(app, token, paper_id)) == (5, 0, 0, 5, 0)
+    assert trips == [2, 1, 1]  # it asked only for the one missing
+
+    fail_second = False
+    trips.clear()
+    paper = await _paper(app, token, paper_id)
+    assert trips == [1]  # only what was missing
+    assert paper["links_ready"] is True and _repeats(paper)[str(a)] == str(s0)
+
+
+async def test_list_counts_fall_back_per_paper_whose_keys_are_missing(
+    app, async_db_session, monkeypatch
+):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    ready, _ = await _three_pages(db, alice)
+    await _mark(app, token, ready, 0)
+    await _paper(app, token, ready)  # its keys are cached now
+    late = await seed_paper(db, alice)
+
+    def other_structure(s):
+        for p in s.query(Prediction).join(Segment).filter(Segment.paper_id == late.paper_id):
+            p.smiles = "CCCCCCO"
+
+    await db.run_sync(other_structure)
+    await db.commit()
+    await _mark(app, token, late.paper_id, 0)
+
+    async def busy(fn, *args):
+        raise HTTPException(status_code=503, detail="busy, try again")
+
+    monkeypatch.setattr(read.CHEM, "run", busy)
+    assert _counts(await _listed(app, token, ready)) == (4, 0, 0, 4, 0)
+    assert _counts(await _listed(app, token, late.paper_id)) == (2, 0, 0, 2, 0)

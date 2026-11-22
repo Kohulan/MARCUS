@@ -36,11 +36,11 @@ from marcus.api.deps import (
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import (
     IMAGE_HEADERS,
+    list_count_fix,
     load_segments,
     main_figure_page,
     paper_counts,
     paper_summary,
-    repeat_ids,
     repeat_links,
     segments_out,
     steps_by_status,
@@ -118,9 +118,9 @@ async def list_papers(
             )
         ).scalars()
     )
-    # Each compound once: repeats of main-figure structures are not counted (as the workspace).
-    hidden = await repeat_ids(db, papers)
-    counts = await paper_counts(db, [p.id for p in papers], hidden)
+    # Each compound once, under its group's status, as the workspace shows it.
+    fix = await list_count_fix(db, papers)
+    counts = await paper_counts(db, [p.id for p in papers], fix)
     return PaperList(papers=[paper_summary(p, counts[p.id]) for p in papers])
 
 
@@ -133,11 +133,11 @@ async def get_paper(
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     counts = await steps_by_status(db, paper.id)
     main_page = await main_figure_page(db, paper.id)
-    segments = await segments_out(db, paper, main_page)
-    hidden = {s.id for s in segments if s.repeat_of is not None}  # counted as on the list
+    segments, fix = await segments_out(db, paper, main_page)
     return PaperDetail(
-        **paper_summary(paper, (await paper_counts(db, [paper.id], hidden))[paper.id]).model_dump(),
+        **paper_summary(paper, (await paper_counts(db, [paper.id], fix))[paper.id]).model_dump(),
         main_figure_page=main_page,
+        links_ready=fix is not None,
         counts=Counts(steps_by_status=counts),
         segments=segments,
     )
@@ -151,7 +151,7 @@ async def get_segments(
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     main_page = await main_figure_page(db, paper.id)
-    return SegmentList(segments=await segments_out(db, paper, main_page))
+    return SegmentList(segments=(await segments_out(db, paper, main_page))[0])
 
 
 @router.put("/papers/{paper_id}/curation", response_model=BulkCurationOut)

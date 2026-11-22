@@ -52,3 +52,29 @@ def test_inchikey_of_smiles_and_molfile():
     assert inchikey("smiles", "*CC") is None  # a scaffold is not one compound
     assert inchikey("smiles", "not a smiles") is None
     assert inchikeys([("smiles", "CCO"), ("smiles", "C1")]) == [key, None]
+
+
+def test_group_status_rule():
+    from marcus.core.main_figure import group_status
+
+    assert group_status(["unchecked", "accepted"]) == "accepted"
+    assert group_status(["rejected", "accepted"]) == "accepted"
+    assert group_status(["rejected", "rejected"]) == "rejected"
+    assert group_status(["rejected", None]) == "unchecked"
+    assert group_status([None, None]) == "unchecked"
+
+
+def test_chosen_member_and_count_fix():
+    from marcus.core.main_figure import CountFix, chosen_member, count_fix
+
+    m, r1, r2, m2, r3, m3, r4 = _ids(7)
+    status = {m: "unchecked", r1: "rejected", r2: "accepted", m2: "accepted", r3: "accepted",
+              m3: "rejected", r4: None}  # fmt: skip
+    assert chosen_member(m, [r1, r2], status) == r2  # the first accepted repeat
+    assert chosen_member(m2, [r3], status) == m2  # the main one first
+    assert chosen_member(m3, [r4], status) == m3  # not accepted: the main one
+    fix = count_fix({r1: m, r2: m, r3: m2, r4: m3}, status)
+    assert fix == CountFix(
+        hidden=frozenset({r1, r2, r3, r4}), promote=frozenset({m}), unreject=frozenset({m3})
+    )
+    assert (CountFix() | fix) == fix

@@ -24,9 +24,11 @@ file has a paper-level `annotation` object (the values shown: the curator's, els
 plus the model's own), CSV rows get the organism/source fields as columns and SDF records as
 properties (values joined with "; "). `annotation` is a plain dict (api.annotation.for_export).
 
-A paper with a main figure (the main_figures row) exports each compound once: a repeat of a
-main-figure structure on another page (marcus.core.main_figure) is left out, and JSON names its
-pages on the main-figure record (`also_on_pages`, 0-based as `page`; [] for none) and the main
+A paper with a main figure (the main_figures row) exports each compound once: a main-figure
+structure and its repeats on other pages (marcus.core.main_figure) are one record with one
+status (accepted if any member is, rejected only if all are, else unchecked); an accepted
+record is the structure of an accepted member (the main one first). JSON names the other
+members' pages on the record (`also_on_pages`, 0-based as `page`; [] for none) and the main
 page on the paper (`main_figure_page`, null without one).
 """
 
@@ -34,14 +36,14 @@ import csv
 import io
 import json
 import uuid
-from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
 from marcus.api.read import named_on, pick_prediction
+from marcus.core.main_figure import chosen_member, group_status, groups_of
 from marcus.core.models import Curation, Paper, Prediction, Segment
 from marcus.core.rgroup_labels import shown_labels
 from marcus.core.rgroups import rgroup_labels
@@ -71,7 +73,7 @@ class Chosen:
     edited: bool = False  # the curation has its own SMILES or molfile
     rgroups: tuple[str, ...] = ()  # R-group labels: a scaffold, not a finished compound
     rgroup_rows: dict | None = None  # the R-group model's rows (api.rgroups.for_export)
-    also_on_pages: tuple[int, ...] = ()  # pages of its repeats (a main-figure structure)
+    also_on_pages: tuple[int, ...] = ()  # pages of the other members of its linked group
 
 
 def _labels(row: Curation | Prediction, named: list[str] | None) -> tuple[str, ...]:
@@ -93,61 +95,74 @@ def choose(
 ) -> list[Chosen]:
     """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
     per prediction id (api.rgroups.for_export); `repeat_of`: repeat segment id -> its
-    main-figure segment id (api.read.repeat_links): repeats are left out."""
+    main-figure segment id (api.read.repeat_links). A main structure and its repeats are one
+    record, at the main one's place, with the group's status (core.main_figure.group_status);
+    an accepted group's record is its accepted member (chosen_member)."""
     rows_of = rgroup_rows or {}
-    repeats = repeat_of or {}
-    also_on: dict[uuid.UUID, list[int]] = defaultdict(list)
-    for seg in segments:
-        if seg.id in repeats:
-            also_on[repeats[seg.id]].append(seg.page)
+    groups = groups_of(repeat_of or {})
+    hidden = set(repeat_of or {})
+    by_id = {seg.id: seg for seg in segments}
+    status_of = {sid: c.status for sid, c in curations.items()}
     out: list[Chosen] = []
     for seg in segments:
-        if seg.id in repeats:
+        if seg.id in hidden:
             continue
-        named = named_on(paper.rgroup_text_labels, seg.page)
-        cur = curations.get(seg.id)
-        status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
+        repeats = groups.get(seg.id, [])
+        members = [seg.id, *repeats]
+        status: Status = group_status([status_of.get(m) for m in members])  # type: ignore[assignment]
         if status == "rejected" and not include_rejected:
             continue
-        row = {
-            "segment_id": seg.id,
-            "page": seg.page,
-            "idx": seg.idx,
-            "status": status,
-            "note": cur.note if cur is not None else None,
-            "also_on_pages": tuple(sorted(set(also_on.get(seg.id, ())))),
-        }
-        valid = [p for p in predictions.get(seg.id, []) if p.valid]
-        pick = pick_prediction(valid, paper.engine)
-        if cur is not None and (cur.smiles or cur.molfile):
-            smiles = cur.smiles or smiles_from_molfile(cur.molfile)
-            labels = _labels(cur, named)
-            out.append(
-                Chosen(
-                    **row,
-                    smiles=smiles,
-                    molfile=cur.molfile,
-                    source="curated",
-                    edited=True,
-                    rgroups=labels,
-                    rgroup_rows=rows_of.get(pick.id) if labels and pick is not None else None,
-                )
-            )
-            continue
-        if pick is not None:
-            labels = _labels(pick, named)
-            out.append(
-                Chosen(
-                    **row,
-                    smiles=pick.smiles,
-                    molfile=pick.molfile,
-                    source="predicted",
-                    engine=pick.engine,
-                    rgroups=labels,
-                    rgroup_rows=rows_of.get(pick.id) if labels else None,
-                )
-            )
+        member = by_id[chosen_member(seg.id, repeats, status_of)]
+        others = {by_id[m].page for m in members if m != member.id}
+        record = _record(paper, member, curations.get(member.id), predictions, rows_of)
+        if record is not None:
+            out.append(replace(record, status=status, also_on_pages=tuple(sorted(others))))
     return out
+
+
+def _record(
+    paper: Paper,
+    seg: Segment,
+    cur: Curation | None,
+    predictions: dict[uuid.UUID, list[Prediction]],
+    rows_of: dict[uuid.UUID, dict],
+) -> Chosen | None:
+    """One segment's record with its own status (the curated structure, else pick_prediction);
+    None without a structure."""
+    named = named_on(paper.rgroup_text_labels, seg.page)
+    status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
+    row = {
+        "segment_id": seg.id,
+        "page": seg.page,
+        "idx": seg.idx,
+        "status": status,
+        "note": cur.note if cur is not None else None,
+    }
+    valid = [p for p in predictions.get(seg.id, []) if p.valid]
+    pick = pick_prediction(valid, paper.engine)
+    if cur is not None and (cur.smiles or cur.molfile):
+        labels = _labels(cur, named)
+        return Chosen(
+            **row,
+            smiles=cur.smiles or smiles_from_molfile(cur.molfile),
+            molfile=cur.molfile,
+            source="curated",
+            edited=True,
+            rgroups=labels,
+            rgroup_rows=rows_of.get(pick.id) if labels and pick is not None else None,
+        )
+    if pick is None:
+        return None
+    labels = _labels(pick, named)
+    return Chosen(
+        **row,
+        smiles=pick.smiles,
+        molfile=pick.molfile,
+        source="predicted",
+        engine=pick.engine,
+        rgroups=labels,
+        rgroup_rows=rows_of.get(pick.id) if labels else None,
+    )
 
 
 # organism/source fields of the annotation as CSV columns and SDF properties
