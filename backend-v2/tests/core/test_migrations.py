@@ -490,3 +490,20 @@ def test_migration_0014_computes_the_labels_again(migrated_db):
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))
         command.upgrade(cfg, "head")
+
+
+def test_migration_0015_page_label_index_up_down(migrated_db):
+    """0015 adds papers.rgroup_text_labels (NULL: no index, every label shown)."""
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        cols = {c["name"]: c for c in inspect(engine).get_columns("papers")}
+        assert cols["rgroup_text_labels"]["nullable"] is True
+        command.downgrade(cfg, "0014")
+        assert "rgroup_text_labels" not in _columns(engine, "papers")
+    finally:
+        command.upgrade(cfg, "head")

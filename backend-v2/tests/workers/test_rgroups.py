@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from marcus.core import annotation as ann
+from marcus.core import page_text
 from marcus.core import rgroup_extraction as rg
 from marcus.core.enums import ErrorClass, StepKind
 from marcus.core.pipeline import BadResult
@@ -73,7 +74,7 @@ def test_page_context_reads_pages_around_the_scaffold_captions_and_tables_first(
 
 
 def test_page_context_stops_before_the_part_that_would_pass_the_cap(monkeypatch):
-    monkeypatch.setattr(inputs, "MAX_CHARS", 90)
+    monkeypatch.setattr(page_text, "MAX_CHARS", 90)
     assert inputs.page_context(DOC, 3) == (
         "CAPTION (page 3): Figure 2. Structures 3a: R1 = OMe, R2 = H; 3b: R1 = H, R2 = OMe"
     )

@@ -423,3 +423,38 @@ async def test_curated_scaffold_labels_come_from_the_curation(app, async_db_sess
     assert r.status_code == 200
     body = json.loads((await _export(app, token, seeded.paper_id, "json", "accepted")).content)
     assert [(s["source"], s["rgroups"]) for s in body["segments"]] == [("curated", ["R2"])]
+
+
+async def test_exports_name_the_labels_the_page_text_names(app, async_db_session):
+    """JSON, CSV and SDF carry the labels shown (owner decision 2026-11-22): DECIMER's extra Z
+    is left out where the page's text names R1 and R2."""
+    from sqlalchemy import update
+
+    from marcus.core.models import Paper
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice)
+    s0, _ = seeded.segment_ids
+    later = datetime.now(UTC) + timedelta(seconds=10)
+
+    def add(s):
+        s.add(
+            Prediction(
+                segment_id=s0, engine="decimer", engine_version="d",
+                smiles="[1*]c1ccc(*)cc1[2*]", valid=True, ms=1, created_at=later,
+                rgroups=["R1", "R2", "Z"],  # as stored for DECIMER's [R1], [R2], [Z]
+            )
+        )  # fmt: skip
+
+    await db.run_sync(add)
+    await db.execute(update(Paper).where(Paper.id == seeded.paper_id)
+                     .values(rgroup_text_labels={"0": ["R1", "R2"]}))  # fmt: skip
+    await db.commit()
+    body = json.loads((await _export(app, token, seeded.paper_id, "json")).content)
+    assert {s["segment_id"]: s["rgroups"] for s in body["segments"]}[str(s0)] == ["R1", "R2"]
+    rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
+    assert {r[0]: r[-1] for r in rows[1:]}[str(s0)] == "R1; R2"
+    r = await _export(app, token, seeded.paper_id, "sdf", "all")
+    by_seg = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
+    assert by_seg[str(s0)].GetProp("MARCUS_RGROUPS") == "R1; R2"

@@ -43,7 +43,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import annotation, rgroup_extraction, storage
+from marcus.core import annotation, rgroup_extraction, rgroup_labels, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -534,6 +534,13 @@ def _check_nothing(result: dict) -> None:
     pass
 
 
+def _check_docling_result(result: dict) -> None:
+    if "rgroup_text_labels" in result:
+        error = rgroup_labels.index_error(result["rgroup_text_labels"], get_settings().max_pages)
+        if error:
+            raise BadResult(f"docling: {error}")
+
+
 _CHECK = {
     StepKind.CHECK_PDF.value: _check_pdf_result,
     StepKind.SEGMENT_PAGE.value: _check_segment_page_result,
@@ -541,6 +548,7 @@ _CHECK = {
     StepKind.DOI.value: _check_doi_result,
     StepKind.ANNOTATE.value: _check_annotate_result,
     StepKind.RGROUPS.value: _check_rgroups_result,
+    StepKind.DOCLING.value: _check_docling_result,
 }
 
 
@@ -838,6 +846,16 @@ def _rgroups_failed(session: Session, step: Step) -> None:
     )
 
 
+def _after_docling(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    """The text file already sits in the paper dir; the page label index goes on the paper
+    (only pages the paper has: checked against its page count here)."""
+    index = result.get("rgroup_text_labels")
+    if index is not None and rgroup_labels.index_error(index, paper.pages or 0):
+        raise BadResult("docling: the page label index names pages the paper does not have")
+    paper.rgroup_text_labels = index
+    return []
+
+
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     # docling: the text file already sits in the paper dir; nothing to store.
     return []
@@ -848,7 +866,7 @@ _AFTER = {
     StepKind.RENDER_PAGE.value: _after_render_page,
     StepKind.SEGMENT_PAGE.value: _after_segment_page,
     StepKind.OCSR.value: _after_ocsr,
-    StepKind.DOCLING.value: _no_successors,
+    StepKind.DOCLING.value: _after_docling,
     StepKind.DOI.value: _after_doi,
     StepKind.ANNOTATE.value: _after_annotate,
     StepKind.RGROUPS.value: _after_rgroups,

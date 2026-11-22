@@ -86,7 +86,43 @@ def docling(step, session) -> dict:
     pdfsafe.run_docling(
         pdf_path(step.paper_id), paper_dir(step.paper_id), timeout_s=soft - DOCLING_MARGIN_S
     )
-    return {"text_path": "text.json"}
+    result: dict = {"text_path": "text.json"}
+    index = _page_label_index(step.paper_id, pages)
+    if index is not None:
+        result["rgroup_text_labels"] = index
+    return result
+
+
+def _doc_pages(doc: dict) -> int:
+    """The last page any text item or table of the document is on (Docling counts from 1)."""
+    found = [
+        prov.get("page_no")
+        for key in ("texts", "tables")
+        for item in doc.get(key) or []
+        if isinstance(item, dict)
+        for prov in (item.get("prov") or [])[:1]
+        if isinstance(prov, dict)
+    ]
+    return max((p for p in found if isinstance(p, int)), default=0)
+
+
+def _page_label_index(paper_id, pages: int | None) -> dict | None:
+    """Per page, the R-group labels its text names (marcus.core.rgroup_labels.page_label_index),
+    from the text docling just wrote; None when that text cannot be read (every label is then
+    shown)."""
+    from marcus.core import annotation
+    from marcus.core.rgroup_labels import page_label_index
+    from marcus.core.storage import text_path
+
+    try:
+        doc = annotation.read_document(text_path(paper_id))
+        if not isinstance(doc, dict):
+            raise ValueError("not a Docling document")
+        return page_label_index(doc, pages or _doc_pages(doc))
+    except (annotation.TextTooLarge, OSError, ValueError, KeyError, TypeError, AttributeError,
+            RecursionError) as exc:  # fmt: skip
+        log.warning("paper %s: no page label index (%s)", paper_id, type(exc).__name__)
+        return None
 
 
 def normalise_doi(value) -> str | None:

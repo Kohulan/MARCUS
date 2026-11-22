@@ -21,8 +21,9 @@ This module holds what both sides need: the request (worker) and the checks of t
 from __future__ import annotations
 
 import json
-import re
 import unicodedata
+
+from marcus.core.rgroup_labels import shown_labels, text_labels
 
 MAX_VALUE = 80  # markush_eval.MAX_VALUE: a substituent's maxLength in the schema
 MAX_COMPOUND = 40  # the compound label's maxLength in the schema
@@ -75,37 +76,11 @@ def schema_for(labels: list[str]) -> dict:
 
 # --- the labels to ask for --------------------------------------------------------------------
 
-_SCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
-_PRIMES = (("″", "′′"), ('"', "′′"), ("’", "′"), ("'", "′"))
-
-
-def _plain(text: str) -> str:
-    """Super- and subscript digits as digits, every prime as ′ (R², R₂ -> R2; R', R’ -> R′;
-    R", R″ -> R′′), as Docling and the drawings write them in different ways."""
-    text = text.translate(_SCRIPT_DIGITS)
-    for old, new in _PRIMES:
-        text = text.replace(old, new)
-    return text
-
-
-def _named(label: str, plain_text: str) -> bool:
-    """`label` stands in the text as a token of its own: not inside a word or another label
-    (R1 in R10 or R1′, R in R1), a space allowed before a digit or prime (Docling writes a
-    subscript as "R 1"), and not a stereo descriptor in brackets ("(Z)", "(R)")."""
-    body = "".join(
-        (r"\s?" if ch.isdigit() or ch == "′" else "") + re.escape(ch) for ch in _plain(label)
-    )
-    for m in re.finditer(rf"(?<!\w){body}(?![\w′])", plain_text):
-        start, end = m.span()
-        if not (plain_text[start - 1 : start] == "(" and plain_text[end : end + 1] == ")"):
-            return True
-    return False
-
-
 def named_labels(labels: list[str], context: str) -> list[str]:
     """The labels to ask the model for: those the page text (the model's `context`) names, in
     their order; all of them when it names none (no text, or the definitions are only drawn).
 
+    The same rule as the labels shown for a structure (marcus.core.rgroup_labels.shown_labels).
     OCSR sometimes adds a label the drawing does not have (DECIMER read stylissa-bromopyrroles
     page 6 as R1, R2 and Z); asked for it, the model fills that column too. Measured on the
     Phase 2 test set, DECIMER run as MARCUS runs it on all 42 gold scaffold pages (MARCUS-training
@@ -115,9 +90,7 @@ def named_labels(labels: list[str], context: str) -> list[str]:
     on the answer instead (a column whose value differs between rows) would lose 19 of the 164
     gold labels (stylissa's R2 is Br in both rows).
     """
-    plain = _plain(context)
-    named = [lab for lab in labels if _named(lab, plain)]
-    return named or list(labels)
+    return shown_labels(labels, text_labels(context))
 
 
 UNLABELLED = "*"  # marcus.core.rgroups: a dummy atom without a drawn label

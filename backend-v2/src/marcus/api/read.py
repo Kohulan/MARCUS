@@ -269,8 +269,17 @@ async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
     return segments, curations, predictions
 
 
+async def page_labels(db: AsyncSession, paper_id: uuid.UUID) -> dict | None:
+    """The paper's page label index (papers.rgroup_text_labels), None without one."""
+    return (
+        await db.execute(select(Paper.rgroup_text_labels).where(Paper.id == paper_id))
+    ).scalar_one_or_none()
+
+
 async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut]:
+    """The paper's segments; each structure shows the R-group labels its page's text names."""
     segments, curations, predictions = await load_segments(db, paper_id)
+    index = await page_labels(db, paper_id) or {}
     return [
         SegmentOut(
             id=seg.id,
@@ -278,9 +287,14 @@ async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut
             idx=seg.idx,
             bbox=list(seg.bbox),
             curation=(
-                CurationOut.model_validate(curations[seg.id]) if seg.id in curations else None
+                CurationOut.model_validate(curations[seg.id]).shown_for(index.get(str(seg.page)))
+                if seg.id in curations
+                else None
             ),
-            predictions=[PredictionOut.model_validate(p) for p in predictions[seg.id]],
+            predictions=[
+                PredictionOut.model_validate(p).shown_for(index.get(str(seg.page)))
+                for p in predictions[seg.id]
+            ],
         )
         for seg in segments
     ]
