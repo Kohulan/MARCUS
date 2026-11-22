@@ -124,6 +124,7 @@ def choose(
             )
             continue
         if pick is not None:
+            labels = tuple(shown_labels(list(_labels(pick)), named))
             out.append(
                 Chosen(
                     **row,
@@ -131,8 +132,8 @@ def choose(
                     molfile=pick.molfile,
                     source="predicted",
                     engine=pick.engine,
-                    rgroups=tuple(shown_labels(list(_labels(pick)), named)),
-                    rgroup_rows=rows_of.get(pick.id),
+                    rgroups=labels,
+                    rgroup_rows=rows_of.get(pick.id) if labels else None,
                 )
             )
     return out
