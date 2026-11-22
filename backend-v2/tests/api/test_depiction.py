@@ -528,10 +528,12 @@ async def test_depiction_follows_molscribes_positions(app, async_db_session, dra
         other = await c.get(url(seg, "?engine=molnextr"))
         again = await c.get(url(seg))
     assert shown.status_code == other.status_code == again.status_code == 200
-    assert [k["template"] for _, k, _ in draws.seen] == [SCRIBE_MOLFILE, SCRIBE_MOLFILE]
-    want = {**depiction.DEPICT_OPTIONS, "smiles": "CCO", "template": SCRIBE_MOLFILE}
+    # both candidates, MolScribe first: the worker takes the first with the image's positions
+    both = [SCRIBE_MOLFILE, NEXTR_MOLFILE]
+    assert [k["template"] for _, k, _ in draws.seen] == [both, both]
+    want = {**depiction.DEPICT_OPTIONS, "smiles": "CCO", "template": both}
     assert draws.seen[0][1] == want
-    path = storage.depiction_path(owner.id, depiction.drawing_key("CCO", SCRIBE_MOLFILE))
+    path = storage.depiction_path(owner.id, depiction.drawing_key("CCO", both))
     assert path.read_bytes() == shown.content
     assert not storage.depiction_path(owner.id, sha("CCO")).exists()
 
@@ -545,7 +547,7 @@ async def test_depiction_template_falls_back_to_molnextr(app, async_db_session, 
     await _predict(db, seg, "molnextr", "CCN", molfile=NEXTR_MOLFILE)
     async with make_client(app, token) as c:
         assert (await c.get(url(seg))).status_code == 200
-    assert draws.seen[0][1]["template"] == NEXTR_MOLFILE
+    assert draws.seen[0][1]["template"] == [NEXTR_MOLFILE]
 
 
 async def test_depiction_without_a_template_is_drawn_as_before(app, async_db_session, draws):
@@ -568,7 +570,7 @@ async def test_a_newer_template_draws_again(app, async_db_session, draws):
         await c.get(url(seg))
         await _predict(db, seg, "molnextr", "CCC", molfile="a newer reading")
         await c.get(url(seg))
-    assert [k["template"] for _, k, _ in draws.seen] == [NEXTR_MOLFILE, "a newer reading"]
+    assert [k["template"] for _, k, _ in draws.seen] == [[NEXTR_MOLFILE], ["a newer reading"]]
 
 
 async def test_a_curated_structure_follows_the_template_too(app, async_db_session, draws):
@@ -580,10 +582,14 @@ async def test_a_curated_structure_follows_the_template_too(app, async_db_sessio
     async with make_client(app, token) as c:
         assert (await c.get(url(seg))).status_code == 200
     assert draws.seen[0][1]["smiles"] == "CCCO"
-    assert draws.seen[0][1]["template"] == NEXTR_MOLFILE
+    assert draws.seen[0][1]["template"] == [NEXTR_MOLFILE]
 
 
 def test_drawing_key_is_the_smiles_hash_without_a_template():
     assert depiction.drawing_key("CCO", None) == sha("CCO")
+    assert depiction.drawing_key("CCO", []) == sha("CCO")
+    # one candidate: the key drawings stored with a single template already have
+    assert depiction.drawing_key("CCO", ["t"]) == depiction.drawing_key("CCO", "t")
+    assert depiction.drawing_key("CCO", ["t", "u"]) != depiction.drawing_key("CCO", ["t"])
     other = depiction.drawing_key("CCO", "u")
     assert depiction.drawing_key("CCO", "t") not in (sha("CCO"), other)

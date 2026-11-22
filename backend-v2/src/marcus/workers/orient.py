@@ -75,6 +75,13 @@ def image_layout(molfile: str) -> bool:
     return _template(molfile) is not None
 
 
+def first_template(molfiles) -> str | None:
+    """Of candidate templates in the order they are preferred (MolScribe's, then MolNexTR's),
+    the first whose positions were read off the image; None without one. The one rule the
+    stored depictions (cards, focus mode) go by; Compare's client applies the same rule."""
+    return next((m for m in molfiles if m and image_layout(m)), None)
+
+
 def _template(molfile: str):
     """(molecule, its positions corrected and scaled to BOND_LENGTH) of a molfile with 2D
     positions, or None."""

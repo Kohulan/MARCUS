@@ -326,3 +326,19 @@ def test_a_fixed_molnextr_molfile_is_drawn_without_a_stretch(crop):
             math.dist(coords[on_drawn[i]], coords[on_drawn[j]]) / math.hypot(p.x - q.x, p.y - q.y)
         )
     assert max(ratios) / min(ratios) < 1.001
+
+
+# --- the first usable of several candidates (one rule for cards, focus mode and Compare) ------
+
+
+def test_the_first_candidate_with_the_images_positions_is_the_template():
+    """An old MolNexTR molfile (fb7505b, computed) never blocks a good MolScribe one."""
+    from marcus.workers.orient import first_template
+
+    scribe = REAL["p2_6"]["molscribe"]["molfile"]
+    old = REAL["p2_6"]["molnextr"]["molfile"]
+    assert first_template([old, scribe]) == scribe
+    assert first_template([scribe, old]) == scribe
+    assert first_template([old]) is None
+    assert first_template([]) is None
+    assert first_template(["", "not a molfile", scribe]) == scribe

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
-from marcus.api.depiction import draw_or_read, orientation_template, shown_structure
+from marcus.api.depiction import draw_or_read, orientation_templates, shown_structure
 from marcus.api.deps import (
     current_owner,
     get_owned_segment,
@@ -55,8 +55,8 @@ async def segment_depiction(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """SVG of the structure the UI shows for this segment (`engine`: that engine's newest valid
-    prediction instead), in the paper's orientation when the segment has a template (MolNexTR's,
-    else MolScribe's molfile). Drawn once per distinct SMILES (and template) and stored
+    prediction instead), in the paper's orientation when the segment has a template (the first
+    of MolScribe's and MolNexTR's molfiles with the image's positions). Drawn once per distinct SMILES (and template) and stored
     (marcus.api.depiction). The client's `v` query parameter only busts its cache; it is
     ignored here."""
     segment, paper = await get_owned_segment(db, owner, segment_id)
@@ -71,7 +71,7 @@ async def segment_depiction(
         ).scalars()
     )
     shown = await shown_structure(paper, segment, curation, predictions, engine)
-    template = orientation_template(segment, predictions)
+    template = orientation_templates(segment, predictions)
     # End the read-only transaction (and free its connection): a miss may wait up to WAIT_S
     # on the tools worker. commit, not rollback: a rollback would expire `owner`.
     await db.commit()
