@@ -1030,11 +1030,26 @@ def remove_paper_files(paper_id: uuid.UUID) -> None:
         )
 
 
+def _waiting_ocsr(session: Session, where, engine: Engine) -> Step | None:
+    """The `engine` OCSR step of a segment or image job (`where`) still pending, queued or
+    running. Read under the parent's lock, so two requests at once cannot both miss it."""
+    session.flush()
+    return session.execute(
+        select(Step)
+        .where(where, Step.kind == StepKind.OCSR.value, Step.engine == engine.value,
+               Step.status.in_(ACTIVE))
+        .order_by(Step.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()  # fmt: skip
+
+
 def request_ocsr(
     session: Session, segment_id: uuid.UUID, engine: Engine, started_ip: str | None = None
 ) -> Step:
     """Create a pending `ocsr` step for one segment with the given engine. Caller commits.
     A `done` paper becomes active again, with `started_ip` (the requesting address bucket).
+    A step of that engine still waiting or running for the segment is returned instead (repeat
+    requests never queue a second one).
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
@@ -1045,6 +1060,9 @@ def request_ocsr(
     paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
+    waiting = _waiting_ocsr(session, Step.segment_id == segment.id, engine)
+    if waiting is not None:
+        return waiting
     step = _new_step(
         paper,
         StepKind.OCSR,
@@ -1117,7 +1135,7 @@ def request_image_ocsr(
 ) -> Step:
     """Create a pending `ocsr` step for an image job with the given engine and reopen the job
     (status `queued`; a finished job gets `started_ip`, the requesting address bucket). Caller
-    commits.
+    commits. A step of that engine still waiting or running for the job is returned instead.
 
     Raises ValueError for an unknown or deleted image job, or a disabled engine.
     """
@@ -1125,6 +1143,9 @@ def request_image_ocsr(
     job = _lock(session, ImageJob, job_id)
     if job is None or job.status == ImageJobStatus.DELETED.value:
         raise ValueError("image job not found")
+    waiting = _waiting_ocsr(session, Step.image_job_id == job.id, engine)
+    if waiting is not None:
+        return waiting
     seq = session.execute(
         select(func.count()).select_from(Step).where(Step.image_job_id == job.id)
     ).scalar_one()
