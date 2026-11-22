@@ -35,8 +35,9 @@ V1 = {
     Engine.MOLNEXTR: json.loads((FIXTURES / "v1_molnextr.json").read_text()),
     Engine.MOLSCRIBE: json.loads((FIXTURES / "v1_molscribe.json").read_text()),
 }
-# docker/MODEL_PINS.md: the commits v1 installed; engine version = short hash.
-VERSIONS = {Engine.MOLNEXTR: "fb7505b", Engine.MOLSCRIBE: "250f683"}
+# docker/MODEL_PINS.md: the commits installed (v1's, MolNexTR with PR #1); engine version = short
+# hash.
+VERSIONS = {Engine.MOLNEXTR: "7a4e03f", Engine.MOLSCRIBE: "250f683"}
 WEIGHTS = {
     Engine.MOLNEXTR: (
         "/opt/pystow/molnextr/molnextr_best.pth",
