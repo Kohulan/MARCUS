@@ -23,9 +23,11 @@ export function coconutStructures(segments: SegmentOut[], paperEngine: string): 
   const held: HeldStructure[] = [];
   segments.forEach((s, i) => {
     if (s.curation?.status !== "accepted" || !hasDrawing(s)) return;
-    const { smiles, rgroups } = shownStructure(s, paperEngine);
-    // A dummy atom without labels (a curation not yet answered by the server) is held too.
-    const labels = rgroups.length > 0 ? rgroups : smiles && hasDummyAtom(smiles) ? ["*"] : [];
+    const { smiles, rgroups, placeholder } = shownStructure(s, paperEngine);
+    // Held for any placeholder atom: the server's word (whatever labels the page shows), or a
+    // dummy atom without labels (a curation not yet answered by the server).
+    const isHeld = placeholder || (smiles !== null && hasDummyAtom(smiles));
+    const labels = rgroups.length > 0 ? rgroups : isHeld ? ["*"] : [];
     if (labels.length > 0) held.push({ segmentId: s.id, n: i + 1, rgroups: labels });
     else if (smiles) send.push({ segmentId: s.id, n: i + 1, smiles });
   });

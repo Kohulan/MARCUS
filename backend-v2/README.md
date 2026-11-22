@@ -212,6 +212,13 @@ an R-group reading, nor the other way round; the fake stack runs the fake reader
 `worker-fake-rgroup`. Without either, the API answers 503 (`rgroup_enabled`). Real-model smoke test against a running server:
 `python ops/rgroup_smoke.py --url http://127.0.0.1:8080 --pdf paper.pdf --page 3 --labels R1,R2 --text docling.json`.
 
+The same page-text rule decides which labels a structure shows: the docling step stores, per
+page, the labels its text names (`papers.rgroup_text_labels`), and the scaffold tag, the UI
+label list and the exports' `rgroups` (JSON, CSV, SDF) show only a structure's labels that its
+page names (all of them when it names none, or for a paper read before migration 0015, or an
+image job). `placeholder` in the API says whether a structure has placeholder atoms whatever is
+shown: COCONUT holds every one that has.
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,

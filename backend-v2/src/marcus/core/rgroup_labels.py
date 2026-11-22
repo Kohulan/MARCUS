@@ -33,3 +33,84 @@ def as_label(text: str) -> str | None:
     if m:
         return m.group(1) or m.group(2)
     return None
+
+
+# --- the labels a page's text names ---------------------------------------------------------
+
+_SCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
+_PRIMES = (("″", "′′"), ('"', "′′"), ("’", "′"), ("'", "′"))
+# The label grammar as text writes it: Docling may space a subscript or a prime ("R 1", "R 1 ′").
+_TEXT_LABEL = re.compile(
+    r"(?<!\w)(?:R(?:\s?′)*(?:\s?\d{1,2})?[a-z]?(?:\s?′)*"
+    r"|[XYZ](?:\s?\d{1,2})?(?:\s?′)*|Ar(?:\s?\d{1,2})?|[nmQ])(?![\w′])"
+)
+MAX_PAGE_LABELS = 200  # labels one page's text may name in the stored index
+
+
+def _plain(text: str) -> str:
+    """Super- and subscript digits as digits, every prime as ′ (R², R₂ -> R2; R', R’ -> R′;
+    R", R″ -> R′′), as Docling and the drawings write them in different ways."""
+    text = text.translate(_SCRIPT_DIGITS)
+    for old, new in _PRIMES:
+        text = text.replace(old, new)
+    return text
+
+
+def canonical(label: str) -> str:
+    """One spelling of a label for comparing: R' and R′ alike, no spaces."""
+    return "".join(_plain(label).split())
+
+
+def text_labels(text: str) -> set[str]:
+    """The labels `text` names, each as a token of its own (canonical spelling): not inside a
+    word or another label (R1 in R10 or R1′, R in R1), and not a stereo descriptor in brackets
+    ("(Z)", "(R)")."""
+    plain = _plain(text)
+    found: set[str] = set()
+    for m in _TEXT_LABEL.finditer(plain):
+        start, end = m.span()
+        if plain[start - 1 : start] == "(" and plain[end : end + 1] == ")":
+            continue
+        found.add("".join(m.group().split()))
+    return found
+
+
+def shown_labels(labels: list[str], named: set[str] | list[str] | None) -> list[str]:
+    """Of a structure's labels, those its page's text names (`named`: canonical spellings), in
+    their order; all of them when it names none or there is no text (None). OCSR sometimes adds
+    a label the drawing does not have (DECIMER's Z beside R1, R2)."""
+    if not named:
+        return list(labels)
+    names = set(named)
+    hits = [lab for lab in labels if canonical(lab) in names]
+    return hits or list(labels)
+
+
+def page_label_index(doc: dict, pages: int) -> dict[str, list[str]]:
+    """Per page (0-based, as the API counts; key a string, for JSON), the labels the R-group
+    model's context for a scaffold on it names (marcus.core.page_text.page_context: Docling
+    pages P..P+2). Pages that name none are left out."""
+    from marcus.core.page_text import page_context
+
+    index: dict[str, list[str]] = {}
+    for page in range(pages):
+        found = text_labels(page_context(doc, page + 1))
+        if found:
+            index[str(page)] = sorted(found)[:MAX_PAGE_LABELS]
+    return index
+
+
+def index_error(index: object, pages: int) -> str | None:
+    """Why `index` is not a page label index of a paper with `pages` pages, or None."""
+    if not isinstance(index, dict):
+        return "the page label index must be an object"
+    for key, found in index.items():
+        if not (isinstance(key, str) and key.isdigit() and int(key) < pages):
+            return f"page label index: {key!r} is not a page of the paper"
+        if not isinstance(found, list) or len(found) > MAX_PAGE_LABELS:
+            return f"page label index: page {key} must have a list of labels"
+        if len(set(found)) != len(found) or not all(
+            isinstance(lab, str) and as_label(lab) == lab for lab in found
+        ):
+            return f"page label index: page {key} must have distinct labels"
+    return None

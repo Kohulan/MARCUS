@@ -7,7 +7,8 @@ structure are left out; rejected ones too, unless `include_rejected`.
 
 A structure with R-group placeholders (marcus.core.rgroups) stands for several compounds. It is
 exported as what it is, a scaffold, never as a finished compound: every format names its labels
-(JSON `rgroups`, CSV column `rgroups`, SDF property MARCUS_RGROUPS), [] / empty for none. It is
+(JSON `rgroups`, CSV column `rgroups`, SDF property MARCUS_RGROUPS), [] / empty for none: those
+its page's text names (the paper's page label index; all of them when it names none). It is
 kept rather than left out, so an export still holds every structure the curator accepted.
 
 A scaffold's R-group rows read by the local R-group model (Markush Phase 2), when it has them, go
@@ -35,6 +36,7 @@ from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
 from marcus.core.models import Curation, Paper, Prediction, Segment
+from marcus.core.rgroup_labels import shown_labels
 from marcus.core.rgroups import rgroup_labels
 
 ExportFormat = Literal["json", "csv", "sdf"]
@@ -89,8 +91,10 @@ def choose(
     """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
     per prediction id (api.rgroups.for_export)."""
     rows_of = rgroup_rows or {}
+    index = paper.rgroup_text_labels or {}
     out: list[Chosen] = []
     for seg in segments:
+        named = index.get(str(seg.page))  # the R-group labels the page's text names
         cur = curations.get(seg.id)
         status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
         if status == "rejected" and not include_rejected:
@@ -106,7 +110,7 @@ def choose(
         pick = pick_prediction(valid, paper.engine)
         if cur is not None and (cur.smiles or cur.molfile):
             smiles = cur.smiles or smiles_from_molfile(cur.molfile)
-            labels = _labels(cur)
+            labels = tuple(shown_labels(list(_labels(cur)), named))
             out.append(
                 Chosen(
                     **row,
@@ -127,7 +131,7 @@ def choose(
                     molfile=pick.molfile,
                     source="predicted",
                     engine=pick.engine,
-                    rgroups=_labels(pick),
+                    rgroups=tuple(shown_labels(list(_labels(pick)), named)),
                     rgroup_rows=rows_of.get(pick.id),
                 )
             )
