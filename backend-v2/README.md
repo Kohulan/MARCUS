@@ -257,10 +257,11 @@ MolScribe writes the image's atom positions into its molfile when its structure 
 MolNexTR v1 commit (fb7505b) did not: it rewrote its molfile from its own SMILES, a computed
 layout; the pinned 7a4e03f (PR #1) keeps the image's positions too, so old fb7505b predictions are
 refused as templates and new ones are taken. A segment's stored depiction
-(`GET /segments/{id}/depiction`) sends the molfile of its newest valid MolScribe prediction (else
-MolNexTR's) as a template, and the worker uses it only when its positions come from the image
-(`orient.image_layout`: a computed layout has at least 80 % of its bonds within 1 % of one
-length). Then the common part (MCS) of the drawn structure and the template keeps the template's
+(`GET /segments/{id}/depiction`) sends the molfiles of its newest valid MolScribe and MolNexTR
+predictions, in that order, as template candidates, and the worker takes the first whose positions
+come from the image (`orient.first_template`, `orient.image_layout`: a computed layout has at
+least 80 % of its bonds within 1 % of one length), so an old MolNexTR molfile never blocks a good
+one. Compare applies the same rule in the browser (`imageLayout`, checked on the same fixtures). Then the common part (MCS) of the drawn structure and the template keeps the template's
 positions, RDKit lays out the rest, CDK draws it (`marcus.workers.orient`, `marcus.workers.tools.depict`). Every engine's structure of that
 segment, and a curated one, is drawn that way; it is stored under the SMILES and the template
 together. `POST /tools/depict` takes the same template as `template` (a molfile, at most

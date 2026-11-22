@@ -6,10 +6,11 @@ lazily, on its first request, by `marcus.tools.depict` on q.tools (the same draw
 SMILES (drawing_key). Later requests of that owner, for any segment with that SMILES, read the
 file.
 
-The paper's orientation: a segment with a valid MolScribe (else MolNexTR) prediction that has a
-molfile draws every structure with that molfile as the template (orientation_template;
-marcus.workers.orient), so the drawing follows the image. Such a drawing is keyed by the SMILES
-and the template together. The template comes from the owner's own stored rows, like the
+The paper's orientation: a segment's valid MolScribe and MolNexTR predictions with a molfile are
+the template candidates, in that order (orientation_templates); the tools worker draws every
+structure on the first whose positions come from the image (marcus.workers.orient
+first_template), so the drawing follows the image. Such a drawing is keyed by the SMILES and the
+candidates together. The template comes from the owner's own stored rows, like the
 SMILES; where the worker cannot use it, the drawing is the normal one. The cache
 is per owner: a hit (or a `.nodraw` marker) never comes from another owner's request, so the
 status, timing and rate charge of a request say nothing about what other owners viewed. Only
@@ -59,22 +60,33 @@ Source = Literal["curated", "predicted"]
 TEMPLATE_ENGINES = (Engine.MOLSCRIBE.value, Engine.MOLNEXTR.value)
 
 
-def orientation_template(segment: Segment, predictions: list[Prediction]) -> str | None:
-    """The molfile to draw the segment's structures in the paper's orientation: of its newest
-    valid MolScribe prediction that has one, else MolNexTR's; None without one. (The worker
-    uses it only when its positions come from the image, marcus.workers.orient.image_layout:
-    the pinned MolNexTR's never do.)
+def orientation_templates(segment: Segment, predictions: list[Prediction]) -> list[str]:
+    """The template candidates of the segment, in the order they are preferred: the molfile of
+    its newest valid MolScribe prediction that has one, then MolNexTR's. The worker takes the
+    first whose positions come from the image (marcus.workers.orient.first_template: an old
+    fb7505b MolNexTR's never do), so a computed one never blocks the next.
     `predictions`: the segment's, newest first."""
+    found = []
     for engine in TEMPLATE_ENGINES:
-        for p in predictions:
-            if p.segment_id == segment.id and p.engine == engine and p.valid and p.molfile:
-                return p.molfile
-    return None
+        p = next(
+            (
+                p
+                for p in predictions
+                if p.segment_id == segment.id and p.engine == engine and p.valid and p.molfile
+            ),
+            None,
+        )
+        if p is not None:
+            found.append(p.molfile)
+    return found
 
 
-def drawing_key(smiles: str, template: str | None) -> str:
-    """The stored drawing's name: sha256 of the SMILES, or of the SMILES and the template."""
-    text = smiles if not template else f"{smiles}\0template\0{template}"
+def drawing_key(smiles: str, templates: str | list[str] | None) -> str:
+    """The stored drawing's name: sha256 of the SMILES, or of the SMILES and the template
+    candidates (one candidate: the same name as a drawing stored with that single template)."""
+    if isinstance(templates, str):
+        templates = [templates]
+    text = smiles + "".join(f"\0template\0{t}" for t in templates or [])
     return hashlib.sha256(text.encode()).hexdigest()
 
 
@@ -137,9 +149,14 @@ def _store(path, data: bytes) -> None:
 
 
 async def draw_or_read(
-    request: Request, owner: Owner, smiles: str, source: Source, template: str | None = None
+    request: Request,
+    owner: Owner,
+    smiles: str,
+    source: Source,
+    template: list[str] | None = None,
 ) -> bytes:
-    """The stored SVG of `smiles` (in `template`'s orientation when one is given), drawing (and
+    """The stored SVG of `smiles` (in the orientation of the first usable of the `template`
+    candidates, when given), drawing (and
     storing) it on a miss. 404 (`not_found()`)
     for a SMILES that is never drawn; 429 for a curated miss over the tools limit; 503 with
     Retry-After when the depictions' share of the tools budget is held, or the tools worker is
@@ -167,7 +184,7 @@ async def draw_or_read(
     return data
 
 
-async def _draw(smiles: str, marker, template: str | None = None) -> str:
+async def _draw(smiles: str, marker, template: list[str] | None = None) -> str:
     kwargs = {"smiles": smiles, **DEPICT_OPTIONS}
     if template:
         kwargs["template"] = template
