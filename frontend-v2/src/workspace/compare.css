@@ -152,6 +152,12 @@
   height: 168px;
 }
 
+/* The paper's crop (or the uploaded image): the engines' source, set off by a stronger rule. */
+.cmp-table td.cmp-table__source,
+.cmp-table th.cmp-table__source {
+  border-right: 1px solid var(--line);
+}
+
 /* No result to draw: a quiet ground in the state's shape (spec §7 state table). */
 .cmp-blank {
   display: flex;
