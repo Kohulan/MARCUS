@@ -36,10 +36,7 @@ def get_annotator():
             raise RuntimeError("the fake annotator is disabled (MARCUS_ENABLE_FAKE_ENGINES)")
         return FakeAnnotator()
     return LlamaAnnotator(
-        settings.annotator_url,
-        settings.annotator_timeout_s,
-        settings.annotate_model,
-        settings.annotate_model_version,
+        settings.llm_url, settings.llm_timeout_s, settings.llm_model, settings.llm_model_version
     )
 
 

@@ -59,9 +59,7 @@ def main() -> int:
         if a.text is not None:
             shutil.copyfile(a.text, text_path(pid))
         labels = [lab.strip() for lab in a.labels.split(",") if lab.strip()]
-        reader = LlamaRgroupReader(
-            a.url, a.timeout, settings.rgroup_model, settings.rgroup_model_version
-        )
+        reader = LlamaRgroupReader(a.url, a.timeout, settings.llm_model, settings.llm_model_version)
         start = time.monotonic()
         result = read_scaffold(reader, pid, page0, labels)
         took = time.monotonic() - start

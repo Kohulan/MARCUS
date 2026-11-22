@@ -1059,10 +1059,9 @@ def test_one_model_server_for_both_jobs():
     # each slot keeps the context both jobs were trained and scored with
     assert int(_arg(cmd, "--ctx-size")) // slots == 10240
     # stored results name the model that made them: the server's model, for both jobs
-    assert llm["environment"]["MARCUS_ANNOTATE_MODEL"] == MULTI_MODEL == _arg(cmd, "--alias")
-    assert rg["environment"]["MARCUS_RGROUP_MODEL"] == MULTI_MODEL
-    assert llm["environment"]["MARCUS_ANNOTATE_MODEL_VERSION"] == MULTI_VERSION
-    assert rg["environment"]["MARCUS_RGROUP_MODEL_VERSION"] == MULTI_VERSION
+    for worker in (llm, rg):
+        assert worker["environment"]["MARCUS_LLM_MODEL"] == MULTI_MODEL == _arg(cmd, "--alias")
+        assert worker["environment"]["MARCUS_LLM_MODEL_VERSION"] == MULTI_VERSION
 
 
 def test_model_settings_defaults_are_the_compose_defaults():
@@ -1073,16 +1072,12 @@ def test_model_settings_defaults_are_the_compose_defaults():
     llm = services["worker-llm"]["environment"]
     rg = services["worker-rgroup"]["environment"]
     s = Settings()
-    assert (s.annotate_model, s.annotate_model_version) == (
-        llm["MARCUS_ANNOTATE_MODEL"],
-        llm["MARCUS_ANNOTATE_MODEL_VERSION"],
-    )
-    assert (s.rgroup_model, s.rgroup_model_version) == (
-        rg["MARCUS_RGROUP_MODEL"],
-        rg["MARCUS_RGROUP_MODEL_VERSION"],
-    )
-    assert s.annotator_url == llm["MARCUS_ANNOTATOR_URL"]
-    assert s.rgroup_url == rg["MARCUS_RGROUP_URL"]
+    for env in (llm, rg):
+        assert (s.llm_url, s.llm_model, s.llm_model_version) == (
+            env["MARCUS_LLM_URL"],
+            env["MARCUS_LLM_MODEL"],
+            env["MARCUS_LLM_MODEL_VERSION"],
+        )
 
 
 def test_llama_server_shares_its_own_internal_network_only_with_the_two_model_workers():
@@ -1122,8 +1117,8 @@ def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
     assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"
     env = worker["environment"]
     assert env["MARCUS_ANNOTATOR"] == "llama"
-    assert env["MARCUS_ANNOTATOR_URL"] == "http://llama-server:8080"
-    assert env["MARCUS_ANNOTATE_MODEL"] == MULTI_MODEL
+    assert env["MARCUS_LLM_URL"] == "http://llama-server:8080"
+    assert env["MARCUS_LLM_MODEL"] == MULTI_MODEL
     assert not any(key.startswith("MARCUS_RGROUP_") for key in env)
     assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
     from marcus.core.queues import SLOTS
@@ -1146,9 +1141,9 @@ def test_worker_rgroup_serves_q_rgroup_with_one_process_and_reads_data_only():
     assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"
     env = worker["environment"]
     assert env["MARCUS_RGROUP_READER"] == "llama"
-    assert env["MARCUS_RGROUP_URL"] == "http://llama-server:8080"
-    assert env["MARCUS_RGROUP_MODEL"] == MULTI_MODEL
-    assert env["MARCUS_RGROUP_MODEL_VERSION"] == MULTI_VERSION
+    assert env["MARCUS_LLM_URL"] == "http://llama-server:8080"
+    assert env["MARCUS_LLM_MODEL"] == MULTI_MODEL
+    assert env["MARCUS_LLM_MODEL_VERSION"] == MULTI_VERSION
     assert not any(key.startswith("MARCUS_ANNOTAT") for key in env)
     assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
     from marcus.core.queues import SLOTS

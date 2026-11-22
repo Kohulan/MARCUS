@@ -45,10 +45,7 @@ def get_reader():
             raise RuntimeError("the fake R-group reader is disabled (MARCUS_ENABLE_FAKE_ENGINES)")
         return FakeRgroupReader()
     return LlamaRgroupReader(
-        settings.rgroup_url,
-        settings.rgroup_timeout_s,
-        settings.rgroup_model,
-        settings.rgroup_model_version,
+        settings.llm_url, settings.llm_timeout_s, settings.llm_model, settings.llm_model_version
     )
 
 

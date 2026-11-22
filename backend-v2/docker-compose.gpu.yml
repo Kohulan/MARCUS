@@ -58,6 +58,42 @@ x-gpu: &gpu
             count: 1
             capabilities: [gpu]
 
+# The two llama-server workers (worker-llm, worker-rgroup): the api image, read-only, on the
+# internal and llm networks, the data volume read-only. Each sets its own command and adds its
+# engine choice to the environment.
+x-llm-worker: &llm-worker
+  image: marcus-v2-api:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - internal
+    - llm
+  volumes:
+    - data:/data:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    api-migrate:
+      condition: service_completed_successfully
+    llama-server:
+      condition: service_healthy
+  environment: &llm-env
+    MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
+    MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    MARCUS_DATA_ROOT: /data
+    MARCUS_LLM_URL: http://llama-server:8080
+    MARCUS_LLM_MODEL: ${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}
+    MARCUS_LLM_MODEL_VERSION: ${MARCUS_LLM_MODEL_VERSION:-Q8_0 llama.cpp b12554}
+  mem_limit: 1g
+
 x-tf-cuda: &tf-cuda
   build:
     context: .
@@ -174,82 +210,26 @@ services:
   # reads the paper's text and calls llama-server, so it runs the api image with the data volume
   # read-only.
   worker-llm:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-      - llm
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
-      llama-server:
-        condition: service_healthy
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
               "-n", "llm@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
+      <<: *llm-env
       MARCUS_ANNOTATOR: llama
-      MARCUS_ANNOTATOR_URL: http://llama-server:8080
-      MARCUS_ANNOTATE_MODEL: ${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}
-      MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_LLM_MODEL_VERSION:-Q8_0 llama.cpp b12554}
-    mem_limit: 1g
 
   # rgroups steps (q.rgroup): ONE prefork process (= q.rgroup slots = the other llama-server
   # slot), the same image and hardening as worker-llm; it reads the paper's text and page images
   # and calls llama-server. Its own queue and worker: an annotation run never holds back an
   # R-group reading, nor the other way round (one server, a slot for each).
   worker-rgroup:
-    image: marcus-v2-api:local
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - internal
-      - llm
-    volumes:
-      - data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
-      llama-server:
-        condition: service_healthy
+    <<: *llm-worker
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
               "-n", "rgroup@%h", "--loglevel", "INFO"]
     environment:
-      MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
-      MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      MARCUS_DATA_ROOT: /data
+      <<: *llm-env
       MARCUS_RGROUP_READER: llama
-      MARCUS_RGROUP_URL: http://llama-server:8080
-      MARCUS_RGROUP_MODEL: ${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}
-      MARCUS_RGROUP_MODEL_VERSION: ${MARCUS_LLM_MODEL_VERSION:-Q8_0 llama.cpp b12554}
-    mem_limit: 1g
 
 networks:
   # llama-server, worker-llm and worker-rgroup only (tests/deploy): no route out, no other member.
