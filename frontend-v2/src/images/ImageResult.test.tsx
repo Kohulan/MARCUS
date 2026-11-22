@@ -521,6 +521,23 @@ describe("ImageResult", () => {
       expect(screen.getByRole("button", { name: "Compare" })).toHaveFocus();
     });
 
+    it.each([
+      ["decimer-hand", "true"],
+      ["decimer", "false"],
+    ])("an image read with %s opens Compare with Hand-drawn pressed=%s", async (engine, pressed) => {
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ engine, prediction: pred({ engine }) }),
+      );
+      vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Compare" }));
+      const section = await screen.findByRole("region", { name: "Compare engines" });
+      expect(within(section).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute(
+        "aria-pressed",
+        pressed,
+      );
+    });
+
     it("has one Copy SMILES (the SMILES's own)", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(job());
       renderPage();

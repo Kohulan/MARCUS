@@ -45,6 +45,8 @@ export type CompareProps = {
   tag?: string | undefined;
   /** As a page section (no `onClose`): a control at the end of the head (the page's Close). */
   headAction?: ReactNode;
+  /** The paper or image was uploaded with DECIMER hand-drawn: Hand-drawn starts on. */
+  handDrawn?: boolean | undefined;
 };
 
 /**
@@ -63,12 +65,14 @@ export default function Compare({
   onClose,
   tag,
   headAction,
+  handDrawn = false,
 }: CompareProps) {
   const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
   const { requested, batch, sending, error: runError, run } = useEngineRuns(target, steps, onStarted);
-  // The DECIMER column shows the hand-drawn model while this is on (off on every opening).
-  const [hand, setHand] = useState(false);
+  // The DECIMER column shows the hand-drawn model while this is on: on opening, on only where
+  // the upload chose DECIMER hand-drawn.
+  const [hand, setHand] = useState(handDrawn);
   const rows = useMemo(
     () => engineRows(predictions, steps, requested, hand),
     [predictions, steps, requested, hand],
@@ -405,6 +409,7 @@ function StoredDrawing({
  */
 export function SegmentCompare({
   paperId,
+  paperEngine,
   segment,
   steps,
   tag,
@@ -413,6 +418,8 @@ export function SegmentCompare({
   onSaved,
 }: {
   paperId: string;
+  /** The engine the paper was uploaded with (DECIMER hand-drawn: Hand-drawn starts on). */
+  paperEngine: string;
   segment: SegmentOut;
   /** The paper's steps (the segment's own are picked here). */
   steps: StepOut[];
@@ -444,6 +451,7 @@ export function SegmentCompare({
       onStarted={onStarted}
       onClose={onClose}
       tag={tag}
+      handDrawn={paperEngine === "decimer-hand"}
     />
   );
 }

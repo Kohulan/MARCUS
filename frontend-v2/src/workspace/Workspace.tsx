@@ -324,6 +324,7 @@ function OpenDialog({
     <SegmentCompare
       key={segment.id}
       paperId={paper.id}
+      paperEngine={paper.engine}
       segment={segment}
       steps={ws.steps}
       tag={structureTag(rows[at]?.n ?? at + 1)}
