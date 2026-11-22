@@ -99,7 +99,8 @@ function cell(row: string, engine: string): HTMLElement {
   const heads = [...table.tHead!.rows[0]!.cells].map((c) => c.textContent ?? "");
   const col = heads.findIndex((h) => h.startsWith(engine));
   const tr = [...table.tBodies[0]!.rows].find((r) => r.cells[0]!.textContent === row)!;
-  return tr.cells[col] as HTMLElement;
+  // The source column's one cell spans the body: only the Drawing row has it.
+  return tr.cells[row === "Drawing" ? col : col - 1] as HTMLElement;
 }
 
 describe("Compare", () => {
@@ -109,7 +110,26 @@ describe("Compare", () => {
     });
     const table = screen.getByRole("table", { name: "Engines" }) as HTMLTableElement;
     const heads = [...table.tHead!.rows[0]!.cells].slice(1).map((c) => c.querySelector(".cmp-table__name")?.textContent);
-    expect(heads).toEqual(["DECIMER", "MolNexTR", "MolScribe"]);
+    expect(heads).toEqual(["Paper", "DECIMER", "MolNexTR", "MolScribe"]);
+  });
+
+  it("shows the paper's crop the engines read beside the drawings", () => {
+    renderCompare({ predictions: [prediction({ engine: "decimer" })] });
+    const crop = screen.getByRole("img", { name: "Crop from the paper" });
+    expect(crop).toHaveAttribute("src", api.segmentImageUrl("s1"));
+    // in the Drawing row, before the engines' drawings
+    const row = crop.closest("tr")!;
+    expect(row.cells[0]).toHaveTextContent("Drawing");
+    expect(row.cells[1]).toContainElement(crop);
+  });
+
+  it("an image job shows the uploaded image", () => {
+    renderCompare({ target: { kind: "image", id: "img1" }, predictions: [] });
+    expect(screen.getByRole("img", { name: "The uploaded image" })).toHaveAttribute(
+      "src",
+      api.imageUrl("img1"),
+    );
+    expect(screen.getByRole("columnheader", { name: "Image" })).toBeInTheDocument();
   });
 
   it("opening starts the main engines not read (never hand-drawn), then onStarted once, and opens no stream", async () => {

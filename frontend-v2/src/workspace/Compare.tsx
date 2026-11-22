@@ -48,7 +48,8 @@ export type CompareProps = {
 };
 
 /**
- * Compare engines: each engine's result side by side (drawing, SMILES, validity), the
+ * Compare engines: the image the engines read (the paper's crop, or the uploaded image), then
+ * each engine's result side by side (drawing, SMILES, validity), the
  * pairwise Tanimoto similarity, "Show common part" (the MCS highlighted in every drawing),
  * and "Use this one". Opening it starts every engine not read and not running, at once; a
  * failed engine has its own Retry.
@@ -138,6 +139,9 @@ export default function Compare({
           <thead>
             <tr>
               <td className="cmp-table__corner" />
+              <th scope="col" className="cmp-table__engine cmp-table__source">
+                <span className="cmp-table__name">{target.kind === "image" ? "Image" : "Paper"}</span>
+              </th>
               {rows.map((r, i) => (
                 <th key={colKey(r, i)} scope="col" className="cmp-table__engine">
                   <span className="cmp-table__name">{r.label}</span>
@@ -158,6 +162,13 @@ export default function Compare({
           <tbody>
             <tr>
               <th scope="row">Drawing</th>
+              {/* What the engines read, beside their drawings (one cell down the column). */}
+              <td rowSpan={4} className="cmp-table__figure cmp-table__source">
+                <Structure
+                  src={target.kind === "image" ? api.imageUrl(target.id) : api.segmentImageUrl(target.id)}
+                  alt={target.kind === "image" ? "The uploaded image" : "Crop from the paper"}
+                />
+              </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
                   <Drawing row={r} target={target} depict={depictOf(r)} />
