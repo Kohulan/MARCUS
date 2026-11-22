@@ -200,7 +200,8 @@ pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) t
 model (nuextract3-rgroup-v1, vision, Q8_0) in a second llama-server, `llama-rgroup`, and stores
 the rows (`rgroup_extractions`, one per prediction; a re-run replaces them). Of the labels, only
 those the page text names are asked for (all of them when it names none): OCSR sometimes adds a
-label the drawing does not have, and the model would fill that column too. The request is the
+label the drawing does not have, and the model would fill that column too. An unlabelled point
+(`*`) is never asked for beside drawn labels: the model was trained on printed labels only. The request is the
 one the model was trained on (`marcus.core.rgroup_extraction`, byte for byte the bake-off
 client's). The step never reopens the paper. Exports: JSON `rgroup_rows` per segment, SDF
 `MARCUS_RGROUP_ROWS`. The GPU override runs `llama-rgroup` beside `llama-server` (same image,
