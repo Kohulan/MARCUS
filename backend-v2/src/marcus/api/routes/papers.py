@@ -127,7 +127,7 @@ async def get_paper(
     return PaperDetail(
         **paper_summary(paper, (await paper_counts(db, [paper.id]))[paper.id]).model_dump(),
         counts=Counts(steps_by_status=counts),
-        segments=await segments_out(db, paper.id),
+        segments=await segments_out(db, paper),
     )
 
 
@@ -138,7 +138,7 @@ async def get_segments(
     db: AsyncSession = Depends(get_db),
 ) -> SegmentList:
     paper = await get_owned_paper(db, owner, paper_id)
-    return SegmentList(segments=await segments_out(db, paper.id))
+    return SegmentList(segments=await segments_out(db, paper))
 
 
 @router.put("/papers/{paper_id}/curation", response_model=BulkCurationOut)

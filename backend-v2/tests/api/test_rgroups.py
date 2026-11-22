@@ -8,7 +8,7 @@ import pytest
 from rdkit import Chem
 from sqlalchemy import select, update
 
-from marcus.core.models import Prediction, Segment, Step
+from marcus.core.models import Paper, Prediction, Segment, Step
 from tests.api.conftest import (
     finish,
     make_client,
@@ -209,6 +209,26 @@ async def test_a_structure_without_rgroups_is_refused(app, async_db_session, rea
     async with make_client(app, token) as c:
         r = await c.post(f"/api/v2/predictions/{plain}/rgroups")
     assert r.status_code == 409 and r.json() == {"detail": "This structure has no R-groups"}
+
+
+async def test_the_rgroup_api_shows_the_labels_the_card_shows(app, async_db_session, ready):
+    """Review finding 10: before any rows (status none, queued, a failed first run) the entry's
+    labels are the structure's shown labels (those its page's text names), as on the card."""
+    token, paper_id, scaffold, _, segment, _ = ready
+    db = async_db_session
+    await db.execute(update(Prediction).where(Prediction.id == scaffold)
+                     .values(rgroups=["R1", "Z"]))  # fmt: skip
+    await db.execute(update(Paper).where(Paper.id == paper_id)
+                     .values(rgroup_text_labels={"0": ["R1", "R2"]}))  # fmt: skip
+    await db.commit()
+    async with make_client(app, token) as c:
+        none = (await c.get(f"/api/v2/predictions/{scaffold}/rgroups")).json()
+        card = (await c.get(f"/api/v2/papers/{paper_id}/segments")).json()
+        await c.post(f"/api/v2/predictions/{scaffold}/rgroups")
+        queued = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()["extractions"][0]
+    shown = [s for s in card["segments"] if s["id"] == str(segment)][0]["predictions"][0]
+    assert shown["rgroups"] == ["R1"]
+    assert none["labels"] == ["R1"] and queued["labels"] == ["R1"]
 
 
 async def test_a_structure_whose_only_label_is_unlabelled_is_refused(app, async_db_session, ready):
