@@ -30,9 +30,7 @@ from functools import lru_cache
 from rdkit import Chem
 from rdkit.rdBase import BlockLogs
 
-from marcus.core.rgroup_labels import as_label
-
-UNLABELLED = "*"
+from marcus.core.rgroup_labels import UNLABELLED, as_label
 
 # SMILES: a dummy atom is `*`, bare or in brackets ([*], [1*], [*:1]); nothing else in SMILES
 # uses `*` (a CXSMILES extension starts after whitespace and is cut off first).

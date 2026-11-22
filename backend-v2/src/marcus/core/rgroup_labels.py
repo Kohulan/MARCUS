@@ -18,6 +18,8 @@ CH2OR1, N(R)2): the label is the one R-group in it.
 
 import re
 
+UNLABELLED = "*"  # the label of a dummy atom without a drawn label (marcus.core.rgroups)
+
 _R = r"R[′″']*(?:\d{1,2})?[a-z]?[′″']*"
 _OTHER = r"[XYZ](?:\d{1,2})?[′″']*|Ar(?:\d{1,2})?|[nmQ]|\*"
 _LABEL = re.compile(rf"(?:{_R}|{_OTHER})")
