@@ -191,6 +191,22 @@ Real-model smoke test, outside any stack (the sample PDF through docling, then t
 handler against llama-server): `MARCUS_LLM_GGUF=... ops/annotate_smoke.sh` (`--cpu` without a
 GPU; about 70 s per paper on 16 CPU threads).
 
+### R-group rows of a scaffold (the local R-group model)
+
+On demand per prediction with R-group labels (`POST /api/v2/predictions/{id}/rgroups`; read with
+`GET /api/v2/papers/{id}/rgroups` or `GET /api/v2/predictions/{id}/rgroups`; routes in
+`marcus.api.routes.rgroups`): an `rgroups` step on q.llm sends the scaffold's labels, the text of
+pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) to the R-group
+model (nuextract3-rgroup-v1, vision, Q8_0) in a second llama-server, `llama-rgroup`, and stores
+the rows (`rgroup_extractions`, one per prediction; a re-run replaces them). The request is the
+one the model was trained on (`marcus.core.rgroup_extraction`, byte for byte the bake-off
+client's). The step never reopens the paper. Exports: JSON `rgroup_rows` per segment, SDF
+`MARCUS_RGROUP_ROWS`. The GPU override runs `llama-rgroup` beside `llama-server` (same image,
+same network `llm`, both GGUF files mounted read-only; 6.0 GB measured on a V100); the fake stack
+runs the fake reader in `worker-fake-annotate`. Without either, the API answers 503
+(`rgroup_enabled`). Real-model smoke test against a running server:
+`python ops/rgroup_smoke.py --url http://127.0.0.1:8080 --pdf paper.pdf --page 3 --labels R1,R2 --text docling.json`.
+
 ### nginx and api restarts
 
 nginx re-resolves `api` every second (Docker DNS) and retries idempotent requests (GET, HEAD,

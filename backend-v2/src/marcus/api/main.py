@@ -3,7 +3,17 @@ import asyncio
 from fastapi import APIRouter, FastAPI
 
 from marcus.api import security
-from marcus.api.routes import annotation, events, health, images, papers, queue, segments, tools
+from marcus.api.routes import (
+    annotation,
+    events,
+    health,
+    images,
+    papers,
+    queue,
+    rgroups,
+    segments,
+    tools,
+)
 from marcus.core.logging import configure_logging
 from marcus.core.settings import get_settings
 
@@ -18,6 +28,7 @@ def create_app(json_logs: bool = False) -> FastAPI:
     api.include_router(health.router)
     api.include_router(papers.router)
     api.include_router(annotation.router)
+    api.include_router(rgroups.router)
     api.include_router(images.router)
     api.include_router(segments.router)
     api.include_router(queue.router)
@@ -26,7 +37,7 @@ def create_app(json_logs: bool = False) -> FastAPI:
     app.include_router(api)
     # image uploads: bounded CPU-bound decodes per process (routes/images.py decode_image)
     app.state.decode_slots = asyncio.Semaphore(settings.image_decode_concurrency)
-    # live Celery consumers, cached like /ready (the annotation route checks q.llm)
+    # live Celery consumers, cached like /ready (the annotation and R-group routes check q.llm)
     app.state.live_queues = health.live_queues
     security.install(app, settings)
     return app
