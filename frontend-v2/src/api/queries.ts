@@ -320,7 +320,14 @@ export function useSaveCuration(paperId: string): {
             if (!(err instanceof ApiError) || err.status >= 500) refreshPaper(client, paperId);
             throw err;
           }
-          if ((await write(out)) || cancelled) void client.invalidateQueries({ queryKey: key });
+          // A new structure can make or end a repeat of the main figure (the server links
+          // them): fetch the paper again when it has one.
+          const relink =
+            change.structure !== undefined &&
+            client.getQueryData<PaperDetail>(key)?.main_figure_page != null;
+          if ((await write(out)) || cancelled || relink) {
+            void client.invalidateQueries({ queryKey: key });
+          }
           return out;
         });
       map.set(segmentId, run);
@@ -447,4 +454,41 @@ export function useBulkCuration(paperId: string): {
     [client, paperId],
   );
   return { bulk };
+}
+
+/**
+ * `mark(page0)`: marks a page as the paper's main figure (null clears it). The cache changes
+ * at once (the order follows; the old repeat links are dropped, the server links again on the
+ * fetch that follows); a failure puts the old page back and rejects.
+ */
+export function useMainFigure(paperId: string): { mark: (page0: number | null) => Promise<void> } {
+  const client = useQueryClient();
+  const mark = useCallback(
+    async (page0: number | null): Promise<void> => {
+      const key = keys.paper(paperId);
+      await client.cancelQueries({ queryKey: key });
+      const old = client.getQueryData<PaperDetail>(key);
+      const set = (page: number | null) =>
+        client.setQueryData<PaperDetail>(key, (p) =>
+          p
+            ? {
+                ...p,
+                main_figure_page: page,
+                segments: p.segments.map((s) => (s.repeat_of ? { ...s, repeat_of: null } : s)),
+              }
+            : p,
+        );
+      set(page0);
+      try {
+        await api.putMainFigure(paperId, page0);
+      } catch (err) {
+        if (old) client.setQueryData<PaperDetail>(key, old);
+        throw err;
+      } finally {
+        void client.invalidateQueries({ queryKey: key });
+      }
+    },
+    [client, paperId],
+  );
+  return { mark };
 }

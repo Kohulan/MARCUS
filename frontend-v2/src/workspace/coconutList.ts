@@ -3,6 +3,7 @@ import type { SegmentOut } from "../api/types";
 import { hasDummyAtom, type HeldStructure } from "../coconut/held";
 import type { SubmitStructure } from "../coconut/types";
 import { hasDrawing, shownStructure } from "./cardState";
+import { listedSegments } from "./mainFigure";
 import { UNLABELLED } from "./rgroups";
 
 /** The structures to send, and the accepted ones left out because they have R-groups. */
@@ -10,10 +11,11 @@ export type CoconutList = { send: SubmitStructure[]; held: HeldStructure[] };
 
 /**
  * The accepted structures that have a structure (the rule of bulk Accept: `hasDrawing`), in
- * (page, idx) order. `segments` is the whole paper in that order, so `n` is numbered before
- * any filter and matches the `[nn]` tag. The SMILES is the curated one, else the shown
- * prediction's; a curation with a molfile and no SMILES has no SMILES to send and is left
- * out (the prediction would be another structure).
+ * the workspace's order. `segments` is the whole paper in that order, so `n` is numbered before
+ * any filter and matches the `[nn]` tag; repeats of main-figure structures are left out and
+ * not numbered (listedSegments), as in the review rows. The SMILES is the curated one, else
+ * the shown prediction's; a curation with a molfile and no SMILES has no SMILES to send and is
+ * left out (the prediction would be another structure).
  *
  * A structure that still has R-group placeholders stands for several compounds: it is never
  * sent (owner decision), but listed in `held` so the form says which and why. The curator may
@@ -22,7 +24,8 @@ export type CoconutList = { send: SubmitStructure[]; held: HeldStructure[] };
 export function coconutStructures(segments: SegmentOut[], paperEngine: string): CoconutList {
   const send: SubmitStructure[] = [];
   const held: HeldStructure[] = [];
-  segments.forEach((s, i) => {
+  // A repeat of a main-figure structure is that compound again: never sent twice.
+  listedSegments(segments).forEach((s, i) => {
     if (s.curation?.status !== "accepted" || !hasDrawing(s)) return;
     const { smiles, rgroups, placeholder } = shownStructure(s, paperEngine);
     // Held for any placeholder atom: the server's word (whatever labels the page shows), or a

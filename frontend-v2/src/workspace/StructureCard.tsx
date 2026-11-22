@@ -88,6 +88,8 @@ export type StructureCardProps = {
   failedEngine: string | null;
   /** For a card being read: a line on a slow first run (firstRunNote). */
   readingNote?: string | null;
+  /** A main-figure structure with repeats on other pages: "Also on page N" (mainFigure). */
+  alsoOn?: string | null;
   /** Ticked for a bulk action; the grid's cards only. */
   selected?: boolean;
   /** The focused segment (`?s=`). */
@@ -128,6 +130,7 @@ function StructureCard({
   reason,
   failedEngine,
   readingNote = null,
+  alsoOn = null,
   selected = false,
   current,
   onToggle,
@@ -270,6 +273,7 @@ function StructureCard({
             {enginesDiffer(segment) && <span className="card__differ">Engines differ</span>}
           </p>
         )}
+        {alsoOn !== null && <p className="card__also">{alsoOn}</p>}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
         {state === "reading" && readingNote !== null && (

@@ -170,6 +170,48 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     await expectNoA11yViolations(page);
   });
 
+  test("the main figure: its page marked, its structures first, a repeat shown once", async ({
+    page,
+  }) => {
+    // Page 3 is the main figure; the first structure of page 4 repeats its first structure.
+    const marked = structuredClone(paper) as unknown as {
+      main_figure_page: number | null;
+      segments: { id: string; repeat_of?: string | null }[];
+    };
+    const main = marked.segments[4]!;
+    marked.main_figure_page = 2;
+    marked.segments[6]!.repeat_of = main.id;
+    const puts: unknown[] = [];
+    await page.route(`**/api/v2/papers/${PID}`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(marked) }),
+    );
+    await page.route(`**/api/v2/papers/${PID}/main-figure`, (route) => {
+      puts.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: '{"main_figure_page":null}',
+      });
+    });
+
+    await page.goto(`/app/papers/${PID}?view=paper`);
+    const mark = page.getByRole("button", { name: "Main figure: Page 3" });
+    await expect(mark).toHaveAttribute("aria-pressed", "true");
+    const list = page.getByRole("region", { name: "Structures" });
+    await expect(list.getByRole("article")).toHaveCount(paper.segments.length - 1);
+    const first = list.getByRole("article").first();
+    await expect(first).toHaveAttribute("data-segment-id", main.id);
+    await expect(first.getByText("Also on page 4")).toBeVisible();
+    await expectNoA11yViolations(page);
+
+    await mark.click();
+    await expect.poll(() => puts).toEqual([{ page: null }]);
+
+    await page.goto(`/app/papers/${PID}`);
+    await expect(page.getByRole("article")).toHaveCount(paper.segments.length - 1);
+    await expectNoA11yViolations(page);
+  });
+
   test("compare", async ({ page }) => {
     await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
     await expect(page.getByRole("region", { name: "Focus [01]" })).toBeVisible();

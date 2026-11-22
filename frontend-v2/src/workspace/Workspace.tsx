@@ -129,8 +129,12 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
-  const focused =
+  const picked =
     ws.view === "review" && ws.focus ? ws.segments.find((s) => s.id === ws.selection) : undefined;
+  // A repeat of a main-figure structure has no row: focus mode shows that structure.
+  const focused = picked?.repeat_of
+    ? ws.segments.find((s) => s.id === picked.repeat_of)
+    : picked;
 
   const { focus, selection, setSelection, closeFocus } = ws;
   useEffect(() => {

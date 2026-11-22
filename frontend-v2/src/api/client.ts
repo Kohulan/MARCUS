@@ -16,6 +16,7 @@ import type {
   ExportStatus,
   ImageJobList,
   ImageJobOut,
+  MainFigureOut,
   McsReply,
   OcsrMode,
   PaperDetail,
@@ -263,6 +264,9 @@ export const api = {
   putBulkCuration: (paperId: string, items: BulkCurationItem[]) =>
     sendJson<BulkCurationOut>("PUT", `/papers/${enc(paperId)}/curation`, { items }),
   /** `page0` is the 0-based API page. */
+  /** Marks a page (0-based) as the paper's main figure; null clears the mark. */
+  putMainFigure: (paperId: string, page0: number | null) =>
+    sendJson<MainFigureOut>("PUT", `/papers/${enc(paperId)}/main-figure`, { page: page0 }),
   retryPage: (paperId: string, page0: number) =>
     request<StepAccepted>(`/papers/${enc(paperId)}/pages/${page0}/retry`, { method: "POST" }),
   getQueue: (opts?: ReadOpts) => get<QueueOut>("/queue", opts),
