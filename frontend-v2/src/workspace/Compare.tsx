@@ -66,10 +66,18 @@ export default function Compare({
   const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
   const { requested, batch, sending, error: runError, run } = useEngineRuns(target, steps, onStarted);
+  // The DECIMER column shows the hand-drawn model while this is on (off on every opening).
+  const [hand, setHand] = useState(false);
   const rows = useMemo(
-    () => engineRows(predictions, steps, requested),
-    [predictions, steps, requested],
+    () => engineRows(predictions, steps, requested, hand),
+    [predictions, steps, requested, hand],
   );
+  const toggleHand = () => {
+    const on = !hand;
+    setHand(on);
+    // On: read it now unless it is read or running (its first run loads the model).
+    if (on) run(enginesToRun(engineRows(predictions, steps, requested, true)).filter((e) => e === "decimer-hand"));
+  };
   // Opening starts the engines not read yet, once (the ref holds across a strict-mode remount).
   const opened = useRef(false);
   useEffect(() => {
@@ -130,11 +138,18 @@ export default function Compare({
           <thead>
             <tr>
               <td className="cmp-table__corner" />
-              {rows.map((r) => (
-                <th key={r.engine} scope="col" className="cmp-table__engine">
+              {rows.map((r, i) => (
+                <th key={colKey(r, i)} scope="col" className="cmp-table__engine">
                   <span className="cmp-table__name">{r.label}</span>
                   {r.prediction && (
                     <span className="cmp-table__version">{r.prediction.engine_version}</span>
+                  )}
+                  {i === 0 && (
+                    <span className="cmp-table__hand">
+                      <GlassButton tint="clear" size="sm" pressed={hand} onClick={toggleHand}>
+                        Hand-drawn
+                      </GlassButton>
+                    </span>
                   )}
                 </th>
               ))}
@@ -281,6 +296,10 @@ export default function Compare({
     </Modal>
   );
 }
+
+/** A column's key: the DECIMER column keeps its own whichever model it shows (the toggle in
+ * its head keeps focus). */
+const colKey = (r: EngineRow, i: number) => (i === 0 ? "decimer-column" : r.engine);
 
 function resultText(r: EngineRow): ReactNode {
   if (r.prediction) return resultWord(r.prediction);

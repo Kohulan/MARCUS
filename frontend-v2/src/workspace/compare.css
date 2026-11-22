@@ -116,7 +116,13 @@
 }
 
 .cmp-table__engine {
-  vertical-align: bottom;
+  vertical-align: top;
+}
+
+/* Below DECIMER's name: the toggle to the hand-drawn model. */
+.cmp-table__hand {
+  display: block;
+  margin-top: 8px;
 }
 
 .cmp-table__name {
@@ -279,8 +285,10 @@
   visibility: hidden;
 }
 
-/* "Show common part" is a toggle: a square that fills green while on (shape, not tint). */
-.cmp__actions .glass[aria-pressed]::before {
+/* "Show common part" and "Hand-drawn" are toggles: a square that fills green while on (shape,
+   not tint). */
+.cmp__actions .glass[aria-pressed]::before,
+.cmp-table__hand .glass[aria-pressed]::before {
   content: "";
   flex: none;
   width: 8px;
@@ -288,7 +296,8 @@
   border: 1px solid var(--control-border);
 }
 
-.cmp__actions .glass[aria-pressed="true"]::before {
+.cmp__actions .glass[aria-pressed="true"]::before,
+.cmp-table__hand .glass[aria-pressed="true"]::before {
   border-color: var(--green);
   background-color: var(--green);
 }

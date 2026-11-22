@@ -103,11 +103,20 @@ function cell(row: string, engine: string): HTMLElement {
 }
 
 describe("Compare", () => {
-  it("opening starts the three engines not read, then onStarted once, and opens no stream", async () => {
+  it("three columns: DECIMER, MolNexTR, MolScribe; a hand-drawn reading is not a column", () => {
+    renderCompare({
+      predictions: [prediction({ engine: "decimer-hand" }), prediction({ engine: "decimer" })],
+    });
+    const table = screen.getByRole("table", { name: "Engines" }) as HTMLTableElement;
+    const heads = [...table.tHead!.rows[0]!.cells].slice(1).map((c) => c.querySelector(".cmp-table__name")?.textContent);
+    expect(heads).toEqual(["DECIMER", "MolNexTR", "MolScribe"]);
+  });
+
+  it("opening starts the main engines not read (never hand-drawn), then onStarted once, and opens no stream", async () => {
     const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     const run = vi.mocked(api.runPrediction);
-    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["decimer-hand", "molnextr", "molscribe"]);
+    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["molnextr", "molscribe"]);
     expect(run.mock.calls.every((c) => c[0] === "s1")).toBe(true);
     expect(EventSourceSpy).not.toHaveBeenCalled();
     // Started engines read as Reading… until their steps arrive.
@@ -126,12 +135,12 @@ describe("Compare", () => {
       </QueryClientProvider>,
     );
     await new Promise((r) => setTimeout(r, 20));
-    expect(api.runPrediction).toHaveBeenCalledTimes(3);
+    expect(api.runPrediction).toHaveBeenCalledTimes(2);
   });
 
   it("everything read: nothing is started", async () => {
     const { props } = renderCompare({
-      predictions: ["decimer", "decimer-hand", "molnextr", "molscribe"].map((engine) =>
+      predictions: ["decimer", "molnextr", "molscribe"].map((engine) =>
         prediction({ engine }),
       ),
     });
@@ -144,7 +153,7 @@ describe("Compare", () => {
     const { props, rerender } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     const bar = await screen.findByRole("progressbar", { name: "Engines" });
     expect(bar).toHaveAttribute("aria-valuenow", "0");
-    expect(screen.getByText("Running engines 0/3")).toBeInTheDocument();
+    expect(screen.getByText("Running engines 0/2")).toBeInTheDocument();
     // an engine reading has the calm indeterminate bar under its word
     expect(within(cell("Result", "MolNexTR")).getByRole("progressbar", { name: "Reading, MolNexTR" })).not.toHaveAttribute(
       "aria-valuenow",
@@ -159,29 +168,29 @@ describe("Compare", () => {
         </QueryClientProvider>,
       );
     const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" })];
-    again(first, [step("molnextr", "done"), step("molscribe", "running"), step("decimer-hand", "running")]);
-    expect(bar).toHaveAttribute("aria-valuenow", "33");
-    expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 3, 33%");
-    again(
-      [...first, prediction({ engine: "molscribe" })],
-      [step("molnextr", "done"), step("molscribe", "done"), step("decimer-hand", "failed", "timeout")],
-    );
+    again(first, [step("molnextr", "done"), step("molscribe", "running")]);
+    expect(bar).toHaveAttribute("aria-valuenow", "50");
+    expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 2, 50%");
+    again(first, [step("molnextr", "done"), step("molscribe", "failed", "timeout")]);
     expect(bar).toHaveAttribute("aria-valuenow", "100");
     await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Engines" })).toBeNull());
   });
 
-  it("DECIMER hand-drawn reading says its first run loads the model; the others do not", async () => {
-    const first = [prediction({ engine: "decimer" })];
+  it("Hand-drawn (off by default) reads DECIMER hand-drawn in the DECIMER column; its first run says it loads the model", async () => {
+    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
     const { props, rerender } = renderCompare({ predictions: first });
+    const toggle = screen.getByRole("button", { name: "Hand-drawn" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(api.runPrediction).toHaveBeenCalledWith("s1", "decimer-hand");
     const note = "The first run can take about 30 s";
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
     expect(cell("Result", "MolNexTR")).not.toHaveTextContent(note);
-    // MolNexTR and MolScribe are back; the hand-drawn model is still loading.
-    const steps = [step("decimer-hand", "running"), step("molnextr", "done"), step("molscribe", "done")];
-    const two = [...first, prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
-    const again = (predictions: PredictionOut[], s: typeof steps) =>
+    const again = (predictions: PredictionOut[], s: ReturnType<typeof step>[]) =>
       rerender(
         <QueryClientProvider client={client}>
           <ToastProvider>
@@ -189,11 +198,47 @@ describe("Compare", () => {
           </ToastProvider>
         </QueryClientProvider>,
       );
-    again(two, steps);
+    again(first, [step("decimer-hand", "running")]);
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
-    again([prediction({ engine: "decimer-hand" }), ...two], [step("decimer-hand", "done"), ...steps.slice(1)]);
+    const hand = prediction({ engine: "decimer-hand", smiles: "CCCl" });
+    again([hand, ...first], [step("decimer-hand", "done")]);
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Valid");
     expect(cell("Result", "DECIMER hand-drawn")).not.toHaveTextContent(note);
+    expect(cell("SMILES", "DECIMER hand-drawn")).toHaveTextContent("CCCl");
+    // Use this one takes what the column shows
+    fireEvent.click(screen.getByRole("button", { name: "Use this one, DECIMER hand-drawn" }));
+    expect(props.onPick).toHaveBeenCalledWith(hand);
+    // Off: normal DECIMER again, nothing started
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    expect(cell("SMILES", "DECIMER")).toHaveTextContent("c1ccccc1");
+    expect(screen.queryByRole("button", { name: "Use this one, DECIMER hand-drawn" })).toBeNull();
+    expect(api.runPrediction).toHaveBeenCalledTimes(1);
+  });
+
+  it("Hand-drawn on an already read hand-drawn model starts nothing; the similarity uses what the columns show", async () => {
+    const cmp = vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer-hand", smiles: "CCN" }),
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molscribe", smiles: "CCO" }),
+      ],
+    });
+    const label = await screen.findByRole("table", { name: "Similarity" });
+    expect(within(label).getByRole("row", { name: /DECIMER · MolScribe/ })).toHaveTextContent("1.00");
+    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    await waitFor(() =>
+      expect(within(label).getByRole("row", { name: /DECIMER hand-drawn · MolNexTR/ })).toHaveTextContent("1.00"),
+    );
+    expect(within(label).queryByRole("row", { name: /^DECIMER · / })).toBeNull();
+    expect(api.runPrediction).not.toHaveBeenCalled();
+    expect(cmp).toHaveBeenCalledWith("CCN", "CCO");
   });
 
   it("does not ask again for an engine with an active step", async () => {
@@ -203,10 +248,7 @@ describe("Compare", () => {
     });
     expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1]).sort()).toEqual([
-      "decimer-hand",
-      "molscribe",
-    ]);
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1]).sort()).toEqual(["molscribe"]);
   });
 
   it("an image target starts image predictions", async () => {
@@ -217,14 +259,14 @@ describe("Compare", () => {
     });
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     const run = vi.mocked(api.runImagePrediction);
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls.every((c) => c[0] === "img1")).toBe(true);
     expect(seg).not.toHaveBeenCalled();
   });
 
   it("a failed engine is not started again on opening: its own Retry starts it", async () => {
     const { props } = renderCompare({
-      predictions: ["decimer", "decimer-hand", "molnextr"].map((engine) => prediction({ engine })),
+      predictions: ["decimer", "molnextr"].map((engine) => prediction({ engine })),
       steps: [step("molscribe", "failed", "engine_error")],
     });
     expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
@@ -299,16 +341,16 @@ describe("Compare", () => {
     });
     const predictions = [
       prediction({ engine: "decimer", smiles: "CCO" }),
-      prediction({ engine: "decimer-hand", smiles: "CCO" }),
       prediction({ engine: "molnextr", smiles: "CCN" }),
       prediction({ engine: "molscribe", smiles: "CCC" }),
+      prediction({ engine: "fake", smiles: "CCO" }),
     ];
     const first = renderCompare({ predictions });
     await waitFor(() => expect(cmp).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(screen.queryByText("…")).toBeNull());
     for (const [a, b] of cmp.mock.calls) expect(a < b).toBe(true);
-    // DECIMER and DECIMER hand-drawn read the same SMILES: 1.00 without a call.
-    expect(screen.getByRole("row", { name: /DECIMER · DECIMER hand-drawn/ })).toHaveTextContent(
+    // DECIMER and another engine read the same SMILES: 1.00 without a call.
+    expect(screen.getByRole("row", { name: /DECIMER · fake/ })).toHaveTextContent(
       "1.00",
     );
     first.unmount();
@@ -704,7 +746,7 @@ describe("Compare in the workspace", () => {
     press("c");
     await screen.findByRole("dialog", { name: /Compare engines/ });
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
-    expect(api.runPrediction).toHaveBeenCalledTimes(3);
+    expect(api.runPrediction).toHaveBeenCalledTimes(2);
     expect(EventSourceSpy).not.toHaveBeenCalled();
   });
 
