@@ -549,6 +549,10 @@ BUDGET_LIMIT_MIB = 20 * 1024
 # capped, so it is counted on top of the model workers' budgets and the card must still keep
 # CARD_HEADROOM_MIB free.
 LLAMA_GPU_MIB = 9 * 1024
+# llama-rgroup (the R-group model, vision): Q8_0 GGUF + f16 projector at a 10240-token context,
+# 6.0 GB measured on a V100 (MARCUS-training models/nuextract3-rgroup-v1/README.md), counted as
+# 6 GiB on top as well.
+RGROUP_GPU_MIB = 6 * 1024
 CARD_HEADROOM_MIB = 2 * 1024
 
 
@@ -572,10 +576,12 @@ def test_gpu_override_budget_under_20gb():
         budget += float(env[name]["MARCUS_TORCH_MEM_FRACTION"]) * GPU_TOTAL_MIB
     budget += CUDA_CONTEXT_MIB * len(GPU_SERVICES)
     assert budget <= BUDGET_LIMIT_MIB, budget
-    card = budget + LLAMA_GPU_MIB + CUDA_CONTEXT_MIB
+    card = budget + LLAMA_GPU_MIB + RGROUP_GPU_MIB + 2 * CUDA_CONTEXT_MIB
     assert card <= GPU_TOTAL_MIB - CARD_HEADROOM_MIB, card
     ctx = services["llama-server"]["command"]
     assert ctx[ctx.index("--ctx-size") + 1] == "8192"  # what LLAMA_GPU_MIB was sized for
+    ctx = services["llama-rgroup"]["command"]
+    assert ctx[ctx.index("--ctx-size") + 1] == "10240"  # what RGROUP_GPU_MIB was sized for
 
     published = {name for name, svc in services.items() if svc.get("ports")}
     assert published == {"nginx"}
@@ -595,7 +601,7 @@ def test_llama_gpu_memory_is_the_measured_figure_everywhere():
 def test_gpu_override_reserves_the_gpu_for_exactly_the_model_workers():
     services = _compose_config("docker-compose.yml", GPU)["services"]
     reserved = {name for name, svc in services.items() if _gpu_reservation(svc)}
-    assert reserved == {*GPU_SERVICES, "llama-server", "dcgm-exporter"}
+    assert reserved == {*GPU_SERVICES, "llama-server", "llama-rgroup", "dcgm-exporter"}
     for name in reserved:
         (device,) = _gpu_reservation(services[name])
         assert device["driver"] == "nvidia" and device["capabilities"] == ["gpu"], name
@@ -1018,13 +1024,49 @@ def test_llama_server_is_internal_read_only_and_mounts_the_model_read_only():
     assert "llama-server" not in base and "worker-llm" not in base
 
 
+def test_llama_rgroup_is_internal_read_only_and_mounts_model_and_projector_read_only():
+    """The R-group model's server: the same image and hardening as llama-server, both files
+    bound read-only from the host (never a new directory), the model README's serving flags."""
+    services = _compose_config("docker-compose.yml", GPU)["services"]
+    rg, llama = services["llama-rgroup"], services["llama-server"]
+    assert rg["image"] == llama["image"] == "marcus-v2-llama:cuda-b12554"
+    assert "build" not in rg  # built once, by llama-server
+    assert not rg.get("ports")
+    assert rg["read_only"] is True and rg["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in rg["security_opt"]
+    assert rg["user"] == llama["user"] == "10001:10001"
+    assert rg["tmpfs"] == ["/tmp"]
+    vols = {v["target"]: v for v in rg["volumes"]}
+    assert set(vols) == {"/models/rgroup.gguf", "/models/rgroup-mmproj.gguf"}
+    for vol in vols.values():
+        assert vol["type"] == "bind" and vol["read_only"] is True
+        assert vol["bind"]["create_host_path"] is False
+    assert vols["/models/rgroup.gguf"]["source"].endswith("nuextract3-rgroup-v1-vision-Q8_0.gguf")
+    assert vols["/models/rgroup-mmproj.gguf"]["source"].endswith(
+        "nuextract3-rgroup-v1-vision-mmproj-f16.gguf"
+    )
+    cmd = rg["command"]
+    assert _arg(cmd, "--model") == "/models/rgroup.gguf"
+    assert _arg(cmd, "--mmproj") == "/models/rgroup-mmproj.gguf"
+    assert _arg(cmd, "--alias") == "nuextract3-rgroup-v1"
+    assert _arg(cmd, "--parallel") == "1" and _arg(cmd, "--ctx-size") == "10240"
+    assert _arg(cmd, "--n-gpu-layers") == "999"
+    assert _arg(cmd, "--reasoning") == "off" and "--jinja" in cmd and "--no-webui" in cmd
+    assert rg["healthcheck"]["test"] == ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+    assert int(rg["mem_limit"]) >= 8 * 2**30  # the model files are mapped into memory
+    base = yaml.safe_load(COMPOSE.read_text())["services"]
+    assert "llama-rgroup" not in base
+
+
 def test_llama_server_shares_its_own_internal_network_only_with_worker_llm():
-    """A-M8: no other container (not even one on `internal`) can reach llama-server."""
+    """A-M8: no other container (not even one on `internal`) can reach llama-server or
+    llama-rgroup."""
     config = _compose_config("docker-compose.yml", GPU)
     assert config["networks"]["llm"]["internal"] is True
     members = {name for name, svc in config["services"].items() if "llm" in svc.get("networks", {})}
-    assert members == {"llama-server", "worker-llm"}
+    assert members == {"llama-server", "llama-rgroup", "worker-llm"}
     assert set(config["services"]["llama-server"]["networks"]) == {"llm"}
+    assert set(config["services"]["llama-rgroup"]["networks"]) == {"llm"}
     assert set(config["services"]["worker-llm"]["networks"]) == {"internal", "llm"}
 
 
@@ -1043,14 +1085,19 @@ def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
     worker = services["worker-llm"]
     cmd = worker["command"]
     assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
-    assert _arg(cmd, "--include") == "marcus.workers.annotate"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate,marcus.workers.rgroups"
     assert set(worker["networks"]) == {"internal", "llm"} and worker["read_only"] is True
     (vol,) = worker["volumes"]
     assert vol["target"] == "/data" and vol["read_only"] is True
     assert worker["depends_on"]["llama-server"]["condition"] == "service_healthy"
+    assert worker["depends_on"]["llama-rgroup"]["condition"] == "service_healthy"
     env = worker["environment"]
     assert env["MARCUS_ANNOTATOR"] == "llama"
     assert env["MARCUS_ANNOTATOR_URL"] == "http://llama-server:8080"
+    assert env["MARCUS_RGROUP_READER"] == "llama"
+    assert env["MARCUS_RGROUP_URL"] == "http://llama-rgroup:8080"
+    assert env["MARCUS_RGROUP_MODEL"] == "nuextract3-rgroup-v1"
+    assert env["MARCUS_RGROUP_MODEL_VERSION"] == "vision Q8_0 llama.cpp b12554"
     assert "MARCUS_ENABLE_FAKE_ENGINES" not in env
     from marcus.core.queues import SLOTS
 
@@ -1060,6 +1107,7 @@ def test_worker_llm_serves_q_llm_with_one_process_and_reads_data_only():
 def test_annotation_is_offered_only_where_q_llm_is_served():
     base = _compose_config("docker-compose.yml")["services"]["api"]["environment"]
     assert base.get("MARCUS_ANNOTATE_ENABLED", "0") in ("0", "false", "")
+    assert base.get("MARCUS_RGROUP_ENABLED", "0") in ("0", "false", "")
     assert "q.llm" not in base["MARCUS_EXPECTED_QUEUES"].split(",")
     for files, worker in (
         ((GPU,), "worker-llm"),
@@ -1068,6 +1116,7 @@ def test_annotation_is_offered_only_where_q_llm_is_served():
         services = _compose_config("docker-compose.yml", *files)["services"]
         api = services["api"]["environment"]
         assert api["MARCUS_ANNOTATE_ENABLED"] == "1", files
+        assert api["MARCUS_RGROUP_ENABLED"] == "1", files
         assert "q.llm" in api["MARCUS_EXPECTED_QUEUES"].split(","), files
         assert worker in services, files
 
@@ -1077,10 +1126,11 @@ def test_fake_stack_runs_the_fake_annotator():
     worker = services["worker-fake-annotate"]
     cmd = worker["command"]
     assert _arg(cmd, "-Q") == "q.llm" and _arg(cmd, "-c") == "1"
-    assert _arg(cmd, "--include") == "marcus.workers.annotate"
+    assert _arg(cmd, "--include") == "marcus.workers.annotate,marcus.workers.rgroups"
     env = worker["environment"]
     assert env["MARCUS_ANNOTATOR"] == "fake" and env["MARCUS_ENABLE_FAKE_ENGINES"] == "1"
-    assert "llama-server" not in services
+    assert env["MARCUS_RGROUP_READER"] == "fake"
+    assert "llama-server" not in services and "llama-rgroup" not in services
     (vol,) = worker["volumes"]
     assert vol["read_only"] is True
 

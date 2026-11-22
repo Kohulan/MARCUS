@@ -11,6 +11,13 @@ their positions in the text, marcus.core.annotation) is stored in the paper's on
 row. A re-run replaces the model's values and keeps the curator's. An annotate step never
 decides whether the paper is done or failed.
 
+R-group rows (Markush Phase 2): on demand only, per prediction with R-group labels.
+request_rgroups adds one `rgroups` step (q.llm, the step's segment set, no page) and writes the
+prediction's `rgroup_extractions` row (status `queued`); the step's end sets it `done` with the
+rows or `failed` with the error class. An rgroups step is outside the paper's progress: it never
+reopens a paper, never keeps one busy (_finish_check, the read counts in marcus.api.read) and
+never decides whether it is done or failed.
+
 Segmentation cache (spec §7): when the last page of a paper is segmented and every page was
 segmented successfully by one segmenter version, the planner stores the paper's segments under
 (owner, pdf_sha256, seg_cache_key(version)). A later paper of the same owner with the same PDF
@@ -36,7 +43,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import annotation, storage
+from marcus.core import annotation, rgroup_extraction, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -53,6 +60,7 @@ from marcus.core.models import (
     Owner,
     Paper,
     Prediction,
+    RgroupExtraction,
     SegCache,
     Segment,
     Step,
@@ -65,6 +73,7 @@ log = logging.getLogger(__name__)
 DOCLING_SEQ = 100_000
 DOI_SEQ = 100_001
 ANNOTATE_SEQ = 100_002
+RGROUPS_SEQ = 100_003
 MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
@@ -104,6 +113,14 @@ class RetryNotAllowed(Exception):
     """retry_page refused: the page has not failed, is still running, or has no retries left."""
 
     def __init__(self, reason: Literal["not_failed", "busy", "limit"]):
+        super().__init__(reason)
+        self.reason = reason
+
+
+class RgroupsNotAllowed(Exception):
+    """request_rgroups refused: the prediction has no R-group labels."""
+
+    def __init__(self, reason: Literal["no_rgroups"]):
         super().__init__(reason)
         self.reason = reason
 
@@ -336,8 +353,14 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
     return step, paper, job
 
 
+def in_paper_progress():
+    """SQL condition: the step counts in its paper's progress (every kind but `rgroups`)."""
+    return Step.kind != StepKind.RGROUPS.value
+
+
 def _finish_check(session: Session, paper: Paper) -> None:
-    """If no step of the paper is still active, close the paper as done or failed.
+    """If no step of the paper is still active (rgroups steps aside), close the paper as done or
+    failed.
 
     Failed (spec §8): check_pdf failed, or every page failed, a page being failed when its
     render_page or its segment_page step failed for good. Otherwise done, failed steps and all.
@@ -348,7 +371,7 @@ def _finish_check(session: Session, paper: Paper) -> None:
     active = session.execute(
         select(func.count())
         .select_from(Step)
-        .where(Step.paper_id == paper.id, Step.status.in_(ACTIVE))
+        .where(Step.paper_id == paper.id, Step.status.in_(ACTIVE), in_paper_progress())
     ).scalar_one()
     if active:
         return
@@ -489,6 +512,24 @@ def _check_annotate_result(result: dict) -> None:
         raise BadResult("annotate: 'ms' must be a non-negative int")
 
 
+def _check_rgroups_result(result: dict) -> None:
+    for key in ("model", "model_version"):
+        value = result.get(key)
+        if not _is_text(value) or not value or len(value) > MAX_VERSION_CHARS:
+            raise BadResult(f"rgroups: {key!r} must be a non-empty string of at most "
+                            f"{MAX_VERSION_CHARS} characters")  # fmt: skip
+    labels = result.get("labels")
+    error = rgroup_extraction.labels_error(labels) or rgroup_extraction.rows_error(
+        result.get("rows"), labels
+    )
+    if error:
+        raise BadResult(f"rgroups: {error}")
+    if not isinstance(result.get("truncated"), bool):
+        raise BadResult("rgroups: 'truncated' must be a bool")
+    if not _is_int(result.get("ms")):
+        raise BadResult("rgroups: 'ms' must be a non-negative int")
+
+
 def _check_nothing(result: dict) -> None:
     pass
 
@@ -499,6 +540,7 @@ _CHECK = {
     StepKind.OCSR.value: _check_ocsr_result,
     StepKind.DOI.value: _check_doi_result,
     StepKind.ANNOTATE.value: _check_annotate_result,
+    StepKind.RGROUPS.value: _check_rgroups_result,
 }
 
 
@@ -749,6 +791,41 @@ def _after_annotate(session: Session, paper: Paper, step: Step, result: dict) ->
     return []
 
 
+def _after_rgroups(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    """Store the rows on the step's request row (a re-run replaces them). The row is checked
+    for the labels it asked with: a result for other labels is refused."""
+    step.model_version = result["model_version"]
+    row = session.execute(
+        select(RgroupExtraction).where(RgroupExtraction.step_id == step.id).with_for_update()
+    ).scalar_one_or_none()
+    if row is None:
+        return []  # the prediction is gone: nothing to store
+    if list(row.labels) != result["labels"]:
+        raise BadResult("rgroups: the result is for other labels than were asked for")
+    now = _now()
+    row.status = "done"
+    row.error = None
+    row.rows = result["rows"]
+    row.truncated = result["truncated"]
+    row.model = result["model"]
+    row.model_version = result["model_version"]
+    row.updated_at = now
+    row.finished_at = now
+    return []
+
+
+def _rgroups_failed(session: Session, step: Step) -> None:
+    """The step failed for good: its request row says so (with the error class only). Earlier
+    rows stay."""
+    now = _now()
+    session.execute(
+        update(RgroupExtraction)
+        .where(RgroupExtraction.step_id == step.id)
+        .values(status="failed", error=step.error_class, updated_at=now, finished_at=now)
+        .execution_options(synchronize_session=False)
+    )
+
+
 def _no_successors(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     # docling: the text file already sits in the paper dir; nothing to store.
     return []
@@ -762,6 +839,7 @@ _AFTER = {
     StepKind.DOCLING.value: _no_successors,
     StepKind.DOI.value: _after_doi,
     StepKind.ANNOTATE.value: _after_annotate,
+    StepKind.RGROUPS.value: _after_rgroups,
 }
 
 
@@ -855,6 +933,8 @@ def fail_step(
         step.finished_at = _now()
         if job is not None:
             _settle_image_job(session, job, error)
+        if step.kind == StepKind.RGROUPS.value:
+            _rgroups_failed(session, step)
     if paper is not None:
         _finish_check(session, paper)
     session.flush()
@@ -887,6 +967,17 @@ def cancel_paper(session: Session, paper_id: uuid.UUID, remove_files: bool = Tru
             .where(model.paper_id == paper_id)
             .execution_options(synchronize_session=False)
         )
+    # R-group rows hold text from the paper too
+    predictions = (
+        select(Prediction.id)
+        .join(Segment, Segment.id == Prediction.segment_id)
+        .where(Segment.paper_id == paper_id)
+    )
+    session.execute(
+        delete(RgroupExtraction)
+        .where(RgroupExtraction.prediction_id.in_(predictions))
+        .execution_options(synchronize_session=False)
+    )
     session.flush()
     if remove_files:
         remove_paper_files(paper_id)
@@ -1053,5 +1144,58 @@ def request_annotation(
         paper.status = PaperStatus.PROCESSING.value
         paper.error = None
         keep_address(paper, started_ip)
+    session.flush()
+    return step
+
+
+def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = False) -> Step | None:
+    """Ask for a scaffold's R-group rows: a new pending `rgroups` step for the prediction and its
+    `rgroup_extractions` row set `queued` (labels: the prediction's), or None when it already
+    has rows and `rerun` is false. An rgroups step of the prediction still pending, queued or
+    running is returned instead of a new one (repeat clicks). The paper's status does not change.
+    Caller commits.
+
+    Locks the paper, then the row. Raises ValueError for a missing prediction, one not from a
+    paper, or a deleted paper, and RgroupsNotAllowed("no_rgroups") for a prediction without
+    R-group labels.
+    """
+    found = session.execute(
+        select(Prediction.rgroups, Segment.id, Segment.paper_id)
+        .join(Segment, Segment.id == Prediction.segment_id)
+        .where(Prediction.id == prediction_id)
+    ).one_or_none()
+    if found is None:
+        raise ValueError("prediction not found")
+    paper = _lock(session, Paper, found.paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper not found")
+    labels = list(found.rgroups or [])
+    if not labels:
+        raise RgroupsNotAllowed("no_rgroups")
+    row = session.execute(
+        select(RgroupExtraction)
+        .where(RgroupExtraction.prediction_id == prediction_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if row is not None and row.step_id is not None:
+        running = session.execute(
+            select(Step).where(Step.id == row.step_id, Step.status.in_(ACTIVE))
+        ).scalar_one_or_none()
+        if running is not None:
+            return running
+    if row is not None and row.status == "done" and not rerun:
+        return None
+    step = _new_step(paper, StepKind.RGROUPS, RGROUPS_SEQ, segment_id=found.id, created_at=_now())
+    session.add(step)
+    session.flush()  # assigns the step id
+    if row is None:
+        row = RgroupExtraction(prediction_id=prediction_id, labels=labels, status="queued")
+        session.add(row)
+    row.step_id = step.id
+    row.labels = labels
+    row.status = "queued"
+    row.error = None
+    row.updated_at = _now()
+    row.finished_at = None
     session.flush()
     return step

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import annotation as annotations
 from marcus.api import export
+from marcus.api import rgroups as rgroup_reads
 from marcus.api.chempool import CHEM
 from marcus.api.deps import (
     client_ip,
@@ -278,9 +279,10 @@ async def export_paper(
     paper = await get_owned_paper(db, owner, paper_id)
     segments, curations, predictions = await load_segments(db, paper.id)
     annotation = annotations.for_export(await annotations.load(db, paper.id))
+    rows = await rgroup_reads.for_export(db, paper.id)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
-        export.build, format, paper, segments, curations, predictions, status, annotation
+        export.build, format, paper, segments, curations, predictions, status, annotation, rows
     )
     return Response(
         content=content,

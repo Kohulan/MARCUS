@@ -10,6 +10,14 @@ exported as what it is, a scaffold, never as a finished compound: every format n
 (JSON `rgroups`, CSV column `rgroups`, SDF property MARCUS_RGROUPS), [] / empty for none. It is
 kept rather than left out, so an export still holds every structure the curator accepted.
 
+A scaffold's R-group rows read by the local R-group model (Markush Phase 2), when it has them, go
+with its segment: JSON `rgroup_rows` ({labels, rows: [{compound, groups}], truncated, model,
+model_version, extracted_at}, null without), SDF property MARCUS_RGROUP_ROWS (that object as
+one line of compact JSON). CSV keeps one row per structure and its columns as they are. The rows
+are those of the prediction the export picks; a curated structure with R-group labels takes
+those of the prediction that would be shown without the curation. They are model output, not
+checked by MARCUS.
+
 The paper's annotation (owner decision 6), when it has one, goes with every format: the JSON
 file has a paper-level `annotation` object (the values shown: the curator's, else the model's;
 plus the model's own), CSV rows get the organism/source fields as columns and SDF records as
@@ -53,6 +61,7 @@ class Chosen:
     note: str | None = None
     edited: bool = False  # the curation has its own SMILES or molfile
     rgroups: tuple[str, ...] = ()  # R-group labels: a scaffold, not a finished compound
+    rgroup_rows: dict | None = None  # the R-group model's rows (api.rgroups.for_export)
 
 
 def _labels(row: Curation | Prediction) -> tuple[str, ...]:
@@ -75,8 +84,11 @@ def choose(
     curations: dict[uuid.UUID, Curation],
     predictions: dict[uuid.UUID, list[Prediction]],
     include_rejected: bool = False,
+    rgroup_rows: dict[uuid.UUID, dict] | None = None,
 ) -> list[Chosen]:
-    """`segments` in (page, idx) order; `predictions` per segment, newest first."""
+    """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
+    per prediction id (api.rgroups.for_export)."""
+    rows_of = rgroup_rows or {}
     out: list[Chosen] = []
     for seg in segments:
         cur = curations.get(seg.id)
@@ -90,8 +102,11 @@ def choose(
             "status": status,
             "note": cur.note if cur is not None else None,
         }
+        valid = [p for p in predictions.get(seg.id, []) if p.valid]
+        pick = pick_prediction(valid, paper.engine)
         if cur is not None and (cur.smiles or cur.molfile):
             smiles = cur.smiles or smiles_from_molfile(cur.molfile)
+            labels = _labels(cur)
             out.append(
                 Chosen(
                     **row,
@@ -99,12 +114,11 @@ def choose(
                     molfile=cur.molfile,
                     source="curated",
                     edited=True,
-                    rgroups=_labels(cur),
+                    rgroups=labels,
+                    rgroup_rows=rows_of.get(pick.id) if labels and pick is not None else None,
                 )
             )
             continue
-        valid = [p for p in predictions.get(seg.id, []) if p.valid]
-        pick = pick_prediction(valid, paper.engine)
         if pick is not None:
             out.append(
                 Chosen(
@@ -114,6 +128,7 @@ def choose(
                     source="predicted",
                     engine=pick.engine,
                     rgroups=_labels(pick),
+                    rgroup_rows=rows_of.get(pick.id),
                 )
             )
     return out
@@ -158,6 +173,7 @@ def to_json(paper: Paper, chosen: list[Chosen], annotation: dict | None = None) 
                 "note": c.note,
                 "edited": c.edited,
                 "rgroups": list(c.rgroups),
+                "rgroup_rows": c.rgroup_rows,
             }
             for c in chosen
         ],
@@ -202,6 +218,11 @@ def sdf_text(value: str) -> str:
     return " " + text if text.startswith("$$$$") else text
 
 
+def rgroup_rows_json(rows: dict) -> str:
+    """The rows object as one line of compact JSON (no raw line break: JSON escapes them)."""
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
 def to_sdf(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
     """One record per segment RDKit can build a molecule for; RDKit writes every record."""
     buf = io.StringIO()
@@ -227,6 +248,8 @@ def to_sdf(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
         mol.SetProp("MARCUS_EDITED", "true" if c.edited else "false")
         if c.rgroups:
             mol.SetProp("MARCUS_RGROUPS", sdf_text(VALUE_SEPARATOR.join(c.rgroups)))
+        if c.rgroup_rows is not None:
+            mol.SetProp("MARCUS_RGROUP_ROWS", sdf_text(rgroup_rows_json(c.rgroup_rows)))
         for prop, value in source:
             mol.SetProp(prop, sdf_text(value))
         writer.write(mol)
@@ -242,11 +265,15 @@ def build(
     predictions: dict[uuid.UUID, list[Prediction]],
     status: ExportStatus | None = None,
     annotation: dict | None = None,
+    rgroup_rows: dict[uuid.UUID, dict] | None = None,
 ) -> bytes:
     """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
     marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
     status = status or ("accepted" if fmt == "sdf" else "all")
-    chosen = choose(paper, segments, curations, predictions, include_rejected=status == "all")
+    chosen = choose(
+        paper, segments, curations, predictions, include_rejected=status == "all",
+        rgroup_rows=rgroup_rows,
+    )  # fmt: skip
     if status == "accepted":
         chosen = [c for c in chosen if c.status == "accepted"]
     if fmt == "json":

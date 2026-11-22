@@ -1,0 +1,259 @@
+"""The planner's rgroups step: request_rgroups, its result, failures, deletion, and the paper's
+progress (an rgroups step never touches it); the handler against the database."""
+
+import json
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from PIL import Image
+from sqlalchemy import select, update
+
+from marcus.core.enums import ErrorClass
+from marcus.core.models import Paper, Prediction, RgroupExtraction, Segment, Step
+from marcus.core.pipeline import (
+    RGROUPS_SEQ,
+    BadResult,
+    RgroupsNotAllowed,
+    cancel_paper,
+    complete_step,
+    fail_step,
+    request_ocsr,
+    request_rgroups,
+)
+from marcus.core.settings import get_settings
+from marcus.core.storage import page_image_path, text_path
+from marcus.dispatcher.pick import watchdog_once
+from tests.core.test_pipeline import SEG_V, SEGS, finish, run, steps, to_processing
+from tests.factories import make_image_job, make_paper
+
+SCAFFOLD = {"smiles": "[R1]c1ccccc1[R2]", "molfile": None, "valid": False, "ms": 9,
+            "engine_version": "2.7"}  # fmt: skip
+PLAIN = {"smiles": "CCO", "molfile": None, "valid": True, "ms": 9, "engine_version": "2.7"}
+ROWS = [
+    {"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}},
+    {"compound": "3b", "groups": {"R1": "H", "R2": "OMe"}},
+]
+LIVE_WITHOUT_LLM = frozenset({"q.cpu", "q.tools", "q.segment", "q.fake"})
+
+
+def result(rows=ROWS, labels=("R1", "R2"), **kw) -> dict:
+    return {
+        "model": "nuextract3-rgroup-v1",
+        "model_version": "vision Q8_0 llama.cpp b12554",
+        "labels": list(labels),
+        "rows": rows,
+        "truncated": False,
+        "ms": 3300,
+        **kw,
+    }
+
+
+def done_paper(s):
+    """A done 1-page paper: segment 0 a scaffold (R1, R2), segment 1 a plain structure.
+    Returns (paper, scaffold prediction, plain prediction)."""
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    finish(s, steps(s, paper, "doi")[0], {"doi": None})
+    finish(s, steps(s, paper, "docling")[0], {"text_path": "text.json"})
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    first, second = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    finish(s, first, SCAFFOLD)
+    finish(s, second, PLAIN)
+    s.refresh(paper)
+    assert paper.status == "done"
+    preds = s.execute(
+        select(Prediction).join(Segment).where(Segment.paper_id == paper.id).order_by(Segment.idx)
+    ).scalars()
+    scaffold, plain = list(preds)
+    assert scaffold.rgroups == ["R1", "R2"] and plain.rgroups == []
+    return paper, scaffold, plain
+
+
+def row_of(s, prediction) -> RgroupExtraction | None:
+    return s.execute(
+        select(RgroupExtraction)
+        .where(RgroupExtraction.prediction_id == prediction.id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+
+
+def test_request_creates_a_pending_llm_step_and_a_queued_row(db_session):
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    assert (step.kind, step.queue, step.status, step.seq) == ("rgroups", "q.llm", "pending",
+                                                              RGROUPS_SEQ)  # fmt: skip
+    assert step.paper_id == paper.id and step.segment_id == scaffold.segment_id
+    assert step.page is None and step.engine is None
+    row = row_of(s, scaffold)
+    assert (row.status, row.step_id, row.labels, row.rows) == (
+        "queued",
+        step.id,
+        ["R1", "R2"],
+        None,
+    )
+    s.refresh(paper)
+    assert paper.status == "done"  # never reopened
+
+
+def test_repeat_clicks_get_the_waiting_step(db_session):
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    assert request_rgroups(s, scaffold.id).id == step.id
+    run(s, step)
+    assert request_rgroups(s, scaffold.id, rerun=True).id == step.id  # running: the same
+
+
+def test_refusals(db_session):
+    s = db_session
+    paper, scaffold, plain = done_paper(s)
+    with pytest.raises(RgroupsNotAllowed):
+        request_rgroups(s, plain.id)
+    job, job_step = make_image_job(s)
+    finish(s, job_step, SCAFFOLD)
+    (job_prediction,) = s.execute(
+        select(Prediction).where(Prediction.image_job_id == job.id)
+    ).scalars()
+    with pytest.raises(ValueError):
+        request_rgroups(s, job_prediction.id)  # no paper, no page
+    cancel_paper(s, paper.id, remove_files=False)
+    with pytest.raises(ValueError):
+        request_rgroups(s, scaffold.id)
+    assert s.execute(select(RgroupExtraction)).first() is None
+
+
+def test_result_is_stored_and_a_rerun_replaces_it(db_session):
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    assert finish(s, step, result()) == []
+    s.refresh(step)
+    assert step.status == "done" and step.model_version == "vision Q8_0 llama.cpp b12554"
+    row = row_of(s, scaffold)
+    assert row.status == "done" and row.rows == ROWS and row.error is None
+    assert (row.model, row.truncated) == ("nuextract3-rgroup-v1", False)
+    assert row.finished_at is not None
+    assert request_rgroups(s, scaffold.id) is None  # has rows: no new step
+    again = request_rgroups(s, scaffold.id, rerun=True)
+    assert again.id != step.id
+    row = row_of(s, scaffold)
+    assert row.status == "queued" and row.rows == ROWS  # kept while the re-run waits
+    finish(s, again, result(rows=ROWS[:1], truncated=True))
+    row = row_of(s, scaffold)
+    assert row.status == "done" and row.rows == ROWS[:1] and row.truncated is True
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_a_failed_run_keeps_earlier_rows_and_says_why(db_session):
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    finish(s, request_rgroups(s, scaffold.id), result())
+    step = request_rgroups(s, scaffold.id, rerun=True)
+    run(s, step)
+    fail_step(s, step.id, ErrorClass.TIMEOUT, "llama-rgroup did not answer", retryable=True)
+    row = row_of(s, scaffold)
+    assert row.status == "queued"  # retried once
+    run(s, step)
+    fail_step(s, step.id, ErrorClass.TIMEOUT, "llama-rgroup did not answer", retryable=True)
+    row = row_of(s, scaffold)
+    assert row.status == "failed" and row.error == "timeout"  # the class, never the text
+    assert row.rows == ROWS
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        result(model=""),
+        result(labels=[]),
+        result(rows=[{"compound": "1", "groups": {"R1": "H"}}]),
+        result(rows=[{"compound": "1", "groups": {"R2": "H", "R1": "H"}}]),
+        result(truncated="no"),
+        result(ms=-1),
+        result(labels=["R1", "X"], rows=[]),  # other labels than were asked for
+    ],
+)
+def test_a_malformed_result_is_refused_before_anything_changes(db_session, bad):
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    s.commit()
+    run(s, step)
+    s.commit()
+    with pytest.raises(BadResult):
+        complete_step(s, step.id, bad)
+    s.rollback()
+    assert row_of(s, scaffold).status == "queued"
+
+
+def test_an_rgroups_step_never_keeps_a_paper_busy(db_session):
+    """A paper re-read by another engine ends `done` while its rgroups step still waits."""
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    rg_step = request_rgroups(s, scaffold.id)
+    ocsr = request_ocsr(s, scaffold.segment_id, "molscribe")
+    s.refresh(paper)
+    assert paper.status == "processing"
+    finish(s, ocsr, PLAIN)
+    s.refresh(paper)
+    assert paper.status == "done"
+    s.refresh(rg_step)
+    assert rg_step.status == "pending"
+    finish(s, rg_step, result())
+    s.refresh(paper)
+    assert paper.status == "done"
+
+
+def test_deleting_the_paper_cancels_the_step_and_deletes_the_rows(db_session):
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    finish(s, request_rgroups(s, scaffold.id), result())
+    step = request_rgroups(s, scaffold.id, rerun=True)
+    cancel_paper(s, paper.id, remove_files=False)
+    s.refresh(step)
+    assert step.status == "cancelled"
+    assert row_of(s, scaffold) is None
+    assert complete_step(s, step.id, result()) == []  # a late result is dropped
+
+
+def test_an_unserved_rgroups_step_fails_and_says_so(db_session):
+    s = db_session
+    _, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    old = datetime.now(UTC) - timedelta(seconds=get_settings().annotate_max_wait_s + 30)
+    s.execute(update(Step).where(Step.id == step.id).values(created_at=old))
+    s.commit()
+    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM | {"q.llm"}) == 0
+    assert watchdog_once(s, live_queues=lambda: LIVE_WITHOUT_LLM) == 1
+    s.expire_all()
+    assert s.get(Step, step.id).status == "failed"
+    row = row_of(s, scaffold)
+    assert row.status == "failed" and row.error == "engine_error"
+
+
+def test_the_handler_reads_its_request_from_the_database(db_session, monkeypatch,
+                                                         clear_settings_cache):  # fmt: skip
+    from marcus.workers.rgroups.handler import extract_rgroups
+
+    monkeypatch.setenv("MARCUS_RGROUP_READER", "fake")
+    monkeypatch.setenv("MARCUS_ENABLE_FAKE_ENGINES", "1")
+    clear_settings_cache()
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    s.commit()
+    doc = {
+        "texts": [{"label": "caption", "text": "3a: R1 = OMe, R2 = H", "prov": [{"page_no": 1}]}]
+    }
+    text_path(paper.id).parent.mkdir(parents=True, exist_ok=True)
+    text_path(paper.id).write_text(json.dumps(doc))
+    page_image_path(paper.id, 0).parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 140), "white").save(page_image_path(paper.id, 0))
+    out = extract_rgroups(s.get(Step, step.id), s)
+    assert out["labels"] == ["R1", "R2"]
+    assert out["rows"] == [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}]
+    run(s, s.get(Step, step.id))
+    complete_step(s, step.id, out)
+    assert row_of(s, scaffold).rows == out["rows"]
+    assert s.get(Paper, paper.id).status == "done"

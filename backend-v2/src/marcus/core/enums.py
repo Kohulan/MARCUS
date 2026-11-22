@@ -9,6 +9,7 @@ class StepKind(StrEnum):
     DOCLING = "docling"
     DOI = "doi"
     ANNOTATE = "annotate"
+    RGROUPS = "rgroups"  # one scaffold's R-group rows (marcus.core.rgroup_extraction)
 
 
 class StepStatus(StrEnum):
