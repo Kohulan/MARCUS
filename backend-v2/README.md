@@ -253,17 +253,22 @@ its steps, step counts or progress; the GETs say `auto_pending` for the 20 s aft
 
 ### Drawings in the paper's orientation
 
-MolNexTR and MolScribe write the image's atom positions into their molfile. A segment's stored
-depiction (`GET /segments/{id}/depiction`) uses the molfile of its newest valid MolNexTR
-prediction (else MolScribe's) as a template: the common part (MCS) of the drawn structure and
+MolScribe writes the image's atom positions into its molfile when its structure sanitizes. The
+pinned MolNexTR (fb7505b) does not: it rewrites its molfile from its own SMILES
+(MolNexTR/chemical.py), a computed layout. A segment's stored depiction
+(`GET /segments/{id}/depiction`) sends the molfile of its newest valid MolScribe prediction (else
+MolNexTR's) as a template, and the worker uses it only when its positions come from the image
+(`orient.image_layout`: a computed layout has at least 80 % of its bonds within 1 % of one
+length). Then the common part (MCS) of the drawn structure and the template keeps the template's
+positions, RDKit lays out the rest, CDK draws it the common part (MCS) of the drawn structure and
 the template keeps the template's positions, RDKit lays out the rest, CDK draws it
 (`marcus.workers.orient`, `marcus.workers.tools.depict`). Every engine's structure of that
 segment, and a curated one, is drawn that way; it is stored under the SMILES and the template
 together. `POST /tools/depict` takes the same template as `template` (a molfile, at most
 200,000 bytes; Compare and image jobs send it). The y axis needs no flip (the libraries write
 (x, 1 - y)); the image's width:height squeeze is undone from the template's bond lengths. No
-template, an unreadable one, or a common part under 3 atoms or half the structure: the normal
-layout.
+template, an unreadable or computed one, a common part under 3 atoms or half the structure, or a
+double bond the template would draw against the structure's own E/Z: the normal layout.
 
 ### nginx and api restarts
 

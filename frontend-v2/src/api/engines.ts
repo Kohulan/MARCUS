@@ -18,13 +18,14 @@ export function asEngine(engine: string | null | undefined): Engine | null {
   return ENGINES.find((e) => e.value === engine)?.value ?? null;
 }
 
-/** The engines whose molfile holds the image's atom positions, in the order they are preferred. */
-const TEMPLATE_ENGINES: readonly string[] = ["molnextr", "molscribe"];
+/** The engines whose molfile can hold the image's atom positions, in the order they are preferred. */
+const TEMPLATE_ENGINES: readonly string[] = ["molscribe", "molnextr"];
 
 /**
  * The prediction whose molfile draws an image's structures in the paper's orientation: the
- * newest valid MolNexTR prediction with a molfile, else MolScribe's; null without one. The
- * server picks a segment's the same way (backend api/depiction.py orientation_template).
+ * newest valid MolScribe prediction with a molfile, else MolNexTR's; null without one. The
+ * server picks a segment's the same way (backend api/depiction.py orientation_template), and
+ * the tools worker uses it only when its positions come from the image.
  * `predictions`: newest first.
  */
 export function orientationTemplate(predictions: readonly PredictionOut[]): PredictionOut | null {

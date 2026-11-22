@@ -514,37 +514,38 @@ NEXTR_MOLFILE = "molnextr molfile\n  with the image's atom positions"
 SCRIBE_MOLFILE = "molscribe molfile"
 
 
-async def test_depiction_follows_molnextrs_positions(app, async_db_session, draws):
-    """Every drawing of the segment (the shown one, another engine's) goes with MolNexTR's
-    molfile as the template, and is stored under its own key (SMILES and template)."""
+async def test_depiction_follows_molscribes_positions(app, async_db_session, draws):
+    """Every drawing of the segment (the shown one, another engine's) goes with MolScribe's
+    molfile as the template (its positions come from the image; the pinned MolNexTR's do not),
+    and is stored under its own key (SMILES and template)."""
     db = async_db_session
     owner, token, seeded = await _owner_paper(db)
     seg = seeded.segment_ids[0]
-    await _predict(db, seg, "molscribe", "CCN", molfile=SCRIBE_MOLFILE)
-    await _predict(db, seg, "molnextr", "CCC", molfile=NEXTR_MOLFILE)
+    await _predict(db, seg, "molnextr", "CCN", molfile=NEXTR_MOLFILE)
+    await _predict(db, seg, "molscribe", "CCC", molfile=SCRIBE_MOLFILE)
     async with make_client(app, token) as c:
         shown = await c.get(url(seg))
-        other = await c.get(url(seg, "?engine=molscribe"))
+        other = await c.get(url(seg, "?engine=molnextr"))
         again = await c.get(url(seg))
     assert shown.status_code == other.status_code == again.status_code == 200
-    assert [k["template"] for _, k, _ in draws.seen] == [NEXTR_MOLFILE, NEXTR_MOLFILE]
-    want = {**depiction.DEPICT_OPTIONS, "smiles": "CCO", "template": NEXTR_MOLFILE}
+    assert [k["template"] for _, k, _ in draws.seen] == [SCRIBE_MOLFILE, SCRIBE_MOLFILE]
+    want = {**depiction.DEPICT_OPTIONS, "smiles": "CCO", "template": SCRIBE_MOLFILE}
     assert draws.seen[0][1] == want
-    path = storage.depiction_path(owner.id, depiction.drawing_key("CCO", NEXTR_MOLFILE))
+    path = storage.depiction_path(owner.id, depiction.drawing_key("CCO", SCRIBE_MOLFILE))
     assert path.read_bytes() == shown.content
     assert not storage.depiction_path(owner.id, sha("CCO")).exists()
 
 
-async def test_depiction_template_falls_back_to_molscribe(app, async_db_session, draws):
+async def test_depiction_template_falls_back_to_molnextr(app, async_db_session, draws):
     db = async_db_session
     _, token, seeded = await _owner_paper(db)
     seg = seeded.segment_ids[0]
-    await _predict(db, seg, "molnextr", "CCC", molfile=None)  # no molfile: no positions
-    await _predict(db, seg, "molnextr", "CCC", valid=False, molfile=NEXTR_MOLFILE)  # invalid
-    await _predict(db, seg, "molscribe", "CCN", molfile=SCRIBE_MOLFILE)
+    await _predict(db, seg, "molscribe", "CCC", molfile=None)  # no molfile: no positions
+    await _predict(db, seg, "molscribe", "CCC", valid=False, molfile=SCRIBE_MOLFILE)  # invalid
+    await _predict(db, seg, "molnextr", "CCN", molfile=NEXTR_MOLFILE)
     async with make_client(app, token) as c:
         assert (await c.get(url(seg))).status_code == 200
-    assert draws.seen[0][1]["template"] == SCRIBE_MOLFILE
+    assert draws.seen[0][1]["template"] == NEXTR_MOLFILE
 
 
 async def test_depiction_without_a_template_is_drawn_as_before(app, async_db_session, draws):
