@@ -1,7 +1,8 @@
 // R-group (Markush) placeholders: a drawing with R1, X, Ar… stands for several compounds, not
 // one. The server finds the labels (backend-v2 marcus/core/rgroups.py) and sends them with each
 // prediction and curation as `rgroups`. Pure helpers, so the words are pinned by tests.
-import type { DoclingDoc } from "../api/types";
+import { reasonText } from "../api/reasons";
+import type { DoclingDoc, RgroupExtractionOut, RgroupList, RgroupState } from "../api/types";
 
 const NONE: readonly string[] = Object.freeze([]);
 
@@ -28,6 +29,39 @@ export function rgroupNotice(labels: readonly string[], definitionsOnPage: boole
   const line = `This drawing has R-groups (${labelList(labels)}): it stands for several compounds.`;
   return definitionsOnPage ? `${line} Definitions found on this page.` : line;
 }
+
+// --- R-group rows read by the local model (GET /papers/{id}/rgroups) ---------------------------
+
+/** A reading in flight: the server is still to answer it. */
+export const isRgroupActive = (status: RgroupState): boolean =>
+  status === "queued" || status === "running";
+
+/** The reading of one prediction, or undefined (never asked for). */
+export function extractionFor(
+  list: RgroupList | undefined,
+  predictionId: string | undefined,
+): RgroupExtractionOut | undefined {
+  if (!list || predictionId === undefined) return undefined;
+  return list.extractions.find((e) => e.prediction_id === predictionId);
+}
+
+/** Any reading of the paper in flight (the list is read again until none is). */
+export const anyRgroupActive = (list: RgroupList | undefined): boolean =>
+  list?.extractions.some((e) => isRgroupActive(e.status)) ?? false;
+
+/** The words of a reading in flight. */
+export const rgroupProgress = (status: RgroupState): string =>
+  status === "running" ? "Reading R-groups…" : "Queued";
+
+/** Why a reading failed, as a line. */
+export const rgroupFailure = (error: string | null): string =>
+  `R-groups not read: ${reasonText(error, "rgroups")}.`;
+
+/** The table's caption: what it is, and that it is to be checked. */
+export const RGROUP_NOTE = "Model output · check against the paper";
+
+/** "3 compounds", "1 compound" */
+export const compoundCount = (n: number): string => `${n} ${n === 1 ? "compound" : "compounds"}`;
 
 // --- the text signal: definitions on the page ------------------------------------------------
 

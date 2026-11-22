@@ -17,7 +17,7 @@ from marcus.core.enums import (
     StepStatus,
 )
 from marcus.core.models import Curation, Paper, Prediction, Segment, Step
-from marcus.core.pipeline import ACTIVE, PAGE_KINDS, page_step_order
+from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
@@ -147,7 +147,7 @@ def _step_counts(paper_ids: list[uuid.UUID]):
             .filter(kind == StepKind.CHECK_PDF.value)
             .label("check_started"),
         )
-        .where(Step.paper_id.in_(paper_ids))
+        .where(Step.paper_id.in_(paper_ids), in_paper_progress())
         .group_by(Step.paper_id)
         .subquery()
     )
@@ -225,8 +225,11 @@ def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
 
 
 async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, int]:
+    """The paper's steps per status (rgroups steps aside: they are not part of its read)."""
     rows = await db.execute(
-        select(Step.status, func.count()).where(Step.paper_id == paper_id).group_by(Step.status)
+        select(Step.status, func.count())
+        .where(Step.paper_id == paper_id, in_paper_progress())
+        .group_by(Step.status)
     )
     return {status: n for status, n in rows.all()}
 
@@ -284,11 +287,12 @@ async def segments_out(db: AsyncSession, paper_id: uuid.UUID) -> list[SegmentOut
 
 
 async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:
-    """The paper's steps, oldest first (created_at, seq)."""
+    """The paper's steps, oldest first (created_at, seq). Rgroups steps are left out: they are
+    not part of the paper's read (their state is served by marcus.api.routes.rgroups)."""
     rows = (
         await db.execute(
             select(Step)
-            .where(Step.paper_id == paper_id)
+            .where(Step.paper_id == paper_id, in_paper_progress())
             .order_by(Step.created_at, Step.seq, Step.id)
         )
     ).scalars()

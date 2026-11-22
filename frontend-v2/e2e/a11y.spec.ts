@@ -119,6 +119,57 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     await expectNoA11yViolations(page);
   });
 
+  test("a scaffold's R-group rows: card and focus mode", async ({ page }) => {
+    // The first structure as a scaffold (R1, R2) with rows read by the R-group model.
+    const scaffold = structuredClone(paper) as unknown as {
+      segments: { id: string; predictions: { id: string; engine: string; rgroups?: string[] }[] }[];
+    };
+    const segment = scaffold.segments[0]!;
+    const shown = segment.predictions.find((p) => p.engine === "decimer")!;
+    shown.rgroups = ["R1", "R2"];
+    const rows = {
+      available: true,
+      extractions: [
+        {
+          prediction_id: shown.id,
+          segment_id: segment.id,
+          status: "done",
+          labels: ["R1", "R2"],
+          rows: [
+            { compound: "3a", groups: { R1: "OMe", R2: "H" } },
+            { compound: "3b", groups: { R1: "H", R2: "β-D-Glc" } },
+          ],
+          truncated: false,
+          error: null,
+          model: "nuextract3-rgroup-v1",
+          model_version: "vision Q8_0 llama.cpp b12554",
+          created_at: null,
+          updated_at: null,
+          finished_at: null,
+        },
+      ],
+    };
+    const body = (data: unknown) => ({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(data),
+    });
+    await page.route(`**/api/v2/papers/${PID}`, (route) => route.fulfill(body(scaffold)));
+    await page.route(`**/api/v2/papers/${PID}/rgroups`, (route) => route.fulfill(body(rows)));
+
+    await page.goto(`/app/papers/${PID}`);
+    const card = page.locator(`article[data-segment-id="${FIRST}"]`);
+    await expect(card.getByRole("table")).toBeVisible();
+    await expect(card.getByRole("cell", { name: "β-D-Glc" })).toBeVisible();
+    await expectNoA11yViolations(page);
+
+    await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
+    const focus = page.getByRole("region", { name: "Focus [01]" });
+    await expect(focus.getByRole("table")).toBeVisible();
+    await expect(focus.getByRole("button", { name: "Read again" })).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
+
   test("compare", async ({ page }) => {
     await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
     await expect(page.getByRole("region", { name: "Focus [01]" })).toBeVisible();

@@ -981,3 +981,45 @@ describe("useWorkspace", () => {
     expect(result.current.loc.search).toBe("?view=paper");
   });
 });
+
+describe("R-group rows", () => {
+  const scaffold = (id: string): SegmentOut =>
+    seg(id, null, [
+      {
+        id: `pr-${id}`,
+        engine: "decimer",
+        engine_version: "2.7",
+        smiles: "[R1]c1ccccc1",
+        molfile: null,
+        valid: false,
+        ms: 1,
+        cached: false,
+        created_at: "2026-11-18T10:00:00Z",
+        rgroups: ["R1"],
+      },
+    ]);
+
+  it("offers Extract R-groups on a scaffold's card, and only there", async () => {
+    const get = vi.spyOn(api, "getPaperRgroups").mockResolvedValue({ available: true, extractions: [] });
+    renderWorkspace({ paper: paper({ segments: [scaffold("s1"), seg("s2", null)] }) });
+    const button = await screen.findByRole("button", { name: "Extract R-groups" });
+    expect(button.closest("article")).toHaveAttribute("data-segment-id", "s1");
+    expect(screen.getAllByRole("button", { name: "Extract R-groups" })).toHaveLength(1);
+    expect(get).toHaveBeenCalledWith(ID, expect.anything());
+  });
+
+  it("hides the action where the deployment cannot read R-groups", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue({ available: false, extractions: [] });
+    renderWorkspace({ paper: paper({ segments: [scaffold("s1")] }) });
+    await title();
+    await waitFor(() => expect(api.getPaperRgroups).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Extract R-groups" })).toBeNull();
+  });
+
+  it("never asks for a paper without a scaffold", async () => {
+    const get = vi.spyOn(api, "getPaperRgroups").mockResolvedValue({ available: true, extractions: [] });
+    renderWorkspace({ paper: paper({ segments: [seg("s1", null)] }) });
+    await title();
+    expect(get).not.toHaveBeenCalled();
+  });
+});

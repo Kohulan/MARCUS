@@ -1,0 +1,87 @@
+/* A scaffold's R-group rows (RgroupRows): a specimen table (ui.css .specimen) whose charcoal
+   head says it is model output to check; the labels as column heads, the compounds as row
+   heads. Compound labels and substituents are data: Geist Mono, never uppercased (3a is not
+   3A, OMe is not OME). */
+
+.rg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rg__scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+
+/* The card's table scrolls inside a short box (about four rows); focus mode shows it whole. */
+.rg--compact .rg__scroll {
+  max-height: 140px;
+}
+
+.rg__scroll:focus-visible {
+  outline-offset: 0;
+}
+
+.rg__table {
+  border-top: 1px solid var(--line);
+  border-collapse: collapse;
+}
+
+.rg__caption {
+  caption-side: top;
+}
+
+.rg__table thead th {
+  position: sticky;
+  top: 0;
+  width: auto;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.rg__table tbody th,
+.rg__table td {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  /* a value breaks only where it must (at its own hyphens first), never inside "OMe": a
+     narrow column makes the table scroll instead */
+  overflow-wrap: normal;
+  color: var(--ink);
+}
+
+.rg__table tbody tr:first-child > * {
+  border-top: 0;
+}
+
+.rg--compact .rg__table th,
+.rg--compact .rg__table td {
+  padding: 4px 8px;
+}
+
+.rg__note,
+.rg__problem {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rg__note {
+  color: var(--muted);
+}
+
+.rg__problem {
+  color: var(--text-2);
+}
+
+.rg__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}

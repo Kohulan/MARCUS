@@ -295,3 +295,45 @@ export interface AnnotationOut {
 export interface AnnotationStarted {
   step_id: string | null;
 }
+
+// R-group rows of a scaffold read by the local R-group model (backend-v2 api/schemas.py
+// RgroupExtractionOut; routes marcus.api.routes.rgroups). Model output: values are plain text.
+
+/** One compound the scaffold stands for: its label, and the substituent per R-group label. */
+export interface RgroupRow {
+  compound: string;
+  groups: Record<string, string>;
+}
+
+/** none: never asked for; queued and running: in flight; done; failed (`error`: its class). */
+export type RgroupState = "none" | "queued" | "running" | "done" | "failed";
+
+export interface RgroupExtractionOut {
+  prediction_id: string;
+  segment_id: string;
+  status: RgroupState;
+  /** The table's columns, in order. */
+  labels: string[];
+  /** Of the newest run that ended well (kept while a re-run runs or after one fails). */
+  rows: RgroupRow[] | null;
+  /** The token limit cut the answer: rows after the cut are missing. */
+  truncated: boolean;
+  /** The failed run's error class (timeout, engine_error, bad_input, worker_lost). */
+  error: string | null;
+  model: string | null;
+  model_version: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RgroupList {
+  /** False: this deployment cannot read R-groups (POST answers 503). */
+  available: boolean;
+  extractions: RgroupExtractionOut[];
+}
+
+/** step_id null: the scaffold already has rows and no re-run was asked for. */
+export interface RgroupStarted {
+  step_id: string | null;
+}

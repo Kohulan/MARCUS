@@ -293,3 +293,40 @@ class Annotation(Base):
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
     curated_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)
+
+
+RGROUP_STATUSES = ("queued", "done", "failed")
+
+
+class RgroupExtraction(Base):
+    """The R-group model's reading of one scaffold (marcus.core.rgroup_extraction), per
+    prediction. `labels`: the prediction's R-group labels when it was asked for; `step_id`: the
+    newest rgroups step (its request). `status`: queued (asked, not ended: the step tells
+    queued from running), done, failed; `error`: the failed step's error class (public words
+    only, never the step's error text). `rows` ([{compound, groups: {label: value}}]), `model`,
+    `model_version`, `truncated`: of the newest run that ended well; a re-run replaces them when
+    it ends well and keeps them otherwise. Deleting the prediction (its segment, its paper)
+    deletes the row; deleting a paper deletes it at once (pipeline.cancel_paper)."""
+
+    __tablename__ = "rgroup_extractions"
+    __table_args__ = (
+        CheckConstraint(_in("status", RGROUP_STATUSES), name="ck_rgroup_extractions_status"),
+        Index("ix_rgroup_extractions_step_id", "step_id", unique=True),
+    )
+
+    prediction_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("predictions.id", ondelete="CASCADE"), primary_key=True
+    )
+    step_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("steps.id", ondelete="SET NULL"), nullable=True
+    )
+    labels: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    status: Mapped[str] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rows: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    truncated: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+    finished_at: Mapped[datetime | None] = mapped_column(TZ, nullable=True)

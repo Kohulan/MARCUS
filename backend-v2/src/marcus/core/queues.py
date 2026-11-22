@@ -17,7 +17,7 @@ def queue_for(kind: StepKind, engine: Engine | None) -> str:
         return "q.cpu"
     if kind == StepKind.SEGMENT_PAGE:
         return "q.segment"
-    if kind == StepKind.ANNOTATE:
+    if kind in (StepKind.ANNOTATE, StepKind.RGROUPS):
         return "q.llm"
     if kind == StepKind.OCSR:
         if engine is None:
@@ -91,6 +91,8 @@ TIME_LIMITS: dict[StepKind, tuple[int, int]] = {
     StepKind.DOCLING: (300, 360),
     StepKind.DOI: (15, 20),
     StepKind.ANNOTATE: (120, 150),
+    # one scaffold: ~3 s measured on a V100 (README), 2,048 output tokens at ~100 tokens/s at most
+    StepKind.RGROUPS: (120, 150),
 }
 
 # Per (kind, engine) overrides of TIME_LIMITS. decimer-hand loads its model on its first request

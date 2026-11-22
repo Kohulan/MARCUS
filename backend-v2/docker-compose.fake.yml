@@ -3,7 +3,8 @@
 #   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
 #
 # Fake engines: segmentation 2 s per page (2 segments per page), OCSR 1 s per segment, paper
-# annotation 2 s per paper (the fake annotator: values picked from the text by fixed rules).
+# annotation 2 s per paper (the fake annotator: values picked from the text by fixed rules), R-group
+# rows 2 s per scaffold (the fake reader: "3a: R1 = OMe, R2 = H" definitions from the page text).
 # Both fake workers run the api image (it already has everything they import) with exactly
 # their own handler module (--include). Concurrency 1 each = the q.segment / q.fake slots.
 #
@@ -39,6 +40,7 @@ services:
       MARCUS_SEG_VERSION: fake-1
       MARCUS_EXPECTED_QUEUES: q.cpu,q.tools,q.segment,q.fake,q.llm
       MARCUS_ANNOTATE_ENABLED: "1"
+      MARCUS_RGROUP_ENABLED: "1"
       MARCUS_IP_MAX_NEW_OWNERS_PER_HOUR: "1000"
       MARCUS_IP_MAX_ACTIVE_PAPERS: "100"
       MARCUS_RATE_LIMIT_IP_PER_MIN: "6000"
@@ -134,7 +136,8 @@ services:
       api-migrate:
         condition: service_completed_successfully
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.llm",
-              "-c", "1", "--pool", "prefork", "--include", "marcus.workers.annotate",
+              "-c", "1", "--pool", "prefork",
+              "--include", "marcus.workers.annotate,marcus.workers.rgroups",
               "-n", "fake-annotate@%h", "--loglevel", "INFO"]
     environment:
       MARCUS_DATABASE_URL: postgresql+asyncpg://marcus:${POSTGRES_PASSWORD}@postgres:5432/marcus
@@ -143,6 +146,8 @@ services:
       MARCUS_ENABLE_FAKE_ENGINES: "1"
       MARCUS_ANNOTATOR: fake
       MARCUS_FAKE_ANNOTATE_DELAY_S: "2"
+      MARCUS_RGROUP_READER: fake
+      MARCUS_FAKE_RGROUP_DELAY_S: "2"
 
   fake-coconut:
     image: marcus-v2-api:local

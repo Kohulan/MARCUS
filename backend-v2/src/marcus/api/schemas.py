@@ -341,6 +341,61 @@ class AnnotationStarted(BaseModel):
     step_id: uuid.UUID | None
 
 
+class RgroupRow(BaseModel):
+    """One compound the scaffold stands for: its label as the paper writes it, and the
+    substituent for every R-group label ("" where the paper gives none)."""
+
+    compound: str
+    groups: dict[str, str]
+
+
+RgroupState = Literal["none", "queued", "running", "done", "failed"]
+
+
+class RgroupExtractionOut(BaseModel):
+    """The R-group model's reading of one scaffold (a prediction with R-group labels).
+
+    `status`: none (never asked for), queued, running, done, failed (the newest run; `error`:
+    its error class: timeout, engine_error, bad_input or worker_lost). `labels`: the labels it
+    was asked for (the table's columns, in order). `rows`, `model`, `model_version`,
+    `truncated` (the token limit cut the answer: rows after the cut are missing): of the newest
+    run that ended well, kept while a re-run runs or after one fails; null before any. Model
+    output to check: every value is a plain string, never markup."""
+
+    prediction_id: uuid.UUID
+    segment_id: uuid.UUID
+    status: RgroupState
+    labels: list[str]
+    rows: list[RgroupRow] | None
+    truncated: bool
+    error: str | None
+    model: str | None
+    model_version: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    finished_at: datetime | None
+
+
+class RgroupList(BaseModel):
+    """A paper's R-group readings, one per prediction that was asked for (paper order)."""
+
+    available: bool  # this deployment can read R-groups (POST answers 503 otherwise)
+    extractions: list[RgroupExtractionOut]
+
+
+class RgroupStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rerun: bool = False  # run the model again although the scaffold has rows
+
+
+class RgroupStarted(BaseModel):
+    """`step_id`: the rgroups step started (or still running); null when the scaffold already
+    has rows and no re-run was asked for (HTTP 200 instead of 202)."""
+
+    step_id: uuid.UUID | None
+
+
 class AnnotationCurationIn(BaseModel):
     """Every field's values as the curator wants them (all 11 keys; [] = none). Each value is
     trimmed (hidden characters out, spaces collapsed); empty ones and exact repeats are
