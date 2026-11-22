@@ -7,7 +7,7 @@ import { engineName } from "../api/engines";
 import { STATE_WORD, type CardState } from "../ui/StateBadge";
 import { isPaperReading } from "./annotation";
 import { newestFirst } from "./pageFailures";
-import { labelList, resultWord, rgroupsOf } from "./rgroups";
+import { isPlaceholder, labelList, resultWord, rgroupsOf } from "./rgroups";
 
 export { STATE_WORD, type CardState };
 
@@ -82,7 +82,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
       smiles: c.smiles || null,
       molfile: c.molfile ?? null,
       rgroups: rgroupsOf(c),
-      placeholder: c.placeholder === true || rgroupsOf(c).length > 0,
+      placeholder: isPlaceholder(c),
     };
   }
   return {
@@ -91,7 +91,7 @@ export function shownStructure(segment: SegmentOut, paperEngine: string): ShownS
     smiles: prediction?.smiles || null,
     molfile: prediction?.molfile ?? null,
     rgroups: rgroupsOf(prediction),
-    placeholder: prediction?.placeholder === true || rgroupsOf(prediction).length > 0,
+    placeholder: isPlaceholder(prediction),
   };
 }
 
