@@ -497,3 +497,25 @@ def test_depict_task_takes_a_template():
         kwargs={"smiles": "CCO", "template": _ocsr_template("CCO", 30)}, throw=True
     ).get()
     assert out["ok"] and out["result"].lstrip().startswith("<svg")
+
+
+@needs_cdk
+def test_depict_takes_the_first_candidate_with_the_images_positions():
+    """The stored depiction sends every candidate (MolScribe's, MolNexTR's): a computed
+    molfile is skipped, the next one is drawn on."""
+    from rdkit import Chem
+
+    from marcus.workers import tools
+    from marcus.workers.orient import oriented_coords
+
+    smiles = "OC(=O)/C=C/c1ccc(O)c(OC)c1"
+    good = _ocsr_template("COc1cc(/C=C/C(=O)O)ccc1O", 70)
+    computed = Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))  # RDKit's own layout
+    mol = tools._layout(tools._smiles_to_cdk(smiles), smiles, [computed, good])
+    want = oriented_coords(smiles, good)
+    point = mol.getAtom(0).getPoint2d()
+    assert (point.x, point.y) == pytest.approx(want[0])
+    out = tools.depict_task.apply(
+        kwargs={"smiles": smiles, "template": [computed, good]}, throw=True
+    ).get()
+    assert out["ok"]

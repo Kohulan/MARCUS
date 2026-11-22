@@ -254,19 +254,19 @@ its steps, step counts or progress; the GETs say `auto_pending` for the 20 s aft
 ### Drawings in the paper's orientation
 
 MolScribe writes the image's atom positions into its molfile when its structure sanitizes. The
-pinned MolNexTR (fb7505b) does not: it rewrites its molfile from its own SMILES
-(MolNexTR/chemical.py), a computed layout. A segment's stored depiction
-(`GET /segments/{id}/depiction`) sends the molfile of its newest valid MolScribe prediction (else
-MolNexTR's) as a template, and the worker uses it only when its positions come from the image
-(`orient.image_layout`: a computed layout has at least 80 % of its bonds within 1 % of one
-length). Then the common part (MCS) of the drawn structure and the template keeps the template's
-positions, RDKit lays out the rest, CDK draws it the common part (MCS) of the drawn structure and
-the template keeps the template's positions, RDKit lays out the rest, CDK draws it
-(`marcus.workers.orient`, `marcus.workers.tools.depict`). Every engine's structure of that
+MolNexTR v1 commit (fb7505b) did not: it rewrote its molfile from its own SMILES, a computed
+layout; the pinned 7a4e03f (PR #1) keeps the image's positions too, so old fb7505b predictions are
+refused as templates and new ones are taken. A segment's stored depiction
+(`GET /segments/{id}/depiction`) sends the molfiles of its newest valid MolScribe and MolNexTR
+predictions, in that order, as template candidates, and the worker takes the first whose positions
+come from the image (`orient.first_template`, `orient.image_layout`: a computed layout has at
+least 80 % of its bonds within 1 % of one length), so an old MolNexTR molfile never blocks a good
+one. Compare applies the same rule in the browser (`imageLayout`, checked on the same fixtures). Then the common part (MCS) of the drawn structure and the template keeps the template's
+positions, RDKit lays out the rest, CDK draws it (`marcus.workers.orient`, `marcus.workers.tools.depict`). Every engine's structure of that
 segment, and a curated one, is drawn that way; it is stored under the SMILES and the template
 together. `POST /tools/depict` takes the same template as `template` (a molfile, at most
 200,000 bytes; Compare and image jobs send it). The y axis needs no flip (the libraries write
-(x, 1 - y)); the image's width:height squeeze is undone from the template's bond lengths. No
+(x, 1 - y)); both libraries already undo the image's width:height squeeze, so the positions are used as they are. No
 template, an unreadable or computed one, a common part under 3 atoms or half the structure, or a
 double bond the template would draw against the structure's own E/Z: the normal layout.
 
