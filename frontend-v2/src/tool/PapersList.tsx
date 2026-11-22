@@ -10,7 +10,6 @@ import ReadingProgress, { useShownProgress } from "../ui/ReadingProgress";
 import { ItemState } from "../ui/StateBadge";
 import { paperName } from "../ui/tag";
 import { useToast } from "../ui/Toasts";
-import { isAnnotating } from "../workspace/annotation";
 import { progressOf } from "../workspace/readingProgress";
 import "./tool.css";
 
@@ -87,11 +86,7 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
   return (
     <li className="item">
       <div className="item__state">
-        <ItemState
-          status={paper.status}
-          notRead={paper.ocsr_mode === "off"}
-          annotating={isAnnotating(paper)}
-        />
+        <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
       </div>
       <div className="item__main">
         <p className="item__name">{paperName(paper)}</p>

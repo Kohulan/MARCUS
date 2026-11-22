@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
-from marcus.api.depiction import draw_or_read, shown_structure
+from marcus.api.depiction import draw_or_read, orientation_template, shown_structure
 from marcus.api.deps import (
     current_owner,
     get_owned_segment,
@@ -55,8 +55,10 @@ async def segment_depiction(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """SVG of the structure the UI shows for this segment (`engine`: that engine's newest valid
-    prediction instead). Drawn once per distinct SMILES and stored (marcus.api.depiction). The
-    client's `v` query parameter only busts its cache; it is ignored here."""
+    prediction instead), in the paper's orientation when the segment has a template (MolNexTR's,
+    else MolScribe's molfile). Drawn once per distinct SMILES (and template) and stored
+    (marcus.api.depiction). The client's `v` query parameter only busts its cache; it is
+    ignored here."""
     segment, paper = await get_owned_segment(db, owner, segment_id)
     curation = await db.get(Curation, segment.id)
     predictions = list(
@@ -69,13 +71,14 @@ async def segment_depiction(
         ).scalars()
     )
     shown = await shown_structure(paper, segment, curation, predictions, engine)
+    template = orientation_template(segment, predictions)
     # End the read-only transaction (and free its connection): a miss may wait up to WAIT_S
     # on the tools worker. commit, not rollback: a rollback would expire `owner`.
     await db.commit()
     if shown is None:
         raise not_found()
     smiles, source = shown
-    data = await draw_or_read(request, owner, smiles, source)
+    data = await draw_or_read(request, owner, smiles, source, template)
     return Response(data, media_type="image/svg+xml", headers=DEPICTION_HEADERS)
 
 
@@ -110,7 +113,7 @@ async def put_curation(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
-    segment, paper = await get_owned_segment(db, owner, segment_id)
+    segment, paper = await get_owned_segment(db, owner, segment_id, with_labels=True)
     named = named_on(paper.rgroup_text_labels, segment.page)
     rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:

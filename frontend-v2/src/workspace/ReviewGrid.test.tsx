@@ -97,7 +97,6 @@ function paper(segments: SegmentOut[], over: Partial<PaperDetail> = {}): PaperDe
     to_review: segments.filter((s) => (s.curation?.status ?? "unchecked") === "unchecked").length,
     failed_pages: 0,
     failed: 0,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,
@@ -819,18 +818,11 @@ describe("cardState", () => {
     );
   });
 
-  it("a paper busy only with its annotation is not reading its structures", () => {
-    const none = segment("s1", { predictions: [] });
-    expect(cardState(none, [], paper([], { status: "processing" }))).toBe("reading");
-    expect(cardState(none, [], paper([], { status: "processing", annotating: true }))).toBe(
-      "not-read",
-    );
-  });
 });
 
-describe("Review view while the paper is annotated", () => {
+describe("Review view while only the annotation runs (beside the read)", () => {
   it("says No structures found, not that they appear as pages are read", async () => {
-    renderGrid(paper([], { status: "processing" }), [
+    renderGrid(paper([], { status: "done" }), [
       step({ kind: "docling", page: null, engine: null, status: "done" }),
       step({ kind: "annotate", page: null, engine: null, status: "running" }),
     ]);

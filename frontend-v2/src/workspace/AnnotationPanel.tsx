@@ -25,21 +25,21 @@ import {
 
 type Props = {
   annotation: AnnotationOut;
-  /** An annotate step is running (or was just started and the steps do not show it yet). */
+  /** A run is queued or running, or about to start by itself (useAnnotation annotationBusy). */
   running: boolean;
-  /** The newest annotate step as the steps show it (fresher than the annotation's own). */
-  step: StepOut | undefined;
   /** The occurrence shown in the text. */
   at: HitAt | null;
   /** Shows the value's next occurrence; returns its index. */
   onShow: (field: string, value: string) => number;
-  onStart: () => Promise<void>;
+  /** By hand: a first run (none started by itself), or `rerun` over the values. */
+  onStart: (rerun: boolean) => Promise<void>;
   onSave: (values: AnnotationValues) => Promise<unknown>;
   onReset: () => Promise<unknown>;
 };
 
 export default function AnnotationPanel(props: Props) {
-  const { annotation, running, step } = props;
+  const { annotation, running } = props;
+  const step = annotation.step ?? undefined;
   const hintId = useId();
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -54,6 +54,9 @@ export default function AnnotationPanel(props: Props) {
   // The last action in the panel came from a pointer: a focus the panel then moves itself shows
   // no keyboard ring (browsers draw one when the clicked control is gone), until a key or blur.
   const pointer = useRef(false);
+  // A run started here: its end may take a focus the page dropped. A run that started by itself
+  // moves a focus only from inside the panel (never from the page as it loads).
+  const asked = useRef(false);
   const focusAfter = useCallback((el: HTMLElement | null | undefined) => {
     if (!el) return;
     el.focus();
@@ -68,11 +71,12 @@ export default function AnnotationPanel(props: Props) {
     el.addEventListener("keydown", clear);
   }, []);
 
-  async function start() {
+  async function start(rerun = false) {
     setError(null);
+    asked.current = true;
     setStarting(true);
     try {
-      await props.onStart();
+      await props.onStart(rerun);
     } catch (err) {
       setError(`Not started: ${errorText(err, "starts")}`);
     } finally {
@@ -80,8 +84,7 @@ export default function AnnotationPanel(props: Props) {
     }
   }
 
-  const newest = step ?? annotation.step ?? undefined;
-  const failedStep = newest?.status === "failed" ? newest : null;
+  const failedStep = step?.status === "failed" ? step : null;
 
   // The model reports no progress: the bar shows the time-based estimate while the run goes
   // on (never 100%; one clock with the status bar's, by the step's id), then a run that ends
@@ -111,7 +114,8 @@ export default function AnnotationPanel(props: Props) {
     if (was === phase) return;
     const box = section.current;
     const active = document.activeElement;
-    const ours = focusLost(active) || (box !== null && box.contains(active));
+    const ours = (asked.current && focusLost(active)) || (box !== null && box.contains(active));
+    if (phase !== "running") asked.current = false;
     const take = (el: HTMLElement | null | undefined) => {
       if (ours) focusAfter(el);
     };
@@ -147,7 +151,15 @@ export default function AnnotationPanel(props: Props) {
       </div>
     );
   } else if (phase === "values") {
-    body = <Fields {...props} failedStep={failedStep} say={say} focusAfter={focusAfter} />;
+    body = (
+      <Fields
+        {...props}
+        failedStep={failedStep}
+        say={say}
+        focusAfter={focusAfter}
+        onRerun={() => void start(true)}
+      />
+    );
   } else {
     body = (
       <div className="pv-ann__start">
@@ -155,7 +167,7 @@ export default function AnnotationPanel(props: Props) {
           tint="clear"
           size="sm"
           describedBy={failedStep ? undefined : hintId}
-          onClick={() => void start()}
+          onClick={() => void start(failedStep !== null)}
         >
           {failedStep ? "Try again" : "Annotate"}
         </GlassButton>
@@ -205,10 +217,13 @@ function Fields({
   failedStep,
   say,
   focusAfter,
+  onRerun,
 }: Props & {
   failedStep: StepOut | null;
   say: (text: string) => void;
   focusAfter: (el: HTMLElement | null | undefined) => void;
+  /** Run the model again (the curator's values stay). */
+  onRerun: () => void;
 }) {
   const values = annotation.values!;
   const positions = shownPositions(annotation);
@@ -434,6 +449,9 @@ function Fields({
             Reset to model
           </GlassButton>
         )}
+        <GlassButton tint="clear" size="sm" disabled={busy} onClick={onRerun}>
+          Run again
+        </GlassButton>
       </div>
     </>
   );

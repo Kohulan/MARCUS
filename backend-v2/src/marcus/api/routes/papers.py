@@ -122,7 +122,7 @@ async def get_paper(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> PaperDetail:
-    paper = await get_owned_paper(db, owner, paper_id)
+    paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     counts = await steps_by_status(db, paper.id)
     return PaperDetail(
         **paper_summary(paper, (await paper_counts(db, [paper.id]))[paper.id]).model_dump(),
@@ -137,7 +137,7 @@ async def get_segments(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> SegmentList:
-    paper = await get_owned_paper(db, owner, paper_id)
+    paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     return SegmentList(segments=await segments_out(db, paper))
 
 
@@ -276,10 +276,10 @@ async def export_paper(
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    paper = await get_owned_paper(db, owner, paper_id)
+    paper = await get_owned_paper(db, owner, paper_id, with_labels=True)
     segments, curations, predictions = await load_segments(db, paper.id)
     annotation = annotations.for_export(await annotations.load(db, paper.id))
-    rows = await rgroup_reads.for_export(db, paper.id)
+    rows = await rgroup_reads.for_export(db, paper.id, paper.rgroup_text_labels)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
         export.build, format, paper, segments, curations, predictions, status, annotation, rows

@@ -35,6 +35,7 @@ from typing import Literal
 from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
+from marcus.api.read import named_on
 from marcus.core.models import Curation, Paper, Prediction, Segment
 from marcus.core.rgroup_labels import shown_labels
 from marcus.core.rgroups import rgroup_labels
@@ -66,11 +67,12 @@ class Chosen:
     rgroup_rows: dict | None = None  # the R-group model's rows (api.rgroups.for_export)
 
 
-def _labels(row: Curation | Prediction) -> tuple[str, ...]:
-    """The row's stored labels; computed for a row without (export runs in the chem process)."""
-    if row.rgroups is not None:
-        return tuple(row.rgroups)
-    return tuple(rgroup_labels(row.smiles, row.molfile))
+def _labels(row: Curation | Prediction, named: list[str] | None) -> tuple[str, ...]:
+    """The row's labels shown on its page (`named`: the labels the page names, shown_labels):
+    of its stored labels, or of those computed for a row without (export runs in the chem
+    process)."""
+    labels = row.rgroups if row.rgroups is not None else rgroup_labels(row.smiles, row.molfile)
+    return tuple(shown_labels(list(labels), named))
 
 
 def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
@@ -91,10 +93,9 @@ def choose(
     """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
     per prediction id (api.rgroups.for_export)."""
     rows_of = rgroup_rows or {}
-    index = paper.rgroup_text_labels or {}
     out: list[Chosen] = []
     for seg in segments:
-        named = index.get(str(seg.page))  # the R-group labels the page's text names
+        named = named_on(paper.rgroup_text_labels, seg.page)
         cur = curations.get(seg.id)
         status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
         if status == "rejected" and not include_rejected:
@@ -110,7 +111,7 @@ def choose(
         pick = pick_prediction(valid, paper.engine)
         if cur is not None and (cur.smiles or cur.molfile):
             smiles = cur.smiles or smiles_from_molfile(cur.molfile)
-            labels = tuple(shown_labels(list(_labels(cur)), named))
+            labels = _labels(cur, named)
             out.append(
                 Chosen(
                     **row,
@@ -124,7 +125,7 @@ def choose(
             )
             continue
         if pick is not None:
-            labels = tuple(shown_labels(list(_labels(pick)), named))
+            labels = _labels(pick, named)
             out.append(
                 Chosen(
                     **row,

@@ -1,6 +1,6 @@
 """The R-group model's two inputs: the page text near the scaffold and the page image.
 
-Text: marcus.core.page_text.page_context (a port of markush_eval's, unchanged), re-exported here.
+Text: marcus.core.page_text.page_context (a port of markush_eval's, unchanged).
 
 Image: the model saw each page rendered at 150 dpi (PyMuPDF), then scaled down to at most
 1,300,000 pixels (rg_common.load_image: Lanczos, sides at least 28) and sent as a PNG data URI.
@@ -19,10 +19,6 @@ import base64
 import io
 import math
 from pathlib import Path
-
-from marcus.core.page_text import page_context
-
-__all__ = ["model_size", "page_context", "page_image_uri"]
 
 MAX_PIXELS = 1_300_000  # rg_common.MAX_PIXELS
 MIN_SIDE = 28  # rg_common.load_image: max(28, ...)

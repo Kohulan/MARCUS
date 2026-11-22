@@ -1,30 +1,23 @@
 import { faCheck } from "@fortawesome/free-solid-svg-icons";
 import { useState } from "react";
-import { ANNOTATE_END, type ReadingProgress as Model } from "../workspace/readingProgress";
+import type { ReadingProgress as Model } from "../workspace/readingProgress";
 import Icon from "./Icon";
-import ProgressBar, { useAnnotateEstimate } from "./ProgressBar";
+import ProgressBar from "./ProgressBar";
 import "./ui.css";
 
 /**
- * What a reading bar shows of `model` (readingProgress), or null for no bar: the one owner of
- * an annotate run's figure. A run, whose model reports no progress, gets the time-based
- * estimate (useAnnotateEstimate; `run`, its step id, shares the clock with the annotation
- * panel) and ends on its full bar for a moment before the bar goes. A finished read keeps its
- * full bar when `keepDone` and it was read while shown here; otherwise a done paper has no bar.
+ * What a reading bar shows of `model` (readingProgress), or null for no bar. A finished read
+ * keeps its full bar when `keepDone` and it was read while shown here; otherwise a done paper
+ * has no bar.
  */
 export function useShownProgress(
   model: Model | null,
-  { run = null, keepDone = false }: { run?: string | null; keepDone?: boolean } = {},
+  { keepDone = false }: { keepDone?: boolean } = {},
 ): Model | null {
-  const estimated = model?.estimated === true;
-  const figure = useAnnotateEstimate(estimated, run);
   const [seen, setSeen] = useState(false);
-  if (model !== null && !estimated && model.stage !== "done" && !seen) setSeen(true);
-  if (model === null) return null;
-  if (estimated) return model.fraction === null ? { ...model, fraction: figure ?? 0 } : model;
-  if (model.stage !== "done") return model;
-  if (keepDone && seen) return model;
-  return figure === 1 ? ANNOTATE_END : null;
+  if (model !== null && model.stage !== "done" && !seen) setSeen(true);
+  if (model === null || model.stage !== "done") return model;
+  return keepDone && seen ? model : null;
 }
 
 /**
@@ -32,8 +25,7 @@ export function useShownProgress(
  * beside it, never back during a run) with the stage in words. The full form lists the
  * stages, done ones ticked, the current one marked; `announce` adds a polite status that
  * changes with the stage only, never with a count or a percent. `compact` is the tool home's
- * row: a thin bar and one short line. The model is shown as given (useShownProgress fills an
- * annotate run's figure).
+ * row: a thin bar and one short line. The model is shown as given.
  */
 export default function ReadingProgress({
   progress,
@@ -57,7 +49,6 @@ export default function ReadingProgress({
       valueText={progress.valueText}
       active={progress.stage !== "done" && progress.fraction !== 1}
       size={compact ? "sm" : "md"}
-      estimated={progress.estimated}
     />
   );
 

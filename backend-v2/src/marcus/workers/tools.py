@@ -88,6 +88,28 @@ def _sdg(molecule):
     return gen.getMolecule()
 
 
+def _layout(molecule, smiles: str, template: str):
+    """2D positions for `molecule` (CDK's reading of `smiles`): the paper's orientation from an
+    OCSR template molfile (marcus.workers.orient, RDKit, same atom order as CDK) when it can
+    be had, else CDK's own layout. Wedges are set from the stereo on the given positions."""
+    from marcus.workers import orient  # RDKit, as the highlight match: only where it runs
+
+    coords = orient.oriented_coords(smiles, template) if template else None
+    if coords is None or len(coords) != molecule.getAtomCount():
+        return _sdg(molecule)
+    jpype = _jvm()
+    point = jpype.JClass("javax.vecmath.Point2d")
+    for i, (x, y) in enumerate(coords):
+        molecule.getAtom(i).setPoint2d(point(float(x), float(y)))
+    # the ring flags CDK's layout sets on its way: the CIP step's ring test reads them
+    jpype.JClass(f"{CDK}.graph.Cycles").markRingAtomsAndBonds(molecule)
+    try:
+        jpype.JClass(f"{CDK}.layout.NonplanarBonds").assign(molecule)
+    except jpype.JException:
+        return _sdg(molecule)  # stereo CDK cannot place on these positions: its own layout
+    return molecule
+
+
 def _cip_annotate(mol):
     """v1 get_cip_annotation(add_coordinates=False): CIP labels as StandardGenerator annotations."""
     jpype = _jvm()
@@ -163,15 +185,22 @@ def _cip_annotate(mol):
 
 
 def depict(
-    smiles: str, fmt: Literal["svg", "png"], width: int, height: int, highlight: str = ""
+    smiles: str,
+    fmt: Literal["svg", "png"],
+    width: int,
+    height: int,
+    highlight: str = "",
+    template: str = "",
 ) -> str:
     """CDK StandardGenerator depiction (v1 defaults: kekulize, CIP, CDK2D colours, white
-    background, fill-to-fit). SVG as text; PNG as base64. `highlight` is an optional SMARTS."""
+    background, fill-to-fit). SVG as text; PNG as base64. `highlight` is an optional SMARTS.
+    `template`: an OCSR molfile with the image's atom positions; the drawing then follows the
+    paper's orientation where it can (_layout)."""
     jpype = _jvm()
     J = jpype.JClass
     mol = _smiles_to_cdk(smiles)
     try:
-        mol = _cip_annotate(_sdg(mol))
+        mol = _cip_annotate(_layout(mol, smiles, template))
         try:
             J(f"{CDK}.aromaticity.Kekulization").kekulize(mol)
         except jpype.JException:  # v1 logged and carried on; soft limits still propagate
@@ -384,9 +413,14 @@ def _envelope(fn, *args) -> dict:
 
 @celery_app.task(name="marcus.tools.depict", **_LIMITS)
 def depict_task(
-    smiles: str, fmt: str = "svg", width: int = 512, height: int = 512, highlight: str = ""
+    smiles: str,
+    fmt: str = "svg",
+    width: int = 512,
+    height: int = 512,
+    highlight: str = "",
+    template: str = "",
 ) -> dict:
-    return _envelope(depict, smiles, fmt, width, height, highlight)
+    return _envelope(depict, smiles, fmt, width, height, highlight, template)
 
 
 @celery_app.task(name="marcus.tools.smiles_to_molfile", **_LIMITS)

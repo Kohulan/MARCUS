@@ -4,7 +4,7 @@ parser, the paper's text blocks and the value locator.
 Shared by the annotate worker (marcus.workers.annotate: builds the input, calls the model,
 parses and locates) and the API (locates curated values, exports). Standard library only.
 
-The model (models/qwen3.5-9b-marcus-v1/README.md) returns one JSON object with the 11 string
+The model (models/nuextract3-marcus-multi-v1/README.md) returns one JSON object with the 11 string
 keys of FIELDS, in that order; each value is a comma-separated list of spans copied from the
 input text, or `nan`. A field whose values contain `, ` (and `compound_group` always) is in the
 quoted form `'a', 'b'` (GUIDELINE v2.1, F7). Decoding is greedy under `grammar()`: the keys in

@@ -3,8 +3,8 @@ llama-server, on one paper's Docling document. Run by ops/annotate_smoke.sh insi
 (it needs no database, Redis or Celery broker).
 
     python annotate_smoke.py <paper id>
-    env: MARCUS_DATA_ROOT (holds papers/<id>/text.json), MARCUS_ANNOTATOR_URL,
-         MARCUS_ANNOTATOR_TIMEOUT_S
+    env: MARCUS_DATA_ROOT (holds papers/<id>/text.json), MARCUS_LLM_URL,
+         MARCUS_LLM_TIMEOUT_S
 
 Checks: the handler's result passes the planner's own result check; every position points at
 its value in the text the Paper view shows (UTF-16 offsets, same matching rules); the grammar

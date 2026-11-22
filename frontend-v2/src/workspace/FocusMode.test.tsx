@@ -80,7 +80,6 @@ function paper(segments: SegmentOut[]): PaperDetail {
     to_review: segments.filter((s) => (s.curation?.status ?? "unchecked") === "unchecked").length,
     failed_pages: 0,
     failed: 0,
-    annotating: false,
     pages_read: 0,
     structures_total: 0,
     structures_read: 0,

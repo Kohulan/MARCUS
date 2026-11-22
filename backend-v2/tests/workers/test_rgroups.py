@@ -65,7 +65,7 @@ DOC = {
 
 
 def test_page_context_reads_pages_around_the_scaffold_captions_and_tables_first():
-    assert inputs.page_context(DOC, 3) == (
+    assert page_text.page_context(DOC, 3) == (
         "CAPTION (page 3): Figure 2. Structures 3a: R1 = OMe, R2 = H; 3b: R1 = H, R2 = OMe\n"
         "CAPTION (page 4): a measured in CDCl3\n"
         "TABLE (page 2):\nCompound | R1\n3c | Cl\n"
@@ -75,14 +75,14 @@ def test_page_context_reads_pages_around_the_scaffold_captions_and_tables_first(
 
 def test_page_context_stops_before_the_part_that_would_pass_the_cap(monkeypatch):
     monkeypatch.setattr(page_text, "MAX_CHARS", 90)
-    assert inputs.page_context(DOC, 3) == (
+    assert page_text.page_context(DOC, 3) == (
         "CAPTION (page 3): Figure 2. Structures 3a: R1 = OMe, R2 = H; 3b: R1 = H, R2 = OMe"
     )
 
 
 def test_page_context_of_a_page_without_text_is_empty():
-    assert inputs.page_context({"texts": [], "tables": []}, 9) == ""
-    assert inputs.page_context({}, 1) == ""
+    assert page_text.page_context({"texts": [], "tables": []}, 9) == ""
+    assert page_text.page_context({}, 1) == ""
 
 
 # --- page image: 150 dpi size, at most 1.3 MP -------------------------------------------------
@@ -174,7 +174,7 @@ class Stub:
 @pytest.fixture
 def stub(monkeypatch, clear_settings_cache):
     s = Stub()
-    monkeypatch.setenv("MARCUS_RGROUP_URL", s.url)
+    monkeypatch.setenv("MARCUS_LLM_URL", s.url)
     clear_settings_cache()
     yield s
     s.close()
@@ -203,12 +203,12 @@ def test_request_is_the_trained_one(stub):
     body = req["body"]
     image = body["messages"][1]["content"][0]["image_url"]["url"]
     assert _decode(image).size == (500, 600)  # the 150 dpi size of the 300 dpi page
-    context = inputs.page_context(DOC, 3)  # API page 2 = Docling page 3
-    expected = rg.request_body("nuextract3-rgroup-v1", ["R1", "R2"], context, image)
+    context = page_text.page_context(DOC, 3)  # API page 2 = Docling page 3
+    expected = rg.request_body("nuextract3-marcus-multi-v1", ["R1", "R2"], context, image)
     assert req["raw"] == json.dumps(expected).encode()  # the bytes json.dumps writes
     assert out == {
-        "model": "nuextract3-rgroup-v1",
-        "model_version": "vision Q8_0 llama.cpp b12554",
+        "model": "nuextract3-marcus-multi-v1",
+        "model_version": "Q8_0 llama.cpp b12554",
         "labels": ["R1", "R2"],
         "rows": [
             {"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}},
@@ -290,11 +290,11 @@ def test_a_4xx_is_final_and_a_5xx_is_retryable(stub):
 def test_no_server_is_retryable_and_a_slow_one_a_timeout(stub, monkeypatch, clear_settings_cache):
     pid = _paper()
     stub.delay = 1.0
-    monkeypatch.setenv("MARCUS_RGROUP_TIMEOUT_S", "0.2")
+    monkeypatch.setenv("MARCUS_LLM_TIMEOUT_S", "0.2")
     clear_settings_cache()
     with pytest.raises(StepTimeout):
         read_scaffold(get_reader(), pid, 0, ["R1"])
-    monkeypatch.setenv("MARCUS_RGROUP_URL", "http://127.0.0.1:9")  # discard port: refused
+    monkeypatch.setenv("MARCUS_LLM_URL", "http://127.0.0.1:9")  # discard port: refused
     clear_settings_cache()
     with pytest.raises(ModelUnavailable):
         read_scaffold(get_reader(), pid, 0, ["R1"])
@@ -360,7 +360,7 @@ def test_fake_reader_is_refused_unless_fake_engines_are_enabled(monkeypatch, cle
 
 
 def test_fake_reader_reads_definitions_from_the_text_in_the_models_format():
-    text = inputs.page_context(DOC, 3)
+    text = page_text.page_context(DOC, 3)
     raw, cut = FakeRgroupReader(delay_s=0).read(["R1", "R2"], text, "data:")
     assert cut is False
     assert rg.parse_rows(raw, ["R1", "R2"]) == [

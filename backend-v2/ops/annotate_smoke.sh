@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Real-model smoke test of paper annotation: llama-server with the MARCUS GGUF, the sample PDF
-# through docling, then the annotate step's own handler against the server (ops/annotate_smoke.py).
+# Real-model smoke test of paper annotation: llama-server with the MARCUS GGUF and its vision
+# projector, the sample PDF through docling, then the annotate step's own handler against the
+# server (ops/annotate_smoke.py). For R-group rows on the same kind of server: ops/rgroup_smoke.py.
 #
 #   cd backend-v2
-#   MARCUS_LLM_GGUF=/path/to/qwen3.5-9b-marcus-v1-Q8_0.gguf ops/annotate_smoke.sh [--cpu] [PDF]
+#   MARCUS_LLM_GGUF=/path/to/nuextract3-marcus-multi-v1-Q8_0.gguf \
+#   MARCUS_LLM_MMPROJ=/path/to/nuextract3-marcus-multi-v1-mmproj-f16.gguf ops/annotate_smoke.sh [--cpu] [PDF]
 #
 # PDF defaults to the sample paper (frontend-v2/public/sample/synth_015.pdf). GPU (default): the
 # CUDA image marcus-v2-llama:cuda-b12554 with one GPU (needs the NVIDIA Container Toolkit and
-# 8.9 GB of free GPU memory, measured on the jarvis V100). --cpu: the CPU image, no GPU, a long
-# request timeout, MARCUS_SMOKE_THREADS threads (default 16).
+# about 6.5 GB of free GPU memory, measured on a V100 with both slots). --cpu: the CPU image, no
+# GPU, a long request timeout, MARCUS_SMOKE_THREADS threads (default 16).
 # Images: marcus-v2-api:local and marcus-v2-cpu:local must exist (docker compose build api
 # worker-cpu); the llama image is built if missing (docker/Dockerfile.llama).
 #
 # Nothing of a running stack is used or changed: its own internal network (no route out), its own
-# containers and temp dir, all removed at exit. The model file is mounted read-only and run as
-# its owner's uid:gid. The server arguments are read from docker-compose.gpu.yml (llama-server), so
+# containers and temp dir, all removed at exit. The model files are mounted read-only and run as
+# the model file owner's uid:gid. The server arguments are read from docker-compose.gpu.yml (llama-server), so
 # the smoke test runs the server exactly as the stack does.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,9 +25,12 @@ VARIANT=cuda
 if [[ ${1:-} == --cpu ]]; then VARIANT=cpu; shift; fi
 PDF=${1:-../frontend-v2/public/sample/synth_015.pdf}
 GGUF=${MARCUS_LLM_GGUF:?set MARCUS_LLM_GGUF to the model file}
+MMPROJ=${MARCUS_LLM_MMPROJ:?set MARCUS_LLM_MMPROJ to the model's vision projector}
 [[ -f $GGUF && -r $GGUF ]] || { echo "cannot read $GGUF" >&2; exit 2; }
+[[ -f $MMPROJ && -r $MMPROJ ]] || { echo "cannot read $MMPROJ" >&2; exit 2; }
 [[ -f $PDF ]] || { echo "no PDF at $PDF" >&2; exit 2; }
 GGUF=$(realpath "$GGUF")
+MMPROJ=$(realpath "$MMPROJ")
 if [[ $VARIANT == cuda ]]; then TIMEOUT=${MARCUS_SMOKE_TIMEOUT_S:-110}; else TIMEOUT=${MARCUS_SMOKE_TIMEOUT_S:-3600}; fi
 IMAGE=marcus-v2-llama:${VARIANT}-b12554
 for img in marcus-v2-api:local marcus-v2-cpu:local; do
@@ -63,7 +68,7 @@ fi
 echo "starting llama-server ($IMAGE)"
 docker run -d --name "$NAME" --network "$NAME" --read-only --tmpfs /tmp --cap-drop ALL \
   --security-opt no-new-privileges:true --user "$(stat -c %u:%g "$GGUF")" "${GPU_FLAGS[@]}" \
-  -v "$GGUF":/models/marcus.gguf:ro "$IMAGE" "${ARGS[@]}" >/dev/null
+  -v "$GGUF":/models/marcus.gguf:ro -v "$MMPROJ":/models/mmproj.gguf:ro "$IMAGE" "${ARGS[@]}" >/dev/null
 started=$(date +%s)
 until docker exec "$NAME" curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; do
   if ! docker ps -q --filter "name=^$NAME$" | grep -q .; then
@@ -92,6 +97,6 @@ pdfsafe.run_docling(pdf_path(p), paper_dir(p), timeout_s=900)
 
 echo "annotating (request timeout ${TIMEOUT} s)"
 docker run --rm --network "$NAME" --read-only --tmpfs /tmp -e MARCUS_DATA_ROOT=/data \
-  -e MARCUS_ANNOTATOR_URL="http://$NAME:8080" -e MARCUS_ANNOTATOR_TIMEOUT_S="$TIMEOUT" \
+  -e MARCUS_LLM_URL="http://$NAME:8080" -e MARCUS_LLM_TIMEOUT_S="$TIMEOUT" \
   -v "$WORK":/data:ro -v "$PWD/ops":/ops:ro marcus-v2-api:local python /ops/annotate_smoke.py "$PAPER"
 echo "annotate smoke test passed"

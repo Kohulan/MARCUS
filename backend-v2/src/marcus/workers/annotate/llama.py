@@ -1,11 +1,12 @@
-"""The MARCUS model behind llama-server (its own container on the GPU, internal network only).
+"""The MARCUS model behind llama-server (its own container on the GPU, internal network only,
+shared with R-group rows).
 
-One chat request per paper, as the model was trained and tested (models/qwen3.5-9b-marcus-v1
+One chat request per paper, as the model was trained and tested (models/nuextract3-marcus-multi-v1
 README): the system prompt plus the paper's input text, the chat template with thinking off,
 greedy decoding (temperature 0) under the 11-key grammar (marcus.core.annotation.grammar: the
 keys in order, each string within its maxLength, no free whitespace), at most 4,096 output
-tokens. llama-server runs with `--parallel 1`, so requests are served one at a time; the q.llm
-queue has one slot as well.
+tokens. llama-server runs two slots, one for q.llm and one for q.rgroup; the q.llm queue has one
+slot, so annotation requests are served one at a time.
 
 Errors (marcus.workers.llamachat): no connection or a 5xx answer -> AnnotatorUnavailable (the
 step is retried once); the request's own timeout -> StepTimeout (retried once); a 4xx answer

@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from marcus.core.db import get_db
 from marcus.core.enums import (
@@ -332,14 +333,25 @@ def active(model: type[Paper] | type[ImageJob]) -> tuple:
     return (model.status.in_(_ACTIVE[model]), model.expires_at >= func.now())
 
 
-async def get_owned_paper(db: AsyncSession, owner: Owner, paper_id: uuid.UUID) -> Paper:
+def _labels_option(with_labels: bool) -> tuple:
+    """Load the paper's page label index (a deferred column: a lazy load fails in an async
+    session) for a route that reads it."""
+    return (undefer(Paper.rgroup_text_labels),) if with_labels else ()
+
+
+async def get_owned_paper(
+    db: AsyncSession, owner: Owner, paper_id: uuid.UUID, *, with_labels: bool = False
+) -> Paper:
+    """`with_labels`: the route reads paper.rgroup_text_labels."""
     paper = (
         await db.execute(
-            select(Paper).where(
+            select(Paper)
+            .where(
                 Paper.id == paper_id,
                 Paper.owner_id == owner.id,
                 *visible(Paper),
             )
+            .options(*_labels_option(with_labels))
         )
     ).scalar_one_or_none()
     if paper is None:
@@ -363,8 +375,9 @@ async def get_owned_image_job(db: AsyncSession, owner: Owner, job_id: uuid.UUID)
 
 
 async def get_owned_segment(
-    db: AsyncSession, owner: Owner, segment_id: uuid.UUID
+    db: AsyncSession, owner: Owner, segment_id: uuid.UUID, *, with_labels: bool = False
 ) -> tuple[Segment, Paper]:
+    """`with_labels`: the route reads paper.rgroup_text_labels."""
     row = (
         await db.execute(
             select(Segment, Paper)
@@ -374,6 +387,7 @@ async def get_owned_segment(
                 Paper.owner_id == owner.id,
                 *visible(Paper),
             )
+            .options(*_labels_option(with_labels))
         )
     ).one_or_none()
     if row is None:

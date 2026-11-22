@@ -410,3 +410,90 @@ def test_highlight_with_explicit_hydrogens_lands_on_the_right_atoms(monkeypatch)
     monkeypatch.setattr(tools, "_highlight_objects", spy)
     tools.depict("[H]C([H])([H])O", "svg", 200, 200, highlight="[#6]-[#8]")
     assert seen == [["C", "O"]]
+
+
+# --- the paper's orientation (marcus.workers.orient) ---------------------------------------
+
+
+def _ocsr_template(smiles: str, degrees: float) -> str:
+    """A molfile as MolNexTR/MolScribe write it for a square crop of `smiles` turned by
+    `degrees` (tests/workers/test_orient.py has the construction)."""
+    from tests.workers.test_orient import _layout, _ocsr_molfile
+
+    mol, pos = _layout(smiles, degrees)
+    return _ocsr_molfile(mol, pos, width=12.0, height=12.0)[0]
+
+
+@needs_cdk
+def test_depict_with_a_template_draws_the_oriented_positions():
+    from marcus.workers import tools
+    from marcus.workers.orient import oriented_coords
+
+    smiles = "OC(=O)/C=C/c1ccc(O)c(OC)c1"
+    template = _ocsr_template("COc1cc(/C=C/C(=O)O)ccc1O", 70)
+    mol = tools._layout(tools._smiles_to_cdk(smiles), smiles, template)
+    want = oriented_coords(smiles, template)
+    assert want is not None
+    for i, (x, y) in enumerate(want):
+        point = mol.getAtom(i).getPoint2d()
+        assert (point.x, point.y) == pytest.approx((x, y))
+    svg = tools.depict(smiles, "svg", 300, 300, "", template)
+    assert svg.lstrip().startswith("<svg")
+    assert svg != tools.depict(smiles, "svg", 300, 300)
+
+
+@needs_cdk
+def test_depict_keeps_its_stereo_wedges_on_template_positions():
+    from marcus.workers import tools
+
+    smiles = "C[C@H](N)c1ccc(O)cc1"
+    template = _ocsr_template("CC(N)c1ccc(O)cc1", 200)
+    mol = tools._layout(tools._smiles_to_cdk(smiles), smiles, template)
+    displays = {str(b.getDisplay()) for b in mol.bonds()}
+    assert displays - {"Solid"}, displays  # a wedge or hash for the stereocentre
+
+
+@needs_cdk
+def test_depict_on_template_positions_labels_like_its_own_layout():
+    """The CIP step's labels (a "(?)" on an undefined centre, never on a ring's double bonds)
+    are the same whichever positions the atoms have: ring flags are set as CDK's layout sets
+    them."""
+    from marcus.workers import tools
+
+    jp = tools._jvm()
+    std = jp.JClass(f"{tools.CDK}.renderer.generators.standard.StandardGenerator")
+
+    def labels(mol):
+        mol = tools._cip_annotate(mol)
+        atoms = [i for i, a in enumerate(mol.atoms()) if a.getProperty(std.ANNOTATION_LABEL)]
+        bonds = [i for i, b in enumerate(mol.bonds()) if b.getProperty(std.ANNOTATION_LABEL)]
+        return atoms, bonds
+
+    smiles = "O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21"
+    template = _ocsr_template(smiles, 150)
+    oriented = tools._layout(tools._smiles_to_cdk(smiles), smiles, template)
+    assert oriented.getAtom(0).getPoint2d() is not None
+    assert labels(oriented) == labels(tools._sdg(tools._smiles_to_cdk(smiles))) == ([3], [])
+
+
+@needs_cdk
+@pytest.mark.parametrize("template", ["", "not a molfile"])
+def test_depict_without_a_usable_template_lays_out_as_before(template):
+    from marcus.workers import tools
+
+    smiles = "c1ccccc1CCN"
+    oriented = tools._layout(tools._smiles_to_cdk(smiles), smiles, template)
+    plain = tools._sdg(tools._smiles_to_cdk(smiles))
+    for i in range(plain.getAtomCount()):
+        a, b = oriented.getAtom(i).getPoint2d(), plain.getAtom(i).getPoint2d()
+        assert (a.x, a.y) == pytest.approx((b.x, b.y))
+
+
+@needs_cdk
+def test_depict_task_takes_a_template():
+    from marcus.workers import tools
+
+    out = tools.depict_task.apply(
+        kwargs={"smiles": "CCO", "template": _ocsr_template("CCO", 30)}, throw=True
+    ).get()
+    assert out["ok"] and out["result"].lstrip().startswith("<svg")
