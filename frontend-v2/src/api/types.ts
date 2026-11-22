@@ -297,6 +297,8 @@ export interface AnnotationOut {
   created_at: string | null;
   updated_at: string | null;
   curated_at: string | null;
+  /** GET: the annotation starts by itself within seconds (read GET again). */
+  auto_pending?: boolean;
 }
 
 /** step_id null: the paper already has an annotation and no re-run was asked for. */
@@ -339,6 +341,8 @@ export interface RgroupList {
   /** False: this deployment cannot read R-groups (POST answers 503). */
   available: boolean;
   extractions: RgroupExtractionOut[];
+  /** Predictions whose reading starts by itself within seconds (read the list again). */
+  auto_pending?: string[];
 }
 
 /** step_id null: the scaffold already has rows and no re-run was asked for. */

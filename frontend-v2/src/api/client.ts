@@ -279,8 +279,8 @@ export const api = {
   getAnnotation: (id: string, opts?: ReadOpts) =>
     get<AnnotationOut>(`/papers/${enc(id)}/annotation`, opts),
   /** 202 {step_id}: started or still running; 200 {step_id: null}: already annotated. */
-  startAnnotation: (id: string) =>
-    sendJson<AnnotationStarted>("POST", `/papers/${enc(id)}/annotation`, { rerun: false }),
+  startAnnotation: (id: string, rerun = false) =>
+    sendJson<AnnotationStarted>("POST", `/papers/${enc(id)}/annotation`, { rerun }),
   /** The curator's whole set: all 11 fields ([] = none). */
   saveAnnotation: (id: string, values: AnnotationValues) =>
     sendJson<AnnotationOut>("PUT", `/papers/${enc(id)}/annotation/curation`, { values }),

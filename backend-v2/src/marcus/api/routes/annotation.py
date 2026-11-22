@@ -1,7 +1,7 @@
 """A paper's annotation by the local MARCUS model (owner decision 2026-11-20).
 
     GET    /papers/{id}/annotation           state, model values, curated values, positions, limits
-    POST   /papers/{id}/annotation           start (on demand); {"rerun": true} runs it again
+    POST   /papers/{id}/annotation           start by hand; {"rerun": true} runs it again
     PUT    /papers/{id}/annotation/curation  save the curator's values (all 11 fields)
     DELETE /papers/{id}/annotation/curation  reset to the model's values
 
@@ -10,9 +10,12 @@ rate-limited per owner (`rate_limit_annotate_per_min`, failing closed) and idemp
 still waiting or running is returned again, and a paper that has an annotation gets 200 with
 no step unless `rerun` is asked for. PUT/DELETE curation are rate-limited per owner
 (`rate_limit_curation_per_min`); a save holds at most 300 values, and only values not located
-before are searched, in the chem process. Progress arrives on the paper's event stream
-(GET /papers/{id}/events) as step events of kind `annotate`: starting the step puts a done
-paper back to `processing`, so a client reopens the stream after POST.
+before are searched, in the chem process.
+
+The annotation also starts by itself once the paper's text is read (marcus.core.auto, the
+dispatcher): no rate limit is charged for that. It runs beside the paper's read: the paper's
+status, steps and progress never show it, so a client reads GET again while `step` is active
+or `auto_pending` says a run is about to start.
 """
 
 import uuid
@@ -23,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api import annotation as reads
 from marcus.api.chempool import CHEM
-from marcus.api.deps import current_owner, get_owned_paper, not_found, work_ip
+from marcus.api.deps import current_owner, get_owned_paper, not_found
 from marcus.api.schemas import (
     AnnotationCurationIn,
     AnnotationOut,
@@ -31,7 +34,7 @@ from marcus.api.schemas import (
     AnnotationStarted,
 )
 from marcus.api.security import annotate_limit, curation_limit
-from marcus.core import storage
+from marcus.core import auto, storage
 from marcus.core.db import get_db
 from marcus.core.enums import StepKind
 from marcus.core.models import Owner
@@ -49,12 +52,26 @@ NOTHING_TO_CORRECT = "This paper has no annotation yet"
 
 @router.get("/papers/{paper_id}/annotation", response_model=AnnotationOut)
 async def get_annotation(
+    request: Request,
     paper_id: uuid.UUID,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> AnnotationOut:
     paper = await get_owned_paper(db, owner, paper_id)
-    return await reads.annotation_out(db, paper.id)
+    out = await reads.annotation_out(db, paper.id)
+    out.auto_pending = await _auto_pending(request, db, paper.id)
+    return out
+
+
+async def _auto_pending(request: Request, db: AsyncSession, paper_id: uuid.UUID) -> bool:
+    """The dispatcher will start this paper's annotation by itself: the feature is on, the
+    paper is a candidate (marcus.core.auto) and a worker serves q.llm (the cached /ready
+    check, asked only for a candidate)."""
+    if not get_settings().annotate_enabled:
+        return False
+    if await db.scalar(auto.annotation_query(paper_id)) is None:
+        return False
+    return queue_for(StepKind.ANNOTATE, None) in await request.app.state.live_queues()
 
 
 @router.post(
@@ -81,11 +98,8 @@ async def start_annotation(
         raise HTTPException(status_code=503, detail=NOT_RUNNING)
     paper = await get_owned_paper(db, owner, paper_id)
     rerun = body.rerun if body is not None else False
-    ip = work_ip(request)
     try:
-        step = await db.run_sync(
-            lambda s: request_annotation(s, paper.id, rerun=rerun, started_ip=ip)
-        )
+        step = await db.run_sync(lambda s: request_annotation(s, paper.id, rerun=rerun))
     except AnnotateNotAllowed:
         await db.rollback()
         raise HTTPException(status_code=409, detail=NO_TEXT) from None

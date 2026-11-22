@@ -199,8 +199,8 @@ made before the switch keep the names of the two earlier models (`qwen3.5-9b-mar
 
 ### Paper annotation
 
-On demand per paper (`POST /api/v2/papers/{id}/annotation`, routes in
-`marcus.api.routes.annotation`): an `annotate` step on q.llm builds the model input from the
+By itself once a paper's text is read, or by hand (`POST /api/v2/papers/{id}/annotation`, a
+re-run; routes in `marcus.api.routes.annotation`): an `annotate` step on q.llm builds the model input from the
 paper's Docling text (title, abstract, introduction, as trained), asks the MARCUS model and
 locates every value in the whole text. `worker-llm` (one process) calls it; the fake stack runs
 `worker-fake-annotate` instead (values picked from the text by fixed rules). Without either, the
@@ -211,7 +211,8 @@ through docling, then the step's own handler against llama-server):
 
 ### R-group rows of a scaffold
 
-On demand per prediction with R-group labels (`POST /api/v2/predictions/{id}/rgroups`; read with
+By itself for every scaffold the paper read, or by hand per prediction with R-group labels
+(`POST /api/v2/predictions/{id}/rgroups`, a re-run; read with
 `GET /api/v2/papers/{id}/rgroups` or `GET /api/v2/predictions/{id}/rgroups`; routes in
 `marcus.api.routes.rgroups`): an `rgroups` step on q.rgroup sends the scaffold's labels, the text of
 pages P-1..P+1 and the page image (scaled to the 150 dpi size, at most 1.3 MP) to the MARCUS
@@ -234,6 +235,20 @@ label list and the exports' `rgroups` (JSON, CSV, SDF) show only a structure's l
 page names (all of them when it names none, or for a paper read before migration 0015, or an
 image job). `placeholder` in the API says whether a structure has placeholder atoms whatever is
 shown: COCONUT holds every one that has.
+
+### What runs by itself
+
+Annotation (once the paper's text is read) and R-group rows (for the newest prediction of the
+paper's engine per segment with a label the model can be asked for, once it and the text are
+read) start by themselves: the dispatcher's auto pass (`marcus.dispatcher.auto`, every 3 s)
+asks for them with the planner's own requests, where the feature is on (`MARCUS_ANNOTATE_ENABLED`,
+`MARCUS_RGROUP_ENABLED`, set on the dispatcher as on the API) and a live worker serves q.llm /
+q.rgroup (a consumer broadcast in the background, its answer kept 30 s); otherwise nothing is
+asked and the manual action stays. Each is asked once (a paper with any annotate step, a
+prediction with an `rgroup_extractions` row, is never asked again by itself) and only for work
+younger than `MARCUS_AUTO_WINDOW_S` (default 3600 s: no backfill of older papers). No rate
+limit is charged. Both run beside the read: they never reopen a paper, keep it busy, or show in
+its steps, step counts or progress; the GETs say `auto_pending` while a run is about to start.
 
 ### Drawings in the paper's orientation
 

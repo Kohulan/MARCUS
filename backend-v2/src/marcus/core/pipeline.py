@@ -5,13 +5,16 @@ transaction. Steps are created only when their inputs exist: completing a step c
 successors. Functions that change a paper lock its row first (SELECT ... FOR UPDATE), so two
 workers finishing the last two steps of one paper cannot both miss the `done` transition.
 
-Annotation (owner decision 2026-11-20): on demand only. request_annotation adds one `annotate`
-step (q.llm) to a paper whose docling step is done; its result (the MARCUS model's values and
+Annotation (owner decisions 2026-11-20, 2026-11-22): request_annotation adds one `annotate`
+step (q.llm) to a paper whose docling step is done, asked for by the dispatcher once the text
+is read (marcus.core.auto) or by the user (a re-run); its result (the MARCUS model's values and
 their positions in the text, marcus.core.annotation) is stored in the paper's one `annotations`
-row. A re-run replaces the model's values and keeps the curator's. An annotate step never
-decides whether the paper is done or failed.
+row. A re-run replaces the model's values and keeps the curator's. An annotate step is outside
+the paper's progress, like an rgroups step: it never reopens a paper, never keeps one busy and
+never decides whether it is done or failed.
 
-R-group rows (Markush Phase 2): on demand only, per prediction with R-group labels.
+R-group rows (Markush Phase 2): per prediction with R-group labels, asked for by the dispatcher
+(marcus.core.auto) or by the user.
 request_rgroups adds one `rgroups` step (q.rgroup, the step's segment set, no page) and writes the
 prediction's `rgroup_extractions` row (status `queued`); the step's end sets it `done` with the
 rows or `failed` with the error class. An rgroups step is outside the paper's progress: it never
@@ -353,14 +356,19 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
     return step, paper, job
 
 
+# Step kinds outside the paper's read: they never keep it busy or count in its progress.
+OUTSIDE_PROGRESS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
+
+
 def in_paper_progress():
-    """SQL condition: the step counts in its paper's progress (every kind but `rgroups`)."""
-    return Step.kind != StepKind.RGROUPS.value
+    """SQL condition: the step counts in its paper's progress (every kind but `annotate` and
+    `rgroups`, which run beside the read)."""
+    return Step.kind.not_in(OUTSIDE_PROGRESS)
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
-    """If no step of the paper is still active (rgroups steps aside), close the paper as done or
-    failed.
+    """If no step of the paper is still active (annotate and rgroups steps aside), close the
+    paper as done or failed.
 
     Failed (spec §8): check_pdf failed, or every page failed, a page being failed when its
     render_page or its segment_page step failed for good. Otherwise done, failed steps and all.
@@ -1129,13 +1137,11 @@ def request_image_ocsr(
     return step
 
 
-def request_annotation(
-    session: Session, paper_id: uuid.UUID, rerun: bool = False, started_ip: str | None = None
-) -> Step | None:
+def request_annotation(session: Session, paper_id: uuid.UUID, rerun: bool = False) -> Step | None:
     """Ask for the paper's annotation: a new pending `annotate` step, or None when the paper
     already has one and `rerun` is false. An annotate step still pending, queued or running is
-    returned instead of a new one (repeat clicks). A `done`/`failed` paper goes back to
-    `processing` with `started_ip` until the step ends. Caller commits.
+    returned instead of a new one (repeat clicks). The paper's status does not change. Caller
+    commits.
 
     Locks the paper first. Raises ValueError for a missing or deleted paper and
     AnnotateNotAllowed("no_text") unless the paper's docling step is done.
@@ -1164,10 +1170,6 @@ def request_annotation(
         return None
     step = _new_step(paper, StepKind.ANNOTATE, ANNOTATE_SEQ, created_at=_now())
     session.add(step)
-    if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
-        paper.status = PaperStatus.PROCESSING.value
-        paper.error = None
-        keep_address(paper, started_ip)
     session.flush()
     return step
 

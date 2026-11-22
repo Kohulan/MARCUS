@@ -131,7 +131,8 @@ async def test_start_progress_and_result(app, async_db_session, ready):
         step_id = r.json()["step_id"]
         again = await c.post(f"/api/v2/papers/{paper_id}/annotation", json={"rerun": True})
         assert again.status_code == 202 and again.json()["step_id"] == step_id  # repeat click
-        assert (await paper_row(db, paper_id)).status == "processing"  # the stream reopens
+        # beside the read: the paper stays done; the client reads GET until the step ends
+        assert (await paper_row(db, paper_id)).status == "done"
         pending = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
         assert pending["status"] == "pending" and pending["step"]["id"] == step_id
         assert pending["step"]["kind"] == "annotate" and pending["values"] is None
@@ -157,32 +158,56 @@ async def test_start_progress_and_result(app, async_db_session, ready):
     }  # fmt: skip
 
 
-async def test_papers_say_when_the_annotation_is_their_only_work(app, async_db_session, ready):
-    """GET /papers and GET /papers/{id}: `annotating` while the paper is busy only with its
-    annotate step, so the tool home says Annotating…, not Reading… (B-M2)."""
+async def test_an_annotation_run_is_outside_the_papers_read(app, async_db_session, ready):
+    """Annotation runs beside the read (it starts by itself): it never makes the paper busy,
+    is not in its steps or step counts (the progress bar), and `annotating` stays false."""
     db = async_db_session
     token, paper_id, _ = ready
     async with make_client(app, token) as c:
 
-        async def flags() -> tuple[bool, bool]:
+        async def seen() -> tuple:
             listed = (await c.get("/api/v2/papers")).json()["papers"]
             detail = (await c.get(f"/api/v2/papers/{paper_id}")).json()
-            return listed[0]["annotating"], detail["annotating"]
+            kinds = [s["kind"] for s in (await c.get(f"/api/v2/papers/{paper_id}/steps")).json()["steps"]]
+            return (
+                listed[0]["annotating"], detail["annotating"], detail["status"],
+                "annotate" in kinds, sum(detail["counts"]["steps_by_status"].values()),
+            )  # fmt: skip
 
-        assert await flags() == (False, False)
+        before = await seen()
+        assert before[:4] == (False, False, "done", False)
         assert (await c.post(f"/api/v2/papers/{paper_id}/annotation")).status_code == 202
-        assert (await paper_row(db, paper_id)).status == "processing"
-        assert await flags() == (True, True)
-        # another step running too (a manual OCSR run): the paper is reading again
-        (other,) = await db.run_sync(lambda s: steps_of(s, paper_id, "doi"))
-        await db.execute(update(Step).where(Step.id == other.id).values(status="running"))
-        await db.commit()
-        assert await flags() == (False, False)
-        await db.execute(update(Step).where(Step.id == other.id).values(status="done"))
-        await db.commit()
+        assert await seen() == before
         await run_annotate(db, paper_id, model_result())
-        assert (await paper_row(db, paper_id)).status == "done"
-        assert await flags() == (False, False)
+        assert await seen() == before
+
+
+async def test_get_says_when_the_annotation_will_start_by_itself(app, async_db_session, ready):
+    """`auto_pending`: the text is read, nothing was asked yet, and a worker serves q.llm, so
+    the dispatcher starts it within seconds (the client keeps reading GET)."""
+    token, paper_id, _ = ready
+    async with make_client(app, token) as c:
+        first = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
+        assert first["auto_pending"] is True and first["status"] == "none"
+        assert (await c.post(f"/api/v2/papers/{paper_id}/annotation")).status_code == 202
+        after = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
+    assert after["auto_pending"] is False and after["status"] == "pending"
+
+
+async def test_no_auto_pending_without_a_worker_or_the_feature(
+    app, async_db_session, ready, monkeypatch, clear_settings_cache
+):
+    from marcus.api.routes import health
+
+    token, paper_id, _ = ready
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    async with make_client(app, token) as c:
+        unserved = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
+        monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "0")
+        clear_settings_cache()
+        off = (await c.get(f"/api/v2/papers/{paper_id}/annotation")).json()
+    assert unserved["auto_pending"] is False and off["auto_pending"] is False
 
 
 async def test_a_paper_still_being_read_is_not_annotating(app, async_db_session):

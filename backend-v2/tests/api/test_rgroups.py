@@ -101,13 +101,40 @@ async def test_nothing_asked_for_yet(app, async_db_session):
         listed = await c.get(f"/api/v2/papers/{paper_id}/rgroups")
         one = await c.get(f"/api/v2/predictions/{scaffold}/rgroups")
     assert listed.status_code == 200
-    assert listed.json() == {"available": False, "extractions": []}
+    assert listed.json() == {"available": False, "extractions": [], "auto_pending": []}
     assert one.status_code == 200
     assert one.json() == {
         "prediction_id": str(scaffold), "segment_id": str(segment), "status": "none",
         "labels": ["R1"], "rows": None, "truncated": False, "error": None, "model": None,
         "model_version": None, "created_at": None, "updated_at": None, "finished_at": None,
     }  # fmt: skip
+
+
+async def test_the_list_names_the_scaffolds_about_to_be_read_by_themselves(
+    app, async_db_session, ready
+):
+    """`auto_pending`: scaffolds of the paper's reading with nothing asked yet, while a worker
+    serves q.rgroup (the dispatcher starts them within seconds; the client keeps reading)."""
+    db = async_db_session
+    token, paper_id, scaffold, _, _, _ = ready
+    async with make_client(app, token) as c:
+        first = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+        assert first["auto_pending"] == [str(scaffold)] and first["extractions"] == []
+        assert (await c.post(f"/api/v2/predictions/{scaffold}/rgroups")).status_code == 202
+        after = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+    assert after["auto_pending"] == [] and after["extractions"][0]["status"] == "queued"
+    assert db is not None
+
+
+async def test_no_auto_pending_without_a_worker(app, async_db_session, ready, monkeypatch):
+    from marcus.api.routes import health
+
+    token, paper_id, _, _, _, _ = ready
+    monkeypatch.setattr(health, "inspect_live_queues", lambda: {"q.cpu"})
+    monkeypatch.setattr(health, "_live_queues", health.LiveQueues())
+    async with make_client(app, token) as c:
+        listed = (await c.get(f"/api/v2/papers/{paper_id}/rgroups")).json()
+    assert listed["auto_pending"] == []
 
 
 async def test_start_is_503_where_it_is_not_available(app, async_db_session):

@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
 from marcus.core.enums import (
-    ACTIVE_PAPER_STATUSES,
     FINISHED_STEPS,
     Engine,
     StepKind,
@@ -30,7 +29,8 @@ class PaperCounts(NamedTuple):
     to_review: int
     failed_pages: int
     failed: int
-    # its only step in flight is an annotate step (the paper is busy only with its annotation)
+    # always false: an annotation runs beside the read, never keeping the paper busy (kept in the
+    # API for older clients)
     annotating: bool = False
     # the read's coarse progress, as the workspace reads it from the steps (readingProgress.ts)
     pages_read: int = 0  # pages whose newest render_page/segment_page step has ended
@@ -110,10 +110,9 @@ async def paper_counts(
         if row is None:
             out[pid] = PaperCounts(0, 0, 0, 0, 0, 0)
             continue
-        active = row.annotate_active + row.other_active
+        active = row.active
         out[pid] = PaperCounts(
             0, 0, 0, 0, row.failed_pages or 0, 0,
-            annotating=bool(row.annotate_active) and not row.other_active,
             pages_read=row.pages_read or 0,
             structures_total=row.structures_total or 0,
             structures_read=row.structures_read or 0,
@@ -139,8 +138,7 @@ def _step_counts(paper_ids: list[uuid.UUID]):
     steps = (
         select(
             Step.paper_id,
-            func.count().filter(active, kind == StepKind.ANNOTATE.value).label("annotate_active"),
-            func.count().filter(active, kind != StepKind.ANNOTATE.value).label("other_active"),
+            func.count().filter(active).label("active"),
             func.count().filter(kind == StepKind.DOCLING.value).label("docling"),
             func.count().filter(ended, kind == StepKind.DOCLING.value).label("docling_ended"),
             func.count()
@@ -199,8 +197,7 @@ def _step_counts(paper_ids: list[uuid.UUID]):
     )
     return select(
         steps.c.paper_id,
-        steps.c.annotate_active,
-        steps.c.other_active,
+        steps.c.active,
         steps.c.docling,
         steps.c.docling_ended,
         steps.c.check_started,
@@ -219,7 +216,6 @@ def _step_counts(paper_ids: list[uuid.UUID]):
 def paper_summary(paper: Paper, counts: PaperCounts) -> PaperSummary:
     fields = PaperSummary.model_fields.keys() - PaperCounts._fields
     values = counts._asdict()
-    values["annotating"] = counts.annotating and paper.status in ACTIVE_PAPER_STATUSES
     if counts.text_read is None:  # no docling step (a paper read before it existed): its pages
         values["text_read"] = paper.pages is not None and counts.pages_read >= paper.pages
     return PaperSummary(**{f: getattr(paper, f) for f in fields}, **values)

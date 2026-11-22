@@ -156,6 +156,13 @@ services:
       MARCUS_RGROUP_ENABLED: "1"
       MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm,q.rgroup}
 
+  # Annotation and R-group rows run by themselves (marcus.dispatcher.auto): the dispatcher asks
+  # for them where the API offers them, and only while a worker serves q.llm / q.rgroup.
+  dispatcher:
+    environment:
+      MARCUS_ANNOTATE_ENABLED: "1"
+      MARCUS_RGROUP_ENABLED: "1"
+
   # The MARCUS model: llama.cpp llama-server (docker/Dockerfile.llama, built at the commit the GGUF
   # was converted with), with its vision projector. Each request brings its own decoding settings
   # (greedy; the 11-key grammar for annotation, marcus.workers.annotate.llama; the JSON schema and
