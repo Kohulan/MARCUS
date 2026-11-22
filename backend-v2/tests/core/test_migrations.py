@@ -620,3 +620,21 @@ def test_migration_0019_background_steps_and_inchikey_up_down(migrated_db):
         assert "inchikey" not in _columns(engine, "predictions")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0020_curation_shown_prediction_up_down(migrated_db):
+    """0020 adds curation.shown_prediction_id (nullable; its prediction's deletion clears it)."""
+    from marcus.core.db import get_sync_engine
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        fks = inspect(engine).get_foreign_keys("curation")
+        (fk,) = [f for f in fks if f["constrained_columns"] == ["shown_prediction_id"]]
+        assert fk["referred_table"] == "predictions" and fk["options"]["ondelete"] == "SET NULL"
+        command.downgrade(cfg, "0019")
+        assert "shown_prediction_id" not in _columns(engine, "curation")
+    finally:
+        command.upgrade(cfg, "head")

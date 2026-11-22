@@ -7,7 +7,7 @@ import uuid
 
 from sqlalchemy import select
 
-from marcus.core.models import BackgroundStep, Step
+from marcus.core.models import BackgroundStep, Curation, Step
 from tests.api.conftest import (
     finish,
     make_client,
@@ -205,3 +205,91 @@ async def test_an_engine_whose_step_never_ran_does_not_count(app, async_db_sessi
     await db.commit()
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     assert {(s["agree"], s["agree_of"]) for s in paper["segments"]} == {(2, 2)}
+
+
+async def _decide(app, token, seg, status):
+    body = {"status": status, "smiles": None, "molfile": None, "note": None}
+    async with make_client(app, token) as client:
+        r = await client.put(f"/api/v2/segments/{seg}/curation?decision=true", json=body)
+    assert r.status_code == 200, r.text
+
+
+async def test_a_decision_freezes_the_structure_it_was_made_on(app, async_db_session):
+    """Review finding: accepted while only DECIMER had read (CCN); the other two engines then
+    agree on CCO. The card, its depiction pick and its export keep CCN; back to unchecked, the
+    majority shows; a new accept keeps that one."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(0, "decimer"): "CCN", (1, "decimer"): "CCN"})
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    seg = paper["segments"][0]
+    own = seg["default_prediction_id"]
+    await _decide(app, token, seg["id"], "accepted")
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+
+    def shown(paper, sid):
+        s = next(x for x in paper["segments"] if x["id"] == sid)
+        return next(p for p in s["predictions"] if p["id"] == s["default_prediction_id"])
+
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    assert shown(paper, seg["id"])["id"] == own and shown(paper, seg["id"])["smiles"] == "CCN"
+    other = next(x for x in paper["segments"] if x["id"] != seg["id"])
+    assert shown(paper, other["id"])["smiles"] == "CCO"  # undecided: the majority
+    async with make_client(app, token) as client:
+        r = await client.get(f"/api/v2/papers/{pid}/export", params={"format": "json"})
+    exported = {s["segment_id"]: s["smiles"] for s in json.loads(r.content)["segments"]}
+    assert exported[seg["id"]] == "CCN"
+
+    await _decide(app, token, seg["id"], "unchecked")
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    assert shown(paper, seg["id"])["smiles"] == "CCO"
+    await _decide(app, token, seg["id"], "rejected")
+    row = await db.get(Curation, uuid.UUID(seg["id"]))
+    await db.refresh(row)
+    assert row.shown_prediction_id == uuid.UUID(shown(paper, seg["id"])["id"])
+
+
+async def test_bulk_and_group_decisions_freeze_each_structure(app, async_db_session):
+    """A bulk accept freezes each card's own shown prediction; a repeat that inherits a main
+    card's decision freezes its own."""
+    from marcus.core.models import Paper, Prediction, Segment
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await _read(db, pid, {(0, "decimer"): "CCN", (1, "decimer"): "CCO"})
+
+    def add_repeat(s):
+        s.get(Paper, pid).pages = 2
+        seg = Segment(id=uuid.uuid4(), paper_id=pid, page=1, idx=0, bbox=[0, 0, 10, 10],
+                      image_sha256="7" * 64)  # fmt: skip
+        s.add(seg)
+        s.flush()
+        s.add(Curation(segment_id=seg.id, status="unchecked"))
+        s.add(Prediction(segment_id=seg.id, engine="decimer", engine_version="t", smiles="OCC",
+                         valid=True, ms=1, rgroups=[], inchikey=ETHANOL))  # fmt: skip
+        return seg.id
+
+    repeat = await db.run_sync(add_repeat)
+    await db.commit()
+    async with make_client(app, token) as client:
+        assert (await client.put(f"/api/v2/papers/{pid}/main-figure", json={"page": 0})).is_success
+        items = [{"segment_id": str(s), "status": "accepted"} for s in seeded.segment_ids]
+        r = await client.put(f"/api/v2/papers/{pid}/curation", json={"items": items})
+    assert r.status_code == 200, r.text
+    rows = {
+        c.segment_id: c
+        for c in (await db.scalars(select(Curation).execution_options(populate_existing=True)))
+    }
+    preds = {
+        p.id: p
+        for p in await db.scalars(select(Prediction).where(Prediction.segment_id.in_(rows)))
+    }
+    for sid in [*seeded.segment_ids, repeat]:
+        assert rows[sid].status == "accepted"
+        frozen = preds[rows[sid].shown_prediction_id]
+        assert frozen.segment_id == sid  # its own structure
+    assert preds[rows[repeat].shown_prediction_id].smiles == "OCC"
