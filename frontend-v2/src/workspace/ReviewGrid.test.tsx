@@ -371,6 +371,22 @@ describe("the way into focus mode", () => {
   });
 });
 
+describe("Check this drawing", () => {
+  it("a flagged card says so and its Edit opens the editor on it; others say nothing", async () => {
+    renderGrid(
+      paper([segment("s1", { check_drawing: true }), segment("s2"), segment("s3", { check_drawing: false })]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(within(card("[01]")).getByText("Check this drawing")).toBeInTheDocument();
+    expect(card("[01]")).toHaveAccessibleName(/Check this drawing$/);
+    expect(within(card("[02]")).queryByText("Check this drawing")).toBeNull();
+    expect(within(card("[03]")).queryByText("Check this drawing")).toBeNull();
+    fireEvent.click(within(card("[01]")).getByRole("button", { name: "Edit [01]" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(dialog).toBeInTheDocument();
+  });
+});
+
 describe("the card menu (More)", () => {
   it("Edit opens the editor on that structure; a save keeps the note; focus returns to More", async () => {
     const put = vi

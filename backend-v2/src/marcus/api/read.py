@@ -23,6 +23,7 @@ from marcus.core.enums import (
 from marcus.core.main_figure import CountFix, Entry, count_fix, link_repeats, stale_members
 from marcus.core.models import (
     Curation,
+    DrawingFlag,
     InheritedStatus,
     MainFigure,
     Paper,
@@ -562,6 +563,13 @@ async def segments_out(
             out.status = "unchecked"
         return out
 
+    flagged = set(
+        await db.scalars(
+            select(DrawingFlag.segment_id)
+            .join(Segment, Segment.id == DrawingFlag.segment_id)
+            .where(Segment.paper_id == paper.id)
+        )
+    )
     out = [
         SegmentOut(
             id=seg.id,
@@ -569,6 +577,7 @@ async def segments_out(
             idx=seg.idx,
             bbox=list(seg.bbox),
             repeat_of=repeats.get(seg.id),
+            check_drawing=seg.id in flagged,
             curation=curation_out(seg) if seg.id in curations else None,
             predictions=[
                 structure_out(PredictionOut, p, named_on(index, seg.page))

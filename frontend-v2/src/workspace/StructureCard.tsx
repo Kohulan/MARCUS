@@ -198,7 +198,12 @@ function StructureCard({
       ref={ref}
       className={classes.join(" ")}
       tabIndex={0}
-      aria-label={[where, STATE_WORD[state], rgroups.length > 0 && rgroupTag(rgroups)]
+      aria-label={[
+        where,
+        STATE_WORD[state],
+        rgroups.length > 0 && rgroupTag(rgroups),
+        segment.check_drawing && CHECK_DRAWING,
+      ]
         .filter(Boolean)
         .join(", ")}
       aria-describedby={CARD_OPEN_HINT}
@@ -273,6 +278,22 @@ function StructureCard({
             {enginesDiffer(segment) && <span className="card__differ">Engines differ</span>}
           </p>
         )}
+        {segment.check_drawing && (
+          <p className="card__flag">
+            <span>{CHECK_DRAWING}</span>
+            {onEdit && (
+              <button
+                type="button"
+                className="card__flag-edit"
+                aria-label={`Edit ${tag}`}
+                aria-haspopup="dialog"
+                onClick={() => onEdit(segment.id)}
+              >
+                Edit
+              </button>
+            )}
+          </p>
+        )}
         {alsoOn !== null && <p className="card__also">{alsoOn}</p>}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
@@ -316,6 +337,9 @@ function StructureCard({
 }
 
 export default memo(StructureCard);
+
+/** The flag of a crop that is not a clean drawing (SegmentOut.check_drawing). */
+export const CHECK_DRAWING = "Check this drawing";
 
 function CardActions({
   segmentId,

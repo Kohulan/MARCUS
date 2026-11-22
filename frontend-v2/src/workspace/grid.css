@@ -315,6 +315,29 @@
   color: var(--text-2);
 }
 
+/* "Check this drawing": the crop has NMR marks or is an X-ray / 3D picture. */
+.card .card__flag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--orange-ink);
+}
+
+.card__flag-edit {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
 .card .card__reason {
   font-size: 14px;
   color: var(--text-2);

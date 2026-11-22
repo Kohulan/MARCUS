@@ -18,6 +18,7 @@ from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import Engine, ErrorClass
 from marcus.core.models import (
     Curation,
+    DrawingFlag,
     OcsrCache,
     Owner,
     Paper,
@@ -157,6 +158,40 @@ def test_same_pdf_twice_same_owner_two_papers_second_from_cache(db_session):
     b_ocsr = steps(s, b, "ocsr")
     assert {st.segment_id for st in b_ocsr} == {g.id for g in seg_b}
     assert len(cache_rows(s)) == 1
+
+
+def flags(s, paper) -> list[bool]:
+    flagged = set(s.execute(select(DrawingFlag.segment_id)).scalars())
+    return [g.id in flagged for g in segments_of(s, paper)]
+
+
+def test_a_cache_hit_keeps_the_drawing_check(db_session):
+    """The flag travels in the cache row; a row from before the check flags nothing."""
+    s = db_session
+    owner = make_owner(s)
+
+    def flagged(paper, page):
+        out = segment_result(paper, page)
+        for item in out["segments"]:
+            item["check_drawing"] = item["idx"] == 1
+        return out
+
+    a = make_paper(s, owner)
+    drive(s, a, seg=flagged)
+    (row,) = cache_rows(s)
+    assert [g["check_drawing"] for g in row.payload["segments"]] == [False, True, False, True]
+    b = make_paper(s, owner)
+    drive(s, b)
+    assert flags(s, b) == [False, True, False, True]
+
+    payload = {**row.payload, "segments": [
+        {k: v for k, v in g.items() if k != "check_drawing"} for g in row.payload["segments"]
+    ]}  # fmt: skip
+    row.payload = payload
+    s.flush()
+    c = make_paper(s, owner)
+    drive(s, c)
+    assert flags(s, c) == [False] * 4
 
 
 def test_other_owner_never_gets_a_seg_cache_hit(db_session):

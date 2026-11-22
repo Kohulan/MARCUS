@@ -366,3 +366,16 @@ class InheritedStatus(Base):
     )
     main_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class DrawingFlag(Base):
+    """A segment whose crop is not a clean drawing: NMR marks or an X-ray / 3D picture ("check
+    this drawing"; segment_page, marcus.workers.drawing_check). No row: a clean drawing, or a
+    segment from before the check. A table of its own, not a segments column: the migration
+    tests of older revisions insert segments through the ORM."""
+
+    __tablename__ = "drawing_flags"
+
+    segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )

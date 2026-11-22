@@ -4,7 +4,8 @@ Importing this module registers the handler (GPU worker images import it). Crops
 content-addressed (`storage.segment_crop_path`): the planner creates Segment ids only after
 this handler returns, so the crop cannot be named by segment id. Crop arrays and files are RGB
 (true colour, what users see); the OCSR handler gives the engines v1's red/blue-swapped pixels
-(`marcus.workers.ocsr.handler.v1_engine_input`).
+(`marcus.workers.ocsr.handler.v1_engine_input`). Each crop gets its "check this drawing" flag
+here, from the crop alone (`marcus.workers.drawing_check`).
 """
 
 import hashlib
@@ -23,6 +24,7 @@ from PIL import Image, ImageDraw
 from marcus.core.enums import StepKind
 from marcus.core.settings import fake_enabled
 from marcus.core.storage import page_image_path, segment_crop_path, write_atomic
+from marcus.workers.drawing_check import check_drawing
 from marcus.workers.runtime import BadInput, preload_on_worker_init, register
 
 log = logging.getLogger(__name__)
@@ -212,6 +214,7 @@ def segment_page(step, session) -> dict:
                 "idx": idx,
                 "bbox": [int(v) for v in bbox],
                 "image_sha256": _write_crop(step.paper_id, array),
+                "check_drawing": check_drawing(array),
             }
         )
     # seg_version: the planner caches a paper's segmentation only when every page reports the

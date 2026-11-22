@@ -8,7 +8,7 @@ from marcus.core import pipeline as pipeline_module
 from marcus.core import storage
 from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import Engine, ErrorClass
-from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.models import Curation, DrawingFlag, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import (
     BadResult,
     RetryNotAllowed,
@@ -116,6 +116,22 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
         ("ocsr", "molnextr", "q.molnextr", 2, 2000, segs[0].id),
         ("ocsr", "molnextr", "q.molnextr", 2, 2001, segs[1].id),
     ]
+
+
+def test_segment_page_stores_the_drawing_check(db_session):
+    """A flagged segment gets its drawing_flags row; a clean one, or a result without the flag
+    (an older worker), none."""
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    third = {"idx": 2, "bbox": [1, 1, 9, 9], "image_sha256": "2" * 64}
+    items = [{**SEGS[0], "check_drawing": True}, {**SEGS[1], "check_drawing": False}, third]
+    finish(s, seg_step, {"segments": items, "seg_version": SEG_V})
+    flagged = s.execute(
+        select(Segment.idx).join(DrawingFlag, DrawingFlag.segment_id == Segment.id)
+    ).scalars()
+    assert list(flagged) == [0]
 
 
 def test_ocsr_result_stores_cached_flag(db_session):
@@ -601,6 +617,8 @@ GOOD_SEG = {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64}
         {"segments": [{**GOOD_SEG, "image_sha256": "0" * 65}], "seg_version": SEG_V},
         {"segments": [{**GOOD_SEG, "image_sha256": "G" * 64}], "seg_version": SEG_V},
         {"segments": [{"idx": 0, "bbox": [0, 0, 1, 1]}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "check_drawing": "yes"}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "check_drawing": 1}], "seg_version": SEG_V},
         {"segments": "nope", "seg_version": SEG_V},
         {"segments": [GOOD_SEG]},  # no seg_version
         {"segments": [GOOD_SEG], "seg_version": ""},
