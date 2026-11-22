@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { useParams } from "react-router-dom";
 import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
 import { depictQuery, useReplyUrl } from "../api/depictions";
-import { engineName, firstRunNote } from "../api/engines";
+import { engineName, firstRunNote, orientationTemplate } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isImageActive } from "../api/status";
@@ -126,14 +126,21 @@ function ImageJobPage({
 
 /**
  * The drawing of `smiles` from /tools/depict (Compare's query for a plain drawing, so it is
- * drawn once) as an object URL, and the reply itself (Download saves it as is).
+ * drawn once), in the image's orientation when `template` gives its atom positions, as an
+ * object URL, and the reply itself (Download saves it as is).
  */
-function useDrawing(smiles: string | null): {
+function useDrawing(
+  smiles: string | null,
+  template: PredictionOut | null,
+): {
   src: string | null;
   failed: boolean;
   reply: DepictReply | null;
 } {
-  const query = useQuery({ ...depictQuery(smiles ?? "", null), enabled: smiles !== null });
+  const query = useQuery({
+    ...depictQuery(smiles ?? "", null, undefined, template),
+    enabled: smiles !== null,
+  });
   const reply = smiles !== null && !query.isError ? query.data : undefined;
   return { src: useReplyUrl(reply), failed: query.isError, reply: reply ?? null };
 }
@@ -192,7 +199,7 @@ function Result({
     job.steps.find((st) => st.engine === job.engine)?.error_class ?? job.error_class;
   const smiles = edit?.smiles ?? prediction?.smiles ?? null;
   const molfile = edit ? edit.molfile : (prediction?.molfile ?? null);
-  const drawing = useDrawing(smiles);
+  const drawing = useDrawing(smiles, orientationTemplate(job.predictions));
   const active = isImageActive(job.status);
 
   async function retry() {
