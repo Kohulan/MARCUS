@@ -20,8 +20,8 @@ def queue_for(kind: StepKind, engine: Engine | None) -> str:
     if kind == StepKind.ANNOTATE:
         return "q.llm"
     if kind == StepKind.RGROUPS:
-        # its own queue: the R-group model has its own llama-server (llama-rgroup), so an
-        # annotation run never holds back an R-group reading, nor the other way round
+        # its own queue (and a llama-server slot of its own), so an annotation run never
+        # holds back an R-group reading, nor the other way round
         return "q.rgroup"
     if kind == StepKind.OCSR:
         if engine is None:

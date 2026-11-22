@@ -1,4 +1,4 @@
-# Override: the four model workers and the MARCUS model (llama-server) on the GPU (production
+# Override: the four OCSR model workers and the MARCUS model (llama-server) on the GPU (production
 # host: one 32 GB card).
 #
 #   docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
@@ -23,31 +23,28 @@
 #                     V100, 2026-11-17) gave the same SMILES on 205 of 205 fixture crops as cpu,
 #                     the same exact matches, and 0.66 s instead of 1.08 s per structure
 #                     (judges/results/2026-11-17-gpu-session.md).
-#   llama-server      the MARCUS model (Q8_0 GGUF, 9.5 GB) fully on the GPU, 8192-token context,
-#                     one request at a time: 8.9 GB measured on the jarvis V100 (2026-11-20;
-#                     llama.cpp has no cap; the size is the model plus its context). tests/deploy
-#                     counts it on top of the 20 GB above.
-#   llama-rgroup      the R-group model (nuextract3-rgroup-v1 vision, Q8_0 GGUF 4.5 GB + its f16 vision
-#                     projector 0.7 GB) fully on the GPU, 10240-token context, one request at a time:
-#                     6.0 GB measured on a V100 (model README, 2026-11-22). tests/deploy counts it with
-#                     llama-server on top of the 20 GB above.
+#   llama-server      the one MARCUS model (nuextract3-marcus-multi-v1: Q8_0 GGUF 4.5 GB + its f16
+#                     vision projector 0.7 GB) fully on the GPU, two slots of 10240 tokens
+#                     (--parallel 2, ctx 20480): about 6.5 GB (6.33 GB after load, 6.46 GB peak,
+#                     measured on a V100, model README 2026-11-22; llama.cpp has no cap; the size
+#                     is the model plus its context). tests/deploy counts it on top of the 20 GB above.
 # The budgets cap the frameworks' allocators; every process's CUDA context (a few hundred MB)
 # comes on top. Each value can be changed from the environment without editing this file.
 #
-# Paper annotation (owner decision 2026-11-20): llama-server runs in its own container on its own
-# internal network `llm`, shared only with worker-llm (no port published, no internet, no other
-# container can reach it), the GGUF mounted read-only from the
-# host (MARCUS_LLM_GGUF; never copied into an image). It must be readable by the container user
-# (MARCUS_LLM_USER, default 10001:10001; e.g. the file owner's "$(id -u):$(id -g)"). worker-llm
-# (the api image) consumes q.llm and calls it; the API offers annotation (MARCUS_ANNOTATE_ENABLED)
-# and /ready expects q.llm. A different model file means new MARCUS_ANNOTATE_MODEL(_VERSION).
-#
-# R-group rows (Markush Phase 2): llama-rgroup is a second llama-server with the same image and the
-# same hardening on its own internal network `rgroup`, serving the R-group model
-# (MARCUS_RGROUP_GGUF and its vision projector MARCUS_RGROUP_MMPROJ, both mounted read-only,
-# readable by MARCUS_LLM_USER). worker-rgroup consumes q.rgroup, runs the rgroups step
-# (marcus.workers.rgroups) and calls it; the API offers it (MARCUS_RGROUP_ENABLED) and /ready
-# expects q.rgroup. A different model file means new MARCUS_RGROUP_MODEL(_VERSION).
+# The MARCUS model (owner decisions 2026-11-20 and 2026-11-22): ONE model, nuextract3-marcus-multi-v1,
+# does both model jobs, paper annotation and R-group rows, on ONE llama-server. It runs in its own
+# container on its own internal network `llm`, shared only with worker-llm and worker-rgroup (no
+# port published, no internet, no other container can reach it), the GGUF and its vision projector
+# mounted read-only from the host (MARCUS_LLM_GGUF, MARCUS_LLM_MMPROJ; never copied into an image).
+# Both must be readable by the container user (MARCUS_LLM_USER, default 10001:10001; e.g. the file
+# owner's "$(id -u):$(id -g)"). Two slots, one per worker:
+#   worker-llm     consumes q.llm (one process), runs the annotate step (marcus.workers.annotate);
+#                  the API offers annotation (MARCUS_ANNOTATE_ENABLED), /ready expects q.llm.
+#   worker-rgroup  consumes q.rgroup (one process), runs the rgroups step (marcus.workers.rgroups);
+#                  the API offers it (MARCUS_RGROUP_ENABLED), /ready expects q.rgroup.
+# Two queues, so an annotation run never holds back an R-group reading, nor the other way round.
+# Stored results name the model: MARCUS_LLM_MODEL(_VERSION) sets it for both jobs (and the server's
+# alias). A different model file means a new MARCUS_LLM_MODEL(_VERSION).
 #
 # Host: NVIDIA driver with CUDA 12.8 support and the NVIDIA Container Toolkit; the card in compute
 # mode DEFAULT (several processes share it: ops/systemd/nvidia-compute-default.service).
@@ -124,8 +121,10 @@ services:
       MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm,q.rgroup}
 
   # The MARCUS model: llama.cpp llama-server (docker/Dockerfile.llama, built at the commit the GGUF
-  # was converted with). Greedy decoding and the 11-key grammar come with each request
-  # (marcus.workers.annotate.llama); here: thinking off, one slot, the whole model on the GPU.
+  # was converted with), with its vision projector. Each request brings its own decoding settings
+  # (greedy; the 11-key grammar for annotation, marcus.workers.annotate.llama; the JSON schema and
+  # the page image for R-group rows, marcus.workers.rgroups.llama). Here the model README's flags:
+  # thinking off, the whole model on the GPU, two slots of 10240 tokens (one per worker).
   llama-server:
     <<: *gpu
     build:
@@ -148,57 +147,21 @@ services:
       - llm
     volumes:
       - type: bind
-        source: ${MARCUS_LLM_GGUF:-/srv/marcus/models/qwen3.5-9b-marcus-v1-Q8_0.gguf}
+        source: ${MARCUS_LLM_GGUF:-/srv/marcus/models/nuextract3-marcus-multi-v1-Q8_0.gguf}
         target: /models/marcus.gguf
         read_only: true
         bind:
           create_host_path: false
-    command: ["--model", "/models/marcus.gguf", "--alias", "qwen3.5-9b-marcus-v1",
-              "--host", "0.0.0.0", "--port", "8080", "--parallel", "1", "--ctx-size", "8192",
+      - type: bind
+        source: ${MARCUS_LLM_MMPROJ:-/srv/marcus/models/nuextract3-marcus-multi-v1-mmproj-f16.gguf}
+        target: /models/mmproj.gguf
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["--model", "/models/marcus.gguf", "--mmproj", "/models/mmproj.gguf",
+              "--alias", "${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}",
+              "--host", "0.0.0.0", "--port", "8080", "--parallel", "2", "--ctx-size", "20480",
               "--n-gpu-layers", "999", "--jinja", "--reasoning", "off", "--no-webui"]
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
-      interval: 10s
-      timeout: 5s
-      start_period: 300s
-      retries: 3
-    mem_limit: 16g
-
-  # The R-group model: the same llama.cpp build as llama-server, with its vision projector. The
-  # JSON schema, greedy decoding and the page image come with each request
-  # (marcus.workers.rgroups.llama); here the model's serving flags (model README): 10240-token
-  # context, thinking off, one slot, the whole model on the GPU.
-  llama-rgroup:
-    <<: *gpu
-    image: marcus-v2-llama:cuda-b12554
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    user: ${MARCUS_LLM_USER:-10001:10001}
-    networks:
-      - rgroup
-    volumes:
-      - type: bind
-        source: ${MARCUS_RGROUP_GGUF:-/srv/marcus/models/nuextract3-rgroup-v1-vision-Q8_0.gguf}
-        target: /models/rgroup.gguf
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${MARCUS_RGROUP_MMPROJ:-/srv/marcus/models/nuextract3-rgroup-v1-vision-mmproj-f16.gguf}
-        target: /models/rgroup-mmproj.gguf
-        read_only: true
-        bind:
-          create_host_path: false
-    command: ["--model", "/models/rgroup.gguf", "--mmproj", "/models/rgroup-mmproj.gguf",
-              "--alias", "nuextract3-rgroup-v1", "--host", "0.0.0.0", "--port", "8080",
-              "--parallel", "1", "--ctx-size", "10240", "--n-gpu-layers", "999", "--jinja",
-              "--reasoning", "off", "--no-webui"]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 10s
@@ -207,8 +170,9 @@ services:
       retries: 3
     mem_limit: 10g
 
-  # annotate steps (q.llm): ONE prefork process (= q.llm slots); it only reads the paper's text and
-  # calls llama-server, so it runs the api image with the data volume read-only.
+  # annotate steps (q.llm): ONE prefork process (= q.llm slots = one llama-server slot); it only
+  # reads the paper's text and calls llama-server, so it runs the api image with the data volume
+  # read-only.
   worker-llm:
     image: marcus-v2-api:local
     restart: unless-stopped
@@ -242,14 +206,14 @@ services:
       MARCUS_DATA_ROOT: /data
       MARCUS_ANNOTATOR: llama
       MARCUS_ANNOTATOR_URL: http://llama-server:8080
-      MARCUS_ANNOTATE_MODEL: ${MARCUS_ANNOTATE_MODEL:-qwen3.5-9b-marcus-v1}
-      MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_ANNOTATE_MODEL_VERSION:-Q8_0 llama.cpp b12554}
+      MARCUS_ANNOTATE_MODEL: ${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}
+      MARCUS_ANNOTATE_MODEL_VERSION: ${MARCUS_LLM_MODEL_VERSION:-Q8_0 llama.cpp b12554}
     mem_limit: 1g
 
-  # rgroups steps (q.rgroup): ONE prefork process (= q.rgroup slots), the same image and
-  # hardening as worker-llm; it reads the paper's text and page images and calls llama-rgroup.
-  # Its own queue and worker: an annotation run never holds back an R-group reading, nor the
-  # other way round (two llama-servers, one request at a time each).
+  # rgroups steps (q.rgroup): ONE prefork process (= q.rgroup slots = the other llama-server
+  # slot), the same image and hardening as worker-llm; it reads the paper's text and page images
+  # and calls llama-server. Its own queue and worker: an annotation run never holds back an
+  # R-group reading, nor the other way round (one server, a slot for each).
   worker-rgroup:
     image: marcus-v2-api:local
     restart: unless-stopped
@@ -262,7 +226,7 @@ services:
       - ALL
     networks:
       - internal
-      - rgroup
+      - llm
     volumes:
       - data:/data:ro
     depends_on:
@@ -272,7 +236,7 @@ services:
         condition: service_healthy
       api-migrate:
         condition: service_completed_successfully
-      llama-rgroup:
+      llama-server:
         condition: service_healthy
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.rgroup",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.rgroups",
@@ -282,15 +246,12 @@ services:
       MARCUS_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       MARCUS_DATA_ROOT: /data
       MARCUS_RGROUP_READER: llama
-      MARCUS_RGROUP_URL: http://llama-rgroup:8080
-      MARCUS_RGROUP_MODEL: ${MARCUS_RGROUP_MODEL:-nuextract3-rgroup-v1}
-      MARCUS_RGROUP_MODEL_VERSION: ${MARCUS_RGROUP_MODEL_VERSION:-vision Q8_0 llama.cpp b12554}
+      MARCUS_RGROUP_URL: http://llama-server:8080
+      MARCUS_RGROUP_MODEL: ${MARCUS_LLM_MODEL:-nuextract3-marcus-multi-v1}
+      MARCUS_RGROUP_MODEL_VERSION: ${MARCUS_LLM_MODEL_VERSION:-Q8_0 llama.cpp b12554}
     mem_limit: 1g
 
 networks:
-  # llama-server and worker-llm only (tests/deploy): no route out, no other member.
+  # llama-server, worker-llm and worker-rgroup only (tests/deploy): no route out, no other member.
   llm:
-    internal: true
-  # llama-rgroup and worker-rgroup only, the same way.
-  rgroup:
     internal: true

@@ -18,7 +18,7 @@ CASES = [
     (StepKind.OCSR, Engine.MOLSCRIBE, "q.molscribe"),
     (StepKind.OCSR, Engine.FAKE, "q.fake"),
     (StepKind.ANNOTATE, None, "q.llm"),
-    # its own queue: the R-group model has its own llama-server, so neither waits for the other
+    # its own queue (and its own llama-server slot), so neither waits for the other
     (StepKind.RGROUPS, None, "q.rgroup"),
 ]
 

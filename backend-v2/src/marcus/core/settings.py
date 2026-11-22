@@ -82,7 +82,9 @@ class Settings(BaseSettings):
     seg_version: str = Field("", max_length=200)
     # Queues this deployment runs: GET /ready needs a live consumer on each. Comma list in env.
     expected_queues: Annotated[list[str], NoDecode] = []
-    # Paper annotation with the local MARCUS model (marcus.workers.annotate, queue q.llm). The
+    # One local model does both model jobs (owner decision 2026-11-22): nuextract3-marcus-multi-v1
+    # on one llama-server `llama-server` (docker-compose.gpu.yml: two slots, one per queue below).
+    # Paper annotation with it (marcus.workers.annotate, queue q.llm). The
     # API offers it only where a worker serves q.llm: docker-compose.gpu.yml (llama-server) and
     # docker-compose.fake.yml (the fake annotator) set it; elsewhere POST answers 503.
     annotate_enabled: bool = False
@@ -93,7 +95,7 @@ class Settings(BaseSettings):
     # One model request; below the annotate step's soft limit (120 s, marcus.core.queues).
     annotator_timeout_s: float = Field(110.0, gt=0)
     # Stored with every annotation; change them with the model file (docker-compose.gpu.yml).
-    annotate_model: str = Field("qwen3.5-9b-marcus-v1", min_length=1, max_length=200)
+    annotate_model: str = Field("nuextract3-marcus-multi-v1", min_length=1, max_length=200)
     annotate_model_version: str = Field("Q8_0 llama.cpp b12554", min_length=1, max_length=200)
     rate_limit_annotate_per_min: int = 5  # per owner: POST /papers/{id}/annotation
     # An annotate step older than this while no worker consumes q.llm, or an rgroups step while
@@ -102,20 +104,21 @@ class Settings(BaseSettings):
     annotate_max_wait_s: int = Field(600, gt=0)
     # per owner: PUT and DELETE /papers/{id}/annotation/curation (each save locates values)
     rate_limit_curation_per_min: int = 30
-    # R-group definitions of a scaffold with the local R-group model (marcus.workers.rgroups,
-    # queue q.rgroup, its own llama-server `llama-rgroup`). Offered by the API only where a worker
+    # R-group definitions of a scaffold with the same model (marcus.workers.rgroups, its own
+    # queue q.rgroup, the same llama-server). Offered by the API only where a worker
     # serves q.rgroup: docker-compose.gpu.yml and docker-compose.fake.yml set it; elsewhere POST
     # answers 503.
     rgroup_enabled: bool = False
     # Worker side: "llama" = llama-server at rgroup_url (internal network only); "fake" = the
     # fake reader (refused unless enable_fake_engines).
     rgroup_reader: Literal["llama", "fake"] = "llama"
-    rgroup_url: str = Field("http://llama-rgroup:8080", pattern=r"^https?://[^\s/]+(:\d+)?/?$")
+    rgroup_url: str = Field("http://llama-server:8080", pattern=r"^https?://[^\s/]+(:\d+)?/?$")
     # One model request; below the rgroups step's soft limit (120 s, marcus.core.queues).
     rgroup_timeout_s: float = Field(110.0, gt=0)
-    # Stored with every result; change them with the model file (docker-compose.gpu.yml).
-    rgroup_model: str = Field("nuextract3-rgroup-v1", min_length=1, max_length=200)
-    rgroup_model_version: str = Field("vision Q8_0 llama.cpp b12554", min_length=1, max_length=200)
+    # Stored with every result; change them with the model file (docker-compose.gpu.yml). Also
+    # the request's "model" field, which llama-server ignores.
+    rgroup_model: str = Field("nuextract3-marcus-multi-v1", min_length=1, max_length=200)
+    rgroup_model_version: str = Field("Q8_0 llama.cpp b12554", min_length=1, max_length=200)
     # per owner: POST /predictions/{id}/rgroups (a paper may have several scaffolds)
     rate_limit_rgroup_per_min: int = 20
 

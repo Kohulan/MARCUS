@@ -124,7 +124,7 @@ def test_request_is_the_trained_one(stub):
     assert body["grammar"] == ann.grammar()
     assert body["chat_template_kwargs"] == {"enable_thinking": False}
     assert body["stream"] is False
-    assert out["model"] == "qwen3.5-9b-marcus-v1"
+    assert out["model"] == "nuextract3-marcus-multi-v1"
     assert out["model_version"] == "Q8_0 llama.cpp b12554"
     assert out["output"]["organism_or_species"] == ["Taxus brevifolia"]
     # located everywhere in the whole text (title, abstract, introduction, later sections)

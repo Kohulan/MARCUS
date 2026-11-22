@@ -44,7 +44,7 @@ def test_annotation_settings(monkeypatch, clear_settings_cache):
     assert s.annotate_enabled is False  # offered only where a worker serves q.llm
     assert (s.annotator, s.annotator_url) == ("llama", "http://llama-server:8080")
     assert s.annotator_timeout_s < 120  # below the annotate step's soft limit
-    assert s.annotate_model == "qwen3.5-9b-marcus-v1"
+    assert s.annotate_model == "nuextract3-marcus-multi-v1"
     assert s.rate_limit_annotate_per_min == 5
     for bad in ("file:///etc/passwd", "llama-server:8080", "http://a b", "http://x/path"):
         with pytest.raises(ValidationError):
@@ -54,3 +54,12 @@ def test_annotation_settings(monkeypatch, clear_settings_cache):
     monkeypatch.setenv("MARCUS_ANNOTATE_ENABLED", "1")
     clear_settings_cache()
     assert get_settings().annotate_enabled is True
+
+
+def test_one_model_server_serves_annotation_and_rgroups():
+    """Owner decision 2026-11-22: one model (nuextract3-marcus-multi-v1) on one llama-server
+    does both jobs. Both workers call it, and every stored result names it."""
+    s = Settings()
+    assert s.annotator_url == s.rgroup_url == "http://llama-server:8080"
+    assert s.annotate_model == s.rgroup_model == "nuextract3-marcus-multi-v1"
+    assert s.annotate_model_version == s.rgroup_model_version == "Q8_0 llama.cpp b12554"

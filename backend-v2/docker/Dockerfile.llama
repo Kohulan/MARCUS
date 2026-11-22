@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
-# llama.cpp's llama-server for the MARCUS model (paper annotation; docker-compose.gpu.yml service
-# llama-server). Build context: backend-v2/ (nothing of it is copied in).
+# llama.cpp's llama-server for the MARCUS model (paper annotation and R-group rows; docker-compose.gpu.yml
+# service llama-server). Build context: backend-v2/ (nothing of it is copied in).
 #
 # Built from source at a pinned commit: the GGUF was converted with llama.cpp 7fce543 (tag
 # b12554), and on 2026-11-20 the newest published server image (ghcr.io/ggml-org/llama.cpp
