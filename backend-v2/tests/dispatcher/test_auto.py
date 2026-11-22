@@ -44,13 +44,15 @@ def test_both_start_by_themselves_and_the_paper_stays_done(db_session, features)
     features()
     paper, scaffold = _setup(s)
     asked = []
-    assert auto_once(s, lambda: asked.append(1) or BOTH) == 2
+    started = auto_once(s, lambda: asked.append(1) or BOTH)
+    assert started == 2
     assert _kinds(s) == [("annotate", "pending"), ("rgroups", "pending")]
     assert s.get(Paper, paper.id).status == "done"
     row = s.execute(select(RgroupExtraction)).scalar_one()
     assert row.prediction_id == scaffold.id and row.status == "queued"
     # asked once: the next pass finds nothing (and does not ask who serves the queues)
-    assert auto_once(s, lambda: asked.append(1) or BOTH) == 0
+    started = auto_once(s, lambda: asked.append(1) or BOTH)
+    assert started == 0
     assert len(asked) == 1
     assert len(_kinds(s)) == 2
 
@@ -59,7 +61,8 @@ def test_a_feature_that_is_off_runs_nothing(db_session, features):
     s = db_session
     features(annotate=False, rgroup=False)
     _setup(s)
-    assert auto_once(s, lambda: BOTH) == 0
+    started = auto_once(s, lambda: BOTH)
+    assert started == 0
     assert _kinds(s) == []
 
 
@@ -85,7 +88,8 @@ def test_only_the_annotation_where_r_groups_are_off(db_session, features):
     s = db_session
     features(rgroup=False)
     _setup(s)
-    assert auto_once(s, lambda: BOTH) == 1
+    started = auto_once(s, lambda: BOTH)
+    assert started == 1
     assert _kinds(s) == [("annotate", "pending")]
 
 
@@ -98,7 +102,9 @@ def test_nothing_to_do_asks_no_one(db_session, features):
     def boom():
         raise AssertionError("no consumer check without a candidate")
 
-    assert auto_once(s, boom) == 0
+    started = auto_once(s, boom)
+
+    assert started == 0
 
 
 def test_a_paper_deleted_meanwhile_is_skipped(db_session, features, monkeypatch):
@@ -114,7 +120,8 @@ def test_a_paper_deleted_meanwhile_is_skipped(db_session, features, monkeypatch)
     s.commit()
     # found before the delete, asked for after it
     monkeypatch.setattr(pass_, "_ids", lambda session, query: found if query is not None else [])
-    assert auto_once(s, lambda: BOTH) == 0
+    started = auto_once(s, lambda: BOTH)
+    assert started == 0
     assert _kinds(s) == []
 
 
