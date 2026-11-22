@@ -219,6 +219,21 @@ def test_request_is_the_trained_one(stub):
     assert isinstance(out["ms"], int) and out["ms"] >= 0
 
 
+def test_a_label_the_page_text_never_names_is_not_asked_for(stub):
+    """OCSR's extra label (DECIMER's Z beside R1, R2) is no column: the model is asked for the
+    labels the page text names, and the result says which those were."""
+    stub.content = _answer(("3a", {"R1": "OMe", "R2": "H"}))
+    out = read_scaffold(get_reader(), _paper(page=2), 2, ["R1", "R2", "Z"])
+    (req,) = stub.requests
+    body = req["body"]
+    assert body["messages"][1]["content"][1]["text"].startswith(
+        "The structure has these R-groups: R1, R2.\n\n"
+    )
+    assert body["response_format"]["json_schema"]["schema"] == rg.schema_for(["R1", "R2"])
+    assert out["labels"] == ["R1", "R2"]
+    assert out["rows"] == [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}]
+
+
 def test_an_answer_outside_the_schema_is_a_final_engine_error(stub):
     stub.content = _answer(("1", {"R9": "H"}))
     with pytest.raises(BadResult):

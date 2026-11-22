@@ -791,18 +791,30 @@ def _after_annotate(session: Session, paper: Paper, step: Step, result: dict) ->
     return []
 
 
+def _ordered_subset(part: list[str], whole: list[str]) -> bool:
+    """Every label of `part` is in `whole`, in the same order."""
+    rest = iter(whole)
+    return all(label in rest for label in part)
+
+
 def _after_rgroups(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
-    """Store the rows on the step's request row (a re-run replaces them). The row is checked
-    for the labels it asked with: a result for other labels is refused."""
+    """Store the rows and their labels on the step's request row (a re-run replaces them). The
+    worker asks for the prediction's labels that the page text names: a result for labels the
+    prediction does not have, or in another order, is refused."""
     step.model_version = result["model_version"]
-    row = session.execute(
-        select(RgroupExtraction).where(RgroupExtraction.step_id == step.id).with_for_update()
-    ).scalar_one_or_none()
-    if row is None:
+    found = session.execute(
+        select(RgroupExtraction, Prediction.rgroups)
+        .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
+        .where(RgroupExtraction.step_id == step.id)
+        .with_for_update(of=RgroupExtraction)
+    ).one_or_none()
+    if found is None:
         return []  # the prediction is gone: nothing to store
-    if list(row.labels) != result["labels"]:
+    row, asked = found
+    if not _ordered_subset(result["labels"], list(asked or [])):
         raise BadResult("rgroups: the result is for other labels than were asked for")
     now = _now()
+    row.labels = result["labels"]
     row.status = "done"
     row.error = None
     row.rows = result["rows"]
@@ -1150,10 +1162,10 @@ def request_annotation(
 
 def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = False) -> Step | None:
     """Ask for a scaffold's R-group rows: a new pending `rgroups` step for the prediction and its
-    `rgroup_extractions` row set `queued` (labels: the prediction's), or None when it already
-    has rows and `rerun` is false. An rgroups step of the prediction still pending, queued or
-    running is returned instead of a new one (repeat clicks). The paper's status does not change.
-    Caller commits.
+    `rgroup_extractions` row set `queued` (a new row's labels: the prediction's), or None when it
+    already has rows and `rerun` is false. An rgroups step of the prediction still pending,
+    queued or running is returned instead of a new one (repeat clicks). The paper's status does
+    not change. Caller commits.
 
     Locks the paper, then the row. Raises ValueError for a missing prediction, one not from a
     paper, or a deleted paper, and RgroupsNotAllowed("no_rgroups") for a prediction without
@@ -1191,8 +1203,9 @@ def request_rgroups(session: Session, prediction_id: uuid.UUID, rerun: bool = Fa
     if row is None:
         row = RgroupExtraction(prediction_id=prediction_id, labels=labels, status="queued")
         session.add(row)
+    # An existing row keeps its labels: they are those of the rows it shows (the worker asks
+    # for the prediction's labels again, and the result sets them).
     row.step_id = step.id
-    row.labels = labels
     row.status = "queued"
     row.error = None
     row.updated_at = _now()
