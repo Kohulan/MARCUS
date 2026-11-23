@@ -17,7 +17,8 @@ MEASURE.md (119 labelled crops: 101 right, 2 wrong, 16 missed):
 
 Name: the paper text's "<name> (<id>)", the name most often written before that ID
 ("salsubstolin A (1)"). A port of the measurement scripts (phase-b/scripts/compound_id_full.py,
-docling_boxes.py, id_name_link.py), unchanged. Standard library only.
+docling_boxes.py, id_name_link.py); the two page rules came after them (measured with the same
+gold, 2026-11-23). Standard library only.
 """
 
 from __future__ import annotations
@@ -98,26 +99,10 @@ def _nearest(bbox: Sequence[int], boxes: list[Box], inside: float) -> str | None
 def _read(bbox: Sequence[int], boxes: list[Box]) -> tuple[str | None, int]:
     """Rule B of one crop: (ID, the pass that found it: 1 below the crop, 2 in its bottom
     band, 0 none)."""
-    first = _nearest(bbox, boxes, 0.0)
-    if first is not None:
-        return first, 1
-    second = _nearest(bbox, boxes, INSIDE_SHARE)
-    return (second, 2) if second is not None else (None, 0)
-
-
-def read_id(bbox: Sequence[int], boxes: list[Box]) -> str | None:
-    """Rule B: the compound ID of the crop `bbox` (page pixels) from its page's ID boxes, the
-    crop taken alone (read_ids: with the page's other crops)."""
-    return _read(bbox, boxes)[0]
-
-
-def _in_drawing_below(box: tuple[int, int, int, int], bbox: Sequence[int], other) -> bool:
-    """Whether the ID box's centre lies in the crop `other`, a drawing below the crop `bbox`:
-    `other` starts at or below the top of `bbox`'s bottom band (crops may overlap a little)."""
-    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
-    ox0, oy0, ox1, oy1 = other
-    band_top = bbox[3] - INSIDE_SHARE * (bbox[3] - bbox[1])
-    return oy0 >= band_top and ox0 <= cx <= ox1 and oy0 <= cy <= oy1
+    for how, inside in ((1, 0.0), (2, INSIDE_SHARE)):
+        if (value := _nearest(bbox, boxes, inside)) is not None:
+            return value, how
+    return None, 0
 
 
 def read_ids(bboxes: Sequence[Sequence[int]], boxes: list[Box]) -> list[str | None]:
@@ -125,22 +110,33 @@ def read_ids(bboxes: Sequence[Sequence[int]], boxes: list[Box]) -> list[str | No
     against atom numbers (tester paper 2026-11-23: OCR missed the label, an atom number took
     its place, and a structure linked to the wrong compound):
 
-    - a crop does not take an ID box that lies in a drawing below it (that drawing's atom
-      number);
+    - a crop does not take an ID box whose centre lies in a drawing below it (that drawing's
+      atom number): a crop that starts at or below the top of this crop's bottom band (crops
+      may overlap a little);
     - an ID found in a crop's bottom band (pass 2) is dropped when another crop of the page
       has the same ID below it (pass 1): the printed label is that crop's.
 
-    The same ID below two crops (two pictures of one compound) stays on both."""
+    The same ID below two crops (two pictures of one compound) stays on both. One crop alone:
+    rule B."""
+    centres = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for _, b in boxes]
     found = []
-    for i, bbox in enumerate(bboxes):
-        own = [
-            b
-            for b in boxes
-            if not any(j != i and _in_drawing_below(b[1], bbox, o) for j, o in enumerate(bboxes))
+    for i, (x0, y0, x1, y1) in enumerate(bboxes):
+        pad, band_top = X_PAD_SHARE * (x1 - x0), y1 - INSIDE_SHARE * (y1 - y0)
+        # the boxes rule B could take (both passes), then those not in a drawing below
+        near = [
+            (box, cx, cy)
+            for box, (cx, cy) in zip(boxes, centres, strict=True)
+            if x0 - pad <= cx <= x1 + pad and cy >= band_top and box[1][1] <= y1 + BELOW_PX
         ]
-        found.append(_read(bbox, own))
-    below = {value for value, how in found if how == 1}
-    return [None if how == 2 and value in below else value for value, how in found]
+        below = [o for j, o in enumerate(bboxes) if j != i and o[1] >= band_top] if near else []
+        own = [
+            box
+            for box, cx, cy in near
+            if not any(o[0] <= cx <= o[2] and o[1] <= cy <= o[3] for o in below)
+        ]
+        found.append(_read((x0, y0, x1, y1), own))
+    first = {value for value, how in found if how == 1}
+    return [None if how == 2 and value in first else value for value, how in found]
 
 
 def names(doc: dict) -> dict[str, str]:
