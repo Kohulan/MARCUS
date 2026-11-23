@@ -36,9 +36,16 @@ _NUMBER = re.compile(r"^\(?\s*(\d{1,3}[a-z]?['′]?)\s*\)?$")
 _NAMED = re.compile(r"\((\d{1,3}[a-z]?)\)\s*$")  # "Taveuniamide L (1)"
 _LETTER = re.compile(r"^([a-z])$")
 
-_NAME_BEFORE_ID = re.compile(
-    r"((?:[A-Za-z][\w\-′']*\s){0,2}[A-Za-z][\w\-′']*(?:\s[A-Z]{1,2}\d?)?)\s\((\d{1,3}[a-z]?)\)"
-)
+# "<name> (<id>)": up to three words and a suffix ("salsubstolin A") before " (1)". Read in
+# linear time (security scan 2026-11-23 F1: one pattern over the whole text backtracked over
+# every long word, O(n^2), from text an uploaded PDF controls): find each " (<id>)", then walk
+# back over at most four tokens before it (_name_start).
+_ID_MENTION = re.compile(r"\s\((\d{1,3}[a-z]?)\)")
+_WORD_RUN = re.compile(r"[\w\-′']*")  # a word's characters; on the reversed text, a run going left
+_ASCII_LETTER = re.compile(r"[A-Za-z]")
+_SUFFIX = re.compile(r"[A-Z]{1,2}\d?")
+_SPACE = re.compile(r"\s")
+MAX_ID_MENTIONS = 20_000  # " (<id>)" mentions read per paper; a paper has a few hundred
 _STOP = {
     "compound", "compounds", "of", "and", "the", "for", "to", "in", "with", "by", "as", "that",
     "from", "was", "were", "is", "Figure", "Table",
@@ -139,18 +146,53 @@ def read_ids(bboxes: Sequence[Sequence[int]], boxes: list[Box]) -> list[str | No
     return [None if how == 2 and value in first else value for value, how in found]
 
 
+def _name_start(text: str, rev: str, lo: int, p: int) -> int | None:
+    """Where the name before the ID mention at `p` (text[p] is its space) starts, or None: the
+    leftmost s >= lo with text[s:p] = (W\\s){0,2}W(\\sS)?, W = [A-Za-z][\\w\\-′']*, S = _SUFFIX.
+    A word runs up to a space, so the leftmost start is the one with the most tokens (at most
+    4, the 4th a suffix), at the first ASCII letter of its first token. `rev` is text reversed:
+    a token is matched on it from its end, in time linear in its length."""
+    n = len(text)
+    tokens: list[tuple[int, int]] = []  # (start, end) in text, nearest the mention first
+    end = p
+    while len(tokens) < 4 and end > lo:
+        start = n - _WORD_RUN.match(rev, n - end, n - lo).end()
+        if start == end:
+            break
+        tokens.append((start, end))
+        if start - 1 <= lo or not _SPACE.match(text, start - 1):
+            break
+        end = start - 1  # one space, then the token before
+    for k in range(len(tokens), 0, -1):
+        if k == 4 and not _SUFFIX.fullmatch(text, *tokens[0]):
+            continue
+        if not all(_ASCII_LETTER.match(text, s) for s, _ in tokens[: k - 1]):
+            continue  # a word after the first starts with a letter
+        if first := _ASCII_LETTER.search(text, *tokens[k - 1]):
+            return first.start()
+    return None
+
+
 def names(doc: dict) -> dict[str, str]:
     """Compound ID -> the name the text writes most often before "(<id>)"."""
     text = " ".join(str(t.get("text", "")) for t in doc.get("texts") or [] if isinstance(t, dict))
+    rev = text[::-1]
     found: dict[str, Counter] = defaultdict(Counter)
-    for m in _NAME_BEFORE_ID.finditer(text):
-        words = [w for w in m.group(1).split() if w not in _STOP]
+    lo = 0  # a name never reaches back over the mention before it
+    for i, m in enumerate(_ID_MENTION.finditer(text)):
+        if i == MAX_ID_MENTIONS:
+            break
+        p, lo_here, lo = m.start(), lo, m.end()
+        start = _name_start(text, rev, lo_here, p)
+        if start is None:
+            continue
+        words = [w for w in text[start:p].split() if w not in _STOP]
         if not words:
             continue
         name = " ".join(words[-2:]) if re.fullmatch(r"[A-Z]{1,2}\d?", words[-1]) else words[-1]
         if len(name) < 4 or name.lower() in _STOP:
             continue
-        found[m.group(2)][name] += 1
+        found[m.group(1)][name] += 1
     return {cid: counts.most_common(1)[0][0] for cid, counts in found.items()}
 
 
