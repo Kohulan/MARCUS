@@ -11,6 +11,9 @@ MEASURE.md (119 labelled crops: 101 right, 2 wrong, 16 missed):
 - else an ID-like box in the bottom 15 % of the crop (same x rule);
 - ID-like: `12`, `8a`, `6′`, `(3)`, `name (3)` (the number), a single letter `a`; never `0`
   (OCR reads ring O atoms as zeros).
+- per page (read_ids): not an ID box inside a drawing below the crop, and a bottom-band ID
+  gives way to the same ID below another crop (atom numbers; 101 right, 0 wrong, 18 missed of
+  the 119).
 
 Name: the paper text's "<name> (<id>)", the name most often written before that ID
 ("salsubstolin A (1)"). A port of the measurement scripts (phase-b/scripts/compound_id_full.py,
@@ -21,6 +24,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 
 SCALE = 300 / 72  # PDF points to pixels of the 300 DPI page render (pipeline.RENDER_DPI)
 BELOW_PX = 100  # how far below the crop an ID may sit
@@ -75,23 +79,68 @@ def id_boxes(doc: dict) -> dict[int, list[Box]]:
     return dict(out)
 
 
-def read_id(bbox: list[int] | tuple[int, ...], boxes: list[Box]) -> str | None:
-    """Rule B: the compound ID of the crop `bbox` (page pixels) from its page's ID boxes."""
+def _nearest(bbox: Sequence[int], boxes: list[Box], inside: float) -> str | None:
+    """The nearest ID box at most BELOW_PX below the crop `bbox` (`inside` 0), or reaching up
+    into its bottom `inside` share; centre x within the crop's width +- X_PAD_SHARE."""
     x0, y0, x1, y1 = bbox
     w, h = x1 - x0, y1 - y0
+    found = []
+    for value, (bx0, by0, bx1, by1) in boxes:
+        cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+        if not (x0 - X_PAD_SHARE * w <= cx <= x1 + X_PAD_SHARE * w):
+            continue
+        if cy < y1 - inside * h or by0 > y1 + BELOW_PX:
+            continue
+        found.append((max(0, by0 - y1) + abs(cx - (x0 + x1) / 2) * 0.2, value))
+    return min(found)[1] if found else None
 
-    def nearest(inside: float) -> str | None:
-        found = []
-        for value, (bx0, by0, bx1, by1) in boxes:
-            cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
-            if not (x0 - X_PAD_SHARE * w <= cx <= x1 + X_PAD_SHARE * w):
-                continue
-            if cy < y1 - inside * h or by0 > y1 + BELOW_PX:
-                continue
-            found.append((max(0, by0 - y1) + abs(cx - (x0 + x1) / 2) * 0.2, value))
-        return min(found)[1] if found else None
 
-    return nearest(0.0) or nearest(INSIDE_SHARE)
+def _read(bbox: Sequence[int], boxes: list[Box]) -> tuple[str | None, int]:
+    """Rule B of one crop: (ID, the pass that found it: 1 below the crop, 2 in its bottom
+    band, 0 none)."""
+    first = _nearest(bbox, boxes, 0.0)
+    if first is not None:
+        return first, 1
+    second = _nearest(bbox, boxes, INSIDE_SHARE)
+    return (second, 2) if second is not None else (None, 0)
+
+
+def read_id(bbox: Sequence[int], boxes: list[Box]) -> str | None:
+    """Rule B: the compound ID of the crop `bbox` (page pixels) from its page's ID boxes, the
+    crop taken alone (read_ids: with the page's other crops)."""
+    return _read(bbox, boxes)[0]
+
+
+def _in_drawing_below(box: tuple[int, int, int, int], bbox: Sequence[int], other) -> bool:
+    """Whether the ID box's centre lies in the crop `other`, a drawing below the crop `bbox`:
+    `other` starts at or below the top of `bbox`'s bottom band (crops may overlap a little)."""
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    ox0, oy0, ox1, oy1 = other
+    band_top = bbox[3] - INSIDE_SHARE * (bbox[3] - bbox[1])
+    return oy0 >= band_top and ox0 <= cx <= ox1 and oy0 <= cy <= oy1
+
+
+def read_ids(bboxes: Sequence[Sequence[int]], boxes: list[Box]) -> list[str | None]:
+    """Rule B for all crops of one page (page pixels), in their order, with two page rules
+    against atom numbers (tester paper 2026-11-23: OCR missed the label, an atom number took
+    its place, and a structure linked to the wrong compound):
+
+    - a crop does not take an ID box that lies in a drawing below it (that drawing's atom
+      number);
+    - an ID found in a crop's bottom band (pass 2) is dropped when another crop of the page
+      has the same ID below it (pass 1): the printed label is that crop's.
+
+    The same ID below two crops (two pictures of one compound) stays on both."""
+    found = []
+    for i, bbox in enumerate(bboxes):
+        own = [
+            b
+            for b in boxes
+            if not any(j != i and _in_drawing_below(b[1], bbox, o) for j, o in enumerate(bboxes))
+        ]
+        found.append(_read(bbox, own))
+    below = {value for value, how in found if how == 1}
+    return [None if how == 2 and value in below else value for value, how in found]
 
 
 def names(doc: dict) -> dict[str, str]:
