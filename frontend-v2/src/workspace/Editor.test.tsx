@@ -3,12 +3,27 @@
 // segment caller (useSaveCuration + editorChange) never loses the note.
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient, keys, useSaveCuration } from "../api/queries";
 import type { CurationOut, PaperDetail } from "../api/types";
-import Editor, { editorChange, type EditorStructure } from "./Editor";
+import Editor, {
+  editorChange,
+  editorLoad,
+  hasImagePositions,
+  type EditorStructure,
+} from "./Editor";
+
+// Real engine molfiles (as engines.test.ts): MolScribe on p2_6 keeps the image's positions,
+// MolNexTR on p2_0 lays the structure out itself.
+const engines = JSON.parse(
+  readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures/orient_engines.json"), "utf8"),
+) as Record<string, Record<string, { smiles: string; molfile: string | null }>>;
+const IMAGE_MOL = engines["p2_6"]!["molscribe"]!.molfile!;
+const COMPUTED_MOL = engines["p2_0"]!["molnextr"]!.molfile!;
 
 const ORIGIN = window.location.origin;
 
@@ -407,5 +422,80 @@ describe("editorChange", () => {
     expect(editorChange({ ...base, status: "rejected" }, s)).toEqual({ structure: s });
     // no note key: curationBody keeps the stored note
     expect("note" in editorChange({ ...base, status: "accepted" }, s)).toBe(false);
+  });
+});
+
+describe("hasImagePositions / editorLoad", () => {
+  it("only a molfile with the image's positions counts", () => {
+    expect(hasImagePositions({ molfile: null })).toBe(false);
+    expect(hasImagePositions({ molfile: "" })).toBe(false);
+    expect(hasImagePositions({ molfile: COMPUTED_MOL })).toBe(false);
+    expect(hasImagePositions({ molfile: IMAGE_MOL })).toBe(true);
+  });
+
+  it("on: the start as it is; off: the SMILES only, when the molfile has image positions", () => {
+    const image = { smiles: "CC", molfile: IMAGE_MOL };
+    const computed = { smiles: "CC", molfile: COMPUTED_MOL };
+    const bare = { smiles: "CC", molfile: null };
+    expect(editorLoad(image, true)).toEqual(image);
+    expect(editorLoad(image, false)).toEqual({ smiles: "CC", molfile: null });
+    expect(editorLoad(computed, true)).toEqual(computed);
+    expect(editorLoad(computed, false)).toEqual(computed);
+    expect(editorLoad(bare, false)).toEqual(bare);
+  });
+});
+
+describe("Use coordinates", () => {
+  function coordsButton() {
+    return screen.getByRole("button", { name: "Use coordinates" });
+  }
+  function spyFrame() {
+    const post = vi.spyOn(frame().contentWindow as Window, "postMessage");
+    post.mockImplementation(() => {});
+    return post;
+  }
+
+  it("is on at opening; switching it loads the start again with or without the molfile", () => {
+    renderEditor({ initial: { smiles: "CC", molfile: IMAGE_MOL } });
+    expect(coordsButton()).toHaveAttribute("aria-pressed", "true");
+    expect(coordsButton()).toBeEnabled();
+    const post = spyFrame();
+    fromKetcher({ type: "marcus:ready" });
+    expect(post).toHaveBeenLastCalledWith(
+      { type: "marcus:load", molfile: IMAGE_MOL, smiles: "CC" },
+      ORIGIN,
+    );
+    fireEvent.click(coordsButton());
+    expect(coordsButton()).toHaveAttribute("aria-pressed", "false");
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith({ type: "marcus:load", molfile: null, smiles: "CC" }, ORIGIN);
+    fireEvent.click(coordsButton());
+    expect(post).toHaveBeenCalledTimes(3);
+    expect(post).toHaveBeenLastCalledWith(
+      { type: "marcus:load", molfile: IMAGE_MOL, smiles: "CC" },
+      ORIGIN,
+    );
+  });
+
+  it("is off and disabled without image positions; Ketcher gets the start as today", () => {
+    renderEditor({ initial: { smiles: "CC", molfile: COMPUTED_MOL } });
+    expect(coordsButton()).toBeDisabled();
+    expect(coordsButton()).toHaveAttribute("aria-pressed", "false");
+    const post = spyFrame();
+    fromKetcher({ type: "marcus:ready" });
+    expect(post).toHaveBeenCalledWith(
+      { type: "marcus:load", molfile: COMPUTED_MOL, smiles: "CC" },
+      ORIGIN,
+    );
+  });
+
+  it("switched off before Ketcher is ready: nothing is posted until marcus:ready, then no molfile", () => {
+    renderEditor({ initial: { smiles: "CC", molfile: IMAGE_MOL } });
+    const post = spyFrame();
+    fireEvent.click(coordsButton());
+    expect(post).not.toHaveBeenCalled();
+    fromKetcher({ type: "marcus:ready" });
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith({ type: "marcus:load", molfile: null, smiles: "CC" }, ORIGIN);
   });
 });

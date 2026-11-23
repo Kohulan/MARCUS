@@ -106,6 +106,25 @@
   outline-offset: 1px;
 }
 
+/* "Use coordinates": a toggle like Compare's, a square that fills green while on. */
+.editor__coords {
+  padding: 8px 14px 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.editor__coords .glass[aria-pressed]::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--control-border);
+}
+
+.editor__coords .glass[aria-pressed="true"]::before {
+  border-color: var(--green);
+  background-color: var(--green);
+}
+
 .editor__error {
   margin: 0;
   padding: 10px 20px;

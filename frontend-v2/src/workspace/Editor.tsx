@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
+import { imageLayout } from "../api/engines";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
@@ -37,6 +38,25 @@ export function editorChange(
   return !current || current.status === "unchecked" ? { status: "accepted", structure } : { structure };
 }
 
+type EditorStart = { smiles: string | null; molfile: string | null };
+
+/**
+ * Whether the starting structure has its own image positions: a molfile that keeps the
+ * positions its engine read from the image (Compare's usableTemplate test). Only then does
+ * "Use coordinates" apply; no borrowed positions from another engine.
+ */
+export function hasImagePositions(initial: { molfile: string | null }): boolean {
+  return Boolean(initial.molfile) && imageLayout(initial.molfile!);
+}
+
+/**
+ * What Ketcher loads: "Use coordinates" on, the start as it is (the molfile); off, the SMILES
+ * only (Ketcher lays it out). Without image positions the toggle does not apply: the start.
+ */
+export function editorLoad(initial: EditorStart, coords: boolean): EditorStart {
+  return coords || !hasImagePositions(initial) ? initial : { smiles: initial.smiles, molfile: null };
+}
+
 export default function Editor({ initial, onSave, onClose }: EditorProps) {
   const iframe = useRef<HTMLIFrameElement>(null);
   const field = useRef<HTMLInputElement>(null);
@@ -44,11 +64,14 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Use coordinates": on at every opening, never saved.
+  const [coords, setCoords] = useState(true);
+  const canCoords = hasImagePositions(initial);
 
   // Read through refs inside the one message listener, so it is added once per dialog.
   const savingNow = useRef(false);
-  const latest = useRef({ initial, onSave, onClose });
-  latest.current = { initial, onSave, onClose };
+  const latest = useRef({ initial, onSave, onClose, coords });
+  latest.current = { initial, onSave, onClose, coords };
 
   const save = useCallback(async (structure: EditorStructure) => {
     if (savingNow.current) return;
@@ -99,7 +122,7 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
           const frame = iframe.current?.contentWindow;
           if (message.type === "marcus:ready") {
             // also after a reload of the frame: load the structure again
-            if (frame) postToFrame(frame, latest.current.initial);
+            if (frame) postToFrame(frame, editorLoad(latest.current.initial, latest.current.coords));
             setReady(true);
           } else if (message.type === "marcus:cancel") {
             close();
@@ -124,6 +147,16 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
   const startSmiles = (initial.smiles ?? "").trim();
   const fieldValue = smiles.trim();
   const fieldChanged = fieldValue !== "" && fieldValue !== startSmiles;
+
+  // Switching loads the starting structure again (unsaved drawing changes are lost); before
+  // marcus:ready nothing is posted: the ready handler reads the current state.
+  const toggleCoords = () => {
+    const next = !coords;
+    setCoords(next);
+    latest.current.coords = next;
+    const frame = iframe.current?.contentWindow;
+    if (ready && frame) postToFrame(frame, editorLoad(initial, next));
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -166,6 +199,18 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
           {error}
         </p>
       ) : null}
+
+      <div className="editor__coords">
+        <GlassButton
+          tint="clear"
+          size="sm"
+          disabled={!canCoords}
+          pressed={canCoords && coords}
+          onClick={toggleCoords}
+        >
+          Use coordinates
+        </GlassButton>
+      </div>
 
       <div className="editor__frame" aria-busy={!ready}>
         {ready ? null : (
