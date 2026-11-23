@@ -155,7 +155,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   // does not rewrite them); `waiting`: the annotation had not answered yet, so its first answer
   // still starts them (the form takes them only if the curator has not typed organisms).
   const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
-  const sendCount = toCoconut.send.length;
+  // Repeats not linked on this read: a compound could be sent twice, so wait for the next one.
+  const linking = paper.links_ready === false;
+  const sendCount = linking ? 0 : toCoconut.send.length;
   const annotation = useAnnotation(paper.id).data;
   useAutoRunRefresh(paper.id, ws.steps);
   // R-group rows: one list for the paper's scaffolds, polled while a reading is in flight
@@ -212,9 +214,11 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
             </GlassButton>
             {sendCount === 0 && (
               <span id={reasonId} className="ws-send__why">
-                {toCoconut.held.length > 0
-                  ? heldOnlyReason(toCoconut.held)
-                  : "Accept a structure first"}
+                {linking
+                  ? "Checking repeats, try again soon"
+                  : toCoconut.held.length > 0
+                    ? heldOnlyReason(toCoconut.held)
+                    : "Accept a structure first"}
               </span>
             )}
           </div>

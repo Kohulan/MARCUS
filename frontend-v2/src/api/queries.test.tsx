@@ -11,7 +11,9 @@ import {
   refreshPaper,
   SEGMENT_GONE,
   snapshotIsCached,
+  useBulkCuration,
   useImages,
+  useMainFigure,
   usePapers,
   useSaveCuration,
 } from "./queries";
@@ -315,6 +317,135 @@ describe("useSaveCuration optimistic write", () => {
     });
     await vi.waitFor(() => expect(getPaper).toHaveBeenCalled(), { timeout: 3000 });
     stop();
+  });
+});
+
+describe("the main figure", () => {
+  it("a new structure on a paper with a main figure fetches it again (repeats may change)", async () => {
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    client.setQueryData(keys.paper("p1"), { ...paper(null), main_figure_page: 0 });
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    await act(() => result.current.save("s1", { status: "accepted" }));
+    expect(invalidate).not.toHaveBeenCalled(); // a status changes no structure
+    await act(() =>
+      result.current.save("s1", { status: "accepted", structure: { smiles: "CCO", molfile: null } }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.paper("p1") });
+  });
+
+  it("mark() shows the page at once, keeps the old links until the fetch, and a failure puts it back", async () => {
+    const before = paper(null);
+    before.segments[1] = { ...before.segments[1]!, repeat_of: "s1" };
+    client.setQueryData(keys.paper("p1"), { ...before, main_figure_page: 0 });
+    let answer: (v: { main_figure_page: number | null }) => void = () => undefined;
+    const put = vi
+      .spyOn(api, "putMainFigure")
+      .mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    vi.spyOn(api, "getPaper").mockResolvedValue({ ...before, main_figure_page: null });
+    const { result } = renderHook(() => useMainFigure("p1"), { wrapper });
+    let done: Promise<void> = Promise.resolve();
+    act(() => {
+      done = result.current.mark(null);
+    });
+    await vi.waitFor(() => expect(put).toHaveBeenCalledWith("p1", null));
+    const now = client.getQueryData<PaperDetail>(keys.paper("p1"));
+    expect(now?.main_figure_page).toBeNull();
+    // a compound must never look unlinked before the server says so (COCONUT could get it twice)
+    expect(now?.segments.map((s) => s.repeat_of ?? null)).toEqual([null, "s1"]);
+    await act(async () => {
+      answer({ main_figure_page: null });
+      await done;
+    });
+
+    put.mockRejectedValue(new ApiError(503, "busy"));
+    client.setQueryData(keys.paper("p1"), { ...before, main_figure_page: 0 });
+    await expect(result.current.mark(null)).rejects.toThrow("busy");
+    const back = client.getQueryData<PaperDetail>(keys.paper("p1"));
+    expect(back?.main_figure_page).toBe(0);
+    expect(back?.segments[1]?.repeat_of).toBe("s1");
+  });
+});
+
+describe("a decision on a main-figure structure covers its repeats", () => {
+  function grouped(): PaperDetail {
+    const p = { ...paper(null), main_figure_page: 0 };
+    p.segments[1] = {
+      ...p.segments[1]!,
+      repeat_of: "s1",
+      curation: { status: "accepted", smiles: null, molfile: null, note: null },
+    };
+    return p;
+  }
+  const statuses = () =>
+    client.getQueryData<PaperDetail>(keys.paper("p1"))?.segments.map((s) => s.curation?.status);
+
+  it("a status sends a decision, shows on the repeats at once, and fetches the server's", async () => {
+    client.setQueryData(keys.paper("p1"), grouped());
+    const put = vi.mocked(api.putCuration);
+    let answer: () => void = () => undefined;
+    put.mockImplementation(
+      (_id, body) => new Promise((resolve) => (answer = () => resolve({ ...body }))),
+    );
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    let done: Promise<unknown> = Promise.resolve();
+    act(() => {
+      done = result.current.save("s1", { status: "rejected" });
+    });
+    await vi.waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0]![2]).toBe(true);
+    expect(statuses()).toEqual(["rejected", "rejected"]);
+    await act(async () => {
+      answer();
+      await done;
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: keys.paper("p1") });
+  });
+
+  it("a failed decision puts the repeats back; a note alone is no decision", async () => {
+    client.setQueryData(keys.paper("p1"), grouped());
+    const put = vi.mocked(api.putCuration);
+    put.mockRejectedValueOnce(new ApiError(409, "no"));
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    await act(() => expect(result.current.save("s1", { status: "rejected" })).rejects.toThrow());
+    expect(statuses()).toEqual([undefined, "accepted"]);
+    await act(() => result.current.save("s1", { note: "hi" }));
+    expect(put.mock.calls.at(-1)![2]).toBe(false);
+    expect(statuses()).toEqual(["unchecked", "accepted"]);
+  });
+
+  it("an edit that keeps the status is no decision; one that changes it is", async () => {
+    const p = grouped();
+    p.segments[0] = {
+      ...p.segments[0]!,
+      curation: { status: "rejected", smiles: null, molfile: null, note: null },
+    };
+    client.setQueryData(keys.paper("p1"), p);
+    const put = vi.mocked(api.putCuration);
+    const { result } = renderHook(() => useSaveCuration("p1"), { wrapper });
+    const structure = { smiles: "CCN", molfile: null };
+    await act(() => result.current.save("s1", { status: "rejected", structure }));
+    expect(put.mock.calls.at(-1)![2]).toBe(false);
+    expect(statuses()).toEqual(["rejected", "accepted"]); // the repeat keeps its own
+    await act(() => result.current.save("s1", { status: "accepted", structure }));
+    expect(put.mock.calls.at(-1)![2]).toBe(true);
+  });
+
+  it("a bulk decision shows on the repeats at once, and a failure puts them back", async () => {
+    client.setQueryData(keys.paper("p1"), grouped());
+    const bulk = vi.spyOn(api, "putBulkCuration").mockResolvedValue({ updated: 1 });
+    vi.spyOn(api, "getPaper").mockImplementation(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useBulkCuration("p1"), { wrapper });
+    await act(() => result.current.bulk([{ segment_id: "s1", status: "rejected" }]));
+    expect(bulk).toHaveBeenCalledWith("p1", [{ segment_id: "s1", status: "rejected" }]);
+    expect(statuses()).toEqual(["rejected", "rejected"]);
+
+    client.setQueryData(keys.paper("p1"), grouped());
+    bulk.mockRejectedValueOnce(new ApiError(503, "busy"));
+    await act(() =>
+      expect(result.current.bulk([{ segment_id: "s1", status: "rejected" }])).rejects.toThrow(),
+    );
+    expect(statuses()).toEqual([undefined, "accepted"]);
   });
 });
 

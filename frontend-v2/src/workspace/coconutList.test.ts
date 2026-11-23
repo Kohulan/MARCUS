@@ -31,6 +31,46 @@ function segment(id: string, curation: Partial<CurationOut> | null, predictions 
 }
 
 describe("coconutStructures", () => {
+  it("sends a main structure and its repeats once, and numbers as the listed rows", () => {
+    const list = coconutStructures(
+      [
+        segment("main", { status: "accepted" }),
+        { ...segment("again", { status: "accepted", smiles: "OCC" }), repeat_of: "main" },
+        segment("other", { status: "accepted", smiles: "CCN" }),
+      ],
+      "decimer",
+    );
+    expect(list.send).toEqual([
+      { segmentId: "main", n: 1, smiles: "CCO" }, // the main one first when it is accepted
+      { segmentId: "other", n: 2, smiles: "CCN" },
+    ]);
+    expect(list.held).toEqual([]);
+  });
+
+  it("an accepted repeat sends its group, with its structure, whatever the main one's status", () => {
+    for (const main of [null, { status: "unchecked" as const }, { status: "rejected" as const }]) {
+      const list = coconutStructures(
+        [
+          segment("main", main),
+          { ...segment("again", { status: "accepted", smiles: "OCC" }), repeat_of: "main" },
+        ],
+        "decimer",
+      );
+      expect(list.send).toEqual([{ segmentId: "main", n: 1, smiles: "OCC" }]);
+    }
+  });
+
+  it("a group with no accepted member sends nothing (all rejected, or to check)", () => {
+    const rejected = coconutStructures(
+      [
+        segment("main", { status: "rejected" }),
+        { ...segment("again", { status: "rejected" }), repeat_of: "main" },
+      ],
+      "decimer",
+    );
+    expect(rejected).toEqual({ send: [], held: [] });
+  });
+
   it("keeps accepted structures with a structure, numbered as their tags", () => {
     const list = coconutStructures(
       [

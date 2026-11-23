@@ -36,7 +36,7 @@ from fastapi import HTTPException, Request
 from marcus.api.chem import smiles_from_molfile
 from marcus.api.chempool import CHEM
 from marcus.api.deps import not_found
-from marcus.api.export import pick_prediction
+from marcus.api.read import pick_prediction
 from marcus.api.security import tools_limit
 from marcus.api.tooling import (
     MAX_SMILES,

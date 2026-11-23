@@ -396,6 +396,7 @@ describe("the card menu (More)", () => {
     expect(put.mock.calls[0]).toEqual([
       "s2",
       { status: "rejected", smiles: "CCBr", molfile: null, note: "keep" },
+      false, // the editor's save keeps the status: no decision
     ]);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
     expect(within(card("[02]")).getByRole("button", { name: "More for [02]" })).toHaveFocus();

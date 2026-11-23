@@ -234,6 +234,7 @@ export default function ReviewGrid({
               reason={r.reason}
               failedEngine={r.failedEngine}
               readingNote={r.readingNote}
+              alsoOn={r.alsoOn}
               selected={picked.has(r.segmentId)}
               current={selection === r.segmentId}
               onToggle={onToggle}

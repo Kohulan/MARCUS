@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
+from marcus.api.decisions import record_decisions
 from marcus.api.depiction import draw_or_read, orientation_templates, shown_structure
 from marcus.api.deps import (
     current_owner,
@@ -21,7 +22,7 @@ from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepA
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine
-from marcus.core.models import Curation, Owner, Prediction, Step
+from marcus.core.models import Curation, InheritedStatus, Owner, Prediction, Step
 from marcus.core.pipeline import request_ocsr
 
 router = APIRouter()
@@ -110,6 +111,7 @@ async def run_prediction(
 async def put_curation(
     segment_id: uuid.UUID,
     body: CurationIn,
+    decision: bool = False,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
@@ -124,15 +126,31 @@ async def put_curation(
                 status_code=422,
                 detail=[{"type": "value_error", "loc": ["body", field], "msg": msg}],
             )
+    # A status inherited from a main-figure structure is shown as unchecked while it does not
+    # hold: a note or structure edit sends that back, so it keeps the stored status (and its
+    # mark). Only a decision on this card replaces it.
+    keep = not decision and await db.get(InheritedStatus, segment.id) is not None
     curation = await db.get(Curation, segment.id)
     if curation is None:
         curation = Curation(segment_id=segment.id)
         db.add(curation)
-    curation.status = body.status
+    if not keep or curation.status is None:
+        curation.status = body.status
     curation.smiles = body.smiles
     curation.molfile = body.molfile
     curation.note = body.note
     curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)
+    # ?decision=true: the status is a decision made now on this card (not a note or structure
+    # edit that keeps it); on a main-figure structure it goes to its repeats.
+    if decision:
+        try:
+            await record_decisions(db, paper, {segment.id: body.status})
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
-    return structure_out(CurationOut, curation, named)
+    out = structure_out(CurationOut, curation, named)
+    if keep:
+        out.status = body.status  # as the client shows it (api.read masks it the same way)
+    return out

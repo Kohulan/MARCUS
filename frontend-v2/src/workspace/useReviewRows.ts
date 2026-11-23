@@ -4,6 +4,7 @@ import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { shownStructure, stateOf, type CardState } from "./cardState";
+import { alsoOnText, groupState, listedSegments, repeatPages, repeatsOf } from "./mainFigure";
 import { newestFirst } from "./pageFailures";
 
 /** One structure of the paper as the review views show it. */
@@ -19,13 +20,17 @@ export type ReviewRow = {
   readingNote: string | null;
   /** R-group labels of the structure shown ([] for none): the R-groups filter, the tags. */
   rgroups: string[];
+  /** A main-figure structure with repeats on other pages: "Also on page N"; else null. */
+  alsoOn: string | null;
 };
 
 const NO_STEPS: StepOut[] = [];
 
 /**
  * The rows of the review grid and focus mode: one pass over the steps for the whole paper,
- * not one per card. `segments` in (page, idx) order (useWorkspace sorts them).
+ * not one per card. `segments` in the workspace's order (useWorkspace sorts them). A repeat of
+ * a main-figure structure has no row of its own: its main card says "Also on page N", and its
+ * state is the group's (groupState).
  */
 export function useReviewRows(
   paper: PaperDetail,
@@ -45,23 +50,24 @@ export function useReviewRows(
     return map;
   }, [steps]);
 
-  return useMemo<ReviewRow[]>(
-    () =>
-      segments.map((segment, i) => {
-        const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
-        const state = stateOf(segment, own, paper);
-        const newest = state === "failed" ? own[0] : undefined;
-        return {
-          segmentId: segment.id,
-          n: i + 1,
-          state,
-          reason: newest ? reasonText(newest.error_class) : null,
-          failedEngine: newest?.engine ?? null,
-          readingNote:
-            state === "reading" ? firstRunNote(own.find((s) => isStepActive(s.status))?.engine) : null,
-          rgroups: shownStructure(segment, paper.engine).rgroups,
-        };
-      }),
-    [segments, stepsBySegment, paper],
-  );
+  return useMemo<ReviewRow[]>(() => {
+    const repeats = repeatPages(segments);
+    const groups = repeatsOf(segments);
+    return listedSegments(segments).map((segment, i) => {
+      const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
+      const state = groupState(stateOf(segment, own, paper), segment, groups.get(segment.id) ?? []);
+      const newest = state === "failed" ? own[0] : undefined;
+      return {
+        segmentId: segment.id,
+        n: i + 1,
+        state,
+        reason: newest ? reasonText(newest.error_class) : null,
+        failedEngine: newest?.engine ?? null,
+        readingNote:
+          state === "reading" ? firstRunNote(own.find((s) => isStepActive(s.status))?.engine) : null,
+        rgroups: shownStructure(segment, paper.engine).rgroups,
+        alsoOn: alsoOnText(repeats.get(segment.id)),
+      };
+    });
+  }, [segments, stepsBySegment, paper]);
 }

@@ -8,10 +8,13 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { errorText } from "../api/client";
+import { useMainFigure } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
 import type { StepOut } from "../api/types";
 import { usePrefersReducedMotion } from "../ui/motion";
+import { useToast } from "../ui/Toasts";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
@@ -26,6 +29,7 @@ const NO_MARKERS: PageMarker[] = [];
 
 const sameMarker = (a: PageMarker, b: PageMarker) =>
   a.segmentId === b.segmentId &&
+  a.target === b.target &&
   a.n === b.n &&
   a.state === b.state &&
   a.bbox.every((v, i) => v === b.bbox[i]) &&
@@ -111,11 +115,16 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const shownMarkers = useRef(new Map<number, PageMarker[]>());
   const markers = useMemo(() => {
     const map = new Map<number, PageMarker[]>();
-    for (const r of rows) {
-      const s = byId.get(r.segmentId);
-      if (!s) continue;
+    const rowOf = new Map(rows.map((r) => [r.segmentId, r]));
+    // Every segment has its marker; a repeat of a main-figure structure carries that one's tag
+    // and selects it (it has no row of its own).
+    for (const s of segments) {
+      const target = s.repeat_of ?? s.id;
+      const r = rowOf.get(target);
+      if (!r) continue;
       const m: PageMarker = {
         segmentId: s.id,
+        target,
         n: r.n,
         state: r.state,
         bbox: s.bbox,
@@ -135,11 +144,24 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     }
     shownMarkers.current = map;
     return map;
-  }, [rows, byId]);
+  }, [rows, segments]);
+
+  // The main figure: one page, marked from its caption (pages with structures, and the marked
+  // page, so its mark can always be cleared).
+  const { mark } = useMainFigure(paper.id);
+  const toast = useToast();
+  const mainPage = paper.main_figure_page ?? null;
 
   // Callbacks handed to 200 memoised cards stay stable: they read the latest values here.
-  const latest = useRef({ byId, reduce, setSelection });
-  latest.current = { byId, reduce, setSelection };
+  const latest = useRef({ byId, reduce, setSelection, mark, toast, mainPage });
+  latest.current = { byId, reduce, setSelection, mark, toast, mainPage };
+
+  const onMark = useCallback((page0: number) => {
+    const { mark: save, toast: say, mainPage: now } = latest.current;
+    save(now === page0 ? null : page0).catch((err: unknown) =>
+      say(`Not saved: ${errorText(err)}`, "error"),
+    );
+  }, []);
 
   /** Brings a structure's marker into view in the pages column (its page, before it loads). */
   const showMarker = useCallback((segmentId: string) => {
@@ -162,15 +184,21 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
 
   useViewTop(view);
 
+  // A structure picked from its marker: the pages column stays where the click was (a repeat's
+  // marker picks its main-figure structure, whose own marker is on another page).
+  const pickedFromMarker = useRef<string | null>(null);
+
   // A selection (here, from the URL, or from the Review view) brings its card and page in.
   useEffect(() => {
     if (selection === null) return;
     showCard(selection);
-    showMarker(selection);
+    if (pickedFromMarker.current === selection) pickedFromMarker.current = null;
+    else showMarker(selection);
   }, [selection, showCard, showMarker]);
 
   const onPick = useCallback(
     (segmentId: string) => {
+      pickedFromMarker.current = segmentId;
       latest.current.setSelection(segmentId);
       showCard(segmentId, true);
     },
@@ -180,7 +208,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const onCardHover = useCallback(
     (segmentId: string | null) => {
       setHovered(segmentId);
-      if (segmentId !== null) showMarker(segmentId);
+      if (segmentId === null) pickedFromMarker.current = null;
+      else if (segmentId !== pickedFromMarker.current) showMarker(segmentId);
     },
     [showMarker],
   );
@@ -215,6 +244,8 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                 hovered={hoveredPage === page0 ? hovered : null}
                 onPick={onPick}
                 onHover={setHovered}
+                isMain={mainPage === page0}
+                onMark={markers.has(page0) || mainPage === page0 ? onMark : null}
               />
             ))}
           </div>
@@ -253,6 +284,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   reason={r.reason}
                   failedEngine={r.failedEngine}
                   readingNote={r.readingNote}
+                  alsoOn={r.alsoOn}
                   current={selection === r.segmentId}
                   linked={hovered === r.segmentId}
                   onOpen={onSelect}

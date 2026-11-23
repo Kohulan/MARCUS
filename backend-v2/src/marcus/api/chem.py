@@ -73,3 +73,18 @@ def smiles_from_molfile(molfile: str | None) -> str | None:
     with BlockLogs():
         mol = Chem.MolFromMolBlock(molfile)
         return Chem.MolToSmiles(mol) if mol is not None else None
+
+
+def inchikey(kind: str, value: str) -> str | None:
+    """The InChIKey of a SMILES (`kind` "smiles") or molfile ("molfile"); None when RDKit cannot
+    read it or it has placeholder atoms (an R-group scaffold is not one compound)."""
+    mol = parse_smiles(value) if kind == "smiles" else parse_molfile(value)
+    if mol is None or any(a.GetAtomicNum() == 0 for a in mol.GetAtoms()):
+        return None
+    with BlockLogs():
+        return Chem.MolToInchiKey(mol) or None
+
+
+def inchikeys(items: list[tuple[str, str]]) -> list[str | None]:
+    """inchikey of each (kind, value): one trip to marcus.api.chempool for a whole paper."""
+    return [inchikey(kind, value) for kind, value in items]
