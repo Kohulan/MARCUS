@@ -75,9 +75,11 @@ def test_list_prints_no_secrets_and_json(db_session, capsys):
     assert code == 0 and len(rows) == 1  # browser owners are not keys
     row = rows[0]
     assert set(row) == {
-        "id", "label", "created_at", "revoked_at", "daily_page_quota", "pages_today"
-    }
+        "id", "label", "created_at", "revoked_at", "daily_page_quota", "pages_today",
+        "pages_reserved",
+    }  # fmt: skip
     assert row["id"] == key_id and row["pages_today"] == 0 and row["revoked_at"] is None
+    assert row["pages_reserved"] == 0
     token_hash = hash_token(key)
     code, text, _ = run(capsys, "apikey", "list")
     assert key not in out + text and token_hash not in out + text and str(browser.id) not in text
@@ -135,7 +137,9 @@ async def test_revoked_key_401(app, db_session, capsys):
     async with client(app) as c:
         assert (await c.get("/api/v2/papers", headers=bearer(key))).status_code == 200
         assert await asyncio.to_thread(run, capsys, "apikey", "revoke", key_id) == (
-            0, f"revoked {key_id}\n", ""
+            0,
+            f"revoked {key_id}\n",
+            "",
         )
         assert (await c.get("/api/v2/papers", headers=bearer(key))).status_code == 401
         assert (await post_paper(c, key)).status_code == 401
@@ -147,15 +151,16 @@ async def test_quota_exceeded_429(app, async_db_session, db_session, capsys):
         first = await post_paper(c, key)
         assert first.status_code == 202  # 0 used
         second = await post_paper(c, key)
-        assert second.status_code == 202  # 1 (still checking) used < 2
-        third = await post_paper(c, key)
-        assert third.status_code == 429
-        assert third.json() == {"detail": "daily quota exceeded"}
-        assert (await async_db_session.execute(select(Paper))).scalars().all().__len__() == 2
-        # check_pdf reports real page counts: 2 papers x 3 pages = 6 >= 2
+        # the first, still checking, reserves max_pages (100) >= 2; only reserved: retry soon
+        assert second.status_code == 429
+        assert second.json() == {"detail": "daily quota exceeded"}
+        assert second.headers["retry-after"] == "60"
+        assert (await async_db_session.execute(select(Paper))).scalars().all().__len__() == 1
+        # check_pdf reports the real page count: 3 used >= 2, nothing to wait for
         await async_db_session.execute(update(Paper).values(pages=3, status="processing"))
         await async_db_session.commit()
-        assert (await post_paper(c, key)).status_code == 429
+        third = await post_paper(c, key)
+        assert third.status_code == 429 and "retry-after" not in third.headers
 
 
 async def test_quota_counts_known_pages_not_one_per_paper(app, async_db_session, capsys):
@@ -165,7 +170,51 @@ async def test_quota_counts_known_pages_not_one_per_paper(app, async_db_session,
         await async_db_session.execute(update(Paper).values(pages=9, status="processing"))
         await async_db_session.commit()
         assert (await post_paper(c, key)).status_code == 202  # 9 < 10 (may overshoot)
-        assert (await post_paper(c, key)).status_code == 429  # 9 + 1 checking >= 10
+        third = await post_paper(c, key)  # 9 + 100 reserved by the one checking >= 10
+        assert third.status_code == 429 and third.headers["retry-after"] == "60"
+
+
+async def test_checking_papers_hold_max_pages_so_uploads_cannot_outrun_the_check(
+    app, async_db_session, capsys
+):
+    """Security scan 2026-11-23 F3: at 1 page per paper still being checked, a key could get
+    ~150 papers of 100 pages accepted against a quota of 2000 while check_pdf queued."""
+    _, key = await asyncio.to_thread(create_key, capsys, "--daily-pages", "300")
+    async with client(app) as c:
+        for _ in range(3):  # 0, 100, 200 reserved < 300
+            assert (await post_paper(c, key)).status_code == 202
+        fourth = await post_paper(c, key)
+        assert fourth.status_code == 429 and fourth.headers["retry-after"] == "60"
+        code, out, _ = await asyncio.to_thread(run, capsys, "apikey", "list", "--json")
+        row = json.loads(out)[0]
+        assert (row["pages_today"], row["pages_reserved"]) == (0, 300)
+        code, text, _ = await asyncio.to_thread(run, capsys, "apikey", "list")
+        assert "pages today 0 (+300 reserved)/300" in text
+
+
+@pytest.mark.parametrize(
+    ("status", "pages", "used"),
+    [
+        ("failed", None, 0),  # the check failed: nothing reserved, nothing used
+        ("deleted", None, 0),  # deleted while checking: its steps were cancelled
+        ("processing", 3, 3),  # checked: its real pages
+    ],
+)
+async def test_a_paper_out_of_checking_frees_its_reserved_pages(
+    app, async_db_session, capsys, status, pages, used
+):
+    _, key = await asyncio.to_thread(create_key, capsys, "--daily-pages", "105")
+    async with client(app) as c:
+        assert (await post_paper(c, key)).status_code == 202
+        # 100 reserved: a second upload still fits (100 < 105), a third does not
+        assert (await post_paper(c, key)).status_code == 202
+        assert (await post_paper(c, key)).status_code == 429
+        await async_db_session.execute(update(Paper).values(pages=pages, status=status))
+        await async_db_session.commit()
+        code, out, _ = await asyncio.to_thread(run, capsys, "apikey", "list", "--json")
+        row = json.loads(out)[0]
+        assert (row["pages_today"], row["pages_reserved"]) == (2 * used, 0)
+        assert (await post_paper(c, key)).status_code == 202
 
 
 async def test_quota_counts_only_today_and_own_papers(app, async_db_session, capsys):
@@ -205,9 +254,15 @@ async def test_image_jobs_count_one_page(app, async_db_session, db_session, caps
         assert (await post_paper(c, key)).status_code == 429
 
 
-async def test_quota_race_concurrent_uploads_cannot_exceed(migrated_db, db_session, capsys):
-    """Several uploads of one key at once, each in its own transaction: with quota 3 exactly
-    3 succeed (the owner advisory lock serialises the check and the insert)."""
+@pytest.mark.parametrize(("max_pages", "accepted"), [(1, 3), (100, 1)])
+async def test_quota_race_concurrent_uploads_cannot_exceed(
+    migrated_db, db_session, capsys, monkeypatch, max_pages, accepted
+):
+    """Several uploads of one key at once, each in its own transaction: with quota 3 and each
+    checking paper reserving max_pages, exactly 3 (1 page) or 1 (100 pages) succeed (the owner
+    advisory lock serialises the check and the insert)."""
+    monkeypatch.setenv("MARCUS_MAX_PAGES", str(max_pages))
+    get_settings.cache_clear()
     _, key = create_key(capsys, "--daily-pages", "3")
     engine = create_async_engine(async_db_url(get_settings().database_url), poolclass=NullPool)
     app = create_app()
@@ -224,8 +279,8 @@ async def test_quota_race_concurrent_uploads_cannot_exceed(migrated_db, db_sessi
     finally:
         await engine.dispose()
     codes = sorted(r.status_code for r in results)
-    assert codes == [202] * 3 + [429] * 5
-    assert db_session.execute(select(Paper)).scalars().all().__len__() == 3
+    assert codes == [202] * accepted + [429] * (8 - accepted)
+    assert db_session.execute(select(Paper)).scalars().all().__len__() == accepted
 
 
 def test_purge_paper_with_running_step(db_session, capsys):

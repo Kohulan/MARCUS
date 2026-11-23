@@ -303,7 +303,9 @@ docker compose -p marcus-v2 exec api marcus purge --expired        # run the ret
 - `apikey create` prints the key (`mk_...`) once; only its SHA-256 is stored. Clients send it as
   `Authorization: Bearer <key>`. `list` never shows secrets. `revoke` is idempotent.
 - Daily page quota (API keys only, default 2000, UTC day): a paper counts its pages once
-  `check_pdf` knows them (1 while still checking), an image job counts 1. Above the quota,
-  uploads get `429 {"detail": "daily quota exceeded"}`. A single upload may overshoot by its own
-  page count. Browser owners are not subject to it.
+  `check_pdf` knows them, and reserves `MARCUS_MAX_PAGES` (100) while still being checked; an
+  image job counts 1. Above the quota, uploads get `429 {"detail": "daily quota exceeded"}`,
+  with `Retry-After` when only reserved pages put it over (they are freed when the check counts
+  the real pages). A single upload may overshoot by its own page count. Browser owners are not
+  subject to it. `apikey list` shows the reserved pages beside the pages used.
 - Exit codes: 0 ok, 1 not found or invalid input, 2 usage error.
