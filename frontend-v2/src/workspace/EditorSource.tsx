@@ -1,8 +1,9 @@
 // The editor's left panel: the crop the engines read, so the curator sees what the paper
 // shows while drawing. "Find on paper" swaps the crop for the page with only this
 // structure's box marked (pageBox, as the paper view places it), "Back" returns. The page opens
-// zoomed in on the box ("+" / "−", drag or scroll to move). Ketcher on the right is untouched.
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+// whole; "+" zooms in on the box ("−", drag or scroll to move), and a hint says so until the
+// curator has zoomed once. Ketcher on the right is untouched.
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { boxStyle } from "./pageBox";
 
@@ -13,27 +14,48 @@ export type EditorSourceInfo = {
   page: { url: string; bbox: [number, number, number, number]; page0: number } | null;
 };
 
-/** Zoom steps of the page. It opens at the largest step up to MAX_START where the box fills
- * at most FILL of the view: the drawing and its label at a readable size. */
+/** Zoom steps of the page; it opens at 1 (the whole page). */
 export const ZOOMS = [1, 1.5, 2, 3, 4, 6] as const;
-const MAX_START = ZOOMS.indexOf(4);
-const FILL = 0.75;
 const PAD = 16; // .editor-src__view padding
+
+// The zoom hint: shown until the curator zooms once (this browser), for HINT_MS each time.
+const HINT_KEY = "marcus.zoomHintSeen";
+const HINT_MS = 7000;
+function hintSeen(): boolean {
+  try {
+    return localStorage.getItem(HINT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markHintSeen(): void {
+  try {
+    localStorage.setItem(HINT_KEY, "1");
+  } catch {
+    // storage blocked: the hint shows again next time
+  }
+}
 
 export function EditorSource({ source }: { source: EditorSourceInfo }) {
   const page = source.page;
   const [onPage, setOnPage] = useState(false);
   // The page's natural size, from its load: the marker waits for it.
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-  // null: not chosen yet (the opening zoom, once the page and the view are measured)
-  const [step, setStep] = useState<number | null>(null);
-  const zoom = ZOOMS[step ?? 0]!;
+  const [step, setStep] = useState(0);
+  const zoom = ZOOMS[step]!;
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!hint) return;
+    const t = window.setTimeout(() => setHint(false), HINT_MS);
+    return () => window.clearTimeout(t);
+  }, [hint]);
   // One button for "Find on paper" and "Back": the same element keeps the focus (focused on
   // click too: Safari and tests do not focus a clicked button).
   const button = useRef<HTMLButtonElement>(null);
   const toggle = () => {
+    setHint(!onPage && !hintSeen());
     setOnPage((v) => !v);
-    setStep(null);
+    setStep(0);
     anchor.current = null;
     button.current?.focus();
   };
@@ -50,25 +72,14 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
   };
   useLayoutEffect(measure, [size, onPage]);
   useLayoutEffect(() => {
-    const v = view.current;
-    if (step !== null || fit === null || !size || !page || !v) return;
-    const [x0, y0, x1, y1] = page.bbox;
-    const scale = fit / size.w; // page pixels to view pixels at zoom 1
-    const fits = (z: number) =>
-      (x1 - x0) * scale * z <= FILL * v.clientWidth && (y1 - y0) * scale * z <= FILL * v.clientHeight;
-    let best = 0;
-    for (let i = 1; i <= MAX_START; i++) if (fits(ZOOMS[i]!)) best = i;
-    setStep(best);
-  }, [step, fit, size, page]);
-  useLayoutEffect(() => {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }); // re-added each render: `measure` reads the newest size
 
   // The point of the page (fractions of its width and height) the view is centred on: the box
-  // at opening, the view's centre when the zoom changes.
+  // when zooming in from the whole page, else the view's centre.
   const anchor = useRef<{ fx: number; fy: number } | null>(null);
-  const width = fit !== null && step !== null ? fit * zoom : null;
+  const width = fit !== null ? fit * zoom : null;
   // where the sheet starts in the view: centred while narrower than it (margin auto)
   const left = (v: HTMLElement, w: number) => Math.max(PAD, (v.clientWidth - w) / 2);
   useLayoutEffect(() => {
@@ -81,15 +92,18 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
     v.scrollTop = at.fy * height + PAD - v.clientHeight / 2;
   }, [width, size, page]);
   const zoomBy = (d: number) => {
+    setHint(false);
+    markHintSeen();
     const v = view.current;
-    if (v && size && width !== null) {
+    anchor.current = null;
+    if (step > 0 && v && size && width !== null) {
       const height = (width * size.h) / size.w;
       anchor.current = {
         fx: (v.scrollLeft + v.clientWidth / 2 - left(v, width)) / width,
         fy: (v.scrollTop + v.clientHeight / 2 - PAD) / height,
       };
     }
-    setStep((s) => Math.min(Math.max((s ?? 0) + d, 0), ZOOMS.length - 1));
+    setStep((s) => Math.min(Math.max(s + d, 0), ZOOMS.length - 1));
   };
 
   // Drag to move the page (a mouse or a pen; touch scrolls by itself).
@@ -145,6 +159,11 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
           />
         )}
       </div>
+      {onPage && hint ? (
+        <p className="editor-src__hint" role="status">
+          Use + and − to zoom
+        </p>
+      ) : null}
       {page ? (
         <div className="editor-src__bar">
           <GlassButton ref={button} tint="clear" size="sm" onClick={toggle}>
@@ -152,7 +171,7 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
           </GlassButton>
           {onPage ? (
             <>
-              <GlassButton tint="clear" size="sm" label="Zoom out" disabled={(step ?? 0) === 0} onClick={() => zoomBy(-1)}>
+              <GlassButton tint="clear" size="sm" label="Zoom out" disabled={step === 0} onClick={() => zoomBy(-1)}>
                 −
               </GlassButton>
               <GlassButton

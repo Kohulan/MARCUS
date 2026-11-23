@@ -1,7 +1,7 @@
 // The editor's left panel: the crop the engines read, and "Find on paper" to see the
 // structure's place on its page (one marker, the paper view's box placement), "Back" to return.
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorSource, type EditorSourceInfo } from "./EditorSource";
 import { boxStyle } from "./pageBox";
 
@@ -85,14 +85,14 @@ describe("EditorSource zoom", () => {
     return { view, sheet };
   }
 
-  it("opens zoomed so the box fills at most 3/4 of the view, centred on it", () => {
+  it("opens at the whole page; the first + zooms in on the structure's box", () => {
     const { view, sheet } = openPage();
-    // fit: the whole page in 500 x 700 less 16 px padding each side (468 px wide). The box,
-    // 800 of 2480 px wide, is 151 px at zoom 1: 2x is the largest step within 375 px.
-    expect(sheet.dataset.zoom).toBe("2");
-    const fit = Math.min(500 - 32, (700 - 32) * (2480 / 3508));
-    const width = fit * 2;
-    expect(parseFloat(sheet.style.width)).toBeCloseTo(width, 0);
+    expect(sheet.dataset.zoom).toBe("1");
+    expect(screen.getByRole("button", { name: "Zoom out" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(sheet.dataset.zoom).toBe("1.5");
+    // fit: the whole page in 500 x 700 less 16 px padding each side
+    const width = Math.min(500 - 32, (700 - 32) * (2480 / 3508)) * 1.5;
     // box centre (800, 1200) of 2480 x 3508, in the middle of the view
     const cx = (800 / 2480) * width;
     const cy = (1200 / 3508) * width * (3508 / 2480);
@@ -112,17 +112,6 @@ describe("EditorSource zoom", () => {
     expect(zoomIn).toBeDisabled();
   });
 
-  it("a small box opens at 4x, no more", () => {
-    const small: EditorSourceInfo = { ...SOURCE, page: { ...SOURCE.page!, bbox: [400, 900, 500, 1000] } };
-    const { container } = render(<EditorSource source={small} />);
-    sized(container.querySelector<HTMLElement>(".editor-src__view")!, 500, 700);
-    fireEvent.click(screen.getByRole("button", { name: "Find on paper" }));
-    const page = screen.getByRole("img", { name: "Page 3" });
-    natural(page, 2480, 3508);
-    fireEvent.load(page);
-    expect(container.querySelector<HTMLElement>(".editor-src__sheet")!.dataset.zoom).toBe("4");
-  });
-
   it("drag moves the page", () => {
     // jsdom has no PointerEvent: a MouseEvent with a pointerId and pointerType stands in
     class FakePointer extends MouseEvent {
@@ -136,6 +125,7 @@ describe("EditorSource zoom", () => {
     }
     vi.stubGlobal("PointerEvent", FakePointer);
     const { view } = openPage();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     const left = view.scrollLeft;
     const top = view.scrollTop;
     fireEvent.pointerDown(view, { clientX: 300, clientY: 300, button: 0, pointerId: 1 });
@@ -149,5 +139,46 @@ describe("EditorSource zoom", () => {
   it("no zoom buttons on the crop", () => {
     render(<EditorSource source={SOURCE} />);
     expect(screen.queryByRole("button", { name: "Zoom in" })).toBeNull();
+  });
+});
+
+describe("EditorSource zoom hint", () => {
+  const KEY = "marcus.zoomHintSeen";
+  beforeEach(() => localStorage.removeItem(KEY));
+  afterEach(() => localStorage.removeItem(KEY));
+
+  function open() {
+    render(<EditorSource source={SOURCE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Find on paper" }));
+  }
+
+  it("shows on the page until the curator zooms, then never again in this browser", () => {
+    open();
+    expect(screen.getByRole("status")).toHaveTextContent("Use + and − to zoom");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(localStorage.getItem(KEY)).toBe("1");
+  });
+
+  it("is not shown once seen, nor on the crop", () => {
+    render(<EditorSource source={SOURCE} />);
+    expect(screen.queryByRole("status")).toBeNull();
+    cleanup();
+    localStorage.setItem(KEY, "1");
+    open();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("goes away by itself after a few seconds", () => {
+    vi.useFakeTimers();
+    try {
+      open();
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(8000));
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(localStorage.getItem(KEY)).toBeNull(); // not zoomed yet: shown again next time
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
