@@ -46,8 +46,11 @@ def as_label(text: str) -> str | None:
 _SCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
 _PRIMES = (("″", "′′"), ('"', "′′"), ("’", "′"), ("'", "′"))
 # The label grammar as text writes it: Docling may space a subscript or a prime ("R 1", "R 1 ′").
+# R's primes after an index or a letter are in the optional group, so two prime runs never stand
+# side by side: the same labels as R P* (D)? (L)? P*, in linear time (security scan 2026-11-23
+# F2: "R" and a long prime run before a letter tried every split of the run, O(n^2)).
 _TEXT_LABEL = re.compile(
-    r"(?<!\w)(?:R(?:\s?′)*(?:\s?\d{1,2})?[a-z]?(?:\s?′)*"
+    r"(?<!\w)(?:R(?:\s?′)*(?:(?:\s?\d{1,2}[a-z]?|[a-z])(?:\s?′)*)?"
     r"|[XYZ](?:\s?\d{1,2})?(?:\s?′)*|Ar(?:\s?\d{1,2})?|[nmQ])(?![\w′])"
 )
 MAX_PAGE_LABELS = 200  # labels one page's text may name in the stored index
