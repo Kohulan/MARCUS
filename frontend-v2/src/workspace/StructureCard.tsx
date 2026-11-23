@@ -20,8 +20,8 @@ import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useDisclosure } from "../ui/useDisclosure";
 import {
+  agreeText,
   CARD_OPEN_HINT,
-  enginesDiffer,
   hasDrawing,
   metaText,
   scaffoldPrediction,
@@ -161,6 +161,7 @@ function StructureCard({
   const shown = shownStructure(segment, paperEngine);
   const { smiles, edited, rgroups } = shown;
   const meta = metaText(shown);
+  const agree = agreeText(segment);
   const scaffold = scaffoldPrediction(shown);
   const note = curation?.note?.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const rejected = state === "rejected";
@@ -198,7 +199,12 @@ function StructureCard({
       ref={ref}
       className={classes.join(" ")}
       tabIndex={0}
-      aria-label={[where, STATE_WORD[state], rgroups.length > 0 && rgroupTag(rgroups)]
+      aria-label={[
+        where,
+        STATE_WORD[state],
+        rgroups.length > 0 && rgroupTag(rgroups),
+        segment.check_drawing && CHECK_DRAWING,
+      ]
         .filter(Boolean)
         .join(", ")}
       aria-describedby={CARD_OPEN_HINT}
@@ -266,14 +272,45 @@ function StructureCard({
       </div>
 
       <div className="card__body">
+        {segment.compound_id && (
+          <p className="card__compound">{compoundText(segment.compound_id, segment.compound_name)}</p>
+        )}
         {smiles !== null && <Smiles value={smiles} struck={rejected} />}
         {meta !== null && (
           <p className="card__meta">
             <span>{meta}</span>
-            {enginesDiffer(segment) && <span className="card__differ">Engines differ</span>}
+            {agree !== null && (
+              <span
+                className={segment.agree === 0 ? "card__differ" : "card__agree"}
+                title={agreeTitle(segment)}
+              >
+                {agree}
+              </span>
+            )}
+          </p>
+        )}
+        {segment.check_drawing && (
+          <p className="card__flag">
+            <span>{CHECK_DRAWING}</span>
+            {onEdit && (
+              <button
+                type="button"
+                className="card__flag-edit"
+                aria-label={`Edit ${tag}`}
+                aria-haspopup="dialog"
+                onClick={() => onEdit(segment.id)}
+              >
+                Edit
+              </button>
+            )}
           </p>
         )}
         {alsoOn !== null && <p className="card__also">{alsoOn}</p>}
+        {segment.compound_id && (segment.same_id_pages?.length ?? 0) > 0 && (
+          <p className="card__reason">
+            {sameIdText(segment.compound_id, segment.same_id_pages!)}
+          </p>
+        )}
         {note !== "" && <p className="card__note">{`Note: ${note}`}</p>}
         {reason !== null && <p className="card__reason">{sentence(reason)}</p>}
         {state === "reading" && readingNote !== null && (
@@ -316,6 +353,27 @@ function StructureCard({
 }
 
 export default memo(StructureCard);
+
+/** "Compound 12 · salsubstolin A": the ID printed by the drawing, and its name when known. */
+export function compoundText(id: string, name: string | null | undefined): string {
+  return name ? `Compound ${id} · ${name}` : `Compound ${id}`;
+}
+
+/** "Same ID as compound 12, page 1. Check.": another structure prints the same ID. */
+export function sameIdText(id: string, pages: number[]): string {
+  const where = pages.map((p) => p + 1).join(", ");
+  return `Same ID as compound ${id}, ${pages.length > 1 ? "pages" : "page"} ${where}. Check.`;
+}
+
+/** The badge's tooltip: which engines agree ("DECIMER, MolNexTR and MolScribe agree"). */
+function agreeTitle(segment: SegmentOut): string {
+  const names = (segment.agree_engines ?? []).map(engineName);
+  if (names.length < 2) return "The engines give different structures";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} agree`;
+}
+
+/** The flag of a crop that is not a clean drawing (SegmentOut.check_drawing). */
+export const CHECK_DRAWING = "Check this drawing";
 
 function CardActions({
   segmentId,

@@ -37,6 +37,15 @@ def _settings_env(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _fresh_background_watch(monkeypatch):
+    """The dispatcher watchdog's memory of unserved queues is per process: each test starts
+    with none."""
+    from marcus.dispatcher import pick
+
+    monkeypatch.setattr(pick, "BACKGROUND_WATCH", pick.BackgroundWatch())
+
+
 @pytest.fixture
 def clear_settings_cache():
     from marcus.core.settings import get_settings

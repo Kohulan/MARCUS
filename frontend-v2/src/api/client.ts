@@ -303,15 +303,26 @@ export const api = {
   /**
    * Only through useSaveCuration (curationBody builds the full record). `decision`: the status
    * is a decision made now, not kept by a note or structure edit (the server gives a
-   * main-figure structure's decision to its repeats too).
+   * main-figure structure's decision to its repeats too). `shownPredictionId`: with a
+   * decision, the prediction the card showed; the server keeps it as the decided structure.
    */
-  putCuration: (segmentId: string, body: CurationIn, decision = false) =>
-    sendJson<CurationOut>(
+  putCuration: (
+    segmentId: string,
+    body: CurationIn,
+    decision = false,
+    shownPredictionId: string | null = null,
+  ) => {
+    const q = new URLSearchParams();
+    if (decision) q.set("decision", "true");
+    if (decision && shownPredictionId) q.set("shown_prediction_id", shownPredictionId);
+    const query = q.toString() ? `?${q.toString()}` : "";
+    return sendJson<CurationOut>(
       "PUT",
-      `/segments/${enc(segmentId)}/curation${decision ? "?decision=true" : ""}`,
+      `/segments/${enc(segmentId)}/curation${query}`,
       body,
       SAVE_TIMEOUT_MS,
-    ),
+    );
+  },
   runPrediction: (segmentId: string, engine: Engine) =>
     sendJson<StepAccepted>("POST", `/segments/${enc(segmentId)}/predictions`, { engine }),
   segmentImageUrl: (id: string) => `${BASE}/segments/${enc(id)}/image`,

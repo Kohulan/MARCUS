@@ -42,11 +42,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from marcus.core import annotation, rgroup_extraction, rgroup_labels, storage
+from marcus.core import agreement, annotation, rgroup_extraction, rgroup_labels, storage
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -58,7 +58,9 @@ from marcus.core.enums import (
 )
 from marcus.core.models import (
     Annotation,
+    BackgroundStep,
     Curation,
+    DrawingFlag,
     ImageJob,
     Owner,
     Paper,
@@ -360,10 +362,21 @@ def _load_for_change(session: Session, step_id: uuid.UUID):
 OUTSIDE_PROGRESS = (StepKind.ANNOTATE.value, StepKind.RGROUPS.value)
 
 
-def in_paper_progress():
-    """SQL condition: the step counts in its paper's progress (every kind but `annotate` and
-    `rgroups`, which run beside the read)."""
+def is_background():
+    """SQL condition: the step is a background OCSR step (a background_steps row)."""
+    return exists().where(BackgroundStep.step_id == Step.id)
+
+
+def in_paper_steps():
+    """SQL condition: the step is one of the paper's read steps a client lists (every kind but
+    `annotate` and `rgroups`, which run beside the read), background OCSR steps included."""
     return Step.kind.not_in(OUTSIDE_PROGRESS)
+
+
+def in_paper_progress():
+    """SQL condition: the step counts in its paper's progress: in_paper_steps, background OCSR
+    steps aside (the other engines fill in after the paper is done)."""
+    return and_(in_paper_steps(), ~is_background())
 
 
 def _finish_check(session: Session, paper: Paper) -> None:
@@ -441,7 +454,8 @@ def _check_pdf_result(result: dict) -> None:
 
 
 def _check_segments(segments: object) -> None:
-    """A list of {idx, bbox, image_sha256} with unique idx (one page's segments)."""
+    """A list of {idx, bbox, image_sha256, check_drawing?} with unique idx (one page's segments;
+    check_drawing: a bool or None, absent from older results and cache rows)."""
     if not isinstance(segments, list):
         raise BadResult("segment_page: 'segments' must be a list")
     seen: set[int] = set()
@@ -458,6 +472,9 @@ def _check_segments(segments: object) -> None:
             raise BadResult("segment_page: 'bbox' must be 4 non-negative ints")
         if not isinstance(sha, str) or not _SHA256_HEX.fullmatch(sha):
             raise BadResult("segment_page: 'image_sha256' must be 64 lowercase hex characters")
+        flag = item.get("check_drawing")
+        if flag is not None and not isinstance(flag, bool):
+            raise BadResult("segment_page: 'check_drawing' must be a bool or null")
 
 
 def _check_segment_page_result(result: dict) -> None:
@@ -593,20 +610,40 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     ]
     session.add_all(segments)
     session.flush()  # assigns segment ids
+    session.add_all(
+        DrawingFlag(segment_id=seg.id)
+        for seg, item in zip(segments, items, strict=True)
+        if item.get("check_drawing")
+    )
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
     if paper.ocsr_mode != "auto":
         return []
-    return [
-        _new_step(
-            paper,
-            StepKind.OCSR,
-            _ocsr_seq(seg.page, seg.idx),
-            engine=paper.engine,
-            page=seg.page,
-            segment_id=seg.id,
-        )
-        for seg in segments
-    ]
+    steps = []
+    for seg in segments:
+        for engine in [paper.engine, *background_engines(paper.engine)]:
+            step = _new_step(
+                paper,
+                StepKind.OCSR,
+                _ocsr_seq(seg.page, seg.idx),
+                engine=engine,
+                page=seg.page,
+                segment_id=seg.id,
+            )
+            steps.append(step)
+    # The steps go into the session now (their background_steps rows need them first).
+    session.add_all(steps)
+    session.flush()
+    session.add_all(BackgroundStep(step_id=st.id) for st in steps if st.engine != paper.engine)
+    return steps
+
+
+def background_engines(paper_engine: str) -> list[str]:
+    """The engines that read every new segment beside the paper's own (phase B item 3): those of
+    marcus.core.agreement but the paper's. None for the fake engine (tests and the fake stack,
+    which have no real engines)."""
+    if paper_engine == Engine.FAKE.value:
+        return []
+    return [e for e in agreement.ENGINES if e != paper_engine]
 
 
 def _after_segment_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
@@ -640,14 +677,27 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
     if set(versions) != set(range(paper.pages)) or set(versions.values()) != {seg_version}:
         return
     segments = session.execute(
-        select(Segment.page, Segment.idx, Segment.bbox, Segment.image_sha256)
+        select(
+            Segment.page,
+            Segment.idx,
+            Segment.bbox,
+            Segment.image_sha256,
+            DrawingFlag.segment_id.is_not(None).label("check_drawing"),
+        )
+        .outerjoin(DrawingFlag, DrawingFlag.segment_id == Segment.id)
         .where(Segment.paper_id == paper.id)
         .order_by(Segment.page, Segment.idx)
     ).all()
     payload = {
         "pages": paper.pages,
         "segments": [
-            {"page": g.page, "idx": g.idx, "bbox": list(g.bbox), "image_sha256": g.image_sha256}
+            {
+                "page": g.page,
+                "idx": g.idx,
+                "bbox": list(g.bbox),
+                "image_sha256": g.image_sha256,
+                "check_drawing": g.check_drawing,
+            }
             for g in segments
         ],
     }
@@ -693,7 +743,8 @@ def _cached_page(session: Session, paper: Paper, page: int) -> list[dict] | None
 
 def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
     """Validate a whole seg_cache payload (it is data: checked like worker results, every page)
-    and return one page's segments as {idx, bbox, image_sha256}."""
+    and return one page's segments as {idx, bbox, image_sha256, check_drawing} (None in a row
+    from before the drawing check)."""
     if not isinstance(payload, dict) or not _is_int(pages, 1) or payload.get("pages") != pages:
         raise BadResult("page count differs")
     segments = payload.get("segments")
@@ -708,6 +759,7 @@ def _page_items(payload: object, pages: int | None, page: int) -> list[dict]:
                 "idx": item.get("idx"),
                 "bbox": item.get("bbox"),
                 "image_sha256": item.get("image_sha256"),
+                "check_drawing": item.get("check_drawing"),
             }
         )
     for items in by_page.values():
@@ -766,6 +818,7 @@ def _prediction(step: Step, result: dict) -> Prediction:
         ms=result["ms"],
         cached=bool(result.get("cached", False)),
         rgroups=rgroup_labels(result["smiles"], result.get("molfile")),
+        inchikey=agreement.inchikey_of(result["smiles"], result["valid"]),
     )
 
 
@@ -1049,7 +1102,9 @@ def request_ocsr(
     """Create a pending `ocsr` step for one segment with the given engine. Caller commits.
     A `done` paper becomes active again, with `started_ip` (the requesting address bucket).
     A step of that engine still waiting or running for the segment is returned instead (repeat
-    requests never queue a second one).
+    requests never queue a second one); a background one becomes the paper's own (its
+    background_steps row goes): the user asked for it, so it counts in the read and the
+    dispatcher sends it with the paper's own steps.
 
     Raises ValueError for an unknown segment, a deleted paper, or a disabled engine.
     """
@@ -1062,6 +1117,15 @@ def request_ocsr(
         raise ValueError("paper is deleted")
     waiting = _waiting_ocsr(session, Step.segment_id == segment.id, engine)
     if waiting is not None:
+        promoted = session.execute(
+            delete(BackgroundStep)
+            .where(BackgroundStep.step_id == waiting.id)
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        if promoted and paper.status == PaperStatus.DONE.value:
+            paper.status = PaperStatus.PROCESSING.value
+            keep_address(paper, started_ip)
+        session.flush()
         return waiting
     step = _new_step(
         paper,

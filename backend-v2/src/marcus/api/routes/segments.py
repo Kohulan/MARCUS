@@ -71,7 +71,10 @@ async def segment_depiction(
             )
         ).scalars()
     )
-    shown = await shown_structure(paper, segment, curation, predictions, engine)
+    # A structure frozen with an inherited decision is not drawn (api.read: it holds only while
+    # the structure is a hidden repeat, whose card is the main one's).
+    inherited = await db.get(InheritedStatus, segment.id) is not None
+    shown = await shown_structure(paper, segment, curation, predictions, engine, not inherited)
     template = orientation_templates(segment, predictions)
     # End the read-only transaction (and free its connection): a miss may wait up to WAIT_S
     # on the tools worker. commit, not rollback: a rollback would expire `owner`.
@@ -112,10 +115,21 @@ async def put_curation(
     segment_id: uuid.UUID,
     body: CurationIn,
     decision: bool = False,
+    shown_prediction_id: uuid.UUID | None = None,
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> CurationOut:
     segment, paper = await get_owned_segment(db, owner, segment_id, with_labels=True)
+    # ?shown_prediction_id=: the prediction the card showed, frozen with a decision on it
+    # (marcus.api.decisions); it must be this segment's own.
+    if shown_prediction_id is not None and await db.scalar(
+        select(Prediction.segment_id).where(Prediction.id == shown_prediction_id)
+    ) != segment.id:
+        raise HTTPException(
+            status_code=422,
+            detail=[{"type": "value_error", "loc": ["query", "shown_prediction_id"],
+                     "msg": "not a prediction of this segment"}],
+        )  # fmt: skip
     named = named_on(paper.rgroup_text_labels, segment.page)
     rgroups: list[str] | None = None  # no structure of its own: nothing to label
     if body.smiles is not None or body.molfile is not None:
@@ -138,6 +152,10 @@ async def put_curation(
         curation.status = body.status
     curation.smiles = body.smiles
     curation.molfile = body.molfile
+    if body.smiles is not None or body.molfile is not None:
+        # a structure of its own: no prediction stays decided on (marcus.api.decisions), so
+        # clearing the structure later brings back the default pick, not an old frozen one
+        curation.shown_prediction_id = None
     curation.note = body.note
     curation.rgroups = rgroups
     curation.updated_at = datetime.now(UTC)
@@ -145,7 +163,8 @@ async def put_curation(
     # edit that keeps it); on a main-figure structure it goes to its repeats.
     if decision:
         try:
-            await record_decisions(db, paper, {segment.id: body.status})
+            shown = {segment.id: shown_prediction_id} if shown_prediction_id else None
+            await record_decisions(db, paper, {segment.id: body.status}, shown)
         except HTTPException:
             await db.rollback()
             raise

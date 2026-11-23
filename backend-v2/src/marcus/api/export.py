@@ -1,8 +1,9 @@
 """Paper export: pick one structure per segment, then write JSON, CSV or SDF.
 
 Choice per segment, in order: a curated SMILES/molfile (a SMILES is derived from a
-curated molfile when none was given); else the newest valid prediction
-of the paper's engine; else the newest valid prediction of any engine. Segments without any
+curated molfile when none was given); else the prediction the card shows
+(marcus.core.agreement.pick_prediction: the engines' majority, else the newest valid one of the
+paper's engine, else of any engine). Segments without any
 structure are left out; rejected ones too, unless `include_rejected`.
 
 A structure with R-group placeholders (marcus.core.rgroups) stands for several compounds. It is
@@ -42,7 +43,8 @@ from typing import Literal
 from rdkit import Chem
 
 from marcus.api.chem import mol_for_sdf, smiles_from_molfile
-from marcus.api.read import named_on, pick_prediction
+from marcus.api.read import named_on
+from marcus.core.agreement import pick_prediction
 from marcus.core.main_figure import chosen_member, effective_statuses, group_status, groups_of
 from marcus.core.models import Curation, Paper, Prediction, Segment
 from marcus.core.rgroup_labels import shown_labels
@@ -116,7 +118,9 @@ def choose(
             continue
         member = by_id[chosen_member(seg.id, repeats, status_of)]
         others = {by_id[m].page for m in members if m != member.id}
-        record = _record(paper, member, curations.get(member.id), predictions, rows_of)
+        record = _record(
+            paper, member, curations.get(member.id), predictions, rows_of, member.id in stale
+        )
         if record is not None:
             out.append(replace(record, status=status, also_on_pages=tuple(sorted(others))))
     return out
@@ -128,9 +132,11 @@ def _record(
     cur: Curation | None,
     predictions: dict[uuid.UUID, list[Prediction]],
     rows_of: dict[uuid.UUID, dict],
+    stale: bool = False,
 ) -> Chosen | None:
     """One segment's record with its own status (the curated structure, else pick_prediction);
-    None without a structure."""
+    None without a structure. `stale`: an inherited status that no longer holds, whose decided
+    structure does not hold either."""
     named = named_on(paper.rgroup_text_labels, seg.page)
     status: Status = "unchecked" if cur is None else cur.status  # type: ignore[assignment]
     row = {
@@ -140,8 +146,8 @@ def _record(
         "status": status,
         "note": cur.note if cur is not None else None,
     }
-    valid = [p for p in predictions.get(seg.id, []) if p.valid]
-    pick = pick_prediction(valid, paper.engine)
+    frozen = cur.shown_prediction_id if cur is not None and not stale else None
+    pick = pick_prediction(predictions.get(seg.id, []), paper.engine, frozen)
     if cur is not None and (cur.smiles or cur.molfile):
         labels = _labels(cur, named)
         return Chosen(

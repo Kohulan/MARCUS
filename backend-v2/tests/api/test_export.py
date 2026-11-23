@@ -386,7 +386,7 @@ async def test_scaffold_is_exported_flagged_not_as_a_finished_compound(app, asyn
     labelled at export time."""
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)  # its engine only: no majority
     s0, s1 = seeded.segment_ids
     later = datetime.now(UTC) + timedelta(seconds=10)
 
@@ -434,7 +434,7 @@ async def test_exports_name_the_labels_the_page_text_names(app, async_db_session
 
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice)
+    seeded = await seed_paper(db, alice, others=False)  # its engine only: no majority
     s0, _ = seeded.segment_ids
     later = datetime.now(UTC) + timedelta(seconds=10)
 
@@ -468,7 +468,7 @@ def test_a_prediction_without_labels_exports_no_rgroup_rows():
     seg = SimpleNamespace(id=uuid.uuid4(), page=0, idx=0)
     paper = SimpleNamespace(engine="molscribe", rgroup_text_labels=None)
     pred = SimpleNamespace(id=uuid.uuid4(), engine="molscribe", valid=True, smiles="COc1ccccc1",
-                           molfile=None, rgroups=[])  # fmt: skip
+                           molfile=None, rgroups=[], inchikey=None)  # fmt: skip
     rows = {pred.id: {"labels": ["OMe"], "rows": []}}
     (chosen,) = export.choose(paper, [seg], {}, {seg.id: [pred]}, rgroup_rows=rows)
     assert chosen.rgroups == () and chosen.rgroup_rows is None

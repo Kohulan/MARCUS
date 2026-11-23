@@ -11,6 +11,7 @@ import fakeredis.aioredis
 import pydantic
 import pytest
 import redis.asyncio as aioredis
+from sqlalchemy import select
 
 from marcus.api.deps import COOKIE_NAME
 from marcus.api.routes import events as events_route
@@ -140,7 +141,7 @@ async def test_snapshot_events_ping_and_cleanup(
     snap = parse_snapshot(await sse.chunk())
     assert snap == {
         "status": "processing",
-        "counts": {"steps_by_status": {"done": 5, "pending": 2}},
+        "counts": {"steps_by_status": {"done": 9, "pending": 2}},
     }
     assert subscribers(redis_server, channel) == 1
     # the open stream holds no database transaction (no pooled connection per listener)
@@ -217,8 +218,8 @@ async def test_state_complete_after_sse_disconnect(app, async_db_session, redis_
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["status"] == "done" and body["doi"] == "10.1/x"
-    assert body["counts"]["steps_by_status"] == {"done": 7}
-    assert [len(s["predictions"]) for s in body["segments"]] == [1, 1]
+    assert body["counts"]["steps_by_status"] == {"done": 11}
+    assert [len(s["predictions"]) for s in body["segments"]] == [3, 3]  # the three engines
     assert {p["smiles"] for s in body["segments"] for p in s["predictions"]} == {"c1ccccc1"}
 
 
@@ -322,6 +323,38 @@ async def test_stream_of_a_finished_paper_ends_after_snapshot(app, async_db_sess
     sse = SSE(app, f"/api/v2/papers/{seeded.paper_id}/events", token)
     assert (await sse.start())["status"] == 200
     assert parse_snapshot(await sse.chunk())["status"] == "done"
+    assert await sse.rest() == END_DONE
+
+
+async def test_a_done_paper_streams_until_its_background_engines_end(
+    app, async_db_session, redis_server
+):
+    """Done after its own engine, the paper's stream stays open while the other engines read
+    in the background (phase B item 3), then ends."""
+    from marcus.core.models import BackgroundStep
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+
+    def own_steps(s):
+        background = set(s.execute(select(BackgroundStep.step_id)).scalars())
+        for st in steps_of(s, seeded.paper_id, status="pending"):
+            if st.id not in background:
+                result = {"ocsr": ocsr_result(), "doi": {"doi": None}, "docling": {}}[st.kind]
+                finish(s, st, result)
+
+    await db.run_sync(own_steps)
+    await db.commit()
+    channel = paper_channel(seeded.paper_id)
+    sse = SSE(app, f"/api/v2/papers/{seeded.paper_id}/events", token)
+    assert (await sse.start())["status"] == 200
+    assert parse_snapshot(await sse.chunk())["status"] == "done"  # and no `end` yet
+    await db.run_sync(lambda s: finish_pending(s, seeded.paper_id))
+    await db.commit()
+    last = {"type": "step", "step_id": "z", "kind": "ocsr", "status": "done"}
+    fakeredis.FakeRedis(server=redis_server).publish(channel, json.dumps(last))
+    assert await sse.chunk() == f"data: {json.dumps(last)}\n\n"
     assert await sse.rest() == END_DONE
 
 
