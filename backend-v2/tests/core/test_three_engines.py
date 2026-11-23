@@ -280,5 +280,5 @@ def test_a_young_background_step_is_left_alone(db_session):
     s = db_session
     paper = segmented(s)
     s.commit()
-    watchdog_once(s, live_queues=lambda: set())
+    watchdog_once(s, live_queues=set)
     assert {st.status for st in steps(s, paper, "ocsr")} == {"pending"}
