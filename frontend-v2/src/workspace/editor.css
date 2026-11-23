@@ -220,6 +220,38 @@
   max-height: calc(100dvh - 220px);
 }
 
+/* The page view scrolls: the sheet is the page at the zoom (its width set inline), dragged or
+   scrolled to move. */
+.editor-src__view--page {
+  display: block;
+  overflow: auto;
+  cursor: grab;
+  overscroll-behavior: contain;
+}
+
+.editor-src__view--page:active {
+  cursor: grabbing;
+}
+
+.editor-src__view--page .editor-src__sheet {
+  max-width: none;
+  max-height: none;
+  margin: 0 auto;
+}
+
+.editor-src__view--page .editor-src__sheet[style] .editor-src__img {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: auto;
+  user-select: none;
+}
+
+.editor-src__bar .glass[aria-label^="Zoom"] {
+  min-width: 34px;
+  justify-content: center;
+}
+
 .editor-src__crop {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -239,6 +271,7 @@
 
 .editor-src__bar {
   display: flex;
+  gap: 8px;
   justify-content: center;
   padding: 10px 14px;
   border-top: 1px solid var(--line);
