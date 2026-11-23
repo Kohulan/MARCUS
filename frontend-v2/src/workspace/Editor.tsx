@@ -12,6 +12,7 @@ import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
 import { listenToFrame, postToFrame } from "./editorBridge";
+import { EditorSource, type EditorSourceInfo } from "./EditorSource";
 import "./editor.css";
 
 /** What a save hands to the caller. The SMILES field sends `molfile: null`. */
@@ -22,6 +23,8 @@ type EditorProps = {
   /** Rejects to keep the dialog open with "Save failed: <detail>". Resolves to close it. */
   onSave: (structure: EditorStructure) => Promise<void>;
   onClose: () => void;
+  /** What the left panel shows (the crop, its page); absent: no left panel. */
+  source?: EditorSourceInfo | undefined;
 };
 
 /**
@@ -57,7 +60,7 @@ export function editorLoad(initial: EditorStart, coords: boolean): EditorStart {
   return coords || !hasImagePositions(initial) ? initial : { smiles: initial.smiles, molfile: null };
 }
 
-export default function Editor({ initial, onSave, onClose }: EditorProps) {
+export default function Editor({ initial, onSave, onClose, source }: EditorProps) {
   const iframe = useRef<HTMLIFrameElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const [smiles, setSmiles] = useState(initial.smiles ?? "");
@@ -163,17 +166,8 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
     if (fieldChanged) void save({ smiles: fieldValue, molfile: null });
   };
 
-  return (
-    <Modal className="editor" labelledBy="editor-title" onClose={close} first={field}>
-      <header className="editor__head">
-        <h2 id="editor-title" className="editor__title">
-          Edit structure
-        </h2>
-        <GlassButton tint="clear" size="sm" disabled={saving} onClick={close}>
-          Close
-        </GlassButton>
-      </header>
-
+  const main = (
+    <>
       <form className="editor__smiles" onSubmit={submit}>
         <label className="mono-label editor__label" htmlFor="editor-smiles">
           SMILES
@@ -229,6 +223,33 @@ export default function Editor({ initial, onSave, onClose }: EditorProps) {
           sandbox="allow-scripts allow-same-origin"
         />
       </div>
+    </>
+  );
+
+  return (
+    <Modal
+      className={source ? "editor editor--split" : "editor"}
+      labelledBy="editor-title"
+      onClose={close}
+      first={field}
+    >
+      <header className="editor__head">
+        <h2 id="editor-title" className="editor__title">
+          Edit structure
+        </h2>
+        <GlassButton tint="clear" size="sm" disabled={saving} onClick={close}>
+          Close
+        </GlassButton>
+      </header>
+
+      {source ? (
+        <div className="editor__body">
+          <EditorSource source={source} />
+          <div className="editor__main">{main}</div>
+        </div>
+      ) : (
+        main
+      )}
     </Modal>
   );
 }

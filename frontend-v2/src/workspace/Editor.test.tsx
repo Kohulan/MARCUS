@@ -425,6 +425,32 @@ describe("editorChange", () => {
   });
 });
 
+describe("source panel", () => {
+  const source = {
+    image: "/api/segments/s1/image",
+    page: { url: "/api/papers/p1/pages/0/image", bbox: [0, 0, 10, 10] as [number, number, number, number], page0: 0 },
+  };
+
+  it("shows the crop beside the editor; Escape still closes from the page view", () => {
+    const onClose = vi.fn();
+    render(
+      <Editor initial={{ smiles: "C", molfile: null }} source={source} onSave={async () => {}} onClose={onClose} />,
+    );
+    expect(screen.getByRole("img", { name: "Crop the engines read" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Find on paper" }));
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toHaveFocus();
+    fireEvent.keyDown(back, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("without a source the dialog is as before: no image", () => {
+    renderEditor();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.getByRole("dialog")).not.toHaveClass("editor--split");
+  });
+});
+
 describe("hasImagePositions / editorLoad", () => {
   it("only a molfile with the image's positions counts", () => {
     expect(hasImagePositions({ molfile: null })).toBe(false);
