@@ -184,6 +184,7 @@
 }
 
 .editor-src {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -239,17 +240,63 @@
   margin: 0 auto;
 }
 
-.editor-src__view--page .editor-src__sheet[style] .editor-src__img {
+.editor-src__sheet--sized .editor-src__img {
   width: 100%;
-  max-width: none;
   max-height: none;
-  height: auto;
   user-select: none;
 }
 
 .editor-src__bar .glass[aria-label^="Zoom"] {
   min-width: 34px;
   justify-content: center;
+}
+
+/* The zoom hint: rises in slowly above the zoom buttons, fades out by itself; the end of
+   editor-hint-out removes it (EditorSource). */
+.editor-src__hint {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+  box-shadow: var(--lift-menu);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation:
+    editor-hint-in 1.2s var(--ease) 0.6s both,
+    editor-hint-out 1s ease-in 5.8s forwards;
+}
+
+@keyframes editor-hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes editor-hint-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* No rise: both animations end at once (still ending, so the hint is removed). */
+@media (prefers-reduced-motion: reduce) {
+  .editor-src__hint {
+    animation-duration: 0.01s;
+  }
 }
 
 .editor-src__crop {
