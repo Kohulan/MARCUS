@@ -253,6 +253,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
         <p className="fm-bar__where">
           <span className="fm-bar__tag">{`${tag} · Page ${segment.page + 1}`}</span>
           <span className="fm-bar__of">{`${index + 1} of ${rows.length}`}</span>
+          {row?.alsoOn && <span className="fm-bar__of">{row.alsoOn}</span>}
         </p>
         <StateBadge state={state} />
         <p className="fm-bar__left" role="status">
@@ -452,11 +453,12 @@ function FocusPage({
   const natural = size !== null && size.src === src ? size : null;
   const [x0, y0, x1, y1] = segment.bbox;
 
+  // A repeat of a main-figure structure carries that one's tag and opens it (it has no row).
   const onPage = useMemo(() => {
     const byId = new Map(rows.map((r) => [r.segmentId, r]));
     return segments
       .filter((s) => s.page === segment.page)
-      .map((s) => ({ segment: s, row: byId.get(s.id) }));
+      .map((s) => ({ segment: s, target: s.repeat_of ?? s.id, row: byId.get(s.repeat_of ?? s.id) }));
   }, [segments, rows, segment.page]);
 
   const box = (s: SegmentOut) => boxStyle(s.bbox, natural!.w, natural!.h);
@@ -480,7 +482,7 @@ function FocusPage({
           }
         />
         {natural &&
-          onPage.map(({ segment: s, row }) => {
+          onPage.map(({ segment: s, target, row }) => {
             const current = s.id === segment.id;
             const state = row?.state ?? "to-check";
             const t = structureTag(row?.n ?? 0);
@@ -497,7 +499,7 @@ function FocusPage({
                 style={box(s)}
                 data-testid={`marker-${s.id}`}
                 aria-label={`Open ${t}`}
-                onClick={() => onPick(s.id)}
+                onClick={() => onPick(target)}
               >
                 <span className="fm-marker__tag" aria-hidden="true">
                   {t}

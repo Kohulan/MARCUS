@@ -16,6 +16,7 @@ import type {
   ExportStatus,
   ImageJobList,
   ImageJobOut,
+  MainFigureOut,
   McsReply,
   OcsrMode,
   PaperDetail,
@@ -263,6 +264,9 @@ export const api = {
   putBulkCuration: (paperId: string, items: BulkCurationItem[]) =>
     sendJson<BulkCurationOut>("PUT", `/papers/${enc(paperId)}/curation`, { items }),
   /** `page0` is the 0-based API page. */
+  /** Marks a page (0-based) as the paper's main figure; null clears the mark. */
+  putMainFigure: (paperId: string, page0: number | null) =>
+    sendJson<MainFigureOut>("PUT", `/papers/${enc(paperId)}/main-figure`, { page: page0 }),
   retryPage: (paperId: string, page0: number) =>
     request<StepAccepted>(`/papers/${enc(paperId)}/pages/${page0}/retry`, { method: "POST" }),
   getQueue: (opts?: ReadOpts) => get<QueueOut>("/queue", opts),
@@ -296,9 +300,18 @@ export const api = {
     sendJson<RgroupStarted>("POST", `/predictions/${enc(predictionId)}/rgroups`, { rerun }),
 
   // segments
-  /** Only through useSaveCuration (curationBody builds the full record). */
-  putCuration: (segmentId: string, body: CurationIn) =>
-    sendJson<CurationOut>("PUT", `/segments/${enc(segmentId)}/curation`, body, SAVE_TIMEOUT_MS),
+  /**
+   * Only through useSaveCuration (curationBody builds the full record). `decision`: the status
+   * is a decision made now, not kept by a note or structure edit (the server gives a
+   * main-figure structure's decision to its repeats too).
+   */
+  putCuration: (segmentId: string, body: CurationIn, decision = false) =>
+    sendJson<CurationOut>(
+      "PUT",
+      `/segments/${enc(segmentId)}/curation${decision ? "?decision=true" : ""}`,
+      body,
+      SAVE_TIMEOUT_MS,
+    ),
   runPrediction: (segmentId: string, engine: Engine) =>
     sendJson<StepAccepted>("POST", `/segments/${enc(segmentId)}/predictions`, { engine }),
   segmentImageUrl: (id: string) => `${BASE}/segments/${enc(id)}/image`,

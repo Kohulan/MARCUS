@@ -1,13 +1,18 @@
 """Read helpers shared by the route modules (routes never import each other)."""
 
+import hashlib
+import logging
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from typing import NamedTuple, TypeVar
 
-from sqlalchemy import and_, exists, func, or_, select
+from fastapi import HTTPException
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from marcus.api.chem import inchikeys
+from marcus.api.chempool import CHEM
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
 from marcus.core.enums import (
     FINISHED_STEPS,
@@ -15,9 +20,20 @@ from marcus.core.enums import (
     StepKind,
     StepStatus,
 )
-from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.main_figure import CountFix, Entry, count_fix, link_repeats, stale_members
+from marcus.core.models import (
+    Curation,
+    InheritedStatus,
+    MainFigure,
+    Paper,
+    Prediction,
+    Segment,
+    Step,
+)
 from marcus.core.pipeline import ACTIVE, PAGE_KINDS, in_paper_progress, page_step_order
 from marcus.core.rgroup_labels import shown_labels
+
+log = logging.getLogger(__name__)
 
 IMAGE_HEADERS = {"Cache-Control": "private, max-age=3600"}
 
@@ -73,11 +89,16 @@ def _failed_structure():
 
 
 async def paper_counts(
-    db: AsyncSession, paper_ids: list[uuid.UUID]
+    db: AsyncSession, paper_ids: list[uuid.UUID], fix: CountFix | None = None
 ) -> dict[uuid.UUID, PaperCounts]:
     """Structure, failure and progress counts per paper: two queries, whatever the number of
     papers (one over the segments, one over the steps).
 
+    `fix`: the linked groups of main-figure structures and their repeats (list_count_fix,
+    segments_out) count once, under the group's status (core.main_figure.group_status), as the
+    workspace shows them: repeats are not counted, a main with an accepted repeat counts as
+    accepted, a rejected main with a repeat not rejected as to review; an inherited status that
+    no longer holds (stale) as to review.
     structures = segments; accepted / rejected = curations with that status; failed = the
     undecided ones whose read failed (_failed_structure); to_review = the rest (every segment
     has a curation row). failed_pages = distinct pages whose newest
@@ -87,17 +108,33 @@ async def paper_counts(
     The progress fields are PaperCounts'."""
     if not paper_ids:
         return {}
+    fix = fix or CountFix()
+    accepted = Curation.status == "accepted"
+    rejected = Curation.status == "rejected"
+    failed = _failed_structure()
+    if fix.stale:  # an inherited status that no longer holds: to review
+        accepted = and_(accepted, Segment.id.not_in(fix.stale))
+        rejected = and_(rejected, Segment.id.not_in(fix.stale))
+    if fix.promote:
+        accepted = or_(accepted, Segment.id.in_(fix.promote))
+        rejected = and_(rejected, Segment.id.not_in(fix.promote))
+        failed = and_(failed, Segment.id.not_in(fix.promote))
+    if fix.unreject:
+        rejected = and_(rejected, Segment.id.not_in(fix.unreject))
     seg_rows = await db.execute(
         select(
             Segment.paper_id,
             func.count(),
-            func.count().filter(Curation.status == "accepted"),
-            func.count().filter(Curation.status == "rejected"),
-            func.count().filter(_failed_structure()),
+            func.count().filter(accepted),
+            func.count().filter(rejected),
+            func.count().filter(failed),
         )
         .select_from(Segment)
         .outerjoin(Curation, Curation.segment_id == Segment.id)
-        .where(Segment.paper_id.in_(paper_ids))
+        .where(
+            Segment.paper_id.in_(paper_ids),
+            *([Segment.id.not_in(fix.hidden)] if fix.hidden else []),
+        )
         .group_by(Segment.paper_id)
     )
     progress = {row.paper_id: row for row in (await db.execute(_step_counts(paper_ids))).all()}
@@ -281,21 +318,258 @@ def structure_out(model: type[_Structure], row: object, named: list[str] | None)
     return out
 
 
-async def segments_out(db: AsyncSession, paper: Paper) -> list[SegmentOut]:
-    """The paper's segments; each structure shows the R-group labels its page's text names."""
+def pick_prediction(valid: list[Prediction], paper_engine: str) -> Prediction | None:
+    """The prediction shown and exported when nothing is curated: of `valid` (newest first),
+    the newest of the paper's engine, else the newest of any engine. The one rule; the stored
+    depiction (api.depiction.shown_structure) and the UI (cardState shownPrediction) agree."""
+    return next((p for p in valid if p.engine == paper_engine), None) or next(iter(valid), None)
+
+
+def shown_source(
+    paper_engine: str, curation: Curation | None, predictions: list[Prediction]
+) -> tuple[str, str] | None:
+    """("smiles" | "molfile", value) of the structure a segment shows, as the export picks it
+    (curated, else pick_prediction), whatever its status; None without one, and for an R-group
+    scaffold (it stands for several compounds). `predictions`: the segment's, newest first.
+    Rows with only the columns read here do as well (_load_light). The one pick the linking
+    uses: a new default pick plugs in here."""
+    if curation is not None and (curation.smiles or curation.molfile):
+        if curation.rgroups:
+            return None
+        return ("smiles", curation.smiles) if curation.smiles else ("molfile", curation.molfile)
+    pick = pick_prediction([p for p in predictions if p.valid], paper_engine)
+    if pick is None or not pick.smiles or pick.rgroups:
+        return None
+    return "smiles", pick.smiles
+
+
+# InChIKeys already computed, per (kind, sha256 of the value): a paper's live refreshes ask the
+# chem process only for structures it has not seen. Bounded, oldest out first.
+_KEYS: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+KEY_CACHE_MAX = 20_000
+# Structures per chem-process trip: each trip stays well inside chempool.TIMEOUT_S, and its keys
+# are cached at once, so a cold cache fills over a few reads even when one trip fails.
+CHEM_CHUNK = 200
+
+
+def _remember(name: tuple[str, str], key: str | None) -> None:
+    _KEYS[name] = key
+    _KEYS.move_to_end(name)
+    while len(_KEYS) > KEY_CACHE_MAX:
+        _KEYS.popitem(last=False)
+
+
+async def _known_keys(items: list[tuple[str, str]]) -> dict[tuple[str, str], str | None]:
+    """InChIKey per (kind, value) of `items` that is known: cached, or computed now in trips of
+    CHEM_CHUNK structures. Stops at the first trip the chem process cannot take (busy, timeout):
+    the items not computed by then are missing from the answer (what was computed is cached)."""
+    known: dict[tuple[str, str], str | None] = {}
+    todo: dict[tuple[str, str], tuple[str, str]] = {}
+    for item in items:
+        name = (item[0], hashlib.sha256(item[1].encode()).hexdigest())
+        if name in _KEYS:
+            known[item] = _KEYS[name]
+            _KEYS.move_to_end(name)
+        else:
+            todo.setdefault(name, item)
+    pending = list(todo.items())
+    for start in range(0, len(pending), CHEM_CHUNK):
+        chunk = pending[start : start + CHEM_CHUNK]
+        try:
+            keys = await CHEM.run(inchikeys, [item for _, item in chunk])
+        except HTTPException:
+            log.warning("inchikeys: chem process busy, %d left", len(pending) - start)
+            break
+        for (name, item), key in zip(chunk, keys, strict=True):
+            _remember(name, key)
+            known[item] = key
+    return known
+
+
+async def main_figure_page(db: AsyncSession, paper_id: uuid.UUID) -> int | None:
+    """The page (0-based) marked as the paper's main figure; None: none."""
+    return await db.scalar(select(MainFigure.page).where(MainFigure.paper_id == paper_id))
+
+
+async def repeat_links(
+    paper: Paper,
+    main_page: int | None,
+    segments: list[Segment],
+    curations: dict[uuid.UUID, Curation],
+    predictions: dict[uuid.UUID, list[Prediction]],
+    strict: bool = False,
+    known: dict[tuple[str, str], str | None] | None = None,
+) -> dict[uuid.UUID, uuid.UUID] | None:
+    """repeat segment id -> its main-figure segment id (marcus.core.main_figure); empty
+    without a main figure (`main_page` None). `segments` in (page, idx) order; `known`: keys
+    already asked for (_known_keys), else asked for here. A key missing (the chem process
+    busy): 503 if `strict` (an export must not count a compound twice), else None (a read: the
+    links are not ready)."""
+    if main_page is None:
+        return {}
+    sources = [
+        shown_source(paper.engine, curations.get(s.id), predictions.get(s.id, [])) for s in segments
+    ]
+    needed = [src for src in sources if src is not None]
+    if known is None:
+        known = await _known_keys(needed)
+    if any(src not in known for src in needed):
+        if strict:
+            raise HTTPException(status_code=503, detail="busy, try again")
+        return None
+    entries = [
+        # compound_id: phase B item 4 (the ID printed by the drawing) fills it; not read yet.
+        Entry(s.id, s.page, known[src] if src is not None else None)
+        for s, src in zip(segments, sources, strict=True)
+    ]
+    return link_repeats(entries, main_page)
+
+
+def _statuses(curations: dict) -> dict[uuid.UUID, str | None]:
+    return {sid: c.status for sid, c in curations.items()}
+
+
+async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
+    """load_segments for several papers, with only the columns the linking reads (shown_source,
+    repeat_links, the statuses): no bbox, no prediction molfile, a curated molfile only where
+    the curation has no SMILES. Segments in (paper, page, idx) order."""
+    of_papers = Segment.paper_id.in_(paper_ids)
+    segments = (
+        await db.execute(
+            select(Segment.id, Segment.paper_id, Segment.page, Segment.idx)
+            .where(of_papers)
+            .order_by(Segment.paper_id, Segment.page, Segment.idx)
+        )
+    ).all()
+    curations = {
+        c.segment_id: c
+        for c in (
+            await db.execute(
+                select(
+                    Curation.segment_id,
+                    Curation.status,
+                    Curation.smiles,
+                    case((Curation.smiles.is_(None), Curation.molfile)).label("molfile"),
+                    Curation.rgroups,
+                )
+                .join(Segment, Segment.id == Curation.segment_id)
+                .where(of_papers)
+            )
+        ).all()
+    }
+    predictions: dict[uuid.UUID, list] = defaultdict(list)
+    for p in (
+        await db.execute(
+            select(
+                Prediction.segment_id,
+                Prediction.engine,
+                Prediction.smiles,
+                Prediction.valid,
+                Prediction.rgroups,
+            )
+            .join(Segment, Segment.id == Prediction.segment_id)
+            .where(of_papers)
+            .order_by(Prediction.created_at.desc(), Prediction.id)
+        )
+    ).all():
+        predictions[p.segment_id].append(p)
+    return segments, curations, predictions
+
+
+async def inherited_of(
+    db: AsyncSession, paper_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, dict[uuid.UUID, uuid.UUID]]:
+    """Per paper: its structures with an inherited status -> the main structure it came from
+    (InheritedStatus). One query; papers without any are left out."""
+    rows = await db.execute(
+        select(Segment.paper_id, InheritedStatus.segment_id, InheritedStatus.main_id)
+        .join(Segment, Segment.id == InheritedStatus.segment_id)
+        .where(Segment.paper_id.in_(paper_ids))
+    )
+    out: dict[uuid.UUID, dict[uuid.UUID, uuid.UUID]] = defaultdict(dict)
+    for paper_id, segment_id, main_id in rows.all():
+        out[paper_id][segment_id] = main_id
+    return out
+
+
+async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
+    """How the paper list counts the linked groups of `papers` (core.main_figure.count_fix),
+    and their stale inherited statuses. Only papers with a main figure cost much: one query for
+    the main pages, one for the inherited statuses, three light ones for the marked papers'
+    segments (_load_light), chem trips only for structures not cached. A paper whose keys are
+    not all known (the chem process busy) counts as if it had no links, every inherited status
+    to review."""
+    if not papers:
+        return CountFix()
+    ids = [p.id for p in papers]
+    mains = dict(
+        (
+            await db.execute(
+                select(MainFigure.paper_id, MainFigure.page).where(MainFigure.paper_id.in_(ids))
+            )
+        ).all()
+    )
+    inherited = await inherited_of(db, ids)
+    fix = CountFix()
+    for pid, members in inherited.items():
+        if pid not in mains:  # no main figure: no group holds
+            fix |= CountFix(stale=stale_members(members, {}))
+    if not mains:
+        return fix
+    segments, curations, predictions = await _load_light(db, list(mains))
+    by_paper: dict[uuid.UUID, list] = defaultdict(list)
+    for seg in segments:
+        by_paper[seg.paper_id].append(seg)
+    marked = [p for p in papers if p.id in mains]
+    # One pass over every paper's structures (chunked trips); each paper then links from it.
+    known = await _known_keys(
+        [
+            src
+            for p in marked
+            for s in by_paper[p.id]
+            if (src := shown_source(p.engine, curations.get(s.id), predictions.get(s.id, [])))
+        ]
+    )
+    status_of = _statuses(curations)
+    for p in marked:
+        links = await repeat_links(
+            p, mains[p.id], by_paper[p.id], curations, predictions, known=known
+        )
+        stale = stale_members(inherited.get(p.id, {}), links)
+        fix |= CountFix(stale=stale) if links is None else count_fix(links, status_of, stale)
+    return fix
+
+
+async def segments_out(
+    db: AsyncSession, paper: Paper, main_page: int | None
+) -> tuple[list[SegmentOut], CountFix, bool]:
+    """The paper's segments; each structure shows the R-group labels its page's text names,
+    and a repeat of a main-figure structure (`main_page`: main_figure_page) names it
+    (repeat_links); an inherited status that no longer holds shows as unchecked. With them,
+    how paper_counts counts the linked groups, and whether the links could be computed (not:
+    the chem process busy; no repeat_of at all, every inherited status unchecked)."""
     segments, curations, predictions = await load_segments(db, paper.id)
     index = paper.rgroup_text_labels
-    return [
+    links = await repeat_links(paper, main_page, segments, curations, predictions)
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
+    stale = stale_members(inherited, links)
+    fix = CountFix(stale=stale) if links is None else count_fix(links, _statuses(curations), stale)
+    repeats = links or {}
+
+    def curation_out(seg: Segment) -> CurationOut:
+        out = structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
+        if seg.id in stale:
+            out.status = "unchecked"
+        return out
+
+    out = [
         SegmentOut(
             id=seg.id,
             page=seg.page,
             idx=seg.idx,
             bbox=list(seg.bbox),
-            curation=(
-                structure_out(CurationOut, curations[seg.id], named_on(index, seg.page))
-                if seg.id in curations
-                else None
-            ),
+            repeat_of=repeats.get(seg.id),
+            curation=curation_out(seg) if seg.id in curations else None,
             predictions=[
                 structure_out(PredictionOut, p, named_on(index, seg.page))
                 for p in predictions[seg.id]
@@ -303,6 +577,7 @@ async def segments_out(db: AsyncSession, paper: Paper) -> list[SegmentOut]:
         )
         for seg in segments
     ]
+    return out, fix, links is not None
 
 
 async def steps_out(db: AsyncSession, paper_id: uuid.UUID) -> list[StepOut]:

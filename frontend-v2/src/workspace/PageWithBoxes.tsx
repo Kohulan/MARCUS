@@ -9,6 +9,11 @@ import { rgroupTag } from "./rgroups";
 
 export type PageMarker = {
   segmentId: string;
+  /**
+   * The structure a click selects: the marker's own, or for a repeat of a main-figure
+   * structure, that structure (a repeat has no card of its own).
+   */
+  target: string;
   /** 1-based, in (page, idx) order: the `[nn]` tag. */
   n: number;
   state: CardState;
@@ -36,6 +41,10 @@ type Props = {
   hovered: string | null;
   onPick: (segmentId: string) => void;
   onHover: (segmentId: string | null) => void;
+  /** This page is the main figure (the paper's compound list). */
+  isMain: boolean;
+  /** Marks this page as the main figure, or clears the mark when it is; null: no button. */
+  onMark: ((page0: number) => void) | null;
 };
 
 /**
@@ -55,6 +64,8 @@ function PageWithBoxes({
   hovered,
   onPick,
   onHover,
+  isMain,
+  onMark,
 }: Props) {
   const label = `Page ${page0 + 1}`;
   // "Try again" after a failed load asks afresh (a new URL, so the browser loads it again).
@@ -72,7 +83,20 @@ function PageWithBoxes({
     <figure className="pv-page" data-page={page0}>
       <figcaption className="pv-page__cap">
         <span aria-hidden="true">+</span>
-        <span>{`${label} of ${pages}`}</span>
+        <span className="pv-page__name">
+          <span>{`${label} of ${pages}`}</span>
+          {onMark !== null && (
+            <button
+              type="button"
+              className="pv-page__main"
+              aria-pressed={isMain}
+              aria-label={`Main figure: ${label}`}
+              onClick={() => onMark(page0)}
+            >
+              Main figure
+            </button>
+          )}
+        </span>
         <span aria-hidden="true">+</span>
       </figcaption>
       {ready ? (
@@ -105,10 +129,10 @@ function PageWithBoxes({
                     (m.rgroups.length > 0 ? `, ${rgroupTag(m.rgroups)}` : "")
                   }
                   aria-current={m.segmentId === selected ? "true" : undefined}
-                  onClick={() => onPick(m.segmentId)}
-                  onMouseEnter={() => onHover(m.segmentId)}
+                  onClick={() => onPick(m.target)}
+                  onMouseEnter={() => onHover(m.target)}
                   onMouseLeave={() => onHover(null)}
-                  onFocus={() => onHover(m.segmentId)}
+                  onFocus={() => onHover(m.target)}
                   onBlur={() => onHover(null)}
                 >
                   <span className="pv-marker__tag" aria-hidden="true">

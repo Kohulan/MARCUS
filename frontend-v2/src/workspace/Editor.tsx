@@ -25,15 +25,16 @@ type EditorProps = {
 
 /**
  * The change a segment caller passes to `save(segmentId, …)`: the edited structure, and a
- * structure still to check becomes accepted (a curator who fixed it has checked it). Any
- * other status stays. No note key, so curationBody keeps the stored note.
+ * structure still to check becomes accepted (a curator who fixed it has checked it: a
+ * decision). Any other status stays, so the change has no status key (an edit that keeps the
+ * status is no decision: on a main-figure structure it must not reach the repeats). No note
+ * key, so curationBody keeps the stored note.
  */
 export function editorChange(
   current: CurationOut | null,
   structure: EditorStructure,
 ): CurationChange {
-  const status = !current || current.status === "unchecked" ? "accepted" : current.status;
-  return { status, structure };
+  return !current || current.status === "unchecked" ? { status: "accepted", structure } : { structure };
 }
 
 export default function Editor({ initial, onSave, onClose }: EditorProps) {

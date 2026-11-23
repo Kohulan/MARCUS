@@ -117,6 +117,11 @@ export interface SegmentOut {
   bbox: [number, number, number, number];
   curation: CurationOut | null;
   predictions: PredictionOut[];
+  /**
+   * The main-figure structure this one repeats (the same compound on another page: same
+   * InChIKey). Null or absent for every other structure, and without a main figure.
+   */
+  repeat_of?: string | null;
 }
 
 export interface SegmentList {
@@ -144,6 +149,13 @@ export interface StepList {
 }
 
 export interface PaperDetail extends PaperSummary {
+  /** The page (0-based) marked as the main figure, the paper's compound list; null: none. */
+  main_figure_page?: number | null;
+  /**
+   * False when the server could not link the main figure's repeats this time (busy): no
+   * segment has repeat_of, so nothing may go to COCONUT until a read says true. Absent: true.
+   */
+  links_ready?: boolean;
   counts: Counts;
   segments: SegmentOut[];
 }
@@ -157,6 +169,10 @@ export interface BulkCurationItem {
   segment_id: string;
   status: CurationStatus;
   note?: string | null;
+}
+
+export interface MainFigureOut {
+  main_figure_page: number | null;
 }
 
 export interface BulkCurationOut {

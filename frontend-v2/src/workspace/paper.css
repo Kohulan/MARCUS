@@ -128,6 +128,36 @@
   color: var(--ink);
 }
 
+.pv-page__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The page's "Main figure" mark: quiet until pressed, then inked. */
+.pv-page__main {
+  padding: 1px 6px;
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pv-page__main:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.pv-page__main[aria-pressed="true"] {
+  border-color: var(--ink);
+  background-color: var(--ink);
+  color: var(--surface);
+}
+
 .pv-page__sheet {
   position: relative;
   border: 1px solid var(--hair);

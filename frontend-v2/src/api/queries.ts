@@ -167,8 +167,15 @@ export function usePapers() {
   });
 }
 
+/** While the server could not link a paper's repeats (links_ready false), it is read again. */
+export const LINKS_POLL_MS = 5000;
+
 export function usePaper(id: string) {
-  return useQuery({ queryKey: keys.paper(id), queryFn: paperFn(id) });
+  return useQuery({
+    queryKey: keys.paper(id),
+    queryFn: paperFn(id),
+    refetchInterval: (query) => (query.state.data?.links_ready === false ? LINKS_POLL_MS : false),
+  });
 }
 
 function paperFn(id: string) {
@@ -256,6 +263,23 @@ async function currentCuration(
 // The workspace counts from its rows and the tool home reads GET /papers, so the cached
 // paper's own counts are never patched here: only segments change.
 
+/**
+ * The repeats of a main-figure structure in the cached paper, with their statuses now (null:
+ * no curation); null when it has none. A decision on the structure goes to them.
+ */
+function groupStatuses(
+  client: QueryClient,
+  key: readonly unknown[],
+  segmentId: string,
+): Map<string, BulkStatus | null> | null {
+  const repeats = (client.getQueryData<PaperDetail>(key)?.segments ?? []).filter(
+    (s) => s.repeat_of === segmentId,
+  );
+  return repeats.length > 0
+    ? new Map(repeats.map((s) => [s.id, s.curation?.status ?? null]))
+    : null;
+}
+
 /** The paper with one segment's curation replaced (no refetch). */
 function withCuration(
   paper: PaperDetail,
@@ -306,11 +330,23 @@ export function useSaveCuration(paperId: string): {
           // drawing key would change at once, and the drawing asked for under it would be the
           // one still stored (the server draws what it has committed).
           const optimistic = change.structure === undefined;
+          // A decision on a main-figure structure goes to its repeats (the server writes it):
+          // shown on them at once, taken back with the save.
+          // A decision: a status given on its own (a button, a key), or one that changes the
+          // stored status with an edit. An edit that keeps the status is none.
+          const decision =
+            change.status !== undefined &&
+            (change.structure === undefined || change.status !== (before?.status ?? "unchecked"));
+          const group = decision ? groupStatuses(client, key, segmentId) : null;
+          const setGroup = (statuses: Map<string, BulkStatus | null>) =>
+            client.setQueryData<PaperDetail>(key, (old) => (old ? withStatuses(old, statuses) : old));
           const cancelled = optimistic ? await write(body) : false;
+          if (group) setGroup(new Map([...group.keys()].map((id) => [id, body.status])));
           let out: CurationOut;
           try {
-            out = await api.putCuration(segmentId, body);
+            out = await api.putCuration(segmentId, body, decision);
           } catch (err) {
+            if (group) setGroup(group);
             if ((optimistic && (await write(before))) || cancelled) {
               void client.invalidateQueries({ queryKey: key });
             }
@@ -320,7 +356,14 @@ export function useSaveCuration(paperId: string): {
             if (!(err instanceof ApiError) || err.status >= 500) refreshPaper(client, paperId);
             throw err;
           }
-          if ((await write(out)) || cancelled) void client.invalidateQueries({ queryKey: key });
+          // A new structure can make or end a repeat of the main figure (the server links
+          // them): fetch the paper again when it has one.
+          const relink =
+            change.structure !== undefined &&
+            client.getQueryData<PaperDetail>(key)?.main_figure_page != null;
+          if ((await write(out)) || cancelled || relink || group) {
+            void client.invalidateQueries({ queryKey: key });
+          }
           return out;
         });
       map.set(segmentId, run);
@@ -401,14 +444,26 @@ export function useBulkCuration(paperId: string): {
       const ids = items.map((i) => i.segment_id);
       const wanted = new Set(ids);
       const cached = client.getQueryData<PaperDetail>(key);
+      // A decision on a main-figure structure goes to its repeats (the server writes it; one
+      // decided in the same call keeps its own): shown on them at once, as the items are.
+      const repeatsOf = new Map<string, string[]>();
+      for (const s of cached?.segments ?? []) {
+        if (!s.repeat_of || !wanted.has(s.repeat_of) || wanted.has(s.id)) continue;
+        repeatsOf.set(s.repeat_of, [...(repeatsOf.get(s.repeat_of) ?? []), s.id]);
+      }
+      const touched = new Set([...ids, ...[...repeatsOf.values()].flat()]);
       const before = new Map<string, BulkStatus | null>(
         (cached?.segments ?? [])
-          .filter((s) => wanted.has(s.id))
+          .filter((s) => touched.has(s.id))
           .map((s) => [s.id, s.curation?.status ?? null]),
       );
       const apply = (list: BulkCurationItem[], undo: boolean) => {
         const statuses = new Map(
-          list.map((i) => [i.segment_id, undo ? (before.get(i.segment_id) ?? null) : i.status]),
+          list.flatMap((i) =>
+            [i.segment_id, ...(repeatsOf.get(i.segment_id) ?? [])].map(
+              (id) => [id, undo ? (before.get(id) ?? null) : i.status] as const,
+            ),
+          ),
         );
         client.setQueryData<PaperDetail>(key, (old) => (old ? withStatuses(old, statuses) : old));
       };
@@ -447,4 +502,32 @@ export function useBulkCuration(paperId: string): {
     [client, paperId],
   );
   return { bulk };
+}
+
+/**
+ * `mark(page0)`: marks a page as the paper's main figure (null clears it). The page changes in
+ * the cache at once (the order follows); the repeat links stay as they were until the fetch
+ * that follows brings the server's (dropping them early could let a compound be sent twice). A
+ * failure puts the old page back and rejects.
+ */
+export function useMainFigure(paperId: string): { mark: (page0: number | null) => Promise<void> } {
+  const client = useQueryClient();
+  const mark = useCallback(
+    async (page0: number | null): Promise<void> => {
+      const key = keys.paper(paperId);
+      await client.cancelQueries({ queryKey: key });
+      const old = client.getQueryData<PaperDetail>(key);
+      client.setQueryData<PaperDetail>(key, (p) => (p ? { ...p, main_figure_page: page0 } : p));
+      try {
+        await api.putMainFigure(paperId, page0);
+      } catch (err) {
+        if (old) client.setQueryData<PaperDetail>(key, old);
+        throw err;
+      } finally {
+        void client.invalidateQueries({ queryKey: key });
+      }
+    },
+    [client, paperId],
+  );
+  return { mark };
 }

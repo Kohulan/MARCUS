@@ -1096,3 +1096,154 @@ describe("Paper view: annotation", () => {
     expect(within(p).queryByText("Annotating…", { selector: "span" })).toBeNull();
   });
 });
+
+describe("Paper view: the main figure", () => {
+  it("marks a page with structures as the main figure from its caption; again clears it", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 1 })];
+    const put = vi.spyOn(api, "putMainFigure").mockResolvedValue({ main_figure_page: 1 });
+    renderAt(paper(segs));
+    const pages = await screen.findByRole("region", { name: "Pages" });
+    const mark = await within(pages).findByRole("button", { name: "Main figure: Page 2" });
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+    // a page without structures has no button
+    expect(within(pages).queryByRole("button", { name: "Main figure: Page 3" })).toBeNull();
+
+    vi.mocked(api.getPaper).mockResolvedValue(paper(segs, { main_figure_page: 1 }));
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenCalledWith(ID, 1));
+    await waitFor(() => expect(mark).toHaveAttribute("aria-pressed", "true"));
+
+    put.mockResolvedValue({ main_figure_page: null });
+    vi.mocked(api.getPaper).mockResolvedValue(paper(segs, { main_figure_page: null }));
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenLastCalledWith(ID, null));
+    await waitFor(() => expect(mark).toHaveAttribute("aria-pressed", "false"));
+  });
+
+  it("a mark that is not saved goes back and says why", async () => {
+    vi.spyOn(api, "putMainFigure").mockRejectedValue(new ApiError(503, "The server is busy."));
+    renderAt(paper([segment("s1", { page: 0 })]));
+    const mark = await screen.findByRole("button", { name: "Main figure: Page 1" });
+    fireEvent.click(mark);
+    expect(await screen.findByText("Not saved: The server is busy.")).toBeInTheDocument();
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("lists the main figure first and a repeat once, on its main card", async () => {
+    renderAt(
+      paper(
+        [
+          segment("s1", { page: 0 }),
+          segment("s2", { page: 1 }),
+          segment("s3", { page: 2, repeat_of: "s2" }), // s2's compound again
+        ],
+        { main_figure_page: 1 },
+      ),
+    );
+    const list = await screen.findByRole("region", { name: "Structures" });
+    const cards = await within(list).findAllByRole("article");
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual([
+      "[01] · Page 2, To check",
+      "[02] · Page 1, To check",
+    ]);
+    expect(within(cards[0]!).getByText("Also on page 3")).toBeInTheDocument();
+    expect(within(cards[1]!).queryByText(/Also on/)).toBeNull();
+    expect(screen.getByRole("list", { name: "Counts" })).toHaveTextContent("2 structures");
+
+    // the repeat's marker carries its main structure's tag and selects that card
+    await loadPage(3);
+    fireEvent.click(screen.getByRole("button", { name: "Structure [01] on page 3" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("s=s2");
+  });
+});
+
+describe("Paper view: a main structure and its repeats", () => {
+  const accepted = { status: "accepted" as const, smiles: null, molfile: null, note: null };
+
+  it("an accepted repeat makes its main card accepted, and COCONUT gets the compound once", async () => {
+    renderAt(
+      paper(
+        [
+          segment("s1", { page: 0 }),
+          segment("s2", { page: 2, repeat_of: "s1", curation: accepted }),
+        ],
+        { main_figure_page: 0 },
+      ),
+    );
+    const list = await screen.findByRole("region", { name: "Structures" });
+    expect(await within(list).findAllByRole("article")).toHaveLength(1);
+    expect(card("[01]")).toHaveAttribute("aria-label", "[01] · Page 1, Accepted");
+    expect(screen.getByRole("button", { name: "Send 1 to COCONUT" })).toBeEnabled();
+  });
+
+  it("Reject on a main card is a decision for its group: the card shows Rejected at once", async () => {
+    const put = vi
+      .spyOn(api, "putCuration")
+      .mockImplementation(() => new Promise<never>(() => undefined)); // still on the wire
+    renderAt(
+      paper([segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })], {
+        main_figure_page: 0,
+      }),
+      { search: "" },
+    );
+    await screen.findByRole("button", { name: "Reject [01]" });
+    fireEvent.click(screen.getByRole("button", { name: "Reject [01]" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0]![0]).toBe("s1");
+    expect(put.mock.calls[0]![2]).toBe(true);
+    // without the repeat shown rejected too, the group would still be to check
+    await waitFor(() =>
+      expect(card("[01]")).toHaveAttribute("aria-label", "[01] · Page 1, Rejected"),
+    );
+  });
+
+  it("while the server could not link the repeats, nothing goes to COCONUT", async () => {
+    renderAt(
+      paper([segment("s1", { page: 0, curation: accepted })], {
+        main_figure_page: 0,
+        links_ready: false,
+      }),
+    );
+    const send = await screen.findByRole("button", { name: "Send 0 to COCONUT" });
+    expect(send).toBeDisabled();
+    expect(screen.getByText("Checking repeats, try again soon")).toBeInTheDocument();
+  });
+
+  it("clicking a repeat's marker selects its main card and leaves the pages column where it was", async () => {
+    renderAt(
+      paper([segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })], {
+        main_figure_page: 0,
+      }),
+    );
+    await loadPage(3);
+    const pages = screen.getByRole("region", { name: "Pages" });
+    const scrolled = vi.fn();
+    pages.scrollTo = scrolled as unknown as typeof pages.scrollTo;
+    fireEvent.click(screen.getByRole("button", { name: "Structure [01] on page 3" }));
+    expect(screen.getByTestId("where")).toHaveTextContent("s=s1");
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it("a marked page without structures keeps its button, so the mark can be cleared", async () => {
+    const put = vi.spyOn(api, "putMainFigure").mockResolvedValue({ main_figure_page: null });
+    renderAt(paper([segment("s1", { page: 0 })], { main_figure_page: 2 }));
+    const mark = await screen.findByRole("button", { name: "Main figure: Page 3" });
+    expect(mark).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Main figure: Page 2" })).toBeNull();
+    fireEvent.click(mark);
+    await waitFor(() => expect(put).toHaveBeenCalledWith(ID, null));
+  });
+
+  it("?s= naming a repeat selects its main card in the Paper view", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })];
+    renderAt(paper(segs, { main_figure_page: 0 }), { search: "?view=paper&s=s2" });
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+  });
+
+  it("?s= naming a repeat selects its main card in the grid", async () => {
+    const segs = [segment("s1", { page: 0 }), segment("s2", { page: 2, repeat_of: "s1" })];
+    renderAt(paper(segs, { main_figure_page: 0 }), { search: "?s=s2" });
+    await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
+  });
+});

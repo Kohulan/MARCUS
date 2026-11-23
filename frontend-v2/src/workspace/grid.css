@@ -283,6 +283,7 @@
 }
 
 .card .card__meta,
+.card .card__also,
 .card .card__note,
 .card .card__reason {
   margin: 0;
@@ -308,6 +309,10 @@
 .card .card__note {
   overflow-wrap: anywhere;
   color: var(--muted);
+}
+
+.card .card__also {
+  color: var(--text-2);
 }
 
 .card .card__reason {
