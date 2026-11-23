@@ -167,3 +167,18 @@
     color: GrayText;
   }
 }
+
+/* A toggle (GlassButton `pressed`: Compare's "Show common part", "Hand-drawn", "Use
+   coordinates"): a square that fills green while on (shape, not tint). */
+.glass[aria-pressed]::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--control-border);
+}
+
+.glass[aria-pressed="true"]::before {
+  border-color: var(--green);
+  background-color: var(--green);
+}

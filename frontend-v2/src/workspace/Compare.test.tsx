@@ -5,8 +5,7 @@
 // replaced), and the dialog in focus mode (review keys held, Esc closes Compare first).
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { backendFixture } from "../test/backendFixture";
 import { useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,8 +33,7 @@ const ID = "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f";
 // Real molfiles (backend-v2/tests/fixtures): MolScribe's and the fixed MolNexTR's hold the
 // image's positions; the old MolNexTR (fb7505b) wrote a computed layout.
 type Out = { molfile: string };
-const fixture = (name: string) =>
-  JSON.parse(readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures", name), "utf8")) as Record<string, never>;
+const fixture = (name: string) => backendFixture<Record<string, never>>(name);
 const REAL = fixture("orient_engines.json") as Record<string, Record<string, Out>>;
 const SCRIBE = REAL.p2_6!.molscribe!.molfile;
 const OLD_NEXTR = REAL.p2_6!.molnextr!.molfile;

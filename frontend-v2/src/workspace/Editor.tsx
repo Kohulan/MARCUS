@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
-import { imageLayout } from "../api/engines";
+import { hasImageLayout } from "../api/engines";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
@@ -45,12 +45,12 @@ type EditorStart = { smiles: string | null; molfile: string | null };
 
 /**
  * Whether the starting structure has its own image positions: a molfile that keeps the
- * positions its engine read from the image (Compare's usableTemplate test). Only then does
+ * positions its engine read from the image (hasImageLayout, as Compare's usableTemplate). Only then does
  * "Use coordinates" apply; no borrowed positions from another engine.
  */
 export function hasImagePositions(initial: EditorStart): boolean {
   // a SMILES too: "off" loads the SMILES alone, which must not open Ketcher empty
-  return Boolean(initial.smiles?.trim()) && Boolean(initial.molfile) && imageLayout(initial.molfile!);
+  return Boolean(initial.smiles?.trim()) && hasImageLayout(initial.molfile);
 }
 
 /**

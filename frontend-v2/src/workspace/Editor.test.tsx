@@ -3,8 +3,7 @@
 // segment caller (useSaveCuration + editorChange) never loses the note.
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { backendFixture } from "../test/backendFixture";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
@@ -19,9 +18,9 @@ import Editor, {
 
 // Real engine molfiles (as engines.test.ts): MolScribe on p2_6 keeps the image's positions,
 // MolNexTR on p2_0 lays the structure out itself.
-const engines = JSON.parse(
-  readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures/orient_engines.json"), "utf8"),
-) as Record<string, Record<string, { smiles: string; molfile: string | null }>>;
+const engines = backendFixture<Record<string, Record<string, { smiles: string; molfile: string | null }>>>(
+  "orient_engines.json",
+);
 const IMAGE_MOL = engines["p2_6"]!["molscribe"]!.molfile!;
 const COMPUTED_MOL = engines["p2_0"]!["molnextr"]!.molfile!;
 

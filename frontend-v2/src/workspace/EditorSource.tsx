@@ -2,7 +2,7 @@
 // shows while drawing. "Find on paper" swaps the crop for the page with only this
 // structure's box marked (pageBox, as the paper view places it), "Back" returns. Ketcher on
 // the right is untouched by either.
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { boxStyle } from "./pageBox";
 
@@ -14,65 +14,47 @@ export type EditorSourceInfo = {
 };
 
 export function EditorSource({ source }: { source: EditorSourceInfo }) {
-  const [view, setView] = useState<"crop" | "page">("crop");
+  const page = source.page;
+  const [onPage, setOnPage] = useState(false);
   // The page's natural size, from its load: the marker waits for it.
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-  const find = useRef<HTMLButtonElement>(null);
-  const back = useRef<HTMLButtonElement>(null);
-
-  // Focus follows the switch (not on opening: the dialog puts it in the SMILES field).
-  const switched = useRef(false);
-  useEffect(() => {
-    if (!switched.current) return;
-    (view === "page" ? back : find).current?.focus();
-  }, [view]);
-  const show = (next: "crop" | "page") => {
-    switched.current = true;
-    setView(next);
+  // One button for "Find on paper" and "Back": the same element keeps the focus (focused on
+  // click too: Safari and tests do not focus a clicked button).
+  const button = useRef<HTMLButtonElement>(null);
+  const toggle = () => {
+    setOnPage((v) => !v);
+    button.current?.focus();
   };
-
-  const page = source.page;
   return (
     <div className="editor-src">
-      {view === "page" && page ? (
-        <>
-          <div className="editor-src__view">
-            <div className="editor-src__sheet">
-              <img
-                className="editor-src__img"
-                src={page.url}
-                alt={`Page ${page.page0 + 1}`}
-                onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-              />
-              {size && size.w > 0 && size.h > 0 ? (
-                <span
-                  className="editor-src__mark"
-                  aria-hidden="true"
-                  style={boxStyle(page.bbox, size.w, size.h)}
-                />
-              ) : null}
-            </div>
+      <div className="editor-src__view">
+        {onPage && page ? (
+          <div className="editor-src__sheet">
+            <img
+              className="editor-src__img"
+              src={page.url}
+              alt={`Page ${page.page0 + 1}`}
+              onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            />
+            {size && size.w > 0 && size.h > 0 ? (
+              <span className="editor-src__mark" aria-hidden="true" style={boxStyle(page.bbox, size.w, size.h)} />
+            ) : null}
           </div>
-          <div className="editor-src__bar">
-            <GlassButton ref={back} tint="clear" size="sm" onClick={() => show("crop")}>
-              Back
-            </GlassButton>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="editor-src__view">
-            <img className="editor-src__img editor-src__crop" src={source.image} alt={source.page ? "Crop the engines read" : "Uploaded image"} />
-          </div>
-          {page ? (
-            <div className="editor-src__bar">
-              <GlassButton ref={find} tint="clear" size="sm" onClick={() => show("page")}>
-                Find on paper
-              </GlassButton>
-            </div>
-          ) : null}
-        </>
-      )}
+        ) : (
+          <img
+            className="editor-src__img editor-src__crop"
+            src={source.image}
+            alt={page ? "Crop the engines read" : "Uploaded image"}
+          />
+        )}
+      </div>
+      {page ? (
+        <div className="editor-src__bar">
+          <GlassButton ref={button} tint="clear" size="sm" onClick={toggle}>
+            {onPage ? "Back" : "Find on paper"}
+          </GlassButton>
+        </div>
+      ) : null}
     </div>
   );
 }

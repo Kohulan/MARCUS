@@ -292,23 +292,6 @@
   visibility: hidden;
 }
 
-/* "Show common part" and "Hand-drawn" are toggles: a square that fills green while on (shape,
-   not tint). */
-.cmp__actions .glass[aria-pressed]::before,
-.cmp-table__toggle .glass[aria-pressed]::before {
-  content: "";
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--control-border);
-}
-
-.cmp__actions .glass[aria-pressed="true"]::before,
-.cmp-table__toggle .glass[aria-pressed="true"]::before {
-  border-color: var(--green);
-  background-color: var(--green);
-}
-
 /* A failed engine's own Retry, under its reason. */
 .cmp-result__retry {
   display: block;

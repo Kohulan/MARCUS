@@ -42,9 +42,9 @@ export function SegmentEditor({
     await save(segment.id, editorChange(segment.curation, s));
   };
   // Left of Ketcher: the crop the engines read, and its page with this structure's box.
-  const [source] = useState(() => ({
+  const source = {
     image: api.segmentImageUrl(segment.id),
     page: { url: api.pageImageUrl(paperId, segment.page), bbox: segment.bbox, page0: segment.page },
-  }));
+  };
   return <Editor initial={initial} source={source} onSave={onSave} onClose={onClose} />;
 }

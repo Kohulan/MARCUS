@@ -62,9 +62,13 @@ export function imageLayout(molfile: string): boolean {
   return same < COMPUTED_SHARE * lengths.length;
 }
 
+/** A molfile that holds the image's positions (none: false). */
+export const hasImageLayout = (molfile: string | null | undefined): boolean =>
+  !!molfile && imageLayout(molfile);
+
 /** A prediction whose molfile can be a template: valid, with a molfile from the image. */
 export const usableTemplate = (p: PredictionOut | null | undefined): boolean =>
-  p != null && p.valid && Boolean(p.molfile) && imageLayout(p.molfile!);
+  p != null && p.valid && hasImageLayout(p.molfile);
 
 /**
  * The prediction whose molfile draws an image's structures in the paper's orientation: the
