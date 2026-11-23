@@ -90,17 +90,20 @@ def cmd_apikey_list(session: Session, args: argparse.Namespace) -> int:
     owners = session.execute(
         select(Owner).where(Owner.kind == OwnerKind.API_KEY.value).order_by(Owner.created_at)
     ).scalars()
-    rows = [
-        {
-            "id": str(o.id),
-            "label": o.label,
-            "created_at": _iso(o.created_at),
-            "revoked_at": _iso(o.revoked_at),
-            "daily_page_quota": o.daily_page_quota,
-            "pages_today": session.execute(pages_used_stmt(o.id)).scalar_one(),
-        }
-        for o in owners
-    ]
+    rows = []
+    for o in owners:
+        used, reserved = session.execute(pages_used_stmt(o.id)).one()
+        rows.append(
+            {
+                "id": str(o.id),
+                "label": o.label,
+                "created_at": _iso(o.created_at),
+                "revoked_at": _iso(o.revoked_at),
+                "daily_page_quota": o.daily_page_quota,
+                "pages_today": used,
+                "pages_reserved": reserved,  # held by papers still being checked
+            }
+        )
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -110,7 +113,8 @@ def cmd_apikey_list(session: Session, args: argparse.Namespace) -> int:
         state = f"revoked {r['revoked_at']}" if r["revoked_at"] else "active"
         print(
             f"{r['id']}  {r['label']!r}  created {r['created_at']}  {state}  "
-            f"pages today {r['pages_today']}/{r['daily_page_quota']}"
+            f"pages today {r['pages_today']} (+{r['pages_reserved']} reserved)"
+            f"/{r['daily_page_quota']}"
         )
     return 0
 

@@ -7,6 +7,10 @@ boxes are DECIMER Segmentation's at 300 DPI, as MARCUS made them (MEASURE.md).
 """
 
 import json
+import random
+import re
+import time
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import pytest
@@ -70,7 +74,9 @@ def ids(*texts):
 def below(text, gap_px, x_px=450, page=1):
     """A box `gap_px` below the crop's bottom edge, 20 px high, centred at `x_px`."""
     top = 600 + gap_px
-    return box(text, (x_px - 10) * PT, 842 - top * PT, (x_px + 10) * PT, 842 - (top + 20) * PT, page)
+    return box(
+        text, (x_px - 10) * PT, 842 - top * PT, (x_px + 10) * PT, 842 - (top + 20) * PT, page
+    )
 
 
 def test_rule_b():
@@ -101,7 +107,10 @@ def test_labels_from_a_file(tmp_path):
     assert compound_ids.labels_from_file(path) == ({}, {})
     path.write_text(json.dumps(DOC))
     boxes, names = compound_ids.labels_from_file(path)
-    assert compound_ids.read_ids([CROPS[7][0]], boxes[1]) == ["8a"] and names["2"] == "pestaloisocoumarin B"
+    assert (
+        compound_ids.read_ids([CROPS[7][0]], boxes[1]) == ["8a"]
+        and names["2"] == "pestaloisocoumarin B"
+    )
 
 
 # Page-level rules (read_ids): an atom number must not become a crop's ID. Layouts as the
@@ -149,3 +158,80 @@ def test_the_same_id_printed_twice_on_a_page_stays_on_both():
 def test_a_page_without_crops():
     boxes, _ = compound_ids.figure_labels(DOC)
     assert compound_ids.read_ids([], boxes[1]) == []
+
+
+# --- names in linear time (security scan 2026-11-23 F1) -------------------------------------
+# The one pattern names() used before: over text an uploaded PDF controls it backtracked over
+# every long word, O(n^2) (a 16,000-letter word: 10.8 s in the API's chem process).
+_ONE_PATTERN = re.compile(
+    r"((?:[A-Za-z][\w\-′']*\s){0,2}[A-Za-z][\w\-′']*(?:\s[A-Z]{1,2}\d?)?)\s\((\d{1,3}[a-z]?)\)"
+)
+
+
+def _one_pattern_names(doc: dict) -> dict[str, str]:
+    text = " ".join(str(t.get("text", "")) for t in doc.get("texts") or [])
+    found: dict[str, Counter] = defaultdict(Counter)
+    for m in _ONE_PATTERN.finditer(text):
+        words = [w for w in m.group(1).split() if w not in compound_ids._STOP]
+        if not words:
+            continue
+        name = " ".join(words[-2:]) if re.fullmatch(r"[A-Z]{1,2}\d?", words[-1]) else words[-1]
+        if len(name) < 4 or name.lower() in compound_ids._STOP:
+            continue
+        found[m.group(2)][name] += 1
+    return {cid: counts.most_common(1)[0][0] for cid, counts in found.items()}
+
+
+_PIECES = [
+    "a", "Z", "AB", "X1", "q", "1", "8a", "-", "′", "'", "_", "é", "α", " ", " ", "  ", "\t",
+    " ", "(", ")", "(1)", " (1)", " (12a)", " (3)", "(0)", ",", ".", "of", "the",
+    "compound", "Figure", "salsubstolin", " A", "N2", "8-O-methyl",
+]  # fmt: skip
+
+
+def test_names_are_those_the_one_pattern_found():
+    rng = random.Random(7)
+    assert compound_ids.names(DOC) == _one_pattern_names(DOC)
+    for _ in range(5000):
+        texts = [
+            "".join(rng.choice(_PIECES) for _ in range(rng.randint(0, 30)))
+            for _ in range(rng.randint(0, 3))
+        ]
+        doc = {"texts": [{"text": t} for t in texts]}
+        assert compound_ids.names(doc) == _one_pattern_names(doc), texts
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("the new salsubstolin A (1)", {"1": "salsubstolin A"}),
+        ("8-O-methylsterigmatocystin (3)", {"3": "O-methylsterigmatocystin"}),
+        ("isopolisin B (4) and isopolisin B (4)", {"4": "isopolisin B"}),
+        ("compound (2)", {}),
+        ("alpha  (2)", {}),  # two spaces: no name
+        ("(5) (2)", {}),
+    ],
+)
+def test_names_of_short_texts(text, expected):
+    assert compound_ids.names({"texts": [{"text": text}]}) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a" * 200_000,  # one word with no ID after it
+        "a" * 200_000 + " x",
+        "1a" * 100_000,  # a letter after every digit: a start at each
+        "a" * 200_000 + " (1)",
+        "R′" * 100_000,
+    ],
+)
+def test_names_take_linear_time_on_long_words(text):
+    started = time.perf_counter()
+    compound_ids.names({"texts": [{"text": text}]})
+    assert time.perf_counter() - started < 1.0
+
+
+def test_names_read_at_most_max_id_mentions():
+    text = "salsubstolin A (1) " * compound_ids.MAX_ID_MENTIONS + "isopolisin B (2)"
+    assert compound_ids.names({"texts": [{"text": text}]}) == {"1": "salsubstolin A"}

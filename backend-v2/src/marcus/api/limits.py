@@ -12,6 +12,10 @@ from marcus.core.models import ImageJob, Owner, Paper
 from marcus.core.quota import pages_used_stmt
 from marcus.core.settings import get_settings
 
+# Retry-After of a quota 429 that reserved pages caused: they are freed when check_pdf counts
+# the real pages (marcus.core.quota).
+QUOTA_RETRY_AFTER_S = 60
+
 
 async def _count_active(
     db: AsyncSession, *, owner_id: uuid.UUID | None = None, ip: str | None = None
@@ -43,9 +47,15 @@ async def enforce_active_limits(db: AsyncSession, owner: Owner, ip: str) -> None
     if owner.kind != OwnerKind.BROWSER.value:
         # API keys get a daily page quota instead; the owner lock above serialises uploads.
         if owner.daily_page_quota is not None:
-            used = (await db.execute(pages_used_stmt(owner.id))).scalar_one()
-            if used >= owner.daily_page_quota:
-                raise HTTPException(status_code=429, detail="daily quota exceeded")
+            used, reserved = (await db.execute(pages_used_stmt(owner.id))).one()
+            if used + reserved >= owner.daily_page_quota:
+                # Under the quota but for pages held by papers still being checked: retry soon.
+                headers = (
+                    {"Retry-After": str(QUOTA_RETRY_AFTER_S)}
+                    if used < owner.daily_page_quota
+                    else None
+                )
+                raise HTTPException(429, detail="daily quota exceeded", headers=headers)
         return
     # An unknown client address is one shared bucket (fail closed), like any other address.
     ip_key = rate_key_for_ip(ip)  # an IPv6 client's /64

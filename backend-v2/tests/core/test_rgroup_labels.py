@@ -2,6 +2,10 @@
 structure (owner decision 2026-11-22: tag, exports and UI list show the labels the page text
 names; all of them when it names none)."""
 
+import random
+import re
+import time
+
 import pytest
 
 from marcus.core import rgroup_labels as rl
@@ -59,7 +63,9 @@ def test_the_page_index_reads_each_item_a_bounded_number_of_times(monkeypatch):
             expected[str(page)] = sorted(found)
     seen = []
     real = page_text.page_context
-    monkeypatch.setattr(page_text, "page_context", lambda d, p: seen.append(len(d["texts"])) or real(d, p))
+    monkeypatch.setattr(
+        page_text, "page_context", lambda d, p: seen.append(len(d["texts"])) or real(d, p)
+    )
     assert rl.page_label_index(doc, 30) == expected
     assert sum(seen) <= 3 * len(items)
 
@@ -129,3 +135,42 @@ def test_index_error():
     for bad in ([], {"x": ["R1"]}, {"5": ["R1"]}, {"-1": ["R1"]}, {"0": "R1"}, {"0": ["OAc"]},
                 {"0": ["R1", "R1"]}, {"0": [1]}, {"0": ["R1"] * 300}):  # fmt: skip
         assert rl.index_error(bad, pages=5) is not None, bad
+
+
+# --- text labels in linear time (security scan 2026-11-23 F2) -------------------------------
+# The R branch before: two prime runs side by side, so "R", a long prime run and a letter tried
+# every split of the run, O(n^2) (4,000 primes: 2 s; 16,000 per page of an uploaded PDF).
+_TWO_RUNS = re.compile(
+    r"(?<!\w)(?:R(?:\s?′)*(?:\s?\d{1,2})?[a-z]?(?:\s?′)*"
+    r"|[XYZ](?:\s?\d{1,2})?(?:\s?′)*|Ar(?:\s?\d{1,2})?|[nmQ])(?![\w′])"
+)
+_PIECES = [
+    "R", "R", "X", "Y", "Z", "Ar", "n", "m", "Q", "′", "′", " ", "  ", "\t", "1", "2", "12",
+    "123", "a", "b", "f", "A", "(", ")", "-", "/", "é", "_", ".", ",", "′ ", "R1",
+]  # fmt: skip
+
+
+def test_the_label_pattern_finds_what_the_two_run_pattern_found():
+    rng = random.Random(11)
+    for _ in range(20000):
+        text = "".join(rng.choice(_PIECES) for _ in range(rng.randint(0, 25)))
+        old = [(m.span(), m.group()) for m in _TWO_RUNS.finditer(text)]
+        assert [(m.span(), m.group()) for m in rl._TEXT_LABEL.finditer(text)] == old, text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "R" + '"' * 16_000 + "A",  # _plain makes each " two primes: 32,000
+        "R" + "′" * 200_000 + "A",
+        "R" + " ′" * 100_000 + "A",
+        "R1" + "′" * 200_000 + "A",
+        "X" + "′" * 200_000 + "A",
+        "R1" + " " * 200_000 + "x",
+        "O" + "R′" * 100_000,
+    ],
+)
+def test_text_labels_take_linear_time(text):
+    started = time.perf_counter()
+    rl.text_labels(text)
+    assert time.perf_counter() - started < 1.0
