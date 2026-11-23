@@ -475,3 +475,49 @@ def test_a_prediction_without_labels_exports_no_rgroup_rows():
     pred.rgroups = ["R1"]
     (chosen,) = export.choose(paper, [seg], {}, {seg.id: [pred]}, rgroup_rows=rows)
     assert chosen.rgroup_rows == rows[pred.id]
+
+
+# --- chiral flag (absolute stereo, as the SMILES) -------------------------------------------
+
+
+def _sdf_flags(content: bytes) -> list[str]:
+    records = [r for r in content.decode().split("$$$$") if "V2000" in r]
+    return [next(ln for ln in r.splitlines() if "V2000" in ln)[12:15] for r in records]
+
+
+def test_sdf_from_a_stereo_smiles_has_chiral_flag_1():
+    seg = uuid.uuid4()
+    chosen = [
+        export.Chosen(seg, 0, 0, "C[C@H](N)C(=O)O", None, "predicted"),
+        export.Chosen(seg, 0, 1, "CC(N)C(=O)O", None, "predicted"),
+    ]
+    assert _sdf_flags(export.to_sdf(chosen)) == ["  1", "  0"]
+
+
+async def test_export_gives_an_engine_molfile_chiral_flag_1(app, async_db_session):
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
+    s0 = seeded.segment_ids[0]
+    molfile = Chem.MolToMolBlock(Chem.MolFromSmiles("C[C@H](N)C(=O)O"))  # RDKit: flag 0
+
+    def add(s):
+        s.add(
+            Prediction(
+                segment_id=s0,
+                engine="molnextr",
+                engine_version="m",
+                smiles="C[C@H](N)C(=O)O",
+                molfile=molfile,
+                valid=True,
+                ms=1,
+            )
+        )
+
+    await db.run_sync(add)
+    await db.commit()
+    doc = (await _export(app, token, seeded.paper_id, "json", "all")).json()
+    out = next(s["molfile"] for s in doc["segments"] if s["segment_id"] == str(s0))
+    assert out.splitlines()[3][12:15] == "  1"
+    r = await _export(app, token, seeded.paper_id, "sdf", "all")
+    assert _sdf_flags(r.content) == ["  1"]

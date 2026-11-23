@@ -55,7 +55,8 @@ def check_curation(
 
 
 def mol_for_sdf(smiles: str | None, molfile: str | None) -> Chem.Mol | None:
-    """The molfile if RDKit can read it, else the SMILES with fresh 2D coordinates."""
+    """The molfile if RDKit can read it (its chiral flag kept), else the SMILES with fresh 2D
+    coordinates and chiral flag 1 when it has stereocentres."""
     with BlockLogs():
         if molfile:
             mol = Chem.MolFromMolBlock(molfile)
@@ -64,6 +65,9 @@ def mol_for_sdf(smiles: str | None, molfile: str | None) -> Chem.Mol | None:
         mol = parse_smiles(smiles) if smiles else None
         if mol is not None:
             AllChem.Compute2DCoords(mol)
+            # A SMILES gives absolute stereo; RDKit writes chiral flag 0 unless told.
+            if Chem.FindMolChiralCenters(mol, useLegacyImplementation=False):
+                mol.SetIntProp("_MolFileChiralFlag", 1)
         return mol
 
 
