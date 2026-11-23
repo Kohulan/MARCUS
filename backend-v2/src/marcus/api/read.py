@@ -446,13 +446,15 @@ async def figure_labels(paper_id: uuid.UUID, strict: bool = False) -> tuple[dict
 
 
 def segment_ids(segments: list[Segment], boxes: dict) -> dict[uuid.UUID, str]:
-    """segment id -> the compound ID printed by its drawing (compound_ids.read_id); segments
-    without one are left out."""
-    out = {}
+    """segment id -> the compound ID printed by its drawing (compound_ids.read_ids, each page's
+    crops together); segments without one are left out."""
+    by_page: dict[int, list[Segment]] = {}
     for seg in segments:
-        found = compound_ids.read_id(seg.bbox, boxes.get(seg.page, []))
-        if found is not None:
-            out[seg.id] = found
+        by_page.setdefault(seg.page, []).append(seg)
+    out = {}
+    for page, segs in by_page.items():
+        found = compound_ids.read_ids([s.bbox for s in segs], boxes.get(page, []))
+        out.update({s.id: cid for s, cid in zip(segs, found, strict=True) if cid is not None})
     return out
 
 

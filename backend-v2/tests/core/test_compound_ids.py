@@ -41,7 +41,7 @@ def test_id_of(text, expected):
 
 def test_the_main_figure_ids_as_printed():
     boxes, _ = compound_ids.figure_labels(DOC)
-    assert [compound_ids.read_id(bbox, boxes[1]) for bbox, _ in CROPS] == [cid for _, cid in CROPS]
+    assert compound_ids.read_ids([bbox for bbox, _ in CROPS], boxes[1]) == [c for _, c in CROPS]
 
 
 def test_names_from_the_text():
@@ -64,7 +64,7 @@ PT = 72 / 300  # one pixel in points
 
 def ids(*texts):
     boxes, _ = compound_ids.figure_labels({"pages": PAGE, "texts": list(texts)})
-    return compound_ids.read_id(CROP, boxes.get(0, []))
+    return compound_ids.read_ids([CROP], boxes.get(0, []))[0]
 
 
 def below(text, gap_px, x_px=450, page=1):
@@ -101,4 +101,51 @@ def test_labels_from_a_file(tmp_path):
     assert compound_ids.labels_from_file(path) == ({}, {})
     path.write_text(json.dumps(DOC))
     boxes, names = compound_ids.labels_from_file(path)
-    assert compound_ids.read_id(CROPS[7][0], boxes[1]) == "8a" and names["2"] == "pestaloisocoumarin B"
+    assert compound_ids.read_ids([CROPS[7][0]], boxes[1]) == ["8a"] and names["2"] == "pestaloisocoumarin B"
+
+
+# Page-level rules (read_ids): an atom number must not become a crop's ID. Layouts as the
+# tester paper's (np6c00666 pages 3 and 4, where OCR missed the label "1"), with made-up boxes:
+# (value, (x0, y0, x1, y1)) in page pixels, as compound_ids.id_boxes gives them.
+
+
+def test_a_pass_two_id_loses_to_the_same_id_below_another_crop():
+    left, right = [556, 245, 848, 604], [1684, 268, 1977, 586]
+    boxes = [
+        ("4", (756, 585, 767, 600)),  # atom number in the left crop's bottom band
+        ("4", (1815, 643, 1843, 675)),  # the right crop's printed label, below it
+    ]
+    assert compound_ids.read_ids([left], boxes) == ["4"]  # one crop alone: rule B
+    assert compound_ids.read_ids([left, right], boxes) == [None, "4"]
+
+
+def test_an_atom_number_of_the_drawing_below_is_not_an_id():
+    upper, lower = [462, 245, 764, 591], [447, 626, 833, 932]
+    boxes = [
+        ("14", (540, 656, 572, 679)),  # atom 14 at the top of the lower drawing
+        ("5", (617, 929, 640, 960)),  # the lower crop's label
+    ]
+    assert compound_ids.read_ids([upper], boxes) == ["14"]
+    assert compound_ids.read_ids([upper, lower], boxes) == [None, "5"]
+    # crops a little taller than drawn (overlapping by less than 15 % of the upper's height)
+    grown_upper, grown_lower = [462, 245, 764, 611], [447, 606, 833, 952]
+    assert compound_ids.read_ids([grown_upper, grown_lower], boxes) == [None, "5"]
+
+
+def test_a_label_below_a_crop_inside_its_overlapping_neighbour_stays():
+    # side by side, the neighbour reaching down past the label: not a drawing below
+    left, right = [300, 300, 600, 600], [560, 280, 900, 700]
+    boxes = [("3", (440, 640, 460, 660))]
+    assert compound_ids.read_ids([left, right], boxes) == ["3", None]
+
+
+def test_the_same_id_printed_twice_on_a_page_stays_on_both():
+    # two pictures of compound 3 (NMR and X-ray), each labelled below
+    a, b = [300, 300, 600, 600], [300, 900, 600, 1200]
+    boxes = [("3", (440, 640, 460, 660)), ("3", (440, 1240, 460, 1260))]
+    assert compound_ids.read_ids([a, b], boxes) == ["3", "3"]
+
+
+def test_a_page_without_crops():
+    boxes, _ = compound_ids.figure_labels(DOC)
+    assert compound_ids.read_ids([], boxes[1]) == []

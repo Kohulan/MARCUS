@@ -11,16 +11,21 @@ MEASURE.md (119 labelled crops: 101 right, 2 wrong, 16 missed):
 - else an ID-like box in the bottom 15 % of the crop (same x rule);
 - ID-like: `12`, `8a`, `6′`, `(3)`, `name (3)` (the number), a single letter `a`; never `0`
   (OCR reads ring O atoms as zeros).
+- per page (read_ids): not an ID box inside a drawing below the crop, and a bottom-band ID
+  gives way to the same ID below another crop (atom numbers; 101 right, 0 wrong, 18 missed of
+  the 119).
 
 Name: the paper text's "<name> (<id>)", the name most often written before that ID
 ("salsubstolin A (1)"). A port of the measurement scripts (phase-b/scripts/compound_id_full.py,
-docling_boxes.py, id_name_link.py), unchanged. Standard library only.
+docling_boxes.py, id_name_link.py); the two page rules came after them (measured with the same
+gold, 2026-11-23). Standard library only.
 """
 
 from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 
 SCALE = 300 / 72  # PDF points to pixels of the 300 DPI page render (pipeline.RENDER_DPI)
 BELOW_PX = 100  # how far below the crop an ID may sit
@@ -75,23 +80,63 @@ def id_boxes(doc: dict) -> dict[int, list[Box]]:
     return dict(out)
 
 
-def read_id(bbox: list[int] | tuple[int, ...], boxes: list[Box]) -> str | None:
-    """Rule B: the compound ID of the crop `bbox` (page pixels) from its page's ID boxes."""
+def _nearest(bbox: Sequence[int], boxes: list[Box], inside: float) -> str | None:
+    """The nearest ID box at most BELOW_PX below the crop `bbox` (`inside` 0), or reaching up
+    into its bottom `inside` share; centre x within the crop's width +- X_PAD_SHARE."""
     x0, y0, x1, y1 = bbox
     w, h = x1 - x0, y1 - y0
+    found = []
+    for value, (bx0, by0, bx1, by1) in boxes:
+        cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+        if not (x0 - X_PAD_SHARE * w <= cx <= x1 + X_PAD_SHARE * w):
+            continue
+        if cy < y1 - inside * h or by0 > y1 + BELOW_PX:
+            continue
+        found.append((max(0, by0 - y1) + abs(cx - (x0 + x1) / 2) * 0.2, value))
+    return min(found)[1] if found else None
 
-    def nearest(inside: float) -> str | None:
-        found = []
-        for value, (bx0, by0, bx1, by1) in boxes:
-            cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
-            if not (x0 - X_PAD_SHARE * w <= cx <= x1 + X_PAD_SHARE * w):
-                continue
-            if cy < y1 - inside * h or by0 > y1 + BELOW_PX:
-                continue
-            found.append((max(0, by0 - y1) + abs(cx - (x0 + x1) / 2) * 0.2, value))
-        return min(found)[1] if found else None
 
-    return nearest(0.0) or nearest(INSIDE_SHARE)
+def _read(bbox: Sequence[int], boxes: list[Box]) -> tuple[str | None, int]:
+    """Rule B of one crop: (ID, the pass that found it: 1 below the crop, 2 in its bottom
+    band, 0 none)."""
+    for how, inside in ((1, 0.0), (2, INSIDE_SHARE)):
+        if (value := _nearest(bbox, boxes, inside)) is not None:
+            return value, how
+    return None, 0
+
+
+def read_ids(bboxes: Sequence[Sequence[int]], boxes: list[Box]) -> list[str | None]:
+    """Rule B for all crops of one page (page pixels), in their order, with two page rules
+    against atom numbers (tester paper 2026-11-23: OCR missed the label, an atom number took
+    its place, and a structure linked to the wrong compound):
+
+    - a crop does not take an ID box whose centre lies in a drawing below it (that drawing's
+      atom number): a crop that starts at or below the top of this crop's bottom band (crops
+      may overlap a little);
+    - an ID found in a crop's bottom band (pass 2) is dropped when another crop of the page
+      has the same ID below it (pass 1): the printed label is that crop's.
+
+    The same ID below two crops (two pictures of one compound) stays on both. One crop alone:
+    rule B."""
+    centres = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for _, b in boxes]
+    found = []
+    for i, (x0, y0, x1, y1) in enumerate(bboxes):
+        pad, band_top = X_PAD_SHARE * (x1 - x0), y1 - INSIDE_SHARE * (y1 - y0)
+        # the boxes rule B could take (both passes), then those not in a drawing below
+        near = [
+            (box, cx, cy)
+            for box, (cx, cy) in zip(boxes, centres, strict=True)
+            if x0 - pad <= cx <= x1 + pad and cy >= band_top and box[1][1] <= y1 + BELOW_PX
+        ]
+        below = [o for j, o in enumerate(bboxes) if j != i and o[1] >= band_top] if near else []
+        own = [
+            box
+            for box, cx, cy in near
+            if not any(o[0] <= cx <= o[2] and o[1] <= cy <= o[3] for o in below)
+        ]
+        found.append(_read((x0, y0, x1, y1), own))
+    first = {value for value, how in found if how == 1}
+    return [None if how == 2 and value in first else value for value, how in found]
 
 
 def names(doc: dict) -> dict[str, str]:
