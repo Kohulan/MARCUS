@@ -47,6 +47,7 @@ from marcus.api.read import named_on
 from marcus.core.agreement import pick_prediction
 from marcus.core.main_figure import chosen_member, effective_statuses, group_status, groups_of
 from marcus.core.models import Curation, Paper, Prediction, Segment
+from marcus.core.molfile import absolute_stereo
 from marcus.core.rgroup_labels import shown_labels
 from marcus.core.rgroups import rgroup_labels
 
@@ -165,7 +166,7 @@ def _record(
     return Chosen(
         **row,
         smiles=pick.smiles,
-        molfile=pick.molfile,
+        molfile=absolute_stereo(pick.molfile),
         source="predicted",
         engine=pick.engine,
         rgroups=labels,

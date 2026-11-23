@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from marcus.core import annotation as ann
 from marcus.core.enums import Engine
+from marcus.core.molfile import absolute_stereo
 
 MAX_MOLFILE_BYTES = 200 * 1024
 MAX_SMILES_CHARS = 2000  # as the tools routes; RDKit parses run in marcus.api.chempool
@@ -39,6 +40,18 @@ class _RGroups(BaseModel):
     def _placeholder(self):
         self.placeholder = bool(self.rgroups)
         return self
+
+
+class _EngineMolfile(BaseModel):
+    """An engine's molfile with chiral flag 1 when it has wedge bonds, as its SMILES
+    (marcus.core.molfile). Also covers rows stored before the fix."""
+
+    molfile: str | None
+
+    @field_validator("molfile")
+    @classmethod
+    def _absolute(cls, value: str | None) -> str | None:
+        return absolute_stereo(value)
 
 
 class PaperSummary(_Orm):
@@ -87,7 +100,7 @@ class CurationOut(_RGroups, _Orm):
     note: str | None
 
 
-class PredictionOut(_RGroups, _Orm):
+class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     id: uuid.UUID
     engine: str
     engine_version: str
@@ -277,7 +290,7 @@ class QueueOut(BaseModel):
     estimate_s: float
 
 
-class ImagePrediction(_RGroups, _Orm):
+class ImagePrediction(_EngineMolfile, _RGroups, _Orm):
     smiles: str
     molfile: str | None
     valid: bool
