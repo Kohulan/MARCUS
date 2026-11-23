@@ -205,3 +205,6 @@ judges/runs/*.jsonl
 judges/**/__pycache__/
 judges/**/.pytest_cache/
 judges/.venv/
+
+# Session handoff note: stays local, never in git
+NEXT-SESSION.md
