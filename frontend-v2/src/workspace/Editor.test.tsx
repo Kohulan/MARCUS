@@ -453,10 +453,17 @@ describe("source panel", () => {
 
 describe("hasImagePositions / editorLoad", () => {
   it("only a molfile with the image's positions counts", () => {
-    expect(hasImagePositions({ molfile: null })).toBe(false);
-    expect(hasImagePositions({ molfile: "" })).toBe(false);
-    expect(hasImagePositions({ molfile: COMPUTED_MOL })).toBe(false);
-    expect(hasImagePositions({ molfile: IMAGE_MOL })).toBe(true);
+    expect(hasImagePositions({ smiles: "CC", molfile: null })).toBe(false);
+    expect(hasImagePositions({ smiles: "CC", molfile: "" })).toBe(false);
+    expect(hasImagePositions({ smiles: "CC", molfile: COMPUTED_MOL })).toBe(false);
+    expect(hasImagePositions({ smiles: "CC", molfile: IMAGE_MOL })).toBe(true);
+  });
+
+  it("needs a SMILES too: off would otherwise open Ketcher empty", () => {
+    expect(hasImagePositions({ smiles: null, molfile: IMAGE_MOL })).toBe(false);
+    expect(hasImagePositions({ smiles: "  ", molfile: IMAGE_MOL })).toBe(false);
+    const noSmiles = { smiles: null, molfile: IMAGE_MOL };
+    expect(editorLoad(noSmiles, false)).toEqual(noSmiles);
   });
 
   it("on: the start as it is; off: the SMILES only, when the molfile has image positions", () => {
@@ -513,6 +520,17 @@ describe("Use coordinates", () => {
       { type: "marcus:load", molfile: COMPUTED_MOL, smiles: "CC" },
       ORIGIN,
     );
+  });
+
+  it("is disabled while a save runs: a failed save keeps the drawing", async () => {
+    let finish!: () => void;
+    renderEditor({
+      initial: { smiles: "CC", molfile: IMAGE_MOL },
+      onSave: () => new Promise<void>((resolve) => (finish = resolve)),
+    });
+    fromKetcher({ type: "marcus:save", molfile: "M", smiles: "CCO" });
+    expect(coordsButton()).toBeDisabled();
+    await act(async () => finish());
   });
 
   it("switched off before Ketcher is ready: nothing is posted until marcus:ready, then no molfile", () => {

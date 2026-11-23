@@ -62,7 +62,7 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
       ) : (
         <>
           <div className="editor-src__view">
-            <img className="editor-src__img editor-src__crop" src={source.image} alt="Crop the engines read" />
+            <img className="editor-src__img editor-src__crop" src={source.image} alt={source.page ? "Crop the engines read" : "Uploaded image"} />
           </div>
           {page ? (
             <div className="editor-src__bar">

@@ -28,7 +28,7 @@ describe("EditorSource", () => {
 
   it("without a page: no Find on paper", () => {
     render(<EditorSource source={{ image: "/api/images/j1", page: null }} />);
-    expect(screen.getByRole("img", { name: "Crop the engines read" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Uploaded image" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Find on paper" })).toBeNull();
   });
 

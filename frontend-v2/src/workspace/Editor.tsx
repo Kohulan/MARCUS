@@ -48,8 +48,9 @@ type EditorStart = { smiles: string | null; molfile: string | null };
  * positions its engine read from the image (Compare's usableTemplate test). Only then does
  * "Use coordinates" apply; no borrowed positions from another engine.
  */
-export function hasImagePositions(initial: { molfile: string | null }): boolean {
-  return Boolean(initial.molfile) && imageLayout(initial.molfile!);
+export function hasImagePositions(initial: EditorStart): boolean {
+  // a SMILES too: "off" loads the SMILES alone, which must not open Ketcher empty
+  return Boolean(initial.smiles?.trim()) && Boolean(initial.molfile) && imageLayout(initial.molfile!);
 }
 
 /**
@@ -198,7 +199,7 @@ export default function Editor({ initial, onSave, onClose, source }: EditorProps
         <GlassButton
           tint="clear"
           size="sm"
-          disabled={!canCoords}
+          disabled={!canCoords || saving}
           pressed={canCoords && coords}
           onClick={toggleCoords}
         >
