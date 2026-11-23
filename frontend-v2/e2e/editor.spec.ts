@@ -174,6 +174,17 @@ test("the editor shows the crop, and Find on paper shows its page", { tag: "@moc
   expect(m && p && m.width > 0 && m.x >= p.x && m.y >= p.y).toBeTruthy();
   expect(m!.x + m!.width).toBeLessThanOrEqual(p!.x + p!.width + 1);
   expect(m!.y + m!.height).toBeLessThanOrEqual(p!.y + p!.height + 1);
+  // it opens zoomed in, the box in the middle of the view
+  const view = dialog.locator(".editor-src__view");
+  const v = (await view.boundingBox())!;
+  expect(Math.abs(m!.x + m!.width / 2 - (v.x + v.width / 2))).toBeLessThan(v.width / 4);
+  expect(Math.abs(m!.y + m!.height / 2 - (v.y + v.height / 2))).toBeLessThan(v.height / 4);
+  const zoomOut = dialog.getByRole("button", { name: "Zoom out" });
+  expect(await zoomOut.isDisabled()).toBe(false); // it opened zoomed in
+  while (!(await zoomOut.isDisabled())) await zoomOut.click();
+  const whole = (await mark.boundingBox())!;
+  expect(whole.width).toBeLessThan(m!.width);
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
 
   await back.click();
   await expect(crop).toBeVisible();
