@@ -66,7 +66,7 @@ from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.main_figure import stale_members
-from marcus.core.models import Curation, MainFigure, Owner, Paper, Segment
+from marcus.core.models import Curation, MainFigure, Owner, Paper, Prediction, Segment
 from marcus.core.pipeline import (
     RetryNotAllowed,
     cancel_paper,
@@ -194,9 +194,28 @@ async def put_bulk_curation(
         if "note" in item.model_fields_set:
             cur.note = item.note
         cur.updated_at = now
+    shown = {i.segment_id: i.shown_prediction_id for i in body.items if i.shown_prediction_id}
+    if shown:
+        owners = dict(
+            (
+                await db.execute(
+                    select(Prediction.id, Prediction.segment_id).where(
+                        Prediction.id.in_(shown.values())
+                    )
+                )
+            ).all()
+        )
+        if any(owners.get(pid) != sid for sid, pid in shown.items()):
+            await db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail=[{"type": "value_error", "loc": ["body", "items", "shown_prediction_id"],
+                         "msg": "not a prediction of that segment"}],
+            )  # fmt: skip
     # A bulk status is a decision: on a main-figure structure it goes to its repeats.
     try:
-        await record_decisions(db, paper, {item.segment_id: item.status for item in body.items})
+        decided = {item.segment_id: item.status for item in body.items}
+        await record_decisions(db, paper, decided, shown)
     except HTTPException:
         await db.rollback()
         raise
@@ -334,8 +353,11 @@ async def export_paper(
     annotation = annotations.for_export(await annotations.load(db, paper.id))
     rows = await rgroup_reads.for_export(db, paper.id, paper.rgroup_text_labels)
     main_page = await main_figure_page(db, paper.id)
-    repeats = await repeat_links(paper, main_page, segments, curations, predictions, strict=True)
-    stale = stale_members((await inherited_of(db, [paper.id])).get(paper.id, {}), repeats)
+    inherited = (await inherited_of(db, [paper.id])).get(paper.id, {})
+    repeats = await repeat_links(
+        paper, main_page, segments, curations, predictions, strict=True, inherited=inherited
+    )
+    stale = stale_members(inherited, repeats)
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
         export.build, format, paper, segments, curations, predictions, status, annotation, rows,

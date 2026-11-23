@@ -109,6 +109,27 @@ class SegmentOut(BaseModel):
     # The main-figure structure this one repeats (same compound on another page:
     # marcus.core.main_figure); None for every other structure, and without a main figure.
     repeat_of: uuid.UUID | None = None
+    # The crop is not a clean drawing (NMR marks, an X-ray / 3D picture): "check this drawing"
+    # (a drawing_flags row; false for a clean one, and for segments from before the check).
+    check_drawing: bool = False
+    # The compound ID printed by the drawing ("12", "8a"; marcus.core.compound_ids, from the
+    # paper's Docling text), and the name the text gives it ("salsubstolin A (12)"); None
+    # without one.
+    compound_id: str | None = None
+    compound_name: str | None = None
+    # Pages (0-based) of structures with the same compound ID but another InChIKey, not linked
+    # (marcus.core.main_figure.id_conflicts: the main-figure one, or its look-alikes): "check".
+    same_id_pages: list[int] = []
+    # The engines' agreement (marcus.core.agreement): 3 or 2 agree, 0 they differ, of `agree_of`
+    # engines that read (3, or 2 for a structure only two engines read); None while an engine is
+    # still reading, with fewer than two read or two with an InChIKey, and for a scaffold.
+    agree: int | None = None
+    agree_of: int | None = None
+    # The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order.
+    agree_engines: list[str] = []
+    # The prediction shown when nothing is curated (agreement.pick_prediction); None without a
+    # valid one.
+    default_prediction_id: uuid.UUID | None = None
 
 
 class SegmentList(BaseModel):
@@ -126,6 +147,9 @@ class StepOut(_Orm):
     attempts: int
     error_class: str | None
     engine: str | None  # set for ocsr steps
+    # A background OCSR step (another engine, beside the paper's read): it never counts in the
+    # paper's progress, and its failure is no failure of the structure.
+    background: bool = False
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -211,6 +235,9 @@ class BulkCurationItem(BaseModel):
     segment_id: uuid.UUID
     status: CurationStatus
     note: str | None = Field(None, max_length=MAX_NOTE_CHARS)
+    # The prediction the card showed: frozen with the decision (marcus.api.decisions); it must be
+    # the segment's own. Absent: the server's pick.
+    shown_prediction_id: uuid.UUID | None = None
 
     @field_validator("note")
     @classmethod

@@ -36,7 +36,6 @@ from fastapi import HTTPException, Request
 from marcus.api.chem import smiles_from_molfile
 from marcus.api.chempool import CHEM
 from marcus.api.deps import not_found
-from marcus.api.read import pick_prediction
 from marcus.api.security import tools_limit
 from marcus.api.tooling import (
     MAX_SMILES,
@@ -47,6 +46,7 @@ from marcus.api.tooling import (
     tools_busy,
 )
 from marcus.core import storage
+from marcus.core.agreement import pick_prediction
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, Owner, Paper, Prediction, Segment
 
@@ -96,12 +96,14 @@ async def shown_structure(
     curation: Curation | None,
     predictions: list[Prediction],
     engine: Engine | None,
+    use_frozen: bool = True,
 ) -> tuple[str, Source] | None:
     """The SMILES the UI shows for `segment` and where it comes from.
 
     `predictions`: the segment's, newest first. With `engine`: the newest valid prediction of
     that engine. Without: the curated SMILES (or the one derived from a curated molfile), else
-    the newest valid prediction of the paper's engine, else of any engine. The curation status
+    marcus.core.agreement.pick_prediction (the engines' majority, else the newest valid
+    prediction of the paper's engine, else of any engine). The curation status
     is ignored: a rejected structure still has a drawing (unlike `export.choose`).
     """
     valid = [p for p in predictions if p.valid and p.segment_id == segment.id and p.smiles]
@@ -119,8 +121,10 @@ async def shown_structure(
                 raise tools_busy() from None
             raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
-    pick = pick_prediction(valid, paper.engine)
-    return (pick.smiles, "predicted") if pick is not None else None
+    own = [p for p in predictions if p.segment_id == segment.id]
+    frozen = curation.shown_prediction_id if curation is not None and use_frozen else None
+    pick = pick_prediction(own, paper.engine, frozen)
+    return (pick.smiles, "predicted") if pick is not None and pick.smiles else None
 
 
 _UNDRAWABLE = object()

@@ -8,7 +8,7 @@ from marcus.core import pipeline as pipeline_module
 from marcus.core import storage
 from marcus.core.db import get_sync_sessionmaker
 from marcus.core.enums import Engine, ErrorClass
-from marcus.core.models import Curation, Paper, Prediction, Segment, Step
+from marcus.core.models import Curation, DrawingFlag, Paper, Prediction, Segment, Step
 from marcus.core.pipeline import (
     BadResult,
     RetryNotAllowed,
@@ -54,6 +54,11 @@ def finish(s, step, result) -> list[Step]:
 def to_processing(s, paper, pages=2) -> list[Step]:
     (check,) = steps(s, paper, "check_pdf")
     return finish(s, check, {"pages": pages})
+
+
+def own(paper, new: list[Step]) -> list[Step]:
+    """The paper's own OCSR steps of `new` (its engine; the others read in the background)."""
+    return [st for st in new if st.engine == paper.engine]
 
 
 def count(s, model) -> int:
@@ -112,10 +117,31 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
         assert new == []
         return
     got = [(st.kind, st.engine, st.queue, st.page, st.seq, st.segment_id) for st in new]
+    # the paper's engine, then the other two in the background (phase B item 3)
     assert got == [
         ("ocsr", "molnextr", "q.molnextr", 2, 2000, segs[0].id),
+        ("ocsr", "decimer", "q.decimer", 2, 2000, segs[0].id),
+        ("ocsr", "molscribe", "q.molscribe", 2, 2000, segs[0].id),
         ("ocsr", "molnextr", "q.molnextr", 2, 2001, segs[1].id),
+        ("ocsr", "decimer", "q.decimer", 2, 2001, segs[1].id),
+        ("ocsr", "molscribe", "q.molscribe", 2, 2001, segs[1].id),
     ]
+
+
+def test_segment_page_stores_the_drawing_check(db_session):
+    """A flagged segment gets its drawing_flags row; a clean one, or a result without the flag
+    (an older worker), none."""
+    s = db_session
+    paper = make_paper(s)
+    to_processing(s, paper, pages=1)
+    (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
+    third = {"idx": 2, "bbox": [1, 1, 9, 9], "image_sha256": "2" * 64}
+    items = [{**SEGS[0], "check_drawing": True}, {**SEGS[1], "check_drawing": False}, third]
+    finish(s, seg_step, {"segments": items, "seg_version": SEG_V})
+    flagged = s.execute(
+        select(Segment.idx).join(DrawingFlag, DrawingFlag.segment_id == Segment.id)
+    ).scalars()
+    assert list(flagged) == [0]
 
 
 def test_ocsr_result_stores_cached_flag(db_session):
@@ -123,7 +149,7 @@ def test_ocsr_result_stores_cached_flag(db_session):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, ocsr2 = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    ocsr1, ocsr2 = own(paper, finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V}))
     finish(s, ocsr1, {**OCSR, "cached": True, "ms": 0})
     finish(s, ocsr2, OCSR)
     cached = {p.segment_id: p.cached for p in s.execute(select(Prediction)).scalars()}
@@ -135,7 +161,7 @@ def test_ocsr_result_writes_prediction(db_session):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, _ = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    ocsr1, _ = own(paper, finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V}))
     assert finish(s, ocsr1, OCSR) == []
     (pred,) = s.execute(select(Prediction)).scalars()
     assert (pred.segment_id, pred.image_job_id, pred.engine) == (ocsr1.segment_id, None, "decimer")
@@ -455,7 +481,7 @@ def test_ocsr_result_stores_rgroup_labels(db_session):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, ocsr2 = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    ocsr1, ocsr2 = own(paper, finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V}))
     finish(s, ocsr1, {**OCSR, "smiles": "[1*]c1ccccc1[2*]"})
     finish(s, ocsr2, {**OCSR, "smiles": "[R1]c1ccccc1", "valid": False})
     got = {p.segment_id: p.rgroups for p in s.execute(select(Prediction)).scalars()}
@@ -601,6 +627,8 @@ GOOD_SEG = {"idx": 0, "bbox": [0, 0, 10, 10], "image_sha256": "0" * 64}
         {"segments": [{**GOOD_SEG, "image_sha256": "0" * 65}], "seg_version": SEG_V},
         {"segments": [{**GOOD_SEG, "image_sha256": "G" * 64}], "seg_version": SEG_V},
         {"segments": [{"idx": 0, "bbox": [0, 0, 1, 1]}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "check_drawing": "yes"}], "seg_version": SEG_V},
+        {"segments": [{**GOOD_SEG, "check_drawing": 1}], "seg_version": SEG_V},
         {"segments": "nope", "seg_version": SEG_V},
         {"segments": [GOOD_SEG]},  # no seg_version
         {"segments": [GOOD_SEG], "seg_version": ""},
@@ -649,7 +677,7 @@ def test_malformed_ocsr_result_changes_nothing(db_session, bad):
     paper = make_paper(s)
     to_processing(s, paper, pages=1)
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
-    ocsr1, _ = finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+    ocsr1, _ = own(paper, finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V}))
     run(s, ocsr1)
     s.commit()
     with pytest.raises(BadResult):

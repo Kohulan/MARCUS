@@ -11,6 +11,7 @@ Lock order. The planner locks the paper (or image job) row, then the step row.
 """
 
 import logging
+import time
 import uuid
 from collections.abc import Callable
 
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from marcus.core.enums import WAITING_STEPS, ErrorClass, StepKind, StepStatus
 from marcus.core.models import Paper, Step
-from marcus.core.pipeline import fail_step, lock_parent, parent_gone
+from marcus.core.pipeline import fail_step, is_background, lock_parent, parent_gone
 from marcus.core.queues import (
     DOCLING_FIXED_S,
     DOCLING_HARD_EXTRA_S,
@@ -36,6 +37,59 @@ from marcus.core.settings import get_settings
 log = logging.getLogger(__name__)
 
 GRACE_S = 30  # watchdog: a step may run for its hard limit plus this
+# A background OCSR step (another engine beside a paper's read) waits at most this long; one on a
+# queue seen without a live worker for its whole wait allowance (QUEUE_WAIT_S), not longer.
+# Then it is cancelled: no failure, the engine simply did not read (expire_background).
+BACKGROUND_MAX_WAIT_S = 30 * 60
+# For background steps alone the consumer broadcast (blocking, ~1-2 s) runs at most this often,
+# unless a queue is already seen unserved (then each watchdog run, to see it come back).
+BACKGROUND_PROBE_EVERY_S = 60.0
+
+
+class BackgroundWatch:
+    """The watchdog's memory of queues seen without a live worker (one dispatcher process): when
+    each was first seen unserved, reset when it is seen served. A queue is dead for background
+    steps only once seen unserved continuously for its wait allowance, so one missed broadcast
+    reply or a worker restart cancels nothing."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self.clock = clock
+        self.unserved_since: dict[str, float] = {}
+        self.last_probe: float | None = None
+
+    def wants_probe(self, queues: set[str]) -> bool:
+        """A broadcast is worth it for these waiting background steps' queues."""
+        if not queues:
+            return False
+        if queues & set(self.unserved_since):
+            return True
+        return self.last_probe is None or self.clock() - self.last_probe >= BACKGROUND_PROBE_EVERY_S
+
+    def seen(self, live: set[str] | frozenset[str] | None, queues: set[str]) -> None:
+        """Record a broadcast's answer (None: no answer, nothing learnt) for `queues`."""
+        now = self.clock()
+        self.last_probe = now
+        for q in list(self.unserved_since):
+            if q not in queues:
+                del self.unserved_since[q]  # no background step waits there any more
+        if live is None:
+            return
+        for q in queues:
+            if q in live:
+                self.unserved_since.pop(q, None)
+            else:
+                self.unserved_since.setdefault(q, now)
+
+    def dead(self) -> set[str]:
+        """Queues seen unserved continuously for their wait allowance."""
+        now = self.clock()
+        return {
+            q for q, since in self.unserved_since.items()
+            if now - since >= QUEUE_WAIT_S.get(q, 300)
+        }  # fmt: skip
+
+
+BACKGROUND_WATCH = BackgroundWatch()
 
 # send(queue, step_id, kind, attempts, pages, engine): `attempts` is the step's attempts value
 # read in the transaction that set it queued; the runtime uses it to drop stale duplicate
@@ -50,7 +104,10 @@ LiveQueues = Callable[[], "set[str] | frozenset[str] | None"]
 
 _BUSY = (StepStatus.QUEUED.value, StepStatus.RUNNING.value)
 
-# Order: priority class, then owner usage on this queue in the fair window (steps busy now
+# Order: every paper's own steps before any background OCSR step (the other engines,
+# marcus.core.pipeline.background_engines: they fill in after the paper is done), whatever the
+# owner's priority class; then priority class, then owner usage on this queue in the fair
+# window (steps busy now
 # or finished in the window, cancelled ones excluded: spec §8 counts running or done), then
 # the oldest paper / image job, then step order. One statement; the chosen row is locked, rows another
 # dispatcher (or the planner) holds are skipped. `docling_ok` false leaves docling steps out (the
@@ -70,7 +127,8 @@ _PICK_SQL = text(
       JOIN owners o ON o.id = COALESCE(p.owner_id, j.owner_id)
       LEFT JOIN usage u ON u.owner_id = o.id
     WHERE s.queue = :q AND s.status = 'pending' AND (s.kind <> 'docling' OR :docling_ok)
-    ORDER BY o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
+    ORDER BY EXISTS (SELECT 1 FROM background_steps b WHERE b.step_id = s.id),
+             o.priority_class, COALESCE(u.n, 0), COALESCE(p.created_at, j.created_at),
              s.seq, s.created_at
     LIMIT 1 FOR UPDATE OF s SKIP LOCKED
     """
@@ -296,7 +354,11 @@ def fail_unserved_model_step(session: Session, step_id: uuid.UUID, kind: str) ->
     return True
 
 
-def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> int:
+def watchdog_once(
+    session: Session,
+    live_queues: LiveQueues | None = None,
+    watch: BackgroundWatch | None = None,
+) -> int:
     """Fail (retry once, then final) steps stuck in queued/running. Returns the count.
 
     With `live_queues`, a step stuck in `queued` on a queue that no live worker consumes is put
@@ -304,17 +366,31 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
     final failures, one per wait allowance). Without it every queue counts as served.
     The scan takes no locks; each step is re-checked and failed in its own transaction.
     """
+    watch = watch or BACKGROUND_WATCH
     rows = session.execute(select(Step.id, Step.status, Step.queue).where(_stuck())).all()
     waiting_model_steps = _unserved_model_steps(session) if live_queues is not None else []
+    waiting_background = _waiting_background(session)
     session.rollback()
+    background_queues = {q for _, q, _ in waiting_background}
+    probe_background = live_queues is not None and watch.wants_probe(background_queues)
     live: set[str] | frozenset[str] | None = None
-    needs_live = any(r.status == StepStatus.QUEUED.value for r in rows) or waiting_model_steps
+    needs_live = (
+        any(r.status == StepStatus.QUEUED.value for r in rows)
+        or waiting_model_steps
+        or probe_background
+    )
+    probed = False
     if live_queues is not None and needs_live:
+        probed = True
         try:
             live = live_queues()
         except Exception:
             log.exception("watchdog: consumer check failed")
             live = None
+    if probed:
+        watch.seen(live, background_queues)
+    elif not background_queues:
+        watch.seen(None, set())
     done = 0
     for step_id, status, queue in rows:
         served = live_queues is None or (live is not None and queue in live)
@@ -355,4 +431,53 @@ def watchdog_once(session: Session, live_queues: LiveQueues | None = None) -> in
             except Exception:
                 log.exception("watchdog: could not fail %s step %s", kind, step_id)
                 session.rollback()
+    done += expire_background(session, waiting_background, watch.dead())
+    return done
+
+
+def _waiting_background(session: Session) -> list[tuple[uuid.UUID, str, float]]:
+    """(id, queue, seconds waited) of the background OCSR steps still waiting (pending, queued)."""
+    waited = func.extract("epoch", func.now() - Step.created_at)
+    rows = session.execute(
+        select(Step.id, Step.queue, waited).where(Step.status.in_(WAITING_STEPS), is_background())
+    ).all()
+    return [(i, q, float(w)) for i, q, w in rows]
+
+
+def expire_background(
+    session: Session,
+    waiting: list[tuple[uuid.UUID, str, float]],
+    dead: set[str],
+) -> int:
+    """Cancel the background steps of `waiting` (_waiting_background) on a `dead` queue (seen
+    unserved for its whole wait allowance: BackgroundWatch.dead), or waiting longer than
+    BACKGROUND_MAX_WAIT_S. Each is re-checked under its parent's lock (the planner's lock order):
+    a step the user has asked for meanwhile (request_ocsr: now the paper's own) or one that
+    started is left alone. Cancelled, not failed: the paper (done long since) and its cards say
+    nothing; the badge counts only the engines that read, and the paper's event stream ends
+    (api.routes.events). Returns the count."""
+    done = 0
+    for step_id, queue, waited in waiting:
+        if queue not in dead and waited <= BACKGROUND_MAX_WAIT_S:
+            continue
+        still = (Step.status.in_(WAITING_STEPS), is_background())
+        try:
+            if _lock_status(session, step_id, *still) is None:
+                session.rollback()
+                continue
+            session.execute(
+                update(Step)
+                .where(Step.id == step_id, *still)
+                .values(status=StepStatus.CANCELLED.value, finished_at=func.now(),
+                        error="background engine not served")
+                .execution_options(synchronize_session=False)
+            )  # fmt: skip
+            session.commit()
+        except Exception:
+            log.exception("watchdog: could not expire background step %s", step_id)
+            session.rollback()
+            continue
+        done += 1
+        log.warning("watchdog: background step %s on %s expired (%s)", step_id, queue,
+                    "no live consumer" if queue in dead else "waited too long")  # fmt: skip
     return done

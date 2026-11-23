@@ -1,0 +1,976 @@
+{
+ "pages": {
+  "1": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 1
+  },
+  "2": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 2
+  },
+  "3": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 3
+  },
+  "4": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 4
+  },
+  "5": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 5
+  },
+  "6": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 6
+  },
+  "7": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 7
+  },
+  "8": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 8
+  },
+  "9": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 9
+  },
+  "10": {
+   "size": {
+    "width": 595.276,
+    "height": 841.89
+   },
+   "page_no": 10
+  }
+ },
+ "texts": [
+  {
+   "text": "Abstract: Four new compounds, including two isocoumarins, pestaloisocoumarins A and B (1, 2), one sesquiterpenoid degradation, isopolisin B (4), and one furan derivative, pestalotiol A (5), together with one known isocoumarin, gamahorin (3), and three chlorinated benzophenone derivatives, pestalachloride B (6), pestalachloride E (7) and a mixture of pestalalactone atropisomers (8a/8b), were isolated from a culture of the fungus Pestalotiopsis heterocornis associated with sponge Phakellia fusca. These new chemical structures were established using NMR and MS spectroscopic data, as well as single-crystal X-ray crystallographic analysis and CD Cotton effects. All of the isolated compounds were evaluated for their antimicrobial and cytotoxic activities. Isocoumarins 1-3, showed antibacterial activities against Gram-positive bacteria Staphylococcus aureus and Bacillus subtilis with MIC values ranging from 25 to 100 µg/mL and weak antifungal activities. Chlorinated benzophenone derivatives 6-8 exhibited antibacterial activities against S. aureus and B. subtilis with MIC values ranging from 3.0 to 50 µg/mL and cytotoxicities against four human cancer cell lines with IC50 values of 6.8-87.8 µM.",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 81.81599999999996,
+      "t": 432.36456799999996,
+      "r": 519.985463,
+      "b": 260.80880422346365,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Following the above investigations, with the aim of discovering bioactive substances from marine-derived fungi, the secondary metabolites of a culture fermentation of Pestalotiopsis heterocornis, which was isolated from the sponge Phakellia fusca, were investigated. Four new compounds, including two isocoumarins, pestaloisocoumarin A (1) and pestaloisocoumarin B (2), one sesquiterpenoid degradation, isopolisin B (4), and one furan derivative, pestalotiol A (5), together with four known compounds, gamahorin (3) [15], pestalachloride B (6) [16], pestalachloride E (7) [17] and a mixture of pestalalactone atropisomers (8a/8b) [18,19], were discovered (Figure 1). The structures of the new compounds were elucidated on the basis of spectroscopic data, circular dichroism (CD) Cotton effects and single-crystal X-ray crystallographic analysis. The cytotoxicities against four human cancer cell lines, antibacterial and antifungal activities against a panel of bacteria and fungi of these isolated compounds were evaluated in the present paper. Following the above investigations, with the aim of discovering bioactive substances from marine-derived fungi, the secondary metabolites of a culture fermentation of Pestalotiopsis heterocornis, which was isolated from the sponge Phakellia fusca, were investigated. Four new compounds, including two isocoumarins, pestaloisocoumarin A (1) and pestaloisocoumarin B (2), one sesquiterpenoid degradation, isopolisin B (4), and one furan derivative, pestalotiol A (5), together with four known compounds, gamahorin (3) [15], pestalachloride B (6) [16], pestalachloride E (7) [17] and a mixture of pestalalactone atropisomers (8a/8b) [18,19], were discovered (Figure 1). The structures of the new compounds were elucidated on the basis of spectroscopic data, circular dichroism (CD) Cotton effects and single-crystal X-ray crystallographic analysis. The cytotoxicities against four human cancer cell lines, antibacterial and antifungal activities against a panel of bacteria and fungi of these isolated compounds were evaluated in the present paper.",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 76.117,
+      "t": 723.7975680000001,
+      "r": 519.9857622,
+      "b": 577.9837319999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "11",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 106.0,
+      "t": 521.5566666666666,
+      "r": 114.0,
+      "b": 514.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "6",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 114.33333333333333,
+      "t": 542.5566666666666,
+      "r": 119.66666666666667,
+      "b": 536.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "8",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 123.0,
+      "t": 522.89,
+      "r": 128.66666666666666,
+      "b": 515.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "4",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 144.66666666666666,
+      "t": 541.5566666666666,
+      "r": 150.0,
+      "b": 534.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "1",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 144.66666666666666,
+      "t": 529.5566666666666,
+      "r": 149.66666666666666,
+      "b": 523.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "10",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 146.66666666666666,
+      "t": 552.89,
+      "r": 164.33333333333331,
+      "b": 545.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "3",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 156.33333333333334,
+      "t": 538.2233333333334,
+      "r": 162.66666666666669,
+      "b": 531.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "9",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 165.33333333333331,
+      "t": 548.2233333333334,
+      "r": 171.66666666666669,
+      "b": 541.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "6",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 353.3333333333333,
+      "t": 542.5566666666666,
+      "r": 358.3333333333333,
+      "b": 535.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "10",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 354.3333333333333,
+      "t": 553.5566666666666,
+      "r": 363.6666666666667,
+      "b": 544.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "7",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 373.0,
+      "t": 535.89,
+      "r": 378.3333333333333,
+      "b": 529.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "12",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 382.3333333333333,
+      "t": 552.2233333333334,
+      "r": 391.0,
+      "b": 544.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "4",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 385.0,
+      "t": 532.5566666666666,
+      "r": 391.0,
+      "b": 525.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "6",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 391.0,
+      "t": 524.5566666666666,
+      "r": 395.6666666666667,
+      "b": 518.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "3",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 392.0,
+      "t": 544.5566666666666,
+      "r": 397.0,
+      "b": 537.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "1",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 401.0,
+      "t": 519.2233333333334,
+      "r": 406.3333333333333,
+      "b": 512.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "11",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 410.0,
+      "t": 516.2233333333334,
+      "r": 418.6666666666667,
+      "b": 508.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "1",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 417.3333333333333,
+      "t": 553.2233333333334,
+      "r": 421.6666666666667,
+      "b": 548.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "11",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 432.6666666666667,
+      "t": 522.2233333333334,
+      "r": 445.0,
+      "b": 513.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "3",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 434.0,
+      "t": 550.5566666666666,
+      "r": 439.3333333333333,
+      "b": 544.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "4",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 440.3333333333333,
+      "t": 546.89,
+      "r": 446.3333333333333,
+      "b": 539.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "6",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 452.3333333333333,
+      "t": 526.5566666666666,
+      "r": 458.3333333333333,
+      "b": 519.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "8",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 466.6666666666667,
+      "t": 541.5566666666666,
+      "r": 472.6666666666667,
+      "b": 534.2233333333334,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "10",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 484.3333333333333,
+      "t": 551.5566666666666,
+      "r": 492.6666666666667,
+      "b": 543.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "1",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 136.0,
+      "t": 502.2233333333333,
+      "r": 142.0,
+      "b": 494.5566666666667,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "2",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 231.0,
+      "t": 504.2233333333333,
+      "r": 238.0,
+      "b": 495.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "3",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 312.0,
+      "t": 504.2233333333333,
+      "r": 318.33333333333337,
+      "b": 496.5566666666667,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "4",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 381.6666666666667,
+      "t": 504.89,
+      "r": 385.3333333333333,
+      "b": 495.5566666666667,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "5",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 448.6666666666667,
+      "t": 503.2233333333333,
+      "r": 455.0,
+      "b": 495.5566666666667,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "6",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 149.0,
+      "t": 412.22333333333336,
+      "r": 155.33333333333334,
+      "b": 404.22333333333336,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "7",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 243.66666666666666,
+      "t": 411.22333333333336,
+      "r": 250.0,
+      "b": 403.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "8a",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 340.66666666666663,
+      "t": 412.22333333333336,
+      "r": 352.0,
+      "b": 403.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "8b",
+   "prov": [
+    {
+     "page_no": 2,
+     "bbox": {
+      "l": 437.0,
+      "t": 412.89,
+      "r": 448.3333333333333,
+      "b": 403.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "501",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 140.0,
+      "t": 296.55666666666673,
+      "r": 152.66666666666666,
+      "b": 287.22333333333324,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "40",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 140.0,
+      "t": 272.22333333333324,
+      "r": 150.66666666666666,
+      "b": 263.89,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "30",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 139.66666666666666,
+      "t": 249.22333333333324,
+      "r": 151.33333333333334,
+      "b": 239.55666666666673,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "20",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 139.66666666666666,
+      "t": 224.55666666666673,
+      "r": 151.33333333333334,
+      "b": 215.22333333333336,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "10",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 138.66666666666666,
+      "t": 202.22333333333336,
+      "r": 151.66666666666666,
+      "b": 191.55666666666662,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "220",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 146.0,
+      "t": 123.88999999999999,
+      "r": 159.33333333333334,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "240",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 180.66666666666669,
+      "t": 123.88999999999999,
+      "r": 194.0,
+      "b": 115.22333333333336,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "260",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 216.0,
+      "t": 124.22333333333336,
+      "r": 229.33333333333331,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "280",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 250.66666666666666,
+      "t": 123.88999999999999,
+      "r": 264.33333333333337,
+      "b": 115.22333333333336,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "300",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 285.0,
+      "t": 124.22333333333336,
+      "r": 298.0,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "320",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 320.33333333333337,
+      "t": 124.22333333333336,
+      "r": 333.66666666666663,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "340",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 355.33333333333337,
+      "t": 123.88999999999999,
+      "r": 369.3333333333333,
+      "b": 115.22333333333336,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "360",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 391.0,
+      "t": 124.22333333333336,
+      "r": 404.3333333333333,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "380",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 426.3333333333333,
+      "t": 123.88999999999999,
+      "r": 440.3333333333333,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "400",
+   "prov": [
+    {
+     "page_no": 3,
+     "bbox": {
+      "l": 460.6666666666667,
+      "t": 124.22333333333336,
+      "r": 474.3333333333333,
+      "b": 114.88999999999999,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "The HRESI-MS analysis of 2 showed a deprotonated ion at m/z 279.0865 [M - H]-. Analysis of the 1 H and 13 C NMR data (Table 1) indicated that 2 was very similar to gamahorin (3) [15], except that a doublet methyl in 3 was replaced by a singlet methyl in 2, and an oxygenated quaternary carbon was presented in 2 instead of a methine in 3. Furthermore, one more acetyl appeared in 2. HMBC experiments helped to determine the planar structure. HMBC correlations from H-9 (δH 1.43) to C-3 (δC 82.5) and C-4 (δC 67.9), from H-10 (δH 1.57) to C-3 (δC 82.5), C-4 (δC 67.9) and C-4a (δC 145.3), from H-11 (δH 5.17) to C-6 (δC 136.2), C-7 (δC 123.6), C-8 (δC 159.4) and C-13 (δC 171.1) confirmed that the acetyl was linked with C-11 and that C-4 was oxygenated. Nuclear overhauser effect (NOE) correlations between H-3 (δH 4.60) and H-10 (δH 1.57) suggested H-3 and the methyl at C-4 were α-orientated and the methyl at C-3 and the hydroxyl at C-4 were β-orientated. The calculated ECD spectrum of 2 showed excellent agreement with experimental results, and the 3R and 4R configurations of 2 was confirmed (Figure 3). Thus, Compound 2 was determined and named pestaloisocoumarin B.",
+   "prov": [
+    {
+     "page_no": 4,
+     "bbox": {
+      "l": 76.535,
+      "t": 753.0465968,
+      "r": 520.3357251969998,
+      "b": 592.7698042234637,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "4",
+   "prov": [
+    {
+     "page_no": 5,
+     "bbox": {
+      "l": 177.66666666666669,
+      "t": 660.5566666666666,
+      "r": 183.33333333333331,
+      "b": 653.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "5",
+   "prov": [
+    {
+     "page_no": 5,
+     "bbox": {
+      "l": 312.0,
+      "t": 661.2233333333334,
+      "r": 318.33333333333337,
+      "b": 653.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "5",
+   "prov": [
+    {
+     "page_no": 5,
+     "bbox": {
+      "l": 412.0,
+      "t": 661.2233333333334,
+      "r": 418.0,
+      "b": 653.5566666666666,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Compounds 3, 6-8 were identified as gamahorin (3) [15], pestalachloride B (6) [16], pestalachloride E (7) [17] and a mixture of pestalalactone atropisomers (8a/8b) [18,19] by comparison of the 1 H NMR, 13 C NMR and mass spectroscopy MS data with those reported. All of the isolated compounds were evaluated for their cytotoxic activities against four human H-3 (JH2,3 = 14.7 Hz). Therefore, the structure of 5 was elucidated and named pestalotiol A. Compounds 3, 6-8 were identified as gamahorin (3) [15], pestalachloride B (6) [16], pestalachloride E (7) [17] and a mixture of pestalalactone atropisomers (8a/8b) [18,19] by comparison of the 1 H NMR, 13 C NMR and mass spectroscopy MS data with those reported.",
+   "prov": [
+    {
+     "page_no": 5,
+     "bbox": {
+      "l": 76.157,
+      "t": 386.5120818,
+      "r": 519.9845675127999,
+      "b": 333.5712137,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Pestaloisocoumarin A (1): colorless transparent columnar crystal; [α]20 D +13.3 (c 0.60, MeOH); UV (MeOH) λmax (log ε) 249 (4.51), 321 (4.37) nm; IR (film) νmax 3301, 2922, 2852, 1727, 1667, 1617, 1459, 1421, 1247, 1123, 1063 cm-1 ; CD λmax (∆ε) 243 (-4.45), 265 (46.16), 312 (17.72); 1 H NMR and 13 C NMR data, see Table 1; HRESI-MS m/z 237.0786 [M - H]- (calcd. for C12H13O5, 237.0763).",
+   "prov": [
+    {
+     "page_no": 7,
+     "bbox": {
+      "l": 76.037,
+      "t": 640.0056880000001,
+      "r": 519.9882307319994,
+      "b": 585.6131647821229,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Pestaloisocoumarin B (2): white amorphous solid; [α]20 D -16.0 (c 0.50, MeOH); UV (MeOH) λmax (log ε) 246 (4.32), 321 (4.27) nm; IR (film) νmax 3404, 2991, 2920, 2852, 1736, 1669, 1623, 1431, 1382, 1246, 1158, 1048 cm-1 ; CD λmax (∆ε) 249 (-12.63), 270 (4.11), 308 (4.17); 1 H NMR and 13 CNMR data, see Table 1; HRESI-MS m/z 279.0865 [M - H]- (calcd. for C14H15O6, 279.0869).",
+   "prov": [
+    {
+     "page_no": 7,
+     "bbox": {
+      "l": 76.037,
+      "t": 579.9906880000001,
+      "r": 519.9898578604,
+      "b": 525.5981647821229,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Isopolisin B (4): colorless oil; [α]20 D -19.0 (c 0.84, MeOH); IR (film) νmax 3414.6, 2922.3, 2855.4, 1763.0, 1672.4, 1605.4, 1543.5, 1451.9, 1383.0, 1288.0, 1259.1, 1203.6, 1148.3, 1035.2, 965.5 cm-1 ; 1 H NMR and 13 C NMR data, see Table 2; HRESI-MS m/z 233.1292 [M + Na] + (calcd. for C12H18O3Na, 233.1154).",
+   "prov": [
+    {
+     "page_no": 7,
+     "bbox": {
+      "l": 76.037,
+      "t": 519.975688,
+      "r": 519.9821236960001,
+      "b": 479.0921647821229,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Pestalotiol A (5): colorless oil; [α]20 D +28.6 (c 0.70, MeOH); IR (film) νmax 3379.5, 2958.2, 2928.2, 2872.4, 1667.0, 1604.8, 1452.8, 1408.4, 1378.4, 1089.8, 1041.6, 969.1, 851.7 cm-1 ; 1 H NMR and 13 C NMR data, see Table 2; HRESI-MS m/z 239.1394 [M + Na] + (calcd. for C11H20O4Na, 239.1259).",
+   "prov": [
+    {
+     "page_no": 7,
+     "bbox": {
+      "l": 76.037,
+      "t": 473.46968799999996,
+      "r": 519.9882661992006,
+      "b": 432.5861647821229,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Colorless transparent columnar crystals of 1 were obtained from a 10:1 (v/v) mixture of MeOH and H2O. Crystal data of 1, C12H14O5, MW = 238.23, monoclinic, crystal size 0.10 × 0.10 × 0.08 mm, space group P21, unit cell dimensions a = 7.5403 (2) Å, b = 12.2371 (4) Å, c = 12.5115 (4) Å, α = 90◦ , β = 99.153 (2)◦ , γ = 90◦ , volume = 1139.75 (6) Å 3 , Z = 4 ϱ calcd. = 1.388 g/cm 3 , θ range = 3.58-68.28◦ , Mo Kα radiation, wavelength = 1.54178 Å, temperature = 173 K, F (000) = 504, reflections collected 11,422, unique 4032 [R(int) = 0.0325], completeness to θ = 68.28◦ , 99.7%, the final refinement gave R1 = 0.0455 and wR2 = 0.1250 (w = 1/σ|F| 2 ), S = 1.054, maximum transmission 0.7531, minimum transmission 0.7323, absolute structure parameter = 0.1 (2).",
+   "prov": [
+    {
+     "page_no": 7,
+     "bbox": {
+      "l": 76.037,
+      "t": 400.63808179999995,
+      "r": 519.9860658499999,
+      "b": 296.4998042234637,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  }
+ ]
+}

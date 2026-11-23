@@ -122,6 +122,35 @@ export interface SegmentOut {
    * InChIKey). Null or absent for every other structure, and without a main figure.
    */
   repeat_of?: string | null;
+  /**
+   * The crop is not a clean drawing (NMR marks, an X-ray or 3D picture): "Check this drawing".
+   * False or absent when not flagged, and for structures read before the check existed.
+   */
+  check_drawing?: boolean;
+  /**
+   * The engines' agreement (backend core/agreement.py): 3 or 2 engines agree on the structure
+   * (same InChIKey first block), 0 they differ. Null or absent while an engine is still
+   * reading, or with fewer than two engines read.
+   */
+  agree?: number | null;
+  /** Of how many engines that read: 3, or 2 when only two did. Null with `agree` null. */
+  agree_of?: number | null;
+  /** The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order. */
+  agree_engines?: string[];
+  /**
+   * The prediction shown when nothing is curated: the engines' majority, else the newest valid
+   * one of the paper's engine, else of any engine. The server's one rule (exports, COCONUT).
+   */
+  default_prediction_id?: string | null;
+  /** The compound ID printed by the drawing ("12", "8a"); null or absent without one. */
+  compound_id?: string | null;
+  /** The name the paper's text gives that compound ("salsubstolin A (12)"); null without. */
+  compound_name?: string | null;
+  /**
+   * Pages (0-based) of structures with the same compound ID but another structure, not linked
+   * (the main-figure one, or its look-alikes): the card asks to check. [] or absent: none.
+   */
+  same_id_pages?: number[];
 }
 
 export interface SegmentList {
@@ -139,6 +168,11 @@ export interface StepOut {
   error_class: string | null;
   /** Set for ocsr steps. */
   engine: string | null;
+  /**
+   * A background OCSR step: another engine reading beside the paper's own. It never counts in
+   * the paper's read, and its failure is no failure of the structure.
+   */
+  background?: boolean;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -169,6 +203,8 @@ export interface BulkCurationItem {
   segment_id: string;
   status: CurationStatus;
   note?: string | null;
+  /** The prediction the card showed: kept as the decided structure. Absent: the server's pick. */
+  shown_prediction_id?: string;
 }
 
 export interface MainFigureOut {
