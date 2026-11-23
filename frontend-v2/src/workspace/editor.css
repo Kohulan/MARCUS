@@ -240,11 +240,9 @@
   margin: 0 auto;
 }
 
-.editor-src__view--page .editor-src__sheet[style] .editor-src__img {
+.editor-src__sheet--sized .editor-src__img {
   width: 100%;
-  max-width: none;
   max-height: none;
-  height: auto;
   user-select: none;
 }
 
@@ -253,7 +251,8 @@
   justify-content: center;
 }
 
-/* The zoom hint: rises in slowly above the zoom buttons, fades out by itself (HINT_MS). */
+/* The zoom hint: rises in slowly above the zoom buttons, fades out by itself; the end of
+   editor-hint-out removes it (EditorSource). */
 .editor-src__hint {
   position: absolute;
   bottom: 64px;
@@ -271,7 +270,7 @@
   pointer-events: none;
   transform: translateX(-50%);
   animation:
-    editor-hint-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both,
+    editor-hint-in 1.2s var(--ease) 0.6s both,
     editor-hint-out 1s ease-in 5.8s forwards;
 }
 
@@ -293,17 +292,10 @@
   }
 }
 
+/* No rise: both animations end at once (still ending, so the hint is removed). */
 @media (prefers-reduced-motion: reduce) {
   .editor-src__hint {
-    animation:
-      editor-hint-fade 0.01s linear 0.6s both,
-      editor-hint-out 0.01s linear 5.8s forwards;
-  }
-
-  @keyframes editor-hint-fade {
-    from {
-      opacity: 0;
-    }
+    animation-duration: 0.01s;
   }
 }
 

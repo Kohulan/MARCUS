@@ -1,6 +1,6 @@
 // The editor's left panel: the crop the engines read, and "Find on paper" to see the
 // structure's place on its page (one marker, the paper view's box placement), "Back" to return.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorSource, type EditorSourceInfo } from "./EditorSource";
 import { boxStyle } from "./pageBox";
@@ -112,6 +112,21 @@ describe("EditorSource zoom", () => {
     expect(zoomIn).toBeDisabled();
   });
 
+  it("a live update of the dialog (a new source object) does not move the page", () => {
+    const utils = render(<EditorSource source={SOURCE} />);
+    const view = utils.container.querySelector<HTMLElement>(".editor-src__view")!;
+    sized(view, 500, 700);
+    fireEvent.click(screen.getByRole("button", { name: "Find on paper" }));
+    const page = screen.getByRole("img", { name: "Page 3" });
+    natural(page, 2480, 3508);
+    fireEvent.load(page);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    view.scrollLeft = 123;
+    view.scrollTop = 456;
+    utils.rerender(<EditorSource source={{ ...SOURCE, page: { ...SOURCE.page! } }} />);
+    expect([view.scrollLeft, view.scrollTop]).toEqual([123, 456]);
+  });
+
   it("drag moves the page", () => {
     // jsdom has no PointerEvent: a MouseEvent with a pointerId and pointerType stands in
     class FakePointer extends MouseEvent {
@@ -169,16 +184,23 @@ describe("EditorSource zoom hint", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("goes away by itself after a few seconds", () => {
-    vi.useFakeTimers();
-    try {
-      open();
-      expect(screen.getByRole("status")).toBeInTheDocument();
-      act(() => vi.advanceTimersByTime(8000));
-      expect(screen.queryByRole("status")).toBeNull();
-      expect(localStorage.getItem(KEY)).toBeNull(); // not zoomed yet: shown again next time
-    } finally {
-      vi.useRealTimers();
+  it("goes away when its fade-out ends", () => {
+    // jsdom has no AnimationEvent: an Event with an animationName stands in
+    class FakeAnimation extends Event {
+      animationName: string;
+      constructor(type: string, init: AnimationEventInit = {}) {
+        super(type, init);
+        this.animationName = init.animationName ?? "";
+      }
     }
+    vi.stubGlobal("AnimationEvent", FakeAnimation);
+    open();
+    const hint = screen.getByRole("status");
+    fireEvent.animationEnd(hint, { animationName: "editor-hint-in" });
+    expect(screen.getByRole("status")).toBeInTheDocument(); // the rise-in ending keeps it
+    fireEvent.animationEnd(hint, { animationName: "editor-hint-out" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(localStorage.getItem(KEY)).toBeNull(); // not zoomed yet: shown again next time
+    vi.unstubAllGlobals();
   });
 });

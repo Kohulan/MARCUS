@@ -3,7 +3,7 @@
 // structure's box marked (pageBox, as the paper view places it), "Back" returns. The page opens
 // whole; "+" zooms in on the box ("−", drag or scroll to move), and a hint says so until the
 // curator has zoomed once. Ketcher on the right is untouched.
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { GlassButton } from "../ui/GlassButton";
 import { boxStyle } from "./pageBox";
 
@@ -18,9 +18,8 @@ export type EditorSourceInfo = {
 export const ZOOMS = [1, 1.5, 2, 3, 4, 6] as const;
 const PAD = 16; // .editor-src__view padding
 
-// The zoom hint: shown until the curator zooms once (this browser), for HINT_MS each time.
+// The zoom hint: shown until the curator zooms once (this browser); editor.css times it.
 const HINT_KEY = "marcus.zoomHintSeen";
-const HINT_MS = 7000;
 function hintSeen(): boolean {
   try {
     return localStorage.getItem(HINT_KEY) === "1";
@@ -43,12 +42,8 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [step, setStep] = useState(0);
   const zoom = ZOOMS[step]!;
+  // The zoom hint; its own CSS animation ends it (onAnimationEnd), or the first zoom does.
   const [hint, setHint] = useState(false);
-  useEffect(() => {
-    if (!hint) return;
-    const t = window.setTimeout(() => setHint(false), HINT_MS);
-    return () => window.clearTimeout(t);
-  }, [hint]);
   // One button for "Find on paper" and "Back": the same element keeps the focus (focused on
   // click too: Safari and tests do not focus a clicked button).
   const button = useRef<HTMLButtonElement>(null);
@@ -56,51 +51,58 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
     setHint(!onPage && !hintSeen());
     setOnPage((v) => !v);
     setStep(0);
-    anchor.current = null;
     button.current?.focus();
   };
 
-  // The page's width at zoom 1: the whole page fits the view. Measured once the page is in.
+  // The page's width at zoom 1: the whole page fits the view. Measured once the page is in,
+  // and again when the window changes size.
   const view = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<number | null>(null);
-  const measure = () => {
-    const v = view.current;
-    if (!v || !size) return;
-    const w = v.clientWidth - 2 * PAD;
-    const h = v.clientHeight - 2 * PAD;
-    if (w > 0 && h > 0) setFit(Math.min(w, (h * size.w) / size.h));
-  };
-  useLayoutEffect(measure, [size, onPage]);
   useLayoutEffect(() => {
+    const measure = () => {
+      const v = view.current;
+      if (!v || !size) return;
+      const w = v.clientWidth - 2 * PAD;
+      const h = v.clientHeight - 2 * PAD;
+      if (w > 0 && h > 0) setFit(Math.min(w, (h * size.w) / size.h));
+    };
+    measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }); // re-added each render: `measure` reads the newest size
+  }, [size, onPage]);
 
-  // The point of the page (fractions of its width and height) the view is centred on: the box
-  // when zooming in from the whole page, else the view's centre.
-  const anchor = useRef<{ fx: number; fy: number } | null>(null);
   const width = fit !== null ? fit * zoom : null;
-  // where the sheet starts in the view: centred while narrower than it (margin auto)
-  const left = (v: HTMLElement, w: number) => Math.max(PAD, (v.clientWidth - w) / 2);
+  const height = width !== null && size ? (width * size.h) / size.w : null;
+  // Where the sheet starts in the view: centred across while narrower than it (margin auto),
+  // PAD from the top.
+  const origin = (v: HTMLElement, w: number) => ({ x: Math.max(PAD, (v.clientWidth - w) / 2), y: PAD });
+
+  // The point of the page (fractions of its width and height) to centre once the zoom has
+  // changed: the box when zooming in from the whole page, else the view's centre. Only a zoom
+  // sets it, so a live update of the dialog never moves the page.
+  const anchor = useRef<{ fx: number; fy: number } | null>(null);
   useLayoutEffect(() => {
     const v = view.current;
-    if (!v || !page || !size || width === null) return;
-    const [x0, y0, x1, y1] = page.bbox;
-    const at = anchor.current ?? { fx: (x0 + x1) / 2 / size.w, fy: (y0 + y1) / 2 / size.h };
-    const height = (width * size.h) / size.w;
-    v.scrollLeft = at.fx * width + left(v, width) - v.clientWidth / 2;
-    v.scrollTop = at.fy * height + PAD - v.clientHeight / 2;
-  }, [width, size, page]);
+    const at = anchor.current;
+    if (!v || !at || width === null || height === null) return;
+    anchor.current = null;
+    const o = origin(v, width);
+    v.scrollLeft = at.fx * width + o.x - v.clientWidth / 2;
+    v.scrollTop = at.fy * height + o.y - v.clientHeight / 2;
+  }, [width, height]);
   const zoomBy = (d: number) => {
     setHint(false);
     markHintSeen();
     const v = view.current;
-    anchor.current = null;
-    if (step > 0 && v && size && width !== null) {
-      const height = (width * size.h) / size.w;
+    if (!v || !page || !size || width === null || height === null) return;
+    if (step === 0) {
+      const [x0, y0, x1, y1] = page.bbox;
+      anchor.current = { fx: (x0 + x1) / 2 / size.w, fy: (y0 + y1) / 2 / size.h };
+    } else {
+      const o = origin(v, width);
       anchor.current = {
-        fx: (v.scrollLeft + v.clientWidth / 2 - left(v, width)) / width,
-        fy: (v.scrollTop + v.clientHeight / 2 - PAD) / height,
+        fx: (v.scrollLeft + v.clientWidth / 2 - o.x) / width,
+        fy: (v.scrollTop + v.clientHeight / 2 - o.y) / height,
       };
     }
     setStep((s) => Math.min(Math.max(s + d, 0), ZOOMS.length - 1));
@@ -136,7 +138,7 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
       >
         {onPage && page ? (
           <div
-            className="editor-src__sheet"
+            className={width !== null ? "editor-src__sheet editor-src__sheet--sized" : "editor-src__sheet"}
             data-zoom={zoom}
             style={width !== null ? { width: `${width}px` } : undefined}
           >
@@ -159,8 +161,12 @@ export function EditorSource({ source }: { source: EditorSourceInfo }) {
           />
         )}
       </div>
-      {onPage && hint ? (
-        <p className="editor-src__hint" role="status">
+      {hint ? (
+        <p
+          className="editor-src__hint"
+          role="status"
+          onAnimationEnd={(e) => e.animationName === "editor-hint-out" && setHint(false)}
+        >
           Use + and − to zoom
         </p>
       ) : null}
