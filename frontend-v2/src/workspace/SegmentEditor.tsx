@@ -2,6 +2,7 @@
 // it opens on the structure the card shows and saves through useSaveCuration with
 // editorChange, so curationBody keeps the note and a structure still to check is accepted.
 import { useState } from "react";
+import { api } from "../api/client";
 import { useSaveCuration } from "../api/queries";
 import type { SegmentOut } from "../api/types";
 import { shownStructure } from "./cardState";
@@ -40,7 +41,10 @@ export function SegmentEditor({
   const onSave = async (s: EditorStructure) => {
     await save(segment.id, editorChange(segment.curation, s));
   };
-  return (
-    <Editor initial={initial} onSave={onSave} onClose={onClose} />
-  );
+  // Left of Ketcher: the crop the engines read, and its page with this structure's box.
+  const source = {
+    image: api.segmentImageUrl(segment.id),
+    page: { url: api.pageImageUrl(paperId, segment.page), bbox: segment.bbox, page0: segment.page },
+  };
+  return <Editor initial={initial} source={source} onSave={onSave} onClose={onClose} />;
 }

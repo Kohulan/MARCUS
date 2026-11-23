@@ -361,6 +361,7 @@ function Result({
       {editing && (
         <Editor
           initial={{ smiles, molfile }}
+          source={{ image: api.imageUrl(job.id), page: null }}
           onSave={async (structure) => {
             setEdit(structure);
           }}

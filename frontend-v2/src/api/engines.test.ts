@@ -1,16 +1,11 @@
 // imageLayout: the same verdicts as the tools worker (backend workers/orient.py image_layout,
 // tests/workers/test_orient.py) on the same real engine output.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { backendFixture } from "../test/backendFixture";
 import { describe, expect, it } from "vitest";
 import { imageLayout } from "./engines";
 
 type Out = { smiles: string; molfile: string | null };
-const fixture = (name: string) =>
-  JSON.parse(readFileSync(resolve(process.cwd(), "../backend-v2/tests/fixtures", name), "utf8")) as Record<
-    string,
-    Record<string, Out> | Out | string
-  >;
+const fixture = (name: string) => backendFixture<Record<string, Record<string, Out> | Out | string>>(name);
 
 const real = fixture("orient_engines.json") as Record<string, Record<string, Out>>;
 const fixed = fixture("molnextr_7a4e03f.json");

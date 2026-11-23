@@ -106,6 +106,12 @@
   outline-offset: 1px;
 }
 
+/* "Use coordinates" (the toggle square: ui/glass.css). */
+.editor__coords {
+  padding: 8px 14px 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
 .editor__error {
   margin: 0;
   padding: 10px 20px;
@@ -154,4 +160,109 @@
 .editor__loading .pb {
   flex: none;
   width: 200px;
+}
+
+/* With a source (the crop, its page): two columns, the source left, the SMILES row, the
+   toggle and Ketcher right. Below 720 px they stack, the source above Ketcher. */
+.editor--split {
+  width: min(1480px, calc(100vw - 48px));
+}
+
+.editor__body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.editor__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+}
+
+.editor-src {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--surface);
+}
+
+.editor-src__view {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* The page: the sheet is exactly the shown image, so the percent box stays on the structure. */
+.editor-src__sheet {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.editor-src__img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.editor-src__sheet .editor-src__img {
+  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
+}
+
+.editor-src__crop {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.editor-src__mark {
+  position: absolute;
+  top: var(--t);
+  left: var(--l);
+  width: var(--w);
+  height: var(--h);
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  pointer-events: none;
+}
+
+.editor-src__bar {
+  display: flex;
+  justify-content: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 719.98px) {
+  .editor--split {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    height: calc(100dvh - 16px);
+  }
+
+  .editor__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  .editor__main {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .editor-src__sheet .editor-src__img {
+    max-height: calc(40vh - 80px);
+    max-height: calc(40dvh - 80px);
+  }
 }

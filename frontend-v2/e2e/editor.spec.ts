@@ -4,6 +4,7 @@
 // `npm run build`, the fake stack and `npm run serve:local` (Group F header); never production.
 import { expect, test } from "@playwright/test";
 import { collectCspViolations, routeMatomo, uploadPaperViaApi } from "./helpers";
+import { FIRST, PID, routeApi } from "./mockedApi";
 
 const SAMPLE_PDF = "public/sample/synth_015.pdf";
 const STRUCTURES = 10; // the fake segmenter: 2 per page, 5 pages
@@ -141,5 +142,54 @@ test("edit a structure in Ketcher: saved, note kept, drawing changed, no CSP vio
   await expect(dialog).toHaveCount(0);
   await expect(card.getByRole("button", { name: "More for [01]" })).toBeFocused();
 
+  expect(await csp()).toEqual([]);
+});
+
+// The crop beside Ketcher, and its page (the mocked API: needs only `npm run serve:local`).
+test("the editor shows the crop, and Find on paper shows its page", { tag: "@mocked" }, async ({ page }) => {
+  test.setTimeout(120_000);
+  const csp = collectCspViolations(page);
+  await routeApi(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/app/papers/${PID}?s=${FIRST}&focus=1`);
+  await expect(page.getByRole("region", { name: "Focus [01]" })).toBeVisible();
+  await page.keyboard.press("e");
+  const dialog = page.getByRole("dialog", { name: "Edit structure" });
+  await expect(dialog).toBeVisible();
+  const crop = dialog.getByRole("img", { name: "Crop the engines read" });
+  await expect(crop).toBeVisible();
+  await expect.poll(() => crop.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(dialog.getByRole("button", { name: "Use coordinates" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Find on paper" }).click();
+  const sheet = dialog.getByRole("img", { name: /^Page \d+$/ });
+  await expect(sheet).toBeVisible();
+  await expect(crop).toHaveCount(0);
+  const back = dialog.getByRole("button", { name: "Back" });
+  await expect(back).toBeFocused();
+  // the box sits on the page image
+  const mark = dialog.locator(".editor-src__mark");
+  await expect(mark).toHaveCount(1);
+  const [m, p] = [await mark.boundingBox(), await sheet.boundingBox()];
+  expect(m && p && m.width > 0 && m.x >= p.x && m.y >= p.y).toBeTruthy();
+  expect(m!.x + m!.width).toBeLessThanOrEqual(p!.x + p!.width + 1);
+  expect(m!.y + m!.height).toBeLessThanOrEqual(p!.y + p!.height + 1);
+
+  await back.click();
+  await expect(crop).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Find on paper" })).toBeFocused();
+
+  // The tool's narrowest width: both panels side by side, no horizontal scroll.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(crop).toBeVisible();
+  await expect(dialog.locator('iframe[title="Structure editor"]')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+  // A phone: no horizontal scroll either.
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
   expect(await csp()).toEqual([]);
 });
