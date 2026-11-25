@@ -3,7 +3,7 @@
 // Download JSON saves MARCUS JSON. axe: 0 serious or critical violations.
 import { expect, test } from "@playwright/test";
 import { collectCspViolations, expectNoA11yViolations } from "./helpers";
-import { FIRST, PID, routeApi } from "./mockedApi";
+import { FIRST, PID, paper, routeApi } from "./mockedApi";
 
 test.describe("COCONUT side form", { tag: "@mocked" }, () => {
   let csp: () => Promise<string[]>;
@@ -12,13 +12,28 @@ test.describe("COCONUT side form", { tag: "@mocked" }, () => {
     csp = collectCspViolations(page);
     await routeApi(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.route(`**/api/v2/segments/${FIRST}/curation`, (route) =>
-      route.fulfill({
+    // as the server does: once Accept is saved, the paper says so
+    const accepted = structuredClone(paper) as unknown as {
+      segments: { id: string; curation: unknown }[];
+    };
+    accepted.segments.find((x) => x.id === FIRST)!.curation = {
+      status: "accepted",
+      smiles: null,
+      molfile: null,
+      note: null,
+    };
+    let current: unknown = paper;
+    await page.route(`**/api/v2/papers/${PID}`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(current) }),
+    );
+    await page.route(`**/api/v2/segments/${FIRST}/curation`, (route) => {
+      current = accepted;
+      return route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ status: "accepted", smiles: null, molfile: null, note: null }),
-      }),
-    );
+      });
+    });
   });
 
   test.afterEach(async () => {
