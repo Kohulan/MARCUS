@@ -76,7 +76,6 @@ export default function ToolHome() {
   const images = useImages(listed);
 
   const [engine, setEngine] = useState<Engine>("decimer");
-  const [auto, setAuto] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
 
@@ -97,7 +96,8 @@ export default function ToolHome() {
       try {
         await listAnswered();
         if (kind === "pdf") {
-          const out = await api.uploadPaper(file, { engine, ocsr: auto ? "auto" : "off" });
+          // the paper page asks: read all pages or pick a structure
+          const out = await api.uploadPaper(file, { engine, ocsr: "ask" });
           void client.invalidateQueries({ queryKey: keys.papers() });
           navigate(`/app/papers/${encodeURIComponent(out.paper_id)}`);
         } else {
@@ -110,7 +110,7 @@ export default function ToolHome() {
         setBusy(null);
       }
     },
-    [auto, client, engine, listAnswered, navigate],
+    [client, engine, listAnswered, navigate],
   );
 
   // Each upload takes one of the three active-paper slots: a listed sample is opened.
@@ -181,8 +181,6 @@ export default function ToolHome() {
         <DropZone
           engine={engine}
           onEngine={setEngine}
-          auto={auto}
-          onAuto={setAuto}
           onFile={(file, kind) => void upload(file, kind, `Uploading ${file.name}…`)}
           onRefuse={(text) => setProblem({ text })}
           busy={busy}

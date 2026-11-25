@@ -14,9 +14,6 @@ const ONE_FILE = "Drop one file at a time.";
 type DropZoneProps = {
   engine: Engine;
   onEngine: (engine: Engine) => void;
-  /** `ocsr` auto (true) or off (false); PDFs only. */
-  auto: boolean;
-  onAuto: (auto: boolean) => void;
   /** A file the browser accepts: the right type and at most 20 MB. */
   onFile: (file: File, kind: FileKind) => void;
   /** A file refused in the browser, with the reason. */
@@ -30,14 +27,12 @@ type DropZoneProps = {
 };
 
 /**
- * The upload strip of the tool home: one drop area, the engine and the "find structures"
- * switch, and the file button. Checks type and size before anything is sent.
+ * The upload strip of the tool home: one drop area, the engine, and the file button. Checks
+ * type and size before anything is sent. (What to read is asked on the paper page.)
  */
 export default function DropZone({
   engine,
   onEngine,
-  auto,
-  onAuto,
   onFile,
   onRefuse,
   busy,
@@ -139,21 +134,6 @@ export default function DropZone({
               </option>
             ))}
           </select>
-        </label>
-        <label className="switch">
-          <input
-            type="checkbox"
-            role="switch"
-            className="switch__input"
-            aria-label="Find structures automatically"
-            checked={auto}
-            disabled={busy !== null}
-            onChange={(e) => onAuto(e.target.checked)}
-          />
-          <span className="switch__text">
-            Find structures automatically
-            <span className="switch__note">PDF only</span>
-          </span>
         </label>
       </div>
 

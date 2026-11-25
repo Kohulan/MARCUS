@@ -18,12 +18,18 @@ from marcus.api.deps import (
     work_ip,
 )
 from marcus.api.read import IMAGE_HEADERS, named_on, structure_out, waiting_ocsr_step
-from marcus.api.schemas import CurationIn, CurationOut, PredictionRequest, StepAccepted
+from marcus.api.schemas import (
+    CurationIn,
+    CurationOut,
+    PredictionRequest,
+    ReadAccepted,
+    StepAccepted,
+)
 from marcus.core import storage
 from marcus.core.db import get_db
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, InheritedStatus, Owner, Prediction, Step
-from marcus.core.pipeline import request_ocsr
+from marcus.core.pipeline import ModeNotAllowed, read_segment, request_ocsr
 
 router = APIRouter()
 
@@ -108,6 +114,29 @@ async def run_prediction(
         raise not_found() from None  # the paper was deleted meanwhile
     await db.commit()
     return StepAccepted(step_id=step.id)
+
+
+@router.post("/segments/{segment_id}/read", status_code=202, response_model=ReadAccepted)
+async def read_segment_route(
+    request: Request,
+    segment_id: uuid.UUID,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> ReadAccepted:
+    """Pick mode: the user picked this box; it is read by the three engines (again: the steps
+    it has). 409 {"detail": "mode"} when its paper is not in pick mode."""
+    segment, _ = await get_owned_segment(db, owner, segment_id)
+    try:
+        ip = work_ip(request)
+        steps = await db.run_sync(lambda s: read_segment(s, segment.id, started_ip=ip))
+    except ModeNotAllowed:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="mode") from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None
+    await db.commit()
+    return ReadAccepted(step_ids=[st.id for st in steps])
 
 
 @router.put("/segments/{segment_id}/curation", response_model=CurationOut)

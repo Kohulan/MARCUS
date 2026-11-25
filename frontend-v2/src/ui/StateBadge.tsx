@@ -44,8 +44,18 @@ export default function StateBadge({ state }: { state: CardState }) {
 }
 
 /** A paper's or image job's state as its word and its shape. */
-export function ItemState({ status, notRead }: { status: string; notRead?: boolean }) {
+export function ItemState({
+  status,
+  notRead,
+  choose,
+}: {
+  status: string;
+  notRead?: boolean;
+  /** The paper waits for "Read all pages" / "Pick a structure". */
+  choose?: boolean;
+}) {
   if (status === "failed") return <StateBadge state="failed" />;
+  if (status === "done" && choose) return <span className="state badge badge--orange">Choose</span>;
   if (status === "done") {
     if (notRead) return <StateBadge state="not-read" />;
     return (

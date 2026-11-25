@@ -704,12 +704,20 @@ async def test_paper_without_segments_has_zero_counts(app, async_db_session):
 
 
 async def _ocsr_step(db, segment_id, status, later_s=0):
-    """Set the segment's ocsr step to `status`; with `later_s`, add a newer step instead."""
+    """Set the segment's own ocsr step (the paper engine's, not a background one) to `status`;
+    with `later_s`, add a newer step instead. The own step is chosen explicitly: the segment has
+    three, and an unordered `.first()` picked a background one now and then (flaky in CI)."""
+    from marcus.core.models import BackgroundStep
+
     step = (
-        (await db.execute(select(Step).where(Step.segment_id == segment_id, Step.kind == "ocsr")))
-        .scalars()
-        .first()
-    )
+        await db.execute(
+            select(Step).where(
+                Step.segment_id == segment_id,
+                Step.kind == "ocsr",
+                Step.id.not_in(select(BackgroundStep.step_id)),
+            )
+        )
+    ).scalar_one()
     if later_s:
         db.add(
             Step(

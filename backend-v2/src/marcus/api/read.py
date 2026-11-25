@@ -43,6 +43,7 @@ from marcus.core.models import (
     Segment,
     Step,
 )
+from marcus.core.picks import candidate_clause
 from marcus.core.pipeline import (
     ACTIVE,
     PAGE_KINDS,
@@ -155,6 +156,7 @@ async def paper_counts(
         .outerjoin(Curation, Curation.segment_id == Segment.id)
         .where(
             Segment.paper_id.in_(paper_ids),
+            ~candidate_clause(),  # pick mode: a box not picked is no structure
             *([Segment.id.not_in(fix.hidden)] if fix.hidden else []),
         )
         .group_by(Segment.paper_id)
@@ -289,14 +291,17 @@ async def steps_by_status(db: AsyncSession, paper_id: uuid.UUID) -> dict[str, in
     return {status: n for status, n in rows.all()}
 
 
-async def load_segments(db: AsyncSession, paper_id: uuid.UUID):
+async def load_segments(db: AsyncSession, paper_id: uuid.UUID, *, candidates: bool = False):
     """Segments in (page, idx) order, curation per segment, predictions per segment (newest
-    first). Three queries, whatever the number of segments."""
+    first). Three queries, whatever the number of segments. Pick-mode candidates
+    (marcus.core.picks) only with `candidates` (the page drawing them): every structure reader
+    (export, decisions, links) leaves them out."""
+    counted = [] if candidates else [~candidate_clause()]
     segments = list(
         (
             await db.execute(
                 select(Segment)
-                .where(Segment.paper_id == paper_id)
+                .where(Segment.paper_id == paper_id, *counted)
                 .order_by(Segment.page, Segment.idx)
             )
         ).scalars()
@@ -533,7 +538,7 @@ async def _load_light(db: AsyncSession, paper_ids: list[uuid.UUID]):
     """load_segments for several papers, with only the columns the linking reads (shown_source,
     repeat_links, the statuses; the bbox for the compound IDs): no prediction molfile, a curated
     molfile only where the curation has no SMILES. Segments in (paper, page, idx) order."""
-    of_papers = Segment.paper_id.in_(paper_ids)
+    of_papers = and_(Segment.paper_id.in_(paper_ids), ~candidate_clause())
     segments = (
         await db.execute(
             select(Segment.id, Segment.paper_id, Segment.page, Segment.idx, Segment.bbox)
@@ -708,7 +713,14 @@ async def segments_out(
     (repeat_links); an inherited status that no longer holds shows as unchecked. With them,
     how paper_counts counts the linked groups, and whether the links could be computed (not:
     the chem process busy; no repeat_of at all, every inherited status unchecked)."""
-    segments, curations, predictions = await load_segments(db, paper.id)
+    shown, curations, predictions = await load_segments(db, paper.id, candidates=True)
+    candidates = set(
+        await db.scalars(
+            select(Segment.id).where(Segment.paper_id == paper.id, candidate_clause())
+        )
+    )
+    # the structures; candidates (pick mode) are only drawn on their page
+    segments = [seg for seg in shown if seg.id not in candidates]
     index = paper.rgroup_text_labels
     labels = await figure_labels(paper.id)
     boxes, names = labels if labels is not None else NO_LABELS
@@ -769,8 +781,9 @@ async def segments_out(
                 structure_out(PredictionOut, p, named_on(index, seg.page))
                 for p in predictions[seg.id]
             ],
+            candidate=seg.id in candidates,
         )
-        for seg in segments
+        for seg in shown
     ]
     return out, fix, links is not None
 

@@ -40,7 +40,7 @@ const sameMarker = (a: PageMarker, b: PageMarker) =>
  * newest render_page step failed: the reason. A render still to come, or none yet on a
  * paper being worked on: waiting. No render_page step on a finished paper: try the image.
  */
-function pageImages(steps: StepOut[], pages: number, busy: boolean): PageImage[] {
+export function pageImages(steps: StepOut[], pages: number, busy: boolean): PageImage[] {
   const byPage = pageSteps(steps);
   return Array.from({ length: pages }, (_, page0): PageImage => {
     const renders = (byPage.get(page0) ?? []).filter((s) => s.kind === "render_page");

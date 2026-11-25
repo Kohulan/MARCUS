@@ -10,7 +10,11 @@ export type Engine = "decimer" | "decimer-hand" | "molparser" | "molscribe";
 export type LegacyEngine = "molnextr";
 export type CurationStatus = "unchecked" | "accepted" | "rejected";
 export type ErrorClass = "timeout" | "worker_lost" | "bad_input" | "engine_error";
-export type OcsrMode = "auto" | "off";
+/**
+ * auto: every page read; off: every page segmented, nothing read; ask: the paper page asks
+ * "Read all pages" / "Pick a structure"; pick: pages segmented and boxes read when the user asks.
+ */
+export type OcsrMode = "auto" | "off" | "ask" | "pick";
 export type ExportFormat = "json" | "csv" | "sdf";
 export type ExportStatus = "accepted" | "all";
 
@@ -123,6 +127,8 @@ export interface SegmentOut {
   bbox: [number, number, number, number];
   curation: CurationOut | null;
   predictions: PredictionOut[];
+  /** Pick mode: a box the user has not picked. Drawn on its page only: no card, in no count. */
+  candidate?: boolean;
   /**
    * The main-figure structure this one repeats (the same compound on another page: same
    * InChIKey). Null or absent for every other structure, and without a main figure.
@@ -198,6 +204,20 @@ export interface PaperDetail extends PaperSummary {
   links_ready?: boolean;
   counts: Counts;
   segments: SegmentOut[];
+}
+
+export interface ModeOut {
+  ocsr_mode: OcsrMode;
+}
+
+/** A page opened in pick mode: its segment step, or null when its boxes are there. */
+export interface SegmentAccepted {
+  step_id: string | null;
+}
+
+/** A box picked in pick mode: its three engines' steps. */
+export interface ReadAccepted {
+  step_ids: string[];
 }
 
 export interface StepAccepted {

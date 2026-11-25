@@ -138,6 +138,9 @@ class SegmentOut(BaseModel):
     # still reading, with fewer than two read or two with an InChIKey, and for a scaffold.
     agree: int | None = None
     agree_of: int | None = None
+    # Pick mode (marcus.core.picks): a box the user has not picked; drawn on its page only, no
+    # card, in no count, export or bulk action.
+    candidate: bool = False
     # The engines that agree ([] none), in DECIMER, MolParser (MolNexTR on old papers), MolScribe
     # order.
     agree_engines: list[str] = []
@@ -185,6 +188,28 @@ class PaperDetail(PaperSummary):
 
 class PredictionRequest(BaseModel):
     engine: Engine
+
+
+class ModeIn(BaseModel):
+    """The user's answer on the paper page: read all pages, or pick a structure."""
+
+    mode: Literal["auto", "pick"]
+
+
+class ModeOut(BaseModel):
+    ocsr_mode: str
+
+
+class SegmentAccepted(BaseModel):
+    """A page opened in pick mode: its segment_page step, or None when its boxes are there."""
+
+    step_id: uuid.UUID | None
+
+
+class ReadAccepted(BaseModel):
+    """A box picked in pick mode: its OCSR steps (the three engines)."""
+
+    step_ids: list[uuid.UUID]
 
 
 class StepAccepted(BaseModel):

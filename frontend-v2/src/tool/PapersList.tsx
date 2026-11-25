@@ -86,7 +86,11 @@ function PaperRow({ paper }: { paper: PaperSummary }) {
   return (
     <li className="item">
       <div className="item__state">
-        <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
+        <ItemState
+          status={paper.status}
+          notRead={paper.ocsr_mode === "off"}
+          choose={paper.ocsr_mode === "ask"}
+        />
       </div>
       <div className="item__main">
         <p className="item__name">{paperName(paper)}</p>

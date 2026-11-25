@@ -702,3 +702,43 @@ def test_migration_0021_molparser_replaces_molnextr(migrated_db):
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))
         command.upgrade(cfg, "head")
+
+
+def test_migration_0022_pick_modes_up_down(migrated_db):
+    """0022: papers.ocsr_mode also takes `ask` and `pick`; the downgrade refuses while a paper
+    has one of them."""
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            s.commit()
+            pid = paper.id
+        with engine.begin() as conn:
+            for mode in ("ask", "pick", "off", "auto"):
+                conn.execute(text("UPDATE papers SET ocsr_mode = :m WHERE id = :p"),
+                             {"m": mode, "p": pid})  # fmt: skip
+        with pytest.raises(DBAPIError):
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE papers SET ocsr_mode = 'nope' WHERE id = :p"),
+                             {"p": pid})  # fmt: skip
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE papers SET ocsr_mode = 'pick' WHERE id = :p"), {"p": pid})
+        with pytest.raises(DBAPIError, match="ask or pick"):
+            command.downgrade(cfg, "0021")
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE papers SET ocsr_mode = 'auto' WHERE id = :p"), {"p": pid})
+        command.downgrade(cfg, "0021")
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")
