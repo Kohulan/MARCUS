@@ -54,8 +54,11 @@ from marcus.api.schemas import (
     Counts,
     MainFigureIn,
     MainFigureOut,
+    ModeIn,
+    ModeOut,
     PaperDetail,
     PaperList,
+    SegmentAccepted,
     SegmentList,
     StepAccepted,
     StepList,
@@ -67,12 +70,16 @@ from marcus.core.db import get_db
 from marcus.core.enums import Engine, PaperStatus
 from marcus.core.main_figure import stale_members
 from marcus.core.models import Curation, MainFigure, Owner, Paper, Prediction, Segment
+from marcus.core.picks import candidate_clause
 from marcus.core.pipeline import (
+    ModeNotAllowed,
     RetryNotAllowed,
     cancel_paper,
+    choose_mode,
     new_paper,
     remove_paper_files,
     retry_page,
+    segment_page_on_request,
     store_pdf,
 )
 from marcus.core.settings import get_settings
@@ -172,7 +179,8 @@ async def put_bulk_curation(
         (
             await db.execute(
                 select(Segment.id)
-                .where(Segment.paper_id == paper.id, Segment.id.in_(ids))
+                # a pick-mode candidate is no structure: as unknown as another paper's segment
+                .where(Segment.paper_id == paper.id, Segment.id.in_(ids), ~candidate_clause())
                 .order_by(Segment.id)  # one lock order: overlapping bulk calls cannot deadlock
                 .with_for_update()
             )
@@ -326,6 +334,60 @@ async def retry_page_route(
         raise not_found() from None  # deleted meanwhile
     await db.commit()
     return StepAccepted(step_id=step.id)
+
+
+@router.put("/papers/{paper_id}/mode", response_model=ModeOut)
+async def choose_mode_route(
+    request: Request,
+    paper_id: uuid.UUID,
+    body: ModeIn,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> ModeOut:
+    """The answer on the paper page: read all pages (auto) or pick a structure (pick); also
+    "Read all pages" in pick mode. 409 {"detail": "mode"} for any other change."""
+    paper = await get_owned_paper(db, owner, paper_id)
+    try:
+        ip = work_ip(request)
+        await db.run_sync(lambda s: choose_mode(s, paper.id, body.mode, started_ip=ip))
+    except ModeNotAllowed:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="mode") from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None  # deleted meanwhile
+    await db.commit()
+    return ModeOut(ocsr_mode=body.mode)
+
+
+@router.post(
+    "/papers/{paper_id}/pages/{n}/segment", status_code=202, response_model=SegmentAccepted
+)
+async def segment_page_route(
+    request: Request,
+    paper_id: uuid.UUID,
+    n: int,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> SegmentAccepted:
+    """Pick mode: the user opened page n (0-based); its boxes appear as candidates. step_id
+    None: the boxes are there already. 409 {"detail": "mode" | "not_rendered" | "limit"}."""
+    paper = await get_owned_paper(db, owner, paper_id)
+    if paper.pages is None or not 0 <= n < paper.pages:
+        raise not_found()
+    try:
+        ip = work_ip(request)
+        step = await db.run_sync(
+            lambda s: segment_page_on_request(s, paper.id, n, started_ip=ip)
+        )
+    except (ModeNotAllowed, RetryNotAllowed) as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=exc.reason) from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None
+    await db.commit()
+    return SegmentAccepted(step_id=step.id if step is not None else None)
 
 
 @router.get("/papers/{paper_id}/text")

@@ -57,6 +57,8 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/papers/{paper_id}/steps"),
     ("GET", "/api/v2/papers/{paper_id}/pages/{n}/image"),
     ("POST", "/api/v2/papers/{paper_id}/pages/{n}/retry"),
+    ("POST", "/api/v2/papers/{paper_id}/pages/{n}/segment"),  # pick a structure
+    ("PUT", "/api/v2/papers/{paper_id}/mode"),  # all pages or pick a structure
     ("GET", "/api/v2/papers/{paper_id}/text"),
     ("GET", "/api/v2/papers/{paper_id}/export"),
     ("GET", "/api/v2/papers/{paper_id}/events"),
@@ -76,6 +78,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/segments/{segment_id}/image"),
     ("GET", "/api/v2/segments/{segment_id}/depiction"),
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
+    ("POST", "/api/v2/segments/{segment_id}/read"),  # pick a structure
     ("PUT", "/api/v2/segments/{segment_id}/curation"),
     ("PUT", "/api/v2/papers/{paper_id}/curation"),
     ("PUT", "/api/v2/papers/{paper_id}/main-figure"),

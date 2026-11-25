@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from marcus.core.enums import Engine
-from marcus.core.models import BackgroundStep, Paper, Segment, Step
+from marcus.core.models import BackgroundStep, Paper, Step
 from marcus.core.pipeline import (
     MANUAL_PAGE_RETRIES,
     ModeNotAllowed,
