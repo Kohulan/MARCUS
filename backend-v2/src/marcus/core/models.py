@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from marcus.core.db import Base
 from marcus.core.enums import (
+    BUILT_ENGINE,
     OCSR_MODES,
     Engine,
     ErrorClass,
@@ -37,6 +38,8 @@ def _in(column: str, values) -> str:
 
 
 ENGINES = [e.value for e in Engine]
+# predictions and steps: the engines, and the built structures (marcus.core.enumeration)
+PREDICTION_ENGINES = [*ENGINES, BUILT_ENGINE]
 IMAGE_JOB_STATUSES = [s.value for s in ImageJobStatus]
 
 
@@ -161,7 +164,9 @@ class Step(Base):
         ),
         CheckConstraint(_in("kind", [k.value for k in StepKind]), name="ck_steps_kind"),
         CheckConstraint(_in("status", [s.value for s in StepStatus]), name="ck_steps_status"),
-        CheckConstraint("engine IS NULL OR " + _in("engine", ENGINES), name="ck_steps_engine"),
+        CheckConstraint(
+            "engine IS NULL OR " + _in("engine", PREDICTION_ENGINES), name="ck_steps_engine"
+        ),
         CheckConstraint(
             "error_class IS NULL OR " + _in("error_class", [e.value for e in ErrorClass]),
             name="ck_steps_error_class",
@@ -198,7 +203,7 @@ class Step(Base):
 class Prediction(Base):
     __tablename__ = "predictions"
     __table_args__ = (
-        CheckConstraint(_in("engine", ENGINES), name="ck_predictions_engine"),
+        CheckConstraint(_in("engine", PREDICTION_ENGINES), name="ck_predictions_engine"),
         Index("ix_predictions_segment_id", "segment_id"),
         Index("ix_predictions_image_job_id", "image_job_id"),
     )
@@ -401,3 +406,43 @@ class BackgroundStep(Base):
     step_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("steps.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+class BuiltSegment(Base):
+    """A structure MARCUS built from a scaffold and one of its R-group rows (Markush Phase 3,
+    marcus.core.built): a segment with the scaffold's crop and position (idx 10000 and up), an
+    `enumerated` prediction and a curation, linked here to its scaffold. `row_key`: the row's
+    compound ID; `input_hash`: of the scaffold structure and the row's groups (the rebuild rule).
+    A table of its own, not a segments column: the migration tests of older revisions insert
+    segments through the ORM."""
+
+    __tablename__ = "built_segments"
+    __table_args__ = (
+        UniqueConstraint("scaffold_segment_id", "row_key", name="uq_built_segments_scaffold_row"),
+        Index("ix_built_segments_scaffold_segment_id", "scaffold_segment_id"),
+    )
+
+    segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )
+    scaffold_segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE")
+    )
+    row_key: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_hash: Mapped[str] = mapped_column(CHAR(64))
+    created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
+
+class ScaffoldBuild(Base):
+    """A scaffold's last build (Markush Phase 3): the rows that could not be built, with the
+    reason ([{compound, reason}]); the built ones are BuiltSegment rows."""
+
+    __tablename__ = "scaffold_builds"
+
+    scaffold_segment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), primary_key=True
+    )
+    failures: Mapped[list] = mapped_column(JSONB)
+    built_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
+
