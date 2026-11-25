@@ -326,7 +326,10 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           rows={rows}
           segmentId={side}
           start={coconutStart(annotation)}
-          onClose={() => setSide(null)}
+          onClose={() => {
+            setSide(null);
+            showCard(side, true); // focus back on its card
+          }}
         />
       )}
     </div>

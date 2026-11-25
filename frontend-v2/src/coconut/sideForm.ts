@@ -41,11 +41,18 @@ export function sideStart(
   const held = placeholder || (smiles !== null && hasDummyAtom(smiles));
   const name =
     segment.compound_name?.trim() || (segment.compound_id ? `Compound ${segment.compound_id}` : "");
+  // the structure the card shows now (computed on every render: an edit or a new read counts)
+  const reason =
+    segment.curation?.status !== "accepted"
+      ? `Accept ${structureTag(n)} to send it`
+      : held
+        ? heldReason({ segmentId: segment.id, n, rgroups: rgroups.length ? rgroups : [UNLABELLED] })
+        : !smiles
+          ? "No structure to send"
+          : null;
   return {
-    structure: held || !smiles ? null : { segmentId: segment.id, n, smiles },
-    heldReason: held
-      ? heldReason({ segmentId: segment.id, n, rgroups: rgroups.length ? rgroups : [UNLABELLED] })
-      : null,
+    structure: reason === null && smiles ? { segmentId: segment.id, n, smiles } : null,
+    heldReason: reason,
     paper: {
       title: submissionTitle({ firstAuthor: paper.first_author, year: paper.year }),
       doi: paper.doi ?? "",
@@ -76,8 +83,10 @@ export function marcusJson(
       tag: structureTag(n),
       page: segment.page + 1,
       compound_id: segment.compound_id ?? null,
-      name: fields.name,
+      name: fields.name.trim(),
       smiles: structure.smiles,
+      molfile: shownStructure(segment, paper.engine).molfile,
+      rgroups: shownStructure(segment, paper.engine).rgroups,
       built_from: built
         ? { tag: structureTag(built.n), row: row?.compound ?? null, groups: row?.groups ?? null }
         : null,
@@ -88,7 +97,9 @@ export function marcusJson(
       comment: fields.comment?.trim() ? fields.comment : paperFields.comment,
       organisms: fields.organism ? [fields.organism] : paperFields.organisms,
       structural_comments: fields.structuralComments,
+      // as the report COCONUT gets (buildReport): the DOI; the compound ID is structure.compound_id
       reference_id: paperFields.doi.trim(),
+      link: structure.link ?? "",
     },
   };
 }

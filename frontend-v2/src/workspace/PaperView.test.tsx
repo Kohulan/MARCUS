@@ -1273,9 +1273,10 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     renderAt(paper([segment("s1", { page: 0, compound_id: "12" })]));
     fireEvent.click(await screen.findByRole("button", { name: "Accept [01]" }));
     const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
-    expect(within(form).getByLabelText("Name")).toHaveValue("Compound 12");
+    expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12"); // once the status lands
     fireEvent.click(within(form).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("complementary", { name: "COCONUT [01]" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(card("[01]")));
   });
 
   it("Reject opens nothing", async () => {

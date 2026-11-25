@@ -21,6 +21,20 @@ const PAPER = {
 } as unknown as PaperDetail;
 const START = { organisms: [{ name: "Millettia dura", parts: "", location: "", ecosystems: "" }], note: undefined };
 
+function panel(segment: SegmentOut, onClose = vi.fn()) {
+  return (
+    <CoconutSidePanel
+      paper={PAPER}
+      segment={segment}
+      n={2}
+      start={START}
+      built={{ segmentId: "s1", n: 1 }}
+      row={{ compound: "20a", groups: { R1: "OMe" } }}
+      onClose={onClose}
+    />
+  );
+}
+
 function show(onClose = vi.fn()) {
   render(
     <CoconutSidePanel
@@ -36,7 +50,10 @@ function show(onClose = vi.fn()) {
   return onClose;
 }
 
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear(); // the sent records
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe("COCONUT side form", () => {
@@ -92,3 +109,84 @@ describe("COCONUT side form", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("final review (fable, 2026-11-25)", () => {
+  const send = () =>
+    vi.spyOn(coconutApi, "submitReports").mockResolvedValue([{ segmentId: "s2", ok: true, reportId: "r" }]);
+
+  it("sends the structure the card shows now, not the one it showed when the form opened", async () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    const spy = send();
+    const { rerender } = render(panel(SEG));
+    const edited = { ...SEG, curation: { status: "accepted" as const, smiles: "CCO", molfile: null, note: null } };
+    rerender(panel(edited));
+    fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0]![1][0]!.report.suggested_changes.new_molecule_data.canonical_smiles).toBe("CCO");
+  });
+
+  it("a structure that is not accepted cannot be sent", () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    render(panel({ ...SEG, curation: { status: "rejected", smiles: null, molfile: null, note: null } }));
+    expect(screen.queryByRole("button", { name: "Send to COCONUT" })).toBeNull();
+    expect(screen.getByText("Accept [02] to send it")).toBeInTheDocument();
+  });
+
+  it("sends only the organism the form shows, and says it is the model's suggestion", async () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    const spy = send();
+    render(
+      <CoconutSidePanel
+        paper={PAPER}
+        segment={SEG}
+        n={2}
+        start={{
+          organisms: [
+            { name: "Millettia dura", parts: "", location: "", ecosystems: "" },
+            { name: "Hidden plant", parts: "", location: "", ecosystems: "" },
+          ],
+          note: "Organisms: model suggestion",
+        }}
+        built={null}
+        row={null}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Organisms: model suggestion")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const refs = spy.mock.calls[0]![1][0]!.report.suggested_changes.new_molecule_data.references;
+    expect(refs[0]!.organisms.map((o) => o.name)).toEqual(["Millettia dura"]);
+  });
+
+  it("an unknown outcome is recorded, so the next send asks first", async () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    vi.spyOn(coconutApi, "submitReports").mockResolvedValue([
+      { segmentId: "s2", ok: false, error: coconutApi.UNKNOWN_ERROR },
+    ]);
+    const mark = vi.spyOn(coconutApi, "markUnknown");
+    render(panel(SEG));
+    fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
+    await waitFor(() => expect(mark).toHaveBeenCalledWith(PAPER.id, ["s2"]));
+  });
+
+  it("an expired login brings the login back", async () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    vi.spyOn(coconutApi, "submitReports").mockResolvedValue([
+      { segmentId: "s2", ok: false, error: coconutApi.AUTH_ERROR },
+    ]);
+    const clear = vi.spyOn(coconutApi, "clearToken").mockImplementation(() => undefined);
+    render(panel(SEG));
+    fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
+    expect(await screen.findByRole("heading", { name: "Log in to COCONUT" })).toBeInTheDocument();
+    expect(clear).toHaveBeenCalled();
+  });
+
+  it("Send waits for a name, a title, the evidence and an organism", () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    render(panel({ ...SEG, compound_id: null }));
+    expect(screen.getByRole("button", { name: "Send to COCONUT" })).toBeDisabled();
+    expect(screen.getByText("Fill in name")).toBeInTheDocument();
+  });
+});
+

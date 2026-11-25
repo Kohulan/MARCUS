@@ -8,7 +8,18 @@ import type { PaperDetail, RgroupRow, SegmentOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { CoconutStart } from "../workspace/coconutList";
-import { buildReport, getToken, markSent, sentIds, submitReports } from "./coconutApi";
+import {
+  AUTH_ERROR,
+  buildReport,
+  clearToken,
+  getToken,
+  markSent,
+  markUnknown,
+  sentIds,
+  submitReports,
+  UNKNOWN_ERROR,
+  unknownIds,
+} from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
 import { type BuiltFrom, jsonFileName, marcusJson, sideStart } from "./sideForm";
 import { Field, OrganismFields } from "./SubmitForm";
@@ -31,17 +42,35 @@ const EMPTY: OrganismDraft = { name: "", parts: "", location: "", ecosystems: ""
 
 export default function CoconutSidePanel({ paper, segment, n, start, built, row, onClose }: Props) {
   const id = useId();
-  const first = useRef(sideStart(segment, n, paper, start, built, row));
+  const first = useRef(sideStart(segment, n, paper, start, built, row)); // the typed fields start here
   const [paperFields, setPaper] = useState<PaperFields>(first.current.paper);
   const [fields, setFields] = useState<StructureFields>(first.current.fields);
   const [token, setToken] = useState<string | null>(() => getToken());
   const [busy, setBusy] = useState(false);
+  const busyNow = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [sent, setSent] = useState(() => sentIds(paper.id).has(segment.id));
+  const [sent, setSent] = useState(
+    () => sentIds(paper.id).has(segment.id) || unknownIds(paper.id).has(segment.id),
+  );
   const heading = useRef<HTMLHeadingElement>(null);
-  const { structure, heldReason } = first.current;
+  // what can be sent is the structure the card shows NOW (an edit or a new read counts); the
+  // typed fields keep what the curator wrote
+  const { structure, heldReason } = sideStart(segment, n, paper, start, built, row);
   const tag = structureTag(n);
   const organism = paperFields.organisms[0] ?? EMPTY;
+  // only the organism the form shows is sent
+  const shownPaper: PaperFields = {
+    ...paperFields,
+    organisms: organism.name.trim() ? [organism] : [],
+  };
+  const missing = [
+    !fields.name.trim() && "name",
+    !paperFields.title.trim() && "title",
+    !paperFields.evidence.trim() && "evidence",
+    !organism.name.trim() && "organism",
+  ].filter(Boolean);
+  const fill = missing.length > 0 ? `Fill in ${missing.join(", ")}` : null;
+  const suggested = start.note !== undefined && organism.name === start.organisms[0]?.name;
 
   useEffect(() => heading.current?.focus(), []);
 
@@ -49,29 +78,40 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
     setPaper((p) => ({ ...p, organisms: [{ ...organism, ...change }, ...p.organisms.slice(1)] }));
 
   async function send() {
-    if (!structure || !token || busy) return;
+    if (!structure || !token || busyNow.current || fill !== null) return;
     if (sent && !window.confirm(`${tag} was sent before. Send it again?`)) return;
+    busyNow.current = true;
     setBusy(true);
     setProblem(null);
     try {
-      const report = buildReport(paperFields, structure, fields);
+      const report = buildReport(shownPaper, structure, fields);
       const [result] = await submitReports(token, [{ segmentId: segment.id, report }]);
       if (result?.ok) {
         markSent(paper.id, [segment.id]);
         setSent(true);
       } else {
-        setProblem(result && !result.ok ? result.error : "Not sent");
+        const error = result && !result.ok ? result.error : "Not sent";
+        if (error === UNKNOWN_ERROR) {
+          markUnknown(paper.id, [segment.id]); // it may be in COCONUT: ask before sending again
+          setSent(true);
+        }
+        if (error === AUTH_ERROR) {
+          clearToken();
+          setToken(null); // the login comes back at the end of the form
+        }
+        setProblem(error);
       }
     } catch (err) {
       setProblem(err instanceof Error ? err.message : "Not sent");
     } finally {
+      busyNow.current = false;
       setBusy(false);
     }
   }
 
   function download() {
     if (!structure) return;
-    const doc = marcusJson(paper, segment, n, structure, paperFields, fields, built, row);
+    const doc = marcusJson(paper, segment, n, structure, shownPaper, fields, built, row);
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }),
     );
@@ -131,7 +171,18 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
             <input id={`${id}-name`} className="coconut-input" value={fields.name}
               onChange={(e) => setFields((f) => ({ ...f, name: e.target.value }))} />
           </Field>
-          <OrganismFields idBase={`${id}-org`} label="Organism" value={organism} onChange={setOrganism} />
+          <OrganismFields
+            idBase={`${id}-org`}
+            label="Organism"
+            value={organism}
+            onChange={setOrganism}
+            describedBy={suggested ? `${id}-note` : undefined}
+          />
+          {suggested && (
+            <p id={`${id}-note`} className="coconut-side__note">
+              {start.note}
+            </p>
+          )}
           {input("doi", "DOI")}
           {input("title", "Title")}
           {input("evidence", "Evidence", true)}
@@ -141,6 +192,7 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
               onChange={(e) => setFields((f) => ({ ...f, structuralComments: e.target.value }))} />
           </Field>
           {sent && <p className="coconut-side__sent">Sent to COCONUT</p>}
+          {fill !== null && token !== null && <p className="coconut-side__note">{fill}</p>}
           {problem !== null && (
             <p className="coconut-side__problem" role="alert">
               {problem}
@@ -148,7 +200,7 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
           )}
           <div className="coconut-side__actions glassbed">
             {token !== null && (
-              <GlassButton tint="green" disabled={busy} onClick={() => void send()}>
+              <GlassButton tint="green" disabled={busy || fill !== null} onClick={() => void send()}>
                 Send to COCONUT
               </GlassButton>
             )}

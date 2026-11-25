@@ -642,3 +642,9 @@
   margin: 0;
   color: var(--ink);
 }
+
+.coconut-side__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}

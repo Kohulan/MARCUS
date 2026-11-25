@@ -95,6 +95,8 @@ describe("marcusJson", () => {
         compound_id: "20a",
         name: "Compound 20a",
         smiles: "COc1ccccc1",
+        molfile: null,
+        rgroups: [],
         built_from: { tag: "[01]", row: "20a", groups: { R1: "OMe", R2: "H" } },
       },
       coconut: {
@@ -104,6 +106,7 @@ describe("marcusJson", () => {
         organisms: START.organisms,
         structural_comments: "Built from [01]: R1 = OMe, R2 = H (row 20a)",
         reference_id: "10.1021/acs.jnatprod.6c00411",
+        link: "",
       },
     });
   });
