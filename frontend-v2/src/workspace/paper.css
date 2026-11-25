@@ -37,7 +37,7 @@
     inset: 0 0 0 auto;
     z-index: 30;
     width: min(400px, 100vw);
-    box-shadow: -8px 0 24px rgb(0 0 0 / 0.12);
+    box-shadow: var(--lift-dialog);
   }
 }
 
