@@ -1247,3 +1247,22 @@ describe("Paper view: a main structure and its repeats", () => {
     await waitFor(() => expect(card("[01]")).toHaveAttribute("aria-current", "true"));
   });
 });
+
+describe("built structures (Markush Phase 3)", () => {
+  it("a built card has no box of its own on the page (its scaffold's box is there)", async () => {
+    const scaffold = segment("s1", { page: 0 });
+    const built = segment("s2", {
+      page: 0,
+      idx: 10001,
+      built_from: "s1",
+      compound_id: "3a",
+      predictions: [prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" })],
+    });
+    renderAt(paper([scaffold, built], { pages: 1 }), { steps: [step({}), step({ id: "r0", kind: "render_page", page: 0 })] });
+    const img = await loadPage(1);
+    const sheet = img.parentElement!;
+    await waitFor(() => expect(sheet.querySelectorAll("[data-marker]")).toHaveLength(1));
+    expect(sheet.querySelector('[data-marker="s1"]')).not.toBeNull();
+    expect(sheet.querySelector('[data-marker="s2"]')).toBeNull();
+  });
+});

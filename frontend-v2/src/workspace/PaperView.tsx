@@ -119,6 +119,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     // Every segment has its marker; a repeat of a main-figure structure carries that one's tag
     // and selects it (it has no row of its own).
     for (const s of segments) {
+      if (s.built_from) continue; // a built structure shares its scaffold's box: no marker
       const target = s.repeat_of ?? s.id;
       const r = rowOf.get(target);
       if (!r) continue;
@@ -287,6 +288,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
                   failedEngine={r.failedEngine}
                   readingNote={r.readingNote}
                   alsoOn={r.alsoOn}
+                  builtFrom={r.builtFrom}
                   current={selection === r.segmentId}
                   linked={hovered === r.segmentId}
                   onOpen={onSelect}

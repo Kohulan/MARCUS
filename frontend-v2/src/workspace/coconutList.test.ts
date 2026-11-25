@@ -194,3 +194,22 @@ describe("submissionTitle", () => {
     expect(submissionTitle({})).toBe("MARCUS_Submission");
   });
 });
+
+describe("built structures (Markush Phase 3)", () => {
+  it("an accepted built card is sent with its SMILES; the accepted scaffold stays held", () => {
+    const scaffold = {
+      ...segment("s1", { status: "accepted" }, [prediction({ smiles: "[1*]c1ccccc1", rgroups: ["R1"] })]),
+    };
+    const built = {
+      ...segment("s2", { status: "accepted" }, [
+        prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" }),
+      ]),
+      idx: 10001,
+      built_from: "s1",
+      compound_id: "3a",
+    };
+    const out = coconutStructures([scaffold, built], "decimer");
+    expect(out.send.map((s) => s.smiles)).toEqual(["COc1ccccc1"]);
+    expect(out.held).toHaveLength(1);
+  });
+});

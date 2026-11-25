@@ -34,6 +34,7 @@ import {
   type CardState,
 } from "./cardState";
 import KeyHelp from "./KeyHelp";
+import { builtFromText } from "./built";
 import RgroupRows from "./RgroupRows";
 import { boxStyle } from "./pageBox";
 import { resultWord, rgroupNotice } from "./rgroups";
@@ -201,7 +202,10 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     clearTimer();
     ws.openEditor(id);
   };
+  // a built structure (Markush Phase 3) has no drawing an engine could read again
+  const built = row?.builtFrom ?? null;
   const openCompare = () => {
+    if (built) return;
     clearTimer();
     ws.openCompare(id);
   };
@@ -347,9 +351,16 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
             <GlassButton tint="clear" hasPopup="dialog" onClick={openEditor}>
               Edit <Kbd>E</Kbd>
             </GlassButton>
-            <GlassButton tint="clear" hasPopup="dialog" onClick={openCompare}>
-              Compare <Kbd>C</Kbd>
-            </GlassButton>
+            {!built && (
+              <GlassButton tint="clear" hasPopup="dialog" onClick={openCompare}>
+                Compare <Kbd>C</Kbd>
+              </GlassButton>
+            )}
+            {built && (
+              <GlassButton tint="clear" onClick={() => ws.openFocus(built.segmentId)}>
+                {builtFromText(built.n)}
+              </GlassButton>
+            )}
           </div>
 
           {/* Under the decision row: a long table never pushes it below the fold. */}

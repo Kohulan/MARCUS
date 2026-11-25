@@ -30,6 +30,7 @@ import {
   STATE_WORD,
   type CardState,
 } from "./cardState";
+import { builtFromText } from "./built";
 import RgroupRows from "./RgroupRows";
 import RgroupTag from "./RgroupTag";
 import { rgroupTag } from "./rgroups";
@@ -90,6 +91,8 @@ export type StructureCardProps = {
   readingNote?: string | null;
   /** A main-figure structure with repeats on other pages: "Also on page N" (mainFigure). */
   alsoOn?: string | null;
+  /** A built structure (Markush Phase 3): "Built from [nn]" opens its scaffold; no Compare. */
+  builtFrom?: { segmentId: string; n: number } | null;
   /** Ticked for a bulk action; the grid's cards only. */
   selected?: boolean;
   /** The focused segment (`?s=`). */
@@ -137,13 +140,16 @@ function StructureCard({
   onOpen,
   onDecide,
   onRun,
-  onCompare,
+  onCompare: onCompareGiven,
   onEdit,
+  builtFrom = null,
   paperName = "structure",
   compact = false,
   linked = false,
   onHover,
 }: StructureCardProps) {
+  // a built structure has no drawing an engine could read again: no Compare
+  const onCompare = builtFrom ? undefined : onCompareGiven;
   const ref = useRef<HTMLElement>(null);
   const near = useNearViewport(ref);
   const drawable = hasDrawing(segment);
@@ -274,6 +280,11 @@ function StructureCard({
       <div className="card__body">
         {segment.compound_id && (
           <p className="card__compound">{compoundText(segment.compound_id, segment.compound_name)}</p>
+        )}
+        {builtFrom && (
+          <button type="button" className="card__built" onClick={() => onOpen(builtFrom.segmentId)}>
+            {builtFromText(builtFrom.n)}
+          </button>
         )}
         {smiles !== null && <Smiles value={smiles} struck={rejected} />}
         {meta !== null && (
