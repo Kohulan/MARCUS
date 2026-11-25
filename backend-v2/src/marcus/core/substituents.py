@@ -32,7 +32,7 @@ from rdkit import Chem
 from rdkit.rdBase import BlockLogs
 
 BCHEMLOOKUP_COMMIT = "800d41508798df556ec26401c5db4b6a64dbba8a"
-RESOLVER_VERSION = f"marcus-substituents 1; BChemLookup {BCHEMLOOKUP_COMMIT}"
+RESOLVER_VERSION = f"marcus-substituents 2; BChemLookup {BCHEMLOOKUP_COMMIT}"
 DATA = Path(__file__).parent / "data" / "bchemlookup" / "abbreviations.smi"
 
 _DASHES = dict.fromkeys(map(ord, "−–—‐‒‑"), "-")
@@ -47,6 +47,16 @@ BUILTIN = {
 
 _VALENCE = {"C": 4, "N": 3, "O": 2}
 
+# Texts that name two different groups (final review, 2026-11-25): NC nitrile or isocyanide,
+# OCN cyanate or isocyanate (written leftward), SCN / NCS likewise. Never built.
+AMBIGUOUS = frozenset({"NC", "CNO", "ONC", "OCN", "NCO", "SCN", "NCS"})
+# A bare alkyl formula (C4H9, C8H17): which isomer is not said. C1/C2 have only one.
+_ALKYL_FORMULA = re.compile(r"C(\d+)H(\d+)")
+# The condensed parser backtracks: a longer or branchier text is not parsed (it is never a
+# simple group anyway, and it runs in the shared chem process).
+MAX_CONDENSED = 30
+MAX_BRANCHES = 4
+
 
 @dataclass(frozen=True)
 class Fragment:
@@ -54,6 +64,17 @@ class Fragment:
 
     smiles: str
     attachments: int
+
+
+def bond_dashes(text: str) -> bool:
+    """The paper printed the group with a bond dash at both ends (−OCH2O−): a bridge."""
+    raw = re.sub(r"\s+", "", unicodedata.normalize("NFKC", text).translate(_DASHES))
+    return len(raw) > 2 and raw.startswith("-") and raw.endswith("-")
+
+
+def _ambiguous(text: str) -> bool:
+    m = _ALKYL_FORMULA.fullmatch(text)
+    return text in AMBIGUOUS or (m is not None and int(m.group(1)) >= 3)
 
 
 def normalise(text: str) -> str:
@@ -192,6 +213,8 @@ def parse_condensed(text: str) -> str | None:
     None (no reading, or two different ones: never guessed)."""
     if not text or not re.fullmatch(r"[CHNO0-9=()a-zA-Z]+", text):
         return None
+    if len(text) > MAX_CONDENSED or text.count("(") > MAX_BRANCHES:
+        return None
     results = set()
     for units, end in _parses(text, 0, True):
         if end != len(text):
@@ -225,13 +248,15 @@ def bchemlookup() -> dict[str, str]:
 
 def _mirrored(text: str) -> str | None:
     """ "AcO" -> "OAc", "HO" -> "OH": a leftward group written with its O last; never "CO"."""
-    if len(text) < 2 or not text.endswith("O") or text[:-1] == "C":
-        return None
+    if len(text) < 2 or not text.endswith("O") or text[:-1] == "C" or "O" in text[:-1]:
+        return None  # never "CO" (carbonyl), never "OCO" -> "OOC" (a carboxylate)
     mirror = "O" + text[:-1]
     return mirror if mirror in BUILTIN or mirror in bchemlookup() else None
 
 
 def _one(text: str) -> Fragment | None:
+    if _ambiguous(text):
+        return None
     if text in BUILTIN:
         return _fragment(BUILTIN[text])
     condensed = parse_condensed(text)

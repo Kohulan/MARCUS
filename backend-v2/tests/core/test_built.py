@@ -173,3 +173,11 @@ def test_build_on_a_built_segment_raises_is_built(db_session, scaffold):
     (b,) = make_built(s, scaffold.id, {"a": "Cc1ccccc1"})
     with pytest.raises(IsBuilt):
         apply_build(s, b.id, SCAFFOLD, [outcome("z", "Cc1ccccc1")])
+
+
+def test_the_input_hash_changes_with_the_resolver_version(monkeypatch):
+    from marcus.core import built
+
+    before = input_hash(SCAFFOLD, {"R1": "NC"})
+    monkeypatch.setattr(built, "RESOLVER_VERSION", "marcus-substituents 99; x")
+    assert input_hash(SCAFFOLD, {"R1": "NC"}) != before

@@ -111,3 +111,20 @@ def test_nh2_itself_still_resolves():
 @pytest.mark.parametrize("text", ["Tig", "Ang", "β-D-Glc", "Glc-Ara", "[drawn]"])
 def test_non_goals_are_unknown(text):
     assert resolve(text) == f'unknown substituent "{text}"'
+
+
+def test_the_condensed_parser_stays_fast_on_long_branchy_text():
+    import time
+
+    start = time.monotonic()
+    assert parse_condensed("C" + "(OH)" * 16 + "OH") is None
+    parse_condensed("C" + "(CH3)" * 14)
+    assert time.monotonic() - start < 1.0
+
+
+def test_oco_is_not_mirrored_into_a_carboxylate():
+    assert resolve("OCO") == 'unknown substituent "OCO"'
+
+
+def test_the_version_names_the_rule_set():
+    assert RESOLVER_VERSION.startswith("marcus-substituents 2;")

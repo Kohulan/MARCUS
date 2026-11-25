@@ -23,7 +23,7 @@ from rdkit.rdBase import BlockLogs
 
 from marcus.core.rgroup_labels import UNLABELLED, as_label
 from marcus.core.rgroups import _R_TOKEN, _label_order, _token_label, dummy_labels
-from marcus.core.substituents import Fragment, resolve
+from marcus.core.substituents import Fragment, bond_dashes, resolve
 
 NO_COMPOUND = "no compound ID"
 TWICE = 'compound "{}" is in two rows'
@@ -35,6 +35,7 @@ NOT_ONE_BOND = "scaffold label {} is not on one bond"
 BRIDGE = '"{}" joins two groups that are not side by side'
 NOT_READ = "the scaffold could not be read"
 NOT_VALID = "the result is not a valid structure"
+NO_POINTS = "the scaffold has no R-group points"
 
 _TOKEN_MAP = 900  # atom map numbers of DECIMER's R tokens while the scaffold is read
 
@@ -48,13 +49,26 @@ class Scaffold:
     labels: dict[int, str]
 
 
+def _bare_r(atom: Chem.Atom) -> bool:
+    """A molfile dummy whose only label is its atom symbol: RDKit writes an unlabelled `*` as
+    "R", so "R" with no alias, no R# number, no isotope and no map number is no drawn label."""
+    return not (
+        atom.HasProp("molFileAlias")
+        or atom.HasProp("_MolFileRLabel")
+        or atom.GetIsotope()
+        or atom.GetAtomMapNum()
+    )
+
+
 def _read(smiles: str | None, molfile: str | None) -> tuple[Chem.Mol | None, dict[int, str]]:
-    """The scaffold molecule and the labels of DECIMER R tokens (atom index -> label)."""
+    """The scaffold molecule and the labels it carries outside the atoms' own (atom index ->
+    label): DECIMER's R tokens, and a molfile's unlabelled points."""
     with BlockLogs():
         if molfile:
             mol = Chem.MolFromMolBlock(molfile)
             if mol is not None:
-                return mol, {}
+                return mol, {a.GetIdx(): UNLABELLED for a in mol.GetAtoms()
+                             if a.GetAtomicNum() == 0 and _bare_r(a)}  # fmt: skip
         if not smiles:
             return None, {}
         core = smiles.split(maxsplit=1)[0]
@@ -103,16 +117,19 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
     """(canonical SMILES, InChIKey) of the compound, or the reason it is not built."""
     mol = scaffold.mol
     raw = scaffold.labels
+    if not raw:
+        return NO_POINTS
     if any(lab == UNLABELLED for lab in raw.values()):
         return UNLABELLED_POINT
     for lab in raw.values():
         if as_label(lab) != lab:
             return NOT_A_LABEL.format(lab)
     for idx, lab in raw.items():
-        if mol.GetAtomWithIdx(idx).GetDegree() != 1:
+        atom = mol.GetAtomWithIdx(idx)
+        if atom.GetDegree() != 1 or atom.GetBonds()[0].GetBondType() != Chem.BondType.SINGLE:
             return NOT_ONE_BOND.format(lab)
     order = sorted(set(raw.values()), key=_label_order)
-    values = {k.strip(): str(v or "").strip() for k, v in groups.items()}
+    values = {str(k).strip(): str(v or "").strip() for k, v in groups.items()}
     # a label the row leaves out counts as empty: only a bridge may take it (else NO_VALUE below)
     for lab in order:
         values.setdefault(lab, "")
@@ -133,7 +150,9 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
         if frag.attachments != 2:
             continue
         free = [b for b in empty if b not in partner.values()]
-        ok = len(free) == 1 and abs(order.index(free[0]) - order.index(lab)) == 1
+        # only a group printed as a bridge (−OCH2O−) spans two labels: "CH2" is no bridge
+        ok = bond_dashes(values[lab]) and len(free) == 1
+        ok = ok and abs(order.index(free[0]) - order.index(lab)) == 1
         if ok:
             b = free[0]
             ok = len(atoms_of[lab]) == 1 and len(atoms_of[b]) == 1
@@ -169,6 +188,8 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
             out = Chem.molzip(mol, pieces)
             out = Chem.RemoveHs(out)
             Chem.SanitizeMol(out)
+            # a stereo tag on an atom that lost its centre (R = H) goes
+            Chem.AssignStereochemistry(out, cleanIt=True, force=True)
             if any(a.GetAtomicNum() == 0 for a in out.GetAtoms()):
                 return NOT_VALID
             for a in out.GetAtoms():

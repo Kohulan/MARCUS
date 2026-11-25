@@ -9,6 +9,7 @@ from rdkit.Chem import AllChem
 from marcus.core.enumeration import (
     BRIDGE,
     NO_COMPOUND,
+    NO_POINTS,
     NOT_A_LABEL,
     NOT_ONE_BOND,
     TWICE,
@@ -151,3 +152,42 @@ def test_a_bridge_whose_partner_label_is_left_out_builds():
     assert out["inchikey"] == key(FULL_20["20d"])
     (no,) = build_rows(SCAFFOLD_20, None, [{"compound": "x", "groups": {"R1": "H", "R2": "OH"}}])
     assert no["reason"] == "no value for R3"
+
+
+# --- final review (fable, 2026-11-25): inputs that built a wrong molecule -----------------------
+
+
+@pytest.mark.parametrize("text", ["NC", "OCN", "NCO", "SCN", "NCS", "C4H9", "C8H17"])
+def test_ambiguous_groups_are_never_built(text):
+    (out,) = build_rows("[1*]C1CCCCC1", None, [{"compound": "a", "groups": {"R1": text}}])
+    assert out["reason"] == f'unknown substituent "{text}"'
+
+
+def test_an_unlabelled_point_written_as_r_in_a_molfile_fails():
+    molfile = Chem.MolToMolBlock(Chem.MolFromSmiles("*c1ccc(*)cc1"))
+    (out,) = build_rows(None, molfile, [{"compound": "a", "groups": {"R": "OH"}}])
+    assert out["reason"] == UNLABELLED_POINT
+
+
+def test_a_placeholder_on_a_double_bond_fails():
+    (out,) = build_rows("CC(=[1*])C", None, [{"compound": "a", "groups": {"R1": "OH"}}])
+    assert out["reason"] == NOT_ONE_BOND.format("R1")
+
+
+def test_a_scaffold_without_placeholders_builds_nothing():
+    (out,) = build_rows("c1ccccc1", None, [{"compound": "1", "groups": {}}])
+    assert out["reason"] == NO_POINTS
+
+
+@pytest.mark.parametrize("value", ["CH2", "NMe", "SO2", "OCH2O"])
+def test_a_bridge_needs_its_bond_dashes(value):
+    """Only a group the paper prints as a bridge (a bond dash at both ends, e.g. −OCH2O−) may
+    span two labels; "CH2" (often an exocyclic methylene) never closes a ring by guess."""
+    rows = [{"compound": "a", "groups": {"R1": value}}]
+    (out,) = build_rows("[1*]C1CCCCC1[2*]", None, rows)
+    assert "reason" in out
+
+
+def test_r_equals_h_on_a_stereocentre_leaves_no_stale_tag():
+    (out,) = build_rows("[1*][C@@H]1CCCC[C@H]1C", None, [{"compound": "a", "groups": {"R1": "H"}}])
+    assert "[C@H2]" not in out["smiles"] and "@H2" not in out["smiles"]

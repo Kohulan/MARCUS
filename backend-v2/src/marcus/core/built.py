@@ -56,8 +56,12 @@ def built_clause():
 
 
 def input_hash(scaffold: tuple[str, str], groups: dict) -> str:
-    text = json.dumps({"scaffold": list(scaffold), "groups": groups}, sort_keys=True,
-                      ensure_ascii=False)  # fmt: skip
+    # the rule set too: a fixed resolver refreshes an untouched card on the next build
+    text = json.dumps(
+        {"scaffold": list(scaffold), "groups": groups, "resolver": RESOLVER_VERSION},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
     return hashlib.sha256(text.encode()).hexdigest()
 
 
