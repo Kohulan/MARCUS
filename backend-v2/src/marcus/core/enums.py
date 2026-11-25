@@ -1,6 +1,5 @@
 from enum import IntEnum, StrEnum
 
-
 # papers.ocsr_mode: auto = segment and read every page; off = segment every page, read nothing;
 # ask = the paper page asks "all pages or pick a structure" (no segmentation until then); pick =
 # segment a page and read a box only when the user asks (owner decision 2026-11-25).

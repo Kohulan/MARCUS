@@ -18,9 +18,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from marcus.core.db import Base
 from marcus.core.enums import (
+    OCSR_MODES,
     Engine,
     ErrorClass,
-    OCSR_MODES,
     ImageJobStatus,
     OwnerKind,
     PaperStatus,
