@@ -138,7 +138,8 @@ class SegmentOut(BaseModel):
     # still reading, with fewer than two read or two with an InChIKey, and for a scaffold.
     agree: int | None = None
     agree_of: int | None = None
-    # The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order.
+    # The engines that agree ([] none), in DECIMER, MolParser (MolNexTR on old papers), MolScribe
+    # order.
     agree_engines: list[str] = []
     # The prediction shown when nothing is curated (agreement.pick_prediction); None without a
     # valid one.

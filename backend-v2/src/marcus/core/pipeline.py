@@ -295,11 +295,20 @@ def _new_image_step(job: ImageJob, engine: Engine, seq: int) -> Step:
 
 
 def _ocsr_engine(engine: Engine) -> Engine:
-    """`engine` as an Engine; ValueError for the fake engine where it is disabled."""
+    """`engine` as an Engine; ValueError for the fake engine where it is disabled and for MolNexTR
+    (legacy: no longer run, MolParser replaced it)."""
     engine = Engine(engine)
     if engine == Engine.FAKE and not fake_enabled():
         raise ValueError("engine 'fake' is disabled")
+    if engine == Engine.MOLNEXTR:
+        raise ValueError("engine 'molnextr' is no longer run (replaced by molparser)")
     return engine
+
+
+def run_engine(engine: str) -> str:
+    """The engine that reads for a paper whose engine is `engine`: MolParser for an old MolNexTR
+    paper (MolNexTR is no longer run), else the engine itself."""
+    return Engine.MOLPARSER.value if engine == Engine.MOLNEXTR.value else engine
 
 
 def _ocsr_seq(page: int, idx: int) -> int:
@@ -618,9 +627,10 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
     if paper.ocsr_mode != "auto":
         return []
+    own = run_engine(paper.engine)
     steps = []
     for seg in segments:
-        for engine in [paper.engine, *background_engines(paper.engine)]:
+        for engine in [own, *background_engines(own)]:
             step = _new_step(
                 paper,
                 StepKind.OCSR,
@@ -633,7 +643,7 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     # The steps go into the session now (their background_steps rows need them first).
     session.add_all(steps)
     session.flush()
-    session.add_all(BackgroundStep(step_id=st.id) for st in steps if st.engine != paper.engine)
+    session.add_all(BackgroundStep(step_id=st.id) for st in steps if st.engine != own)
     return steps
 
 

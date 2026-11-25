@@ -4,7 +4,7 @@ name: docker-images
 # worker and the nginx edge with the web UI. Not built here: tf / torch / llama. Their CUDA
 # variants (nvidia/cuda bases, CUDA torch wheels, a llama.cpp CUDA compile) run to tens of GB
 # and over the runner's disk; the CPU variants still fetch GBs of model weights at build time
-# (DECIMER; MolNexTR + MolScribe 2.3 GB) and would blow the 10 GB GHA cache.
+# (DECIMER; MolScribe 1.1 GB) and would blow the 10 GB GHA cache.
 # Those images and their ML tests stay a local gate (backend-v2/README.md).
 
 on:

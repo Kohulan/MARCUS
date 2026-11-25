@@ -73,7 +73,7 @@ RESULTS = HERE / "results"
 TARGETS = {"local": "http://localhost:19100", "jarvis": "http://localhost:29000"}
 TARGETS_V2 = {"local": "http://localhost:18090", "jarvis": "http://localhost:29090"}  # jarvis: pass --base-url
 ENGINES = ["decimer", "molnextr", "molscribe"]
-V2_ONLY_ENGINES = ["fake"]  # backend-v2 fake stack (MARCUS_ENABLE_FAKE_ENGINES=1) only
+V2_ONLY_ENGINES = ["fake", "molparser"]  # fake: backend-v2 fake stack only; molparser: v2 only
 BIG_TIMEOUTS = dict(segment_timeout_s=3600, ocsr_timeout_s=900)  # long: we want to MEASURE the wait, not time out
 
 

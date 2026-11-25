@@ -73,9 +73,9 @@ def _reset(monkeypatch):
     yield
 
 
-def use_engine(monkeypatch, smiles):
+def use_engine(monkeypatch, smiles, name="decimer"):
     eng = StubEngine(smiles)
-    monkeypatch.setitem(base.FACTORIES, "decimer", lambda: eng)
+    monkeypatch.setitem(base.FACTORIES, name, lambda: eng)
     return eng
 
 
@@ -325,3 +325,20 @@ def test_engine_input_equals_v1_cv2_imwrite_of_the_library_crop(tmp_path):
         v1_px, v2_px = np.asarray(a.convert("RGB")), np.asarray(b.convert("RGB"))
     assert np.array_equal(v1_px, v2_px)
     assert tuple(v1_px[0, 0]) == BLUE  # v1's file really is swapped
+
+
+def test_molparser_reads_a_segment_crop_in_true_colour(monkeypatch):
+    """MolParser is no v1 engine: it gets the stored crop as it is (the cache key is its hash);
+    the v1 engines get v1's red/blue-swapped crop (test above)."""
+    from marcus.workers.ocsr.handler import ocsr
+
+    use_engine(monkeypatch, "CCO", name="molparser")
+    pid, sha = uuid.uuid4(), "cd" * 32
+    crop = segment_crop_path(pid, sha)
+    crop.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 8), (200, 10, 10)).save(crop)
+    session = FakeSession(SimpleNamespace(paper_id=pid, image_sha256=sha, owner_id=OWNER))
+    assert ocsr(view(pid, segment_id=uuid.uuid4(), engine="molparser"), session)["valid"] is True
+    (written,) = session.writes
+    assert written["image_sha256"] == hashlib.sha256(crop.read_bytes()).hexdigest()
+    assert written["engine"] == "molparser"

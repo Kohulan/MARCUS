@@ -31,7 +31,8 @@ class ErrorClass(StrEnum):
 class Engine(StrEnum):
     DECIMER = "decimer"
     DECIMER_HAND = "decimer-hand"
-    MOLNEXTR = "molnextr"
+    MOLNEXTR = "molnextr"  # legacy: old rows only, never run (replaced by molparser)
+    MOLPARSER = "molparser"
     MOLSCRIBE = "molscribe"
     FAKE = "fake"
 

@@ -6,7 +6,7 @@ _CPU_KINDS = {StepKind.CHECK_PDF, StepKind.RENDER_PAGE, StepKind.DOCLING, StepKi
 _OCSR_QUEUES = {
     Engine.DECIMER: "q.decimer",
     Engine.DECIMER_HAND: "q.decimer",
-    Engine.MOLNEXTR: "q.molnextr",
+    Engine.MOLPARSER: "q.molparser",
     Engine.MOLSCRIBE: "q.molscribe",
     Engine.FAKE: "q.fake",
 }
@@ -34,7 +34,7 @@ _DEFAULT_SLOTS = {
     "q.cpu": 4,
     "q.segment": 1,
     "q.decimer": 1,
-    "q.molnextr": 1,
+    "q.molparser": 1,
     "q.molscribe": 1,
     "q.fake": 1,
     "q.llm": 1,
@@ -75,7 +75,7 @@ _DEFAULT_QUEUE_WAIT_S = {
     "q.cpu": 120,
     "q.segment": _MODEL_QUEUE_WAIT_S,
     "q.decimer": _MODEL_QUEUE_WAIT_S,
-    "q.molnextr": _MODEL_QUEUE_WAIT_S,
+    "q.molparser": _MODEL_QUEUE_WAIT_S,
     "q.molscribe": _MODEL_QUEUE_WAIT_S,
     "q.fake": 120,
     "q.llm": _MODEL_QUEUE_WAIT_S,

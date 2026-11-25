@@ -297,7 +297,7 @@ def test_current_ocsr_versions_skips_engine_whose_version_fails(monkeypatch):
 
     monkeypatch.setattr(retention, "_static_version", boom)
     assert retention.current_ocsr_versions() == {
-        "decimer": "v-decimer", "decimer-hand": "v-decimer-hand", "molnextr": "v-molnextr",
+        "decimer": "v-decimer", "decimer-hand": "v-decimer-hand", "molparser": "v-molparser",
     }  # fmt: skip
 
 

@@ -89,7 +89,7 @@ def main(argv=None) -> int:
     ap.add_argument("--split", choices=["dev", "test", "all"], default="all")
     ap.add_argument("--order", choices=["manifest", "pages", "bytes"], default="manifest")
     ap.add_argument("--limit", type=int, default=0, help="at most this many papers (after split and order)")
-    ap.add_argument("--engines", nargs="*", default=ENGINES, choices=ENGINES + ["decimer-hand"])
+    ap.add_argument("--engines", nargs="*", default=ENGINES, choices=ENGINES + ["decimer-hand", "molparser"])
     ap.add_argument("--client", choices=["v1", "v2"], default="v1",
                     help="v1: the current build (default); v2: backend-v2 API (default base URL still needs --base-url)")
     ap.add_argument("--retry-failed", action="store_true")

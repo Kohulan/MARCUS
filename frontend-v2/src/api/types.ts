@@ -1,7 +1,13 @@
 // Wire types of /api/v2, mirroring backend-v2/src/marcus/api/schemas.py (after F0).
 // Ids are UUID strings; datetimes are ISO 8601 strings. Pages are 0-based.
 
-export type Engine = "decimer" | "decimer-hand" | "molnextr" | "molscribe";
+/** An engine the UI offers (upload, Compare, re-read). */
+export type Engine = "decimer" | "decimer-hand" | "molparser" | "molscribe";
+/**
+ * An engine no longer offered whose results old papers still hold (retention 30 days): the
+ * server refuses it for new requests (422). MolParser replaced MolNexTR.
+ */
+export type LegacyEngine = "molnextr";
 export type CurationStatus = "unchecked" | "accepted" | "rejected";
 export type ErrorClass = "timeout" | "worker_lost" | "bad_input" | "engine_error";
 export type OcsrMode = "auto" | "off";
@@ -135,7 +141,7 @@ export interface SegmentOut {
   agree?: number | null;
   /** Of how many engines that read: 3, or 2 when only two did. Null with `agree` null. */
   agree_of?: number | null;
-  /** The engines that agree ([] none), in DECIMER, MolNexTR, MolScribe order. */
+  /** The engines that agree ([] none), in DECIMER, MolParser (old papers: MolNexTR), MolScribe order. */
   agree_engines?: string[];
   /**
    * The prediction shown when nothing is curated: the engines' majority, else the newest valid

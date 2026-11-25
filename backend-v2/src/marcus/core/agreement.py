@@ -1,11 +1,16 @@
 """The three engines' agreement on a structure, and the prediction a segment shows (phase B item 3,
 owner decision 2026-11-22).
 
-Every segment of a new paper is read by DECIMER, MolNexTR and MolScribe (the paper's engine in
-its read, the other two in the background: pipeline.BACKGROUND). Two predictions agree when both
-are valid and have the same InChIKey first block (connectivity; stereo may differ); an invalid
-or empty one, or one RDKit gives no InChIKey, never agrees. Of each engine its newest
-prediction counts. MARCUS-training review-feedback/phase-b/MEASURE.md: where 2 engines agreed
+Every segment of a new paper is read by DECIMER, MolParser and MolScribe (the paper's engine in
+its read, the other two in the background: pipeline.background_engines). Two predictions agree
+when both are valid and have the same InChIKey first block (connectivity; stereo may differ); an
+invalid or empty one, or one RDKit gives no InChIKey, never agrees. Of each engine its newest
+prediction counts.
+
+MolParser replaced MolNexTR (owner decision 2026-11-25). Old papers (kept up to the retention
+limit) have MolNexTR predictions: the three counted slots are DECIMER, MolParser and MolScribe,
+and a segment with no MolParser prediction counts its MolNexTR one in MolParser's slot (SLOTS),
+so an old card keeps its badge and its shown structure. MARCUS-training review-feedback/phase-b/MEASURE.md: where 2 engines agreed
 their structure was right in 60/60 crops; 3 never agreed on a wrong one (0/42).
 
 pick_prediction is the one rule for the structure shown when nothing is curated: the card, the
@@ -17,7 +22,18 @@ from typing import Protocol
 
 from marcus.core.enums import Engine
 
-ENGINES = (Engine.DECIMER.value, Engine.MOLNEXTR.value, Engine.MOLSCRIBE.value)
+# The engines that read every new segment, in badge order.
+ENGINES = (Engine.DECIMER.value, Engine.MOLPARSER.value, Engine.MOLSCRIBE.value)
+# engine -> its slot of ENGINES; MolNexTR (legacy, old papers only) fills MolParser's slot when the
+# segment has no MolParser prediction.
+SLOTS = {
+    Engine.DECIMER.value: Engine.DECIMER.value,
+    Engine.MOLPARSER.value: Engine.MOLPARSER.value,
+    Engine.MOLNEXTR.value: Engine.MOLPARSER.value,
+    Engine.MOLSCRIBE.value: Engine.MOLSCRIBE.value,
+}
+# Every engine whose predictions or steps count (SLOTS' keys).
+COUNTED = tuple(SLOTS)
 
 
 class _Prediction(Protocol):
@@ -32,16 +48,21 @@ def _block(p: _Prediction) -> str | None:
 
 
 def newest_by_engine(predictions: Iterable[_Prediction]) -> dict[str, _Prediction]:
-    """Each of the three engines' newest prediction (`predictions` newest first)."""
-    out: dict[str, _Prediction] = {}
+    """Each slot's newest prediction, keyed by slot (ENGINES; `predictions` newest first): the
+    slot's own engine's newest, else (MolParser's slot) the newest MolNexTR one."""
+    own: dict[str, _Prediction] = {}
+    legacy: dict[str, _Prediction] = {}
     for p in predictions:
-        if p.engine in ENGINES and p.engine not in out:
-            out[p.engine] = p
-    return out
+        slot = SLOTS.get(p.engine)
+        if slot is None:
+            continue
+        found = own if p.engine == slot else legacy
+        found.setdefault(slot, p)
+    return {e: own.get(e) or legacy[e] for e in ENGINES if e in own or e in legacy}
 
 
 def majority(predictions: Iterable[_Prediction]) -> list[_Prediction]:
-    """The newest predictions of the engines that agree (two or three, in ENGINES order); [] when
+    """The newest predictions of the slots that agree (two or three, in ENGINES order); [] when
     fewer than two agree. `predictions` newest first."""
     newest = newest_by_engine(predictions)
     groups: dict[str, list[_Prediction]] = {}

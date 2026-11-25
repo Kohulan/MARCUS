@@ -52,10 +52,10 @@ const REFS: Ref[] = [
     doi: "https://doi.org/10.1186/s13321-021-00508-0",
   },
   {
-    title: "MolNexTR: a generalized deep learning model for molecular image recognition",
-    authors: "Chen Y., Leung C.T., Huang Y., et al.",
-    where: "J Cheminform 16, 141 (2024)",
-    doi: "https://doi.org/10.1186/s13321-024-00926-w",
+    title: "MolParser: End-to-end Visual Recognition of Molecule Structures in the Wild",
+    authors: "Fang X., Wang J., Cai X., et al.",
+    where: "ICCV 2025, arXiv 2411.11098",
+    doi: "https://arxiv.org/abs/2411.11098",
   },
   {
     title: "MolScribe: Robust molecular structure recognition with image-to-graph generation",
@@ -88,7 +88,7 @@ const STEPS = [
   {
     tag: "[02]",
     title: "Four engines, side by side",
-    line: "DECIMER by default. Compare with MolNexTR, MolScribe and DECIMER hand-drawn.",
+    line: "DECIMER by default. Compare with MolParser, MolScribe and DECIMER hand-drawn.",
   },
   {
     tag: "[03]",

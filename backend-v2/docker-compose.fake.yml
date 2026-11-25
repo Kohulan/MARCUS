@@ -58,9 +58,9 @@ services:
   # The real DECIMER OCSR worker is not part of the fake stack either.
   worker-decimer:
     profiles: ["real-decimer"]
-  # Nor are the real torch OCSR workers (MolNexTR, MolScribe).
-  worker-molnextr:
-    profiles: ["real-molnextr"]
+  # Nor are the real torch OCSR workers (MolParser, MolScribe).
+  worker-molparser:
+    profiles: ["real-molparser"]
   worker-molscribe:
     profiles: ["real-molscribe"]
 

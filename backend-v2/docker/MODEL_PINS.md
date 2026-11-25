@@ -47,6 +47,12 @@ Runtime difference from v1 (same weights, same calls): v1 loads both DECIMER OCS
 
 ## Torch image (`docker/Dockerfile.torch`)
 
+MolNexTR (engine `molnextr`, last version `7a4e03f`: git `Kohulan/MolNexTR` @
+`7a4e03f22c13f4c1c236effa9dab4a365a8e08d5` with checkpoint `CYF200127/MolNexTR` revision
+`9ac2da6fa553e1d053af3d8d534b8a6c74b79749`) left this image on 2026-11-25: MolParser replaced it
+(owner decision; next section). Old predictions keep its name and version. The packages it
+imported stay pinned as they were.
+
 Same rule (R10): the shipped v1 image's `pip freeze`. Installed are torch/torchvision, the two
 OCSR packages (`--no-deps`, as v1's `backend/Dockerfile`) and exactly the packages they import at
 runtime (measured in the v1 image: `sys.modules` after importing both and their predict modules),
@@ -55,8 +61,6 @@ is the v1 one.
 
 | package | version / commit | source |
 |---|---|---|
-| MolNexTR (engine `molnextr`, version `7a4e03f`) | git `Kohulan/MolNexTR` @ `7a4e03f22c13f4c1c236effa9dab4a365a8e08d5`, `--no-deps`: v1's commit `fb7505b` (what its unpinned `git+...MolNexTR.git` resolved to) plus one fix, Kohulan/MolNexTR PR #1 (branch `fix/keep-image-coords`): the molfile keeps the atom positions read off the image (y up, x corrected for the aspect ratio, median bond 1.5) instead of a layout computed from the SMILES, so it can be the template of the paper's orientation (`marcus.workers.orient`). The SMILES are unchanged (byte-identical on 10 test crops). The engine version moves with it: predictions made before keep `fb7505b`, and their molfiles (computed layouts) are refused as templates; the OCSR cache key changes, so nothing is served from `fb7505b` results | v1 image freeze, then PR #1 |
-| MolNexTR checkpoint `molnextr_best.pth` | Hugging Face dataset `CYF200127/MolNexTR` revision `9ac2da6fa553e1d053af3d8d534b8a6c74b79749`, sha256 `5990bc19aaafa5cf44e9d04e06fb8e2b5aea50c66e1e925f662bdff7d2a6422c` (1,134,334,833 bytes), baked at `/opt/pystow/molnextr/` | the URL `MolNexTRSingleton._initialize_model` downloads at runtime (`.../resolve/main/molnextr_best.pth`); identical (sha256) to v1's runtime-downloaded file in `judges/stack/data/cache/molnextr/` |
 | MolScribe (engine `molscribe`, version `250f683`) | git `CrystalEye42/MolScribe` @ `250f683f52f5050eb624870ccfd04bccbcaa27e1`, `--no-deps` | v1 Dockerfile and freeze |
 | MolScribe checkpoint `swin_base_char_aux_1m.pth` | Hugging Face model `yujieq/MolScribe` revision `a0189776b7415b82795c7ee81eed311bf5c8724b`, sha256 `6f0df56fa32b5ffc21f8c7f311ef333da522f590bf5622e966c6bcb1f2d9ea1d` (1,134,940,406 bytes), baked at `/opt/pystow/molscribe/` | v1's `hf_hub_download("yujieq/MolScribe", "swin_base_char_aux_1m.pth")`; identical (sha256, same revision) to v1's Hugging Face cache in `judges/stack/data/hf/` |
 | torch / torchvision | 2.10.0 / 0.25.0 | v1 image freeze |
@@ -120,6 +124,25 @@ Runtime differences from v1 (same weights, same library calls):
 Kept from v1 as is (library behaviour): MolNexTR logs `name 'rdFMCS' is not defined` for some
 structures (an unimported name in an exception path of its post-processing; output unchanged).
 
+
+## MolParser image (`docker/Dockerfile.molparser`)
+
+The engine `molparser` (owner decision 2026-11-25: it replaces MolNexTR). Not a v1 engine, so
+no v1 freeze: the stack is resolved for Python 3.11 with `uv pip compile --exclude-newer
+2026-11-10` (no release younger than two weeks) against the `molparser` extra's lock; torch and
+the CUDA libraries are the torch image's. On the 140 phase-B crops (MARCUS-training
+review-feedback/molparser-eval) this pinned stack gives the same SMILES as the library's own
+`MolParser.parse(..., rec_only=True)` on all 140 (CPU).
+
+| package | version / commit | source |
+|---|---|---|
+| molparser (engine `molparser`, version `f8f1e21+6ee7c0f`: library commit + model revision) | git `dptech-corp/MolParser` @ `f8f1e2138de92218992772b6699e7c43867f3585`, `--no-deps` (Apache-2.0; only the recognizer and E-SMILES post-processing are imported: no ultralytics, pypdfium2, modelscope or cairosvg) | GitHub |
+| MolParser-Mobile-V2 model | Hugging Face `UniParser/MolParser-Mobile-V2` revision `6ee7c0f7e03cde6e5f871f7a764ad4462bb59797`: `model.safetensors` sha256 `2204a871f7975780ead6eee8ac354de11f859c4eccc8863c3462e6f9eb110f02` (20,037,304 bytes), its configs, vocabulary and the 4 remote-code files, each with its sha256 in the Dockerfile; baked at `/opt/models/molparser-mobile-v2`. **Weights licence: CC BY-NC-SA 4.0 (non-commercial)** | Hugging Face |
+| torch / torchvision | 2.10.0 / 0.25.0 (cpu or CUDA 12.8, as the torch image) | torch image |
+| transformers / tokenizers / huggingface-hub / safetensors | 5.22.2 / 0.23.3 / 2.4.0 / 0.8.0 (the model's remote code needs transformers 5) | uv pip compile |
+| timm / opencv-python-headless / regex | 1.0.31 / 5.0.0.93 / 2026.11.9 | uv pip compile |
+| rdkit / numpy / pillow / pydantic | from the extra's lock (uv.lock) | uv.lock |
+| rest of the closure (hf-xet, pyyaml, tqdm, sympy, networkx, typer, rich, ...) | as listed in the Dockerfile | uv pip compile |
 
 ## CUDA libraries of the `cuda` variants (Task C4)
 

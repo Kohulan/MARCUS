@@ -1015,6 +1015,16 @@ dev = [
     { name = "ruff" },
     { name = "scikit-image" },
 ]
+molparser = [
+    { name = "celery", extra = ["redis"] },
+    { name = "pillow" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "rdkit" },
+    { name = "redis" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
 tf = [
     { name = "celery", extra = ["redis"] },
     { name = "pillow" },
@@ -1047,6 +1057,7 @@ requires-dist = [
     { name = "asyncpg", marker = "extra == 'api'" },
     { name = "celery", extras = ["redis"], marker = "extra == 'api'" },
     { name = "celery", extras = ["redis"], marker = "extra == 'cpu'" },
+    { name = "celery", extras = ["redis"], marker = "extra == 'molparser'" },
     { name = "celery", extras = ["redis"], marker = "extra == 'tf'" },
     { name = "celery", extras = ["redis"], marker = "extra == 'tools'" },
     { name = "celery", extras = ["redis"], marker = "extra == 'torch'" },
@@ -1060,15 +1071,19 @@ requires-dist = [
     { name = "opencv-python-headless", marker = "extra == 'dev'" },
     { name = "pdf2doi", marker = "extra == 'cpu'" },
     { name = "pillow", marker = "extra == 'api'" },
+    { name = "pillow", marker = "extra == 'molparser'" },
     { name = "pillow", marker = "extra == 'tf'" },
     { name = "pillow", marker = "extra == 'torch'" },
     { name = "prometheus-client", marker = "extra == 'api'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'cpu'" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'molparser'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'tf'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'torch'" },
+    { name = "pydantic", marker = "extra == 'molparser'" },
     { name = "pydantic-settings", marker = "extra == 'api'" },
     { name = "pydantic-settings", marker = "extra == 'cpu'" },
+    { name = "pydantic-settings", marker = "extra == 'molparser'" },
     { name = "pydantic-settings", marker = "extra == 'tf'" },
     { name = "pydantic-settings", marker = "extra == 'tools'" },
     { name = "pydantic-settings", marker = "extra == 'torch'" },
@@ -1079,11 +1094,13 @@ requires-dist = [
     { name = "python-multipart", marker = "extra == 'api'" },
     { name = "rdkit", marker = "extra == 'api'" },
     { name = "rdkit", marker = "extra == 'cpu'" },
+    { name = "rdkit", marker = "extra == 'molparser'" },
     { name = "rdkit", marker = "extra == 'tf'" },
     { name = "rdkit", marker = "extra == 'tools'" },
     { name = "rdkit", marker = "extra == 'torch'" },
     { name = "redis", marker = "extra == 'api'" },
     { name = "redis", marker = "extra == 'cpu'" },
+    { name = "redis", marker = "extra == 'molparser'" },
     { name = "redis", marker = "extra == 'tf'" },
     { name = "redis", marker = "extra == 'tools'" },
     { name = "redis", marker = "extra == 'torch'" },
@@ -1093,13 +1110,14 @@ requires-dist = [
     { name = "scikit-image", marker = "extra == 'dev'", specifier = "==0.24.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'api'", specifier = ">=2.1.9" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'cpu'", specifier = ">=2.1.9" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'molparser'", specifier = ">=2.1.9" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'tf'", specifier = ">=2.1.9" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'torch'", specifier = ">=2.1.9" },
     { name = "torch", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "marcus", extra = "cpu" } },
     { name = "torchvision", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "marcus", extra = "cpu" } },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'" },
 ]
-provides-extras = ["api", "cpu", "tools", "tf", "torch", "dev"]
+provides-extras = ["api", "cpu", "tools", "tf", "torch", "molparser", "dev"]
 
 [[package]]
 name = "markdown-it-py"

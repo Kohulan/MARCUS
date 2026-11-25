@@ -119,8 +119,8 @@
   vertical-align: top;
 }
 
-/* Below an engine's name: its toggle (DECIMER: the hand-drawn model; MolNexTR, MolScribe: their
-   coordinates). */
+/* Below an engine's name: its toggle (DECIMER: the hand-drawn model; MolScribe, old papers'
+   MolNexTR: their coordinates). */
 .cmp-table__toggle {
   display: block;
   margin-top: 8px;

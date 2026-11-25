@@ -2,7 +2,7 @@
 // tests/workers/test_orient.py) on the same real engine output.
 import { backendFixture } from "../test/backendFixture";
 import { describe, expect, it } from "vitest";
-import { imageLayout } from "./engines";
+import { asEngine, engineName, ENGINES, imageLayout, isLegacyEngine, TEMPLATE_ENGINES } from "./engines";
 
 type Out = { smiles: string; molfile: string | null };
 const fixture = (name: string) => backendFixture<Record<string, Record<string, Out> | Out | string>>(name);
@@ -29,5 +29,26 @@ describe("imageLayout", () => {
     expect(imageLayout("")).toBe(false);
     expect(imageLayout("<nextr>")).toBe(false);
     expect(imageLayout("\n\n\n  1  0  0  0  0  0  0  0  0  0999 V3000\n")).toBe(false);
+  });
+});
+
+describe("offered and legacy engines", () => {
+  it("the menu offers MolParser, never the legacy MolNexTR", () => {
+    expect(ENGINES.map((e) => e.value)).toEqual(["decimer", "decimer-hand", "molparser", "molscribe"]);
+    expect(ENGINES.map((e) => e.value)).not.toContain("molnextr");
+  });
+
+  it("old papers' MolNexTR keeps its name but is not an offered engine", () => {
+    expect(engineName("molnextr")).toBe("MolNexTR");
+    expect(engineName("molparser")).toBe("MolParser");
+    expect(engineName("fake")).toBe("fake");
+    expect(asEngine("molnextr")).toBeNull();
+    expect(asEngine("molparser")).toBe("molparser");
+    expect(isLegacyEngine("molnextr")).toBe(true);
+    expect(isLegacyEngine("molparser")).toBe(false);
+  });
+
+  it("MolParser is no template engine (its molfile is a computed layout)", () => {
+    expect(TEMPLATE_ENGINES).not.toContain("molparser");
   });
 });

@@ -538,7 +538,7 @@ def test_monitoring_keeps_prometheus_internal_and_grafana_without_egress():
 # --- GPU override -----------------------------------------------------------------------------
 
 GPU = "docker-compose.gpu.yml"
-GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molnextr", "worker-molscribe")
+GPU_SERVICES = ("worker-segment", "worker-decimer", "worker-molparser", "worker-molscribe")
 # Production card (Task D4 host): 32 GB. Budgets cap the frameworks' allocators; each process's
 # CUDA context comes on top and is counted here at a generous 512 MiB.
 GPU_TOTAL_MIB = 32 * 1024
@@ -565,13 +565,13 @@ def test_gpu_override_budget_under_20gb():
     env = {name: services[name]["environment"] for name in GPU_SERVICES}
     assert env["worker-segment"]["MARCUS_GPU_MEM_MB"] == "2048"  # D4: peak < 1 GB
     assert env["worker-decimer"]["MARCUS_GPU_MEM_MB"] == "4096"
-    assert env["worker-molnextr"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
+    assert env["worker-molparser"]["MARCUS_TORCH_MEM_FRACTION"] == "0.03"  # 10M-parameter model
     assert env["worker-molscribe"]["MARCUS_TORCH_MEM_FRACTION"] == "0.09"
     # D4: no loss on the fixture judge, so MolScribe runs on the GPU in the GPU stack
     assert env["worker-molscribe"]["MARCUS_MOLSCRIBE_DEVICE"] == "cuda"
     budget = int(env["worker-segment"]["MARCUS_GPU_MEM_MB"])
     budget += int(env["worker-decimer"]["MARCUS_GPU_MEM_MB"])
-    for name in ("worker-molnextr", "worker-molscribe"):
+    for name in ("worker-molparser", "worker-molscribe"):
         budget += float(env[name]["MARCUS_TORCH_MEM_FRACTION"]) * GPU_TOTAL_MIB
     budget += CUDA_CONTEXT_MIB * len(GPU_SERVICES)
     assert budget <= BUDGET_LIMIT_MIB, budget
@@ -615,7 +615,7 @@ def test_gpu_override_builds_the_cuda_images():
     expected = {
         "worker-segment": ("docker/Dockerfile.tf", "marcus-v2-tf:cuda"),
         "worker-decimer": ("docker/Dockerfile.tf", "marcus-v2-tf:cuda"),
-        "worker-molnextr": ("docker/Dockerfile.torch", "marcus-v2-torch:cuda"),
+        "worker-molparser": ("docker/Dockerfile.molparser", "marcus-v2-molparser:cuda"),
         "worker-molscribe": ("docker/Dockerfile.torch", "marcus-v2-torch:cuda"),
     }
     for name, (dockerfile, image) in expected.items():

@@ -121,13 +121,13 @@ function cell(row: string, engine: string): HTMLElement {
 }
 
 describe("Compare", () => {
-  it("three columns: DECIMER, MolNexTR, MolScribe; a hand-drawn reading is not a column", () => {
+  it("three columns: DECIMER, MolParser, MolScribe; a hand-drawn reading is not a column", () => {
     renderCompare({
       predictions: [prediction({ engine: "decimer-hand" }), prediction({ engine: "decimer" })],
     });
     const table = screen.getByRole("table", { name: "Engines" }) as HTMLTableElement;
     const heads = [...table.tHead!.rows[0]!.cells].slice(1).map((c) => c.querySelector(".cmp-table__name")?.textContent);
-    expect(heads).toEqual(["Paper", "DECIMER", "MolNexTR", "MolScribe"]);
+    expect(heads).toEqual(["Paper", "DECIMER", "MolParser", "MolScribe"]);
   });
 
   it("shows the paper's crop the engines read beside the drawings", () => {
@@ -153,11 +153,11 @@ describe("Compare", () => {
     const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     const run = vi.mocked(api.runPrediction);
-    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["molnextr", "molscribe"]);
+    expect(run.mock.calls.map((c) => c[1]).sort()).toEqual(["molparser", "molscribe"]);
     expect(run.mock.calls.every((c) => c[0] === "s1")).toBe(true);
     expect(EventSourceSpy).not.toHaveBeenCalled();
     // Started engines read as Reading… until their steps arrive.
-    expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
+    expect(cell("Result", "MolParser")).toHaveTextContent("Reading…");
     expect(screen.queryByRole("button", { name: "Run all engines" })).toBeNull();
   });
 
@@ -177,7 +177,7 @@ describe("Compare", () => {
 
   it("everything read: nothing is started", async () => {
     const { props } = renderCompare({
-      predictions: ["decimer", "molnextr", "molscribe"].map((engine) =>
+      predictions: ["decimer", "molparser", "molscribe"].map((engine) =>
         prediction({ engine }),
       ),
     });
@@ -192,7 +192,7 @@ describe("Compare", () => {
     expect(bar).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText("Running engines 0/2")).toBeInTheDocument();
     // an engine reading has the calm indeterminate bar under its word
-    expect(within(cell("Result", "MolNexTR")).getByRole("progressbar", { name: "Reading, MolNexTR" })).not.toHaveAttribute(
+    expect(within(cell("Result", "MolParser")).getByRole("progressbar", { name: "Reading, MolParser" })).not.toHaveAttribute(
       "aria-valuenow",
     );
     await waitFor(() => expect(props.onStarted).toHaveBeenCalled());
@@ -204,17 +204,17 @@ describe("Compare", () => {
           </ToastProvider>
         </QueryClientProvider>,
       );
-    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" })];
-    again(first, [step("molnextr", "done"), step("molscribe", "running")]);
+    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molparser" })];
+    again(first, [step("molparser", "done"), step("molscribe", "running")]);
     expect(bar).toHaveAttribute("aria-valuenow", "50");
     expect(bar).toHaveAttribute("aria-valuetext", "Engines read, 1 of 2, 50%");
-    again(first, [step("molnextr", "done"), step("molscribe", "failed", "timeout")]);
+    again(first, [step("molparser", "done"), step("molscribe", "failed", "timeout")]);
     expect(bar).toHaveAttribute("aria-valuenow", "100");
     await waitFor(() => expect(screen.queryByRole("progressbar", { name: "Engines" })).toBeNull());
   });
 
   it("Hand-drawn (off by default) reads DECIMER hand-drawn in the DECIMER column; its first run says it loads the model", async () => {
-    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })];
+    const first = [prediction({ engine: "decimer" }), prediction({ engine: "molparser" }), prediction({ engine: "molscribe" })];
     const { props, rerender } = renderCompare({ predictions: first });
     const toggle = screen.getByRole("button", { name: "Hand-drawn" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -226,7 +226,7 @@ describe("Compare", () => {
     const note = "The first run can take about 30 s";
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent("Reading…");
     expect(cell("Result", "DECIMER hand-drawn")).toHaveTextContent(note);
-    expect(cell("Result", "MolNexTR")).not.toHaveTextContent(note);
+    expect(cell("Result", "MolParser")).not.toHaveTextContent(note);
     const again = (predictions: PredictionOut[], s: ReturnType<typeof step>[]) =>
       rerender(
         <QueryClientProvider client={client}>
@@ -255,7 +255,7 @@ describe("Compare", () => {
   it("Hand-drawn starts on where the upload chose DECIMER hand-drawn (and starts it if not read)", async () => {
     const { props } = renderCompare({
       handDrawn: true,
-      predictions: [prediction({ engine: "molnextr" }), prediction({ engine: "molscribe" })],
+      predictions: [prediction({ engine: "molparser" }), prediction({ engine: "molscribe" })],
     });
     expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
     expect(cell("Result", "DECIMER hand-drawn")).toBeDefined();
@@ -278,7 +278,7 @@ describe("Compare", () => {
       predictions: [
         prediction({ engine: "decimer-hand", smiles: "CCN" }),
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
         prediction({ engine: "molscribe", smiles: "CCO" }),
       ],
     });
@@ -286,7 +286,7 @@ describe("Compare", () => {
     expect(within(label).getByRole("row", { name: /DECIMER · MolScribe/ })).toHaveTextContent("1.00");
     fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
     await waitFor(() =>
-      expect(within(label).getByRole("row", { name: /DECIMER hand-drawn · MolNexTR/ })).toHaveTextContent("1.00"),
+      expect(within(label).getByRole("row", { name: /DECIMER hand-drawn · MolParser/ })).toHaveTextContent("1.00"),
     );
     expect(within(label).queryByRole("row", { name: /^DECIMER · / })).toBeNull();
     expect(api.runPrediction).not.toHaveBeenCalled();
@@ -296,9 +296,9 @@ describe("Compare", () => {
   it("does not ask again for an engine with an active step", async () => {
     const { props } = renderCompare({
       predictions: [prediction({ engine: "decimer" })],
-      steps: [step("molnextr", "running")],
+      steps: [step("molparser", "running")],
     });
-    expect(cell("Result", "MolNexTR")).toHaveTextContent("Reading…");
+    expect(cell("Result", "MolParser")).toHaveTextContent("Reading…");
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1]).sort()).toEqual(["molscribe"]);
   });
@@ -318,7 +318,7 @@ describe("Compare", () => {
 
   it("a failed engine is not started again on opening: its own Retry starts it", async () => {
     const { props } = renderCompare({
-      predictions: ["decimer", "molnextr"].map((engine) => prediction({ engine })),
+      predictions: ["decimer", "molparser"].map((engine) => prediction({ engine })),
       steps: [step("molscribe", "failed", "engine_error")],
     });
     expect(cell("Result", "MolScribe")).toHaveTextContent("Failed: the engine failed");
@@ -328,7 +328,36 @@ describe("Compare", () => {
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     expect(api.runPrediction).toHaveBeenCalledWith("s1", "molscribe");
     expect(cell("Result", "MolScribe")).toHaveTextContent("Reading…");
+    expect(within(cell("Result", "MolParser")).queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
+
+  it("an old paper's MolNexTR shows its result under its name, is never started and has no Retry", async () => {
+    const { props } = renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molnextr", smiles: "CCN", engine_version: "7a4e03f" }),
+      ],
+      steps: [step("molnextr", "failed", "timeout"), step("molscribe", "failed", "engine_error")],
+    });
+    const table = screen.getByRole("table", { name: "Engines" }) as HTMLTableElement;
+    const heads = [...table.tHead!.rows[0]!.cells].slice(1).map((c) => c.querySelector(".cmp-table__name")?.textContent);
+    expect(heads).toEqual(["Paper", "DECIMER", "MolParser", "MolScribe", "MolNexTR"]);
+    expect(cell("SMILES", "MolNexTR")).toHaveTextContent("CCN");
     expect(within(cell("Result", "MolNexTR")).queryByRole("button", { name: /Retry/ })).toBeNull();
+    await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1])).toEqual(["molparser"]);
+  });
+
+  it("MolParser has no Use coordinates and is never a template, even with a molfile", async () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molparser", smiles: "CCN", molfile: NEXTR }),
+      ],
+    });
+    expect(screen.queryByRole("button", { name: /Use coordinates, MolParser/ })).toBeNull();
+    await waitFor(() => expect(templatesOf("CCN")).toEqual([undefined]));
+    expect(templatesOf("CCO")).toEqual([undefined]);
   });
 
   it("a refused start says so and leaves the engines not read", async () => {
@@ -336,7 +365,7 @@ describe("Compare", () => {
     const { props } = renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     expect(await screen.findByText("Not started: engine not available")).toBeInTheDocument();
     expect(props.onStarted).not.toHaveBeenCalled();
-    expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
+    expect(cell("Result", "MolParser").textContent).toBe("□ Not read yet");
   });
 
   it("an image job's drawings come from /tools/depict keyed with a null highlight", async () => {
@@ -353,8 +382,8 @@ describe("Compare", () => {
   });
 
   it("every drawing comes from /tools/depict, a segment's too", async () => {
-    renderCompare({ predictions: [prediction({ engine: "molnextr", smiles: "CCO" })] });
-    expect(await screen.findByRole("img", { name: "Structure, MolNexTR" })).toHaveAttribute(
+    renderCompare({ predictions: [prediction({ engine: "molparser", smiles: "CCO" })] });
+    expect(await screen.findByRole("img", { name: "Structure, MolParser" })).toHaveAttribute(
       "src",
       "blob:http://localhost/d",
     );
@@ -483,12 +512,12 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
     const label = await screen.findByRole("table", { name: "Similarity" });
     await waitFor(() =>
-      expect(within(label).getByRole("row", { name: /DECIMER · MolNexTR/ })).toHaveTextContent(
+      expect(within(label).getByRole("row", { name: /DECIMER · MolParser/ })).toHaveTextContent(
         "0.87",
       ),
     );
@@ -504,7 +533,7 @@ describe("Compare", () => {
     });
     const predictions = [
       prediction({ engine: "decimer", smiles: "CCO" }),
-      prediction({ engine: "molnextr", smiles: "CCN" }),
+      prediction({ engine: "molparser", smiles: "CCN" }),
       prediction({ engine: "molscribe", smiles: "CCC" }),
       prediction({ engine: "fake", smiles: "CCO" }),
     ];
@@ -540,7 +569,7 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
     const toggle = screen.getByRole("button", { name: "Show common part" });
@@ -554,7 +583,7 @@ describe("Compare", () => {
     const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1" };
     expect(api.depict).toHaveBeenCalledWith("CCO", lit);
     expect(api.depict).toHaveBeenCalledWith("CCN", lit);
-    expect(await screen.findByRole("img", { name: "Structure, MolNexTR" })).toHaveAttribute(
+    expect(await screen.findByRole("img", { name: "Structure, MolParser" })).toHaveAttribute(
       "src",
       "blob:http://localhost/d",
     );
@@ -582,7 +611,7 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
@@ -598,7 +627,7 @@ describe("Compare", () => {
         : Promise.resolve({ format: "svg", data: "<svg/>" }),
     );
     const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
-    for (const name of ["Structure, DECIMER", "Structure, MolNexTR"]) {
+    for (const name of ["Structure, DECIMER", "Structure, MolParser"]) {
       await waitFor(() =>
         expect(screen.getByRole("img", { name })).toHaveAttribute("src", "blob:http://localhost/d"),
       );
@@ -647,7 +676,7 @@ describe("Compare", () => {
     });
     const two = [
       prediction({ engine: "decimer", smiles: "CCO" }),
-      prediction({ engine: "molnextr", smiles: "CCN" }),
+      prediction({ engine: "molparser", smiles: "CCN" }),
     ];
     const { rerender, props } = renderCompare({ predictions: two });
     const toggle = screen.getByRole("button", { name: "Show common part" });
@@ -677,7 +706,7 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
     expect(screen.queryByText("Common part unavailable")).toBeNull();
@@ -690,11 +719,11 @@ describe("Compare", () => {
     vi.mocked(api.runPrediction).mockRejectedValue(new ApiError(503, "busy"));
     renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     await screen.findByText("Not started: busy");
-    expect(cell("Result", "MolNexTR").textContent).toBe("□ Not read yet");
-    const smiles = cell("SMILES", "MolNexTR");
+    expect(cell("Result", "MolParser").textContent).toBe("□ Not read yet");
+    const smiles = cell("SMILES", "MolParser");
     expect(smiles.textContent).toBe("–None");
     expect(smiles.querySelector(".cmp-table__none [aria-hidden='true']")?.textContent).toBe("–");
-    expect(cell("Drawing", "MolNexTR").textContent).toBe("□ Not read yet");
+    expect(cell("Drawing", "MolParser").textContent).toBe("□ Not read yet");
   });
 
   it("a 429 from the tools bucket says when to try again", async () => {
@@ -702,7 +731,7 @@ describe("Compare", () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
-        prediction({ engine: "molnextr", smiles: "CCN" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
     await waitFor(() =>
@@ -755,9 +784,9 @@ describe("Compare", () => {
   });
 
   it("Use this one hands the prediction to onPick", () => {
-    const p = prediction({ engine: "molnextr", smiles: "CCN" });
+    const p = prediction({ engine: "molparser", smiles: "CCN" });
     const { props } = renderCompare({ predictions: [prediction(), p] });
-    fireEvent.click(screen.getByRole("button", { name: "Use this one, MolNexTR" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use this one, MolParser" }));
     expect(props.onPick).toHaveBeenCalledWith(p);
   });
 });
@@ -829,24 +858,24 @@ const press = (key: string) =>
   fireEvent.keyDown(document.activeElement ?? document.body, { key });
 
 describe("Compare in the workspace", () => {
-  it("Use this one accepts MolNexTR's structure, keeps the note and replaces the molfile", async () => {
-    const molnextr = prediction({ engine: "molnextr", smiles: "CCN", molfile: "<molnextr>" });
+  it("Use this one accepts MolParser's structure, keeps the note and replaces the molfile", async () => {
+    const molparser = prediction({ engine: "molparser", smiles: "CCN", molfile: "<molparser>" });
     const cur: CurationOut = { status: "unchecked", note: "keep me", smiles: "CCO", molfile: "<m>" };
     const put = vi
       .spyOn(api, "putCuration")
       .mockImplementation((_id, body) => Promise.resolve({ ...body }));
     renderWorkspace(
-      paper([segment("s1", { curation: cur, predictions: [prediction(), molnextr] })]),
+      paper([segment("s1", { curation: cur, predictions: [prediction(), molparser] })]),
       "?s=s1&focus=1",
     );
     await screen.findByRole("region", { name: /^Focus/ });
     press("c");
     const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, MolNexTR" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, MolParser" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     expect(put.mock.calls[0]).toEqual([
       "s1",
-      { status: "accepted", smiles: "CCN", molfile: "<molnextr>", note: "keep me" },
+      { status: "accepted", smiles: "CCN", molfile: "<molparser>", note: "keep me" },
       true, // a decision
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();

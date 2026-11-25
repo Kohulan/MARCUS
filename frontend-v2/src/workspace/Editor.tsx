@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
-import { hasImageLayout } from "../api/engines";
+import { hasImageLayout, TEMPLATE_ENGINES } from "../api/engines";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
@@ -19,7 +19,7 @@ import "./editor.css";
 export type EditorStructure = { smiles: string; molfile: string | null };
 
 type EditorProps = {
-  initial: { smiles: string | null; molfile: string | null };
+  initial: EditorStart;
   /** Rejects to keep the dialog open with "Save failed: <detail>". Resolves to close it. */
   onSave: (structure: EditorStructure) => Promise<void>;
   onClose: () => void;
@@ -41,14 +41,21 @@ export function editorChange(
   return !current || current.status === "unchecked" ? { status: "accepted", structure } : { structure };
 }
 
-type EditorStart = { smiles: string | null; molfile: string | null };
+type EditorStart = {
+  smiles: string | null;
+  molfile: string | null;
+  /** The engine that read it (a prediction); null or absent: a curated structure. */
+  engine?: string | null;
+};
 
 /**
  * Whether the starting structure has its own image positions: a molfile that keeps the
  * positions its engine read from the image (hasImageLayout, as Compare's usableTemplate). Only then does
- * "Use coordinates" apply; no borrowed positions from another engine.
+ * "Use coordinates" apply; no borrowed positions from another engine. A prediction of an
+ * engine without image positions (MolParser: a computed layout) never counts.
  */
 export function hasImagePositions(initial: EditorStart): boolean {
+  if (initial.engine != null && !TEMPLATE_ENGINES.includes(initial.engine)) return false;
   // a SMILES too: "off" loads the SMILES alone, which must not open Ketcher empty
   return Boolean(initial.smiles?.trim()) && hasImageLayout(initial.molfile);
 }

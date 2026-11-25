@@ -24,6 +24,8 @@ cpu = [
 tools = ["jpype1==1.5.2", "rdkit", "celery[redis]", "redis", "pydantic-settings"]
 tf = ["sqlalchemy[asyncio]>=2.1.9", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
 torch = ["sqlalchemy[asyncio]>=2.1.9", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow"]
+# The MolParser worker (docker/Dockerfile.molparser installs torch and the model stack itself).
+molparser = ["sqlalchemy[asyncio]>=2.1.9", "psycopg[binary]", "celery[redis]", "redis", "pydantic-settings", "rdkit", "pillow", "pydantic"]
 # opencv / scikit-image: the drawing check's tests (marcus.workers.drawing_check); scikit-image
 # as worker-segment's image ships it (docker/Dockerfile.tf), opencv as docling resolves it.
 dev = [

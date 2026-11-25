@@ -167,7 +167,7 @@ describe("focus mode", () => {
         segment("s2", {
           page: 1,
           predictions: [
-            prediction({ engine: "molnextr", smiles: "CCN", valid: false }),
+            prediction({ engine: "molparser", smiles: "CCN", valid: false }),
             prediction({ engine: "decimer", smiles: "CCO" }),
           ],
         }),
@@ -187,7 +187,7 @@ describe("focus mode", () => {
     );
     // Engines listed, newest per engine, with validity.
     const engines = within(region).getByRole("table", { name: "Engines" });
-    expect(within(engines).getByRole("rowheader", { name: /MolNexTR/ })).toBeInTheDocument();
+    expect(within(engines).getByRole("rowheader", { name: /MolParser/ })).toBeInTheDocument();
     expect(within(engines).getByText("CCN")).toBeInTheDocument();
     expect(within(engines).getByText(/Invalid/)).toBeInTheDocument();
     // The shown SMILES: the paper engine's valid prediction.

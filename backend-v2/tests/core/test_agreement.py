@@ -71,3 +71,29 @@ def test_inchikey_of():
     assert agreement.inchikey_of("", True) is None
     assert agreement.inchikey_of("C1CC", True) is None  # does not parse
     assert agreement.inchikey_of("*CC", True) is None  # a scaffold: not one compound
+
+
+# --- MolParser replaced MolNexTR (2026-11-25) --------------------------------------------------
+
+
+def test_the_three_engines_that_read_are_decimer_molparser_molscribe():
+    assert agreement.ENGINES == ("decimer", "molparser", "molscribe")
+    assert agreement.SLOTS["molnextr"] == "molparser"
+
+
+def test_an_old_molnextr_prediction_fills_molparsers_slot():
+    """An old paper: MolNexTR's prediction counts where MolParser's would (the badge and the
+    shown structure of old cards do not change)."""
+    ps = [P("molscribe", PROPANE), P("molnextr", ETHANOL), P("decimer", ETHANOL)]
+    assert [p.engine for p in agreement.majority(ps)] == ["decimer", "molnextr"]
+    assert agreement.pick_prediction(ps, "molnextr").engine == "molnextr"
+
+
+def test_molparser_wins_its_slot_over_an_older_molnextr_one():
+    """A MolParser prediction (e.g. Compare on an old paper) takes the slot, even when a
+    MolNexTR one is newer: never four engines, never two votes for one slot."""
+    ps = [P("molnextr", ETHANOL), P("molparser", PROPANE), P("decimer", ETHANOL)]
+    newest = agreement.newest_by_engine(ps)
+    assert sorted(newest) == ["decimer", "molparser"]
+    assert newest["molparser"].engine == "molparser"
+    assert agreement.agree_count(ps) == 0

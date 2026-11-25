@@ -151,6 +151,7 @@ describe("ImageResult", () => {
   });
 
   describe("the main result is the job engine's (A-I1)", () => {
+    // an old job's MolNexTR (legacy): its molfile holds the image's positions
     const molnextr = pred({
       id: "pr2",
       engine: "molnextr",
@@ -337,6 +338,15 @@ describe("ImageResult", () => {
     expect(run).toHaveBeenCalledWith(ID, "molscribe");
   });
 
+  it("an old job read with the legacy MolNexTR shows its failure without Retry", async () => {
+    vi.spyOn(api, "getImageJob").mockResolvedValue(
+      job({ status: "failed", prediction: null, engine: "molnextr", error_class: "timeout" }),
+    );
+    renderPage();
+    expect(await screen.findByText(/Could not read a structure/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
   it("a refused retry shows the API's reason as a toast", async () => {
     vi.spyOn(api, "getImageJob").mockResolvedValue(
       job({ status: "failed", prediction: null, error_class: "timeout" }),
@@ -496,9 +506,9 @@ describe("ImageResult", () => {
   });
 
   describe("Compare slot", () => {
-    const molnextr: PredictionOut = {
+    const molparser: PredictionOut = {
       id: "pr2",
-      engine: "molnextr",
+      engine: "molparser",
       engine_version: "1.0",
       smiles: "c1ccccc1O",
       molfile: null,
@@ -510,7 +520,7 @@ describe("ImageResult", () => {
 
     it("plugs in the real Compare: one Compare engines section, its Close, its engines started on this job", async () => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
-        job({ predictions: [{ ...molnextr, engine: "decimer", engine_version: "2.7.1" }] }),
+        job({ predictions: [{ ...molparser, engine: "decimer", engine_version: "2.7.1" }] }),
       );
       const run = vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
       renderPage();
@@ -554,11 +564,11 @@ describe("ImageResult", () => {
 
     it("hands Compare the image target, predictions, steps and the page's reconnect", async () => {
       const steps = [
-        { engine: "molnextr", status: "done", error_class: null },
+        { engine: "molparser", status: "done", error_class: null },
         { engine: "decimer", status: "done", error_class: null },
       ];
       vi.spyOn(api, "getImageJob").mockResolvedValue(
-        job({ predictions: [molnextr, pred()], steps }),
+        job({ predictions: [molparser, pred()], steps }),
       );
       const seen: ImageCompareProps[] = [];
       function FakeCompare(props: ImageCompareProps) {
@@ -568,7 +578,7 @@ describe("ImageResult", () => {
             <button type="button" onClick={props.onStarted}>
               Run all engines
             </button>
-            <button type="button" onClick={() => props.onPick(molnextr)}>
+            <button type="button" onClick={() => props.onPick(molparser)}>
               Use this one
             </button>
           </div>
@@ -578,7 +588,7 @@ describe("ImageResult", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Compare" }));
       const last = seen.at(-1)!;
       expect(last.target).toEqual({ kind: "image", id: ID });
-      expect(last.predictions).toEqual([molnextr, pred()]);
+      expect(last.predictions).toEqual([molparser, pred()]);
       expect(last.steps).toEqual(steps);
 
       fireEvent.click(screen.getByRole("button", { name: "Run all engines" }));
@@ -587,7 +597,7 @@ describe("ImageResult", () => {
       fireEvent.click(screen.getByRole("button", { name: "Use this one" }));
       expect(await screen.findByText("c1ccccc1O")).toBeInTheDocument();
       expect(screen.getByText("Picked here, not saved")).toBeInTheDocument();
-      expect(within(screen.getByRole("table")).getByText("MolNexTR 1.0")).toBeInTheDocument();
+      expect(within(screen.getByRole("table")).getByText("MolParser 1.0")).toBeInTheDocument();
     });
   });
 });

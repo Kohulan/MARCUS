@@ -638,3 +638,67 @@ def test_migration_0020_curation_shown_prediction_up_down(migrated_db):
         assert "shown_prediction_id" not in _columns(engine, "curation")
     finally:
         command.upgrade(cfg, "head")
+
+
+def test_migration_0021_molparser_replaces_molnextr(migrated_db):
+    """0021: the engine checks accept molparser and still accept molnextr (old rows); an
+    unfinished molnextr ocsr step moves to molparser on q.molparser (one already sent or started
+    goes back to pending with one more attempt, as 0013); a finished one keeps its engine. The
+    downgrade refuses while a molparser row exists."""
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.downgrade(cfg, "0020")
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            with pytest.raises(DBAPIError):  # 0020: molparser is not an engine yet
+                with s.begin_nested():
+                    s.execute(text("UPDATE papers SET engine = 'molparser' WHERE id = :p"),
+                              {"p": paper.id})  # fmt: skip
+            for seq, status, attempts in (
+                (1, "pending", 0), (2, "queued", 0), (3, "running", 1), (4, "done", 1),
+                (5, "failed", 2),
+            ):  # fmt: skip
+                s.execute(
+                    text("INSERT INTO steps (id, paper_id, kind, queue, seq, status, attempts, "
+                         "engine, queued_at) VALUES (gen_random_uuid(), :p, 'ocsr', "
+                         "'q.molnextr', :seq, :st, :a, 'molnextr', "
+                         "CASE WHEN :st IN ('queued', 'running') THEN now() END)"),
+                    {"p": paper.id, "seq": seq, "st": status, "a": attempts},
+                )  # fmt: skip
+            s.commit()
+        command.upgrade(cfg, "0021")
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT seq, status, engine, queue, attempts, queued_at IS NULL "
+                    "FROM steps WHERE kind = 'ocsr' ORDER BY seq"
+                )  # fmt: skip
+            ).all()
+        assert [tuple(r) for r in rows] == [
+            (1, "pending", "molparser", "q.molparser", 0, True),
+            (2, "pending", "molparser", "q.molparser", 1, True),
+            (3, "pending", "molparser", "q.molparser", 2, True),
+            (4, "done", "molnextr", "q.molnextr", 1, True),
+            (5, "failed", "molnextr", "q.molnextr", 2, True),
+        ]
+        with engine.begin() as conn:  # both names are engines now
+            conn.execute(text("UPDATE papers SET engine = 'molparser'"))
+            conn.execute(text("UPDATE papers SET engine = 'molnextr'"))
+        with pytest.raises(DBAPIError, match="molparser"):
+            command.downgrade(cfg, "0020")
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM steps WHERE engine = 'molparser'"))
+        command.downgrade(cfg, "0020")
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")

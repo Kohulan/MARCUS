@@ -1,24 +1,41 @@
-import type { Engine, PredictionOut } from "./types";
+import type { Engine, LegacyEngine, PredictionOut } from "./types";
 
-/** The engines shown to users, in menu order (DECIMER is the default). */
+/** The engines offered to users, in menu order (DECIMER is the default). */
 export const ENGINES: { value: Engine; label: string }[] = [
   { value: "decimer", label: "DECIMER" },
   { value: "decimer-hand", label: "DECIMER hand-drawn" },
-  { value: "molnextr", label: "MolNexTR" },
+  { value: "molparser", label: "MolParser" },
   { value: "molscribe", label: "MolScribe" },
 ];
 
-/** The shown name of an engine wire value ("molnextr" → "MolNexTR"); unknown values as sent. */
+/** Engines no longer offered whose results old papers still hold: named, never run. */
+export const LEGACY_ENGINES: { value: LegacyEngine; label: string }[] = [
+  { value: "molnextr", label: "MolNexTR" },
+];
+
+const LABELS: ReadonlyMap<string, string> = new Map(
+  [...ENGINES, ...LEGACY_ENGINES].map((e) => [e.value, e.label]),
+);
+
+/** The shown name of an engine wire value, offered or legacy ("molnextr" → "MolNexTR"); others as sent. */
 export function engineName(engine: string): string {
-  return ENGINES.find((e) => e.value === engine)?.label ?? engine;
+  return LABELS.get(engine) ?? engine;
 }
 
-/** A known engine wire value, or null (an engine the UI does not offer, such as "fake"). */
+/** An offered engine wire value, or null (one the UI does not offer: legacy "molnextr", "fake"). */
 export function asEngine(engine: string | null | undefined): Engine | null {
   return ENGINES.find((e) => e.value === engine)?.value ?? null;
 }
 
-/** The engines whose molfile can hold the image's atom positions, in the order they are preferred. */
+/** A legacy engine (old papers only): its results show, but it is never started again. */
+export function isLegacyEngine(engine: string | null | undefined): boolean {
+  return LEGACY_ENGINES.some((e) => e.value === engine);
+}
+
+/**
+ * The engines whose molfile can hold the image's atom positions, in the order they are
+ * preferred (MolNexTR for old papers). MolParser is not one: its molfile is a computed layout.
+ */
 export const TEMPLATE_ENGINES: readonly string[] = ["molscribe", "molnextr"];
 
 // A computed layout (backend workers/orient.py, the same rule): at least COMPUTED_SHARE of the
@@ -72,9 +89,10 @@ export const usableTemplate = (p: PredictionOut | null | undefined): boolean =>
 
 /**
  * The prediction whose molfile draws an image's structures in the paper's orientation: the
- * newest valid MolScribe prediction whose molfile holds the image's positions, else MolNexTR's;
- * null without one. `use` leaves an engine out (Compare's "Use coordinates" off). The server
- * picks a segment's template in the same order (backend api/depiction.py orientation_template).
+ * newest valid MolScribe prediction whose molfile holds the image's positions, else MolNexTR's
+ * (old papers); null without one. `use` leaves an engine out (Compare's "Use coordinates" off).
+ * The server picks a segment's template in the same order (backend api/depiction.py
+ * orientation_template).
  * `predictions`: newest first.
  */
 export function orientationTemplate(

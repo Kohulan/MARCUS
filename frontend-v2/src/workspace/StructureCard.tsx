@@ -365,7 +365,7 @@ export function sameIdText(id: string, pages: number[]): string {
   return `Same ID as compound ${id}, ${pages.length > 1 ? "pages" : "page"} ${where}. Check.`;
 }
 
-/** The badge's tooltip: which engines agree ("DECIMER, MolNexTR and MolScribe agree"). */
+/** The badge's tooltip: which engines agree ("DECIMER, MolParser and MolScribe agree"). */
 function agreeTitle(segment: SegmentOut): string {
   const names = (segment.agree_engines ?? []).map(engineName);
   if (names.length < 2) return "The engines give different structures";

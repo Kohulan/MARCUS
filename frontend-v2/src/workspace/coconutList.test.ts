@@ -106,7 +106,7 @@ describe("coconutStructures", () => {
 
   it("takes the server's pick: the engines' majority over the paper's engine", () => {
     const own = prediction({ id: "d", engine: "decimer", smiles: "CCC" });
-    const majority = prediction({ id: "m", engine: "molnextr", smiles: "CCN" });
+    const majority = prediction({ id: "m", engine: "molparser", smiles: "CCN" });
     const list = coconutStructures(
       [
         {

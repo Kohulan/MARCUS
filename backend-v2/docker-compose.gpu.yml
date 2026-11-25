@@ -16,7 +16,8 @@
 #                     (synth_015, synth_190, two gold-set papers), the same speed and segments with a 1024 MiB
 #                     cap; 2048 is about twice the peak (the spec's first guess was 6 GB).
 #   worker-decimer    TensorFlow  MARCUS_GPU_MEM_MB 4096
-#   worker-molnextr   torch       MARCUS_TORCH_MEM_FRACTION 0.09 (about 2.9 GB of 32 GB)
+#   worker-molparser  torch       MARCUS_TORCH_MEM_FRACTION 0.03 (about 1 GB of 32 GB; a 10M-parameter
+#                     model, fp16 on CUDA; it replaced worker-molnextr's 0.09 on 2026-11-25)
 #   worker-molscribe  torch       MARCUS_TORCH_MEM_FRACTION 0.09, on the GPU
 #                     (MARCUS_MOLSCRIBE_DEVICE cuda here; v1 and the CPU stack run it on cpu).
 #                     Spec §3 allows the move only without loss on the fixture judge: D4 (jarvis
@@ -112,6 +113,15 @@ x-torch-cuda: &torch-cuda
       VARIANT: cuda
   image: marcus-v2-torch:cuda
 
+x-molparser-cuda: &molparser-cuda
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.molparser
+    target: runtime
+    args:
+      VARIANT: cuda
+  image: marcus-v2-molparser:cuda
+
 services:
   worker-segment:
     <<: [*gpu, *tf-cuda]
@@ -125,10 +135,10 @@ services:
       # Hand-drawn model at start too: its first request then answers in seconds, not ~28 s.
       MARCUS_PRELOAD_DECIMER_HAND: ${MARCUS_PRELOAD_DECIMER_HAND:-1}
 
-  worker-molnextr:
-    <<: [*gpu, *torch-cuda]
+  worker-molparser:
+    <<: [*gpu, *molparser-cuda]
     environment:
-      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLNEXTR_TORCH_MEM_FRACTION:-0.09}
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLPARSER_TORCH_MEM_FRACTION:-0.03}
 
   worker-molscribe:
     <<: [*gpu, *torch-cuda]
@@ -154,7 +164,7 @@ services:
     environment:
       MARCUS_ANNOTATE_ENABLED: "1"
       MARCUS_RGROUP_ENABLED: "1"
-      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe,q.llm,q.rgroup}
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molparser,q.molscribe,q.llm,q.rgroup}
 
   # Annotation and R-group rows run by themselves (marcus.dispatcher.auto): the dispatcher asks
   # for them where the API offers them, and only while a worker serves q.llm / q.rgroup.

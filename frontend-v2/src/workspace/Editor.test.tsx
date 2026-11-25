@@ -458,6 +458,12 @@ describe("hasImagePositions / editorLoad", () => {
     expect(hasImagePositions({ smiles: "CC", molfile: IMAGE_MOL })).toBe(true);
   });
 
+  it("a prediction of an engine without image positions (MolParser) never counts", () => {
+    expect(hasImagePositions({ smiles: "CC", molfile: IMAGE_MOL, engine: "molparser" })).toBe(false);
+    expect(hasImagePositions({ smiles: "CC", molfile: IMAGE_MOL, engine: "molscribe" })).toBe(true);
+    expect(hasImagePositions({ smiles: "CC", molfile: IMAGE_MOL, engine: null })).toBe(true);
+  });
+
   it("needs a SMILES too: off would otherwise open Ketcher empty", () => {
     expect(hasImagePositions({ smiles: null, molfile: IMAGE_MOL })).toBe(false);
     expect(hasImagePositions({ smiles: "  ", molfile: IMAGE_MOL })).toBe(false);

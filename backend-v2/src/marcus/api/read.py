@@ -16,7 +16,8 @@ from marcus.api.chem import inchikeys
 from marcus.api.chempool import CHEM
 from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, SegmentOut, StepOut
 from marcus.core import compound_ids, storage
-from marcus.core.agreement import ENGINES as AGREE_ENGINES
+from marcus.core.agreement import COUNTED as AGREE_ENGINES
+from marcus.core.agreement import SLOTS as AGREE_SLOTS
 from marcus.core.agreement import majority, newest_by_engine, pick_prediction
 from marcus.core.enums import (
     FINISHED_STEPS,
@@ -649,9 +650,10 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
 
 
 async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, dict[str, bool]]:
-    """Per segment, the agreement engines that have an OCSR step: engine -> True while one of its
-    steps is pending, queued or running, else False (it ran: done or failed). Cancelled steps
-    are left out: an engine whose step never ran (an expired background step) did not read."""
+    """Per segment, the agreement slots (marcus.core.agreement.SLOTS: a MolNexTR step counts in
+    MolParser's slot) that have an OCSR step: slot -> True while one of its steps is pending,
+    queued or running, else False (it ran: done or failed). Cancelled steps are left out: an
+    engine whose step never ran (an expired background step) did not read."""
     rows = await db.execute(
         select(Step.segment_id, Step.engine, func.bool_or(Step.status.in_(ACTIVE)))
         .where(
@@ -665,7 +667,8 @@ async def engines_run(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, 
     )
     out: dict[uuid.UUID, dict[str, bool]] = defaultdict(dict)
     for segment_id, engine, active in rows.all():
-        out[segment_id][engine] = active
+        slot = AGREE_SLOTS[engine]
+        out[segment_id][slot] = out[segment_id].get(slot, False) or active
     return out
 
 

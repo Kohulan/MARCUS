@@ -181,7 +181,7 @@ describe("Where an upload goes", () => {
       within(select)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["DECIMER", "DECIMER hand-drawn", "MolNexTR", "MolScribe"]);
+    ).toEqual(["DECIMER", "DECIMER hand-drawn", "MolParser", "MolScribe"]);
     expect(select).toHaveValue("decimer");
     fireEvent.change(select, { target: { value: "molscribe" } });
     pick(container, fileOf("paper.pdf", "application/pdf"));

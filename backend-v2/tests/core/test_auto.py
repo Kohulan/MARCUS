@@ -151,7 +151,7 @@ def test_a_scaffold_whose_page_names_its_labels_is_read_by_itself(db_session):
 def test_another_engines_reading_and_an_older_one_are_not_read_by_itself(db_session):
     s = db_session
     paper, scaffold, _ = done_paper(s)
-    other = request_ocsr(s, scaffold.segment_id, "molnextr")
+    other = request_ocsr(s, scaffold.segment_id, "molparser")
     finish(s, other, {**SCAFFOLD, "engine_version": "1.0"})
     again = request_ocsr(s, scaffold.segment_id, "decimer")
     finish(s, again, SCAFFOLD)

@@ -57,6 +57,8 @@ DEPICT_TASK = "marcus.tools.depict"
 DEPICT_OPTIONS = {"fmt": "svg", "width": 512, "height": 512, "highlight": ""}
 Source = Literal["curated", "predicted"]
 # The engines whose molfile can hold the image's atom positions, in the order they are preferred.
+# MolNexTR: old papers only (MolParser replaced it 2026-11-25). MolParser reads no atom positions:
+# never a template.
 TEMPLATE_ENGINES = (Engine.MOLSCRIBE.value, Engine.MOLNEXTR.value)
 
 

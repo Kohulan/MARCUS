@@ -75,7 +75,7 @@ def main(argv=None) -> int:
     ap.add_argument("--target", choices=["local", "jarvis"], required=True, help="jarvis: guard on (prod-stopped)")
     ap.add_argument("--base-url", required=True)
     ap.add_argument("--sizes", type=int, nargs="+", default=[15, 190], choices=[15, 190])
-    ap.add_argument("--engines", nargs="+", default=ENGINES, choices=ENGINES)
+    ap.add_argument("--engines", nargs="+", default=ENGINES, choices=ENGINES + ["molparser"])
     ap.add_argument("--prod-stopped", action="store_true", help="guard: production must stay stopped (GPU window)")
     ap.add_argument("--cache-pg-container", default=None, help="v2: test stack Postgres whose OCSR cache is emptied")
     ap.add_argument("--tag", default="")

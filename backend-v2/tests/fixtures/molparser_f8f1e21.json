@@ -1,0 +1,25 @@
+{
+ "engine": "molparser",
+ "version": "f8f1e21+6ee7c0f",
+ "recorded": "2026-11-25, CPU, the pinned MolParser image stack (docker/Dockerfile.molparser) through marcus.workers.ocsr.molparser; the same three synth_015 crops as v1_molscribe.json",
+ "crops": [
+  {
+   "file": "ocsr/synth015_p0_i0.png",
+   "sha256": "0146a50d4405a13d20565c316328fe809ed5a7c81366f57064b0d2ffc35808ad",
+   "smiles": "C[C@H](C=C[C@H](C)C(C)(C)O)[C@H]1CC[C@@H]2C3=C[C@H](O)[C@@]4(C)C[C@@H](O)CC[C@]4(C)[C@@]3(C)CC[C@@]21C",
+   "molfile": null
+  },
+  {
+   "file": "ocsr/synth015_p1_i1.png",
+   "sha256": "0ce74dadd9a2f2545f8fc2a5f6c0ab5199ffa297e27df8eeafc07ece302caee8",
+   "smiles": "O=C(/C=C/c1ccc(O)cc1)c1c(O)cc(O)cc1O",
+   "molfile": null
+  },
+  {
+   "file": "ocsr/synth015_p2_i0.png",
+   "sha256": "db66d441cc97f41a62df1b0e2e14a2ca2fcdb9248bc8fcdafe88a2b1645d35cc",
+   "smiles": "CC1(C)[C@H]2CC[C@]1(C)[C@@H](O)C2",
+   "molfile": null
+  }
+ ]
+}

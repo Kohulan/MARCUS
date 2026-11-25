@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.7
-# MARCUS v2 PyTorch worker image (extra "torch"), one image for both torch OCSR workers:
-# MolNexTR (worker-molnextr, q.molnextr) and MolScribe (worker-molscribe, q.molscribe). Which
-# engine a container serves is set by MARCUS_OCSR_ENGINES (compose).
+# MARCUS v2 PyTorch worker image (extra "torch") for the torch OCSR worker MolScribe
+# (worker-molscribe, q.molscribe); MARCUS_OCSR_ENGINES (compose) names the engine. MolNexTR,
+# which this image also served, was replaced by MolParser (owner decision 2026-11-25; its own
+# image, docker/Dockerfile.molparser).
 #
 # Model stack = what the shipped v1 image runs (its `pip freeze`, controller ruling R10; table
-# in docker/MODEL_PINS.md): torch 2.10.0 / torchvision 0.25.0, MolNexTR and MolScribe at the
-# commits v1 installed, both --no-deps as in v1 (backend/Dockerfile). Installed besides them:
-# exactly the packages the two libraries import at runtime (measured in the v1 image), with
+# in docker/MODEL_PINS.md): torch 2.10.0 / torchvision 0.25.0, MolScribe at the commit v1
+# installed, --no-deps as in v1 (backend/Dockerfile). Installed besides it: the packages
+# MolScribe and MolNexTR imported at runtime (measured in the v1 image; kept as they were), with
 # their transitive closure resolved for Python 3.11 against the v1 freeze; every version is the
 # v1 one. Declared-but-never-imported requirements are not installed (OpenNMT-py and SmilesPE
 # are therefore --no-deps too); the dependency check below allows exactly those.
@@ -24,11 +25,9 @@
 #
 # Weights are downloaded at BUILD time with a pinned sha256, at a pinned Hugging Face revision;
 # runtime needs no network and the root filesystem stays read-only.
-# - MolNexTR molnextr_best.pth (1.13 GB) into /opt/pystow/molnextr/, where
-#   MolNexTRSingleton looks (pystow.join("molnextr")) before it would download.
 # - MolScribe swin_base_char_aux_1m.pth (1.13 GB) into /opt/pystow/molscribe/ (v1 used
 #   hf_hub_download("yujieq/MolScribe", ...); the engine opens this path directly).
-# Both files are byte-identical to v1's runtime-downloaded copies.
+# The file is byte-identical to v1's runtime-downloaded copy.
 #
 # Targets: `runtime` (the worker, default for compose) and `test` (+ pytest and tests/, for
 # `pytest -m ml` in this image). Build context: backend-v2/.
@@ -85,29 +84,24 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       sympy==1.14.0 mpmath==1.3.0 opt-einsum==3.4.0 \
     && uv pip install --python /app/.venv/bin/python --no-deps \
       OpenNMT-py==2.2.0 SmilesPE==0.0.3 \
-      "MolNexTR @ git+https://github.com/Kohulan/MolNexTR.git@7a4e03f22c13f4c1c236effa9dab4a365a8e08d5" \
       "MolScribe @ git+https://github.com/CrystalEye42/MolScribe.git@250f683f52f5050eb624870ccfd04bccbcaa27e1" \
     && { uv pip check --python /app/.venv/bin/python > /tmp/pip-check.txt 2>&1 || true; } \
     && cat /tmp/pip-check.txt \
     && ! grep -E "requires|not installed|incompatib" /tmp/pip-check.txt \
          | grep -vE "^Found [0-9]+ incompatibilit" \
-         | grep -vE "molnextr\` requires \`(pytorch-lightning|opencv-python|pyonmttok)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
          | grep -vE "molscribe\` requires \`(opencv-python|rdkit-pypi)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
          | grep -vE "molscribe\` requires \`torch>=1\.11\.0,<2\.0\`, but \`2\.10\.0(\+cpu)?\` is installed" \
          | grep -vE "opennmt-py\` requires \`(configargparse|tensorboard|flask|waitress|pyonmttok)([<>=!~ ;][^\`]*)?\`, but it's not installed" \
          | grep -vE "smilespe\` requires \`(fastprogress|gensim)([<>=!~ ;][^\`]*)?\`, but it's not installed"
 
-# Checkpoints in their own stage: a change to the runtime stage's packages does not fetch 2.3 GB
+# Checkpoint in its own stage: a change to the runtime stage's packages does not fetch 1.1 GB
 # again.
 FROM python:3.11-slim-bookworm AS weights
-ADD --checksum=sha256:5990bc19aaafa5cf44e9d04e06fb8e2b5aea50c66e1e925f662bdff7d2a6422c --chmod=644 \
-    https://huggingface.co/datasets/CYF200127/MolNexTR/resolve/9ac2da6fa553e1d053af3d8d534b8a6c74b79749/molnextr_best.pth \
-    /opt/pystow/molnextr/molnextr_best.pth
 ADD --checksum=sha256:6f0df56fa32b5ffc21f8c7f311ef333da522f590bf5622e966c6bcb1f2d9ea1d --chmod=644 \
     https://huggingface.co/yujieq/MolScribe/resolve/a0189776b7415b82795c7ee81eed311bf5c8724b/swin_base_char_aux_1m.pth \
     /opt/pystow/molscribe/swin_base_char_aux_1m.pth
 # ADD creates the parent directories root-only. Fixed here: a chmod in the runtime stage would
-# copy both files into a new layer (2.3 GB more).
+# copy the file into a new layer (1.1 GB more).
 RUN chmod -R a+rX /opt/pystow
 
 FROM python:3.11-slim-bookworm AS runtime
@@ -137,8 +131,8 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
 USER marcus
 # ONE prefork process per container (= the queue's slots): one model per process, loaded when
 # the pool process starts (after the fork), never in the parent; a failed load stops the worker.
-CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molnextr", "-c", "1", \
-     "--pool", "prefork", "--include", "marcus.workers.ocsr", "-n", "molnextr@%h", \
+CMD ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molscribe", "-c", "1", \
+     "--pool", "prefork", "--include", "marcus.workers.ocsr", "-n", "molscribe@%h", \
      "--loglevel", "INFO"]
 
 FROM runtime AS test

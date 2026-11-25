@@ -84,9 +84,11 @@ UI_SEGMENT_TIMEOUT_S = 300
 UI_OCSR_TIMEOUT_S = 60
 PAPER_TIMEOUT_S = 3600.0
 # v1 engine names (run_goldset.py) -> v2 engine identifiers (marcus.core.enums.Engine); "fake" only works
-# against a stack started with MARCUS_ENABLE_FAKE_ENGINES=1
-ENGINES = {"decimer": "decimer", "decimer-hand": "decimer-hand", "molnextr": "molnextr",
-           "molscribe": "molscribe", "fake": "fake"}
+# against a stack started with MARCUS_ENABLE_FAKE_ENGINES=1. v2 no longer runs MolNexTR (MolParser
+# replaced it, 2026-11-25): the v1 name "molnextr" runs v2's "molparser" (same slot), so v1-vs-v2
+# runs still pair up; "molparser" may also be named directly.
+ENGINES = {"decimer": "decimer", "decimer-hand": "decimer-hand", "molnextr": "molparser",
+           "molparser": "molparser", "molscribe": "molscribe", "fake": "fake"}
 TERMINAL = {"done", "failed", "deleted"}
 ACTIVE_STEP = ("pending", "queued", "running")
 

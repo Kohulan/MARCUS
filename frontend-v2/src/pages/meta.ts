@@ -10,7 +10,7 @@ export type PageMeta = {
 
 const DESCRIPTION =
   "MARCUS finds the chemical structures in a scientific PDF, reads them with DECIMER, " +
-  "MolNexTR or MolScribe, and helps you check them before they go into COCONUT.";
+  "MolParser or MolScribe, and helps you check them before they go into COCONUT.";
 
 // Every page shows the Gmarket wordmark and Geist 700 (an h1, or the landing's initials) in
 // its first screen; the landing also opens on Geist Mono 400 (the facts line, the drop hint).

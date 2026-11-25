@@ -11,6 +11,8 @@ from marcus.core import storage
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, Paper, Prediction, Step
 from marcus.core.settings import get_settings
+from tests.api._upload_helpers import upload as upload_paper
+from tests.api._upload_helpers import upload_image
 from tests.api.conftest import (
     PNG,
     make_client,
@@ -59,7 +61,7 @@ async def test_get_paper_shape(app, async_db_session):
     def add_newer_prediction(s):
         s.add(
             Prediction(
-                segment_id=seg0, engine="molnextr", engine_version="m1", smiles="CCN",
+                segment_id=seg0, engine="molparser", engine_version="m1", smiles="CCN",
                 valid=True, ms=3, created_at=datetime.now(UTC) + timedelta(seconds=5),
             )
         )  # fmt: skip
@@ -87,7 +89,7 @@ async def test_get_paper_shape(app, async_db_session):
     preds = segs[0]["predictions"]
     assert [p["smiles"] for p in preds] == ["CCN", "CCO"]  # newest first
     assert set(preds[0]) >= {"engine", "engine_version", "smiles", "molfile", "valid", "created_at"}
-    assert [p["engine"] for p in preds] == ["molnextr", "decimer"]
+    assert [p["engine"] for p in preds] == ["molparser", "decimer"]
 
 
 async def test_paper_shows_doi_title_first_author_and_year(app, async_db_session):
@@ -575,12 +577,12 @@ async def test_queue_default_duration_and_no_foreign_papers(app, async_db_sessio
 
 async def test_queue_leaves_background_steps_out(app, async_db_session):
     """Bob's paper waits for its other engines in the background: none of those steps stands
-    in front of my paper's own read on q.molnextr (the dispatcher sends them after it)."""
+    in front of my paper's own read on q.molparser (the dispatcher sends them after it)."""
     db = async_db_session
     alice, token = await new_owner(db)
     bob, _ = await new_owner(db)
-    await seed_paper(db, bob, ocsr=False)  # its background steps wait on q.molnextr
-    mine = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
+    await seed_paper(db, bob, ocsr=False)  # its background steps wait on q.molparser
+    mine = await seed_paper(db, alice, engine=Engine.MOLPARSER, ocsr=False)
     await db.execute(
         update(Step)
         .where(Step.paper_id == mine.paper_id, Step.status == "pending")
@@ -590,9 +592,9 @@ async def test_queue_leaves_background_steps_out(app, async_db_session):
     async with make_client(app, token) as c:
         body = (await c.get("/api/v2/queue")).json()
     ahead = body["papers"][0]["steps_ahead_by_queue"]
-    # bob's two q.molnextr background steps are not ahead; my own background steps
+    # bob's two q.molparser background steps are not ahead; my own background steps
     # (q.decimer, q.molscribe) are not my paper's wait
-    assert ahead == {"q.cpu": 2, "q.molnextr": 0}
+    assert ahead == {"q.cpu": 2, "q.molparser": 0}
 
 
 async def test_queue_ignores_my_expired_papers(app, async_db_session):
@@ -885,3 +887,24 @@ async def test_a_paper_without_a_docling_step_has_its_text_read_with_its_pages(
     async with make_client(app, token) as c:
         listed = (await c.get("/api/v2/papers")).json()["papers"]
     assert (listed[0]["pages_read"], listed[0]["text_read"]) == (0, False)
+
+
+async def test_molnextr_is_no_longer_run(app, async_db_session):
+    """MolParser replaced MolNexTR (2026-11-25): a new MolNexTR read is refused like a disabled
+    engine (422), on a segment, an upload and an image job; MolParser is accepted."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, others=False)
+    seg = seeded.segment_ids[1]
+    async with make_client(app, token) as c:
+        old = await c.post(f"/api/v2/segments/{seg}/predictions", json={"engine": "molnextr"})
+        new = await c.post(f"/api/v2/segments/{seg}/predictions", json={"engine": "molparser"})
+        upload = await upload_paper(c, engine="molnextr")
+        image = await upload_image(c, engine="molnextr")
+    assert old.status_code == 422 and old.json() == {"detail": "Engine not available"}
+    assert upload.status_code == 422 and image.status_code == 422
+    assert new.status_code == 202
+    step = (
+        await db.execute(select(Step).where(Step.id == uuid.UUID(new.json()["step_id"])))
+    ).scalar_one()
+    assert (step.engine, step.queue) == ("molparser", "q.molparser")

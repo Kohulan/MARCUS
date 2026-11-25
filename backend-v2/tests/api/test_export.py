@@ -66,7 +66,7 @@ async def test_export_prefers_paper_engine_and_accepted_filter_skips_rejected(
         s.add(
             Prediction(
                 segment_id=s0,
-                engine="molnextr",
+                engine="molparser",
                 engine_version="m",
                 smiles="CCN",
                 valid=True,
@@ -116,7 +116,7 @@ async def test_export_prefers_paper_engine_and_accepted_filter_skips_rejected(
 async def test_export_falls_back_to_any_engine_and_uses_curated_molfile(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
+    seeded = await seed_paper(db, alice, engine=Engine.MOLPARSER, ocsr=False)
     s0, s1 = seeded.segment_ids
 
     def add(s):
@@ -147,7 +147,7 @@ async def test_export_leaves_out_segments_without_a_valid_structure(app, async_d
     s0, s1 = seeded.segment_ids
 
     def add(s):
-        for engine in ("decimer", "molnextr"):
+        for engine in ("decimer", "molparser"):
             s.add(Prediction(segment_id=s1, engine=engine, engine_version="v", smiles="C(",
                              valid=False, ms=1))  # fmt: skip
 
@@ -497,7 +497,7 @@ def test_sdf_from_a_stereo_smiles_has_chiral_flag_1():
 async def test_export_gives_an_engine_molfile_chiral_flag_1(app, async_db_session):
     db = async_db_session
     alice, token = await new_owner(db)
-    seeded = await seed_paper(db, alice, engine=Engine.MOLNEXTR, ocsr=False)
+    seeded = await seed_paper(db, alice, engine=Engine.MOLPARSER, ocsr=False)
     s0 = seeded.segment_ids[0]
     molfile = Chem.MolToMolBlock(Chem.MolFromSmiles("C[C@H](N)C(=O)O"))  # RDKit: flag 0
 
@@ -505,7 +505,7 @@ async def test_export_gives_an_engine_molfile_chiral_flag_1(app, async_db_sessio
         s.add(
             Prediction(
                 segment_id=s0,
-                engine="molnextr",
+                engine="molparser",
                 engine_version="m",
                 smiles="C[C@H](N)C(=O)O",
                 molfile=molfile,

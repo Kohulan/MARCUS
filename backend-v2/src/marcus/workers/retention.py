@@ -84,7 +84,7 @@ DEPICTIONS_MAX_BYTES = 2 * 1024**3
 _ENGINE_DISTS = {
     Engine.DECIMER: "decimer",
     Engine.DECIMER_HAND: "decimer",
-    Engine.MOLNEXTR: "MolNexTR",
+    Engine.MOLPARSER: "molparser",
     Engine.MOLSCRIBE: "MolScribe",
 }
 
@@ -116,10 +116,10 @@ def _static_version(engine: Engine) -> str:
         from marcus.workers.ocsr.decimer import DecimerEngine
 
         return DecimerEngine(hand_drawn=engine is Engine.DECIMER_HAND).version
-    if engine is Engine.MOLNEXTR:
-        from marcus.workers.ocsr.molnextr import MolnextrEngine
+    if engine is Engine.MOLPARSER:
+        from marcus.workers.ocsr.molparser import MolparserEngine
 
-        return MolnextrEngine().version
+        return MolparserEngine().version
     from marcus.workers.ocsr.molscribe import MolscribeEngine
 
     return MolscribeEngine().version

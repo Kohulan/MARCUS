@@ -45,7 +45,8 @@ export default function Disclaimer() {
       <InfoSection title="Licence and citation">
         <p>
           MARCUS is released under the MIT licence, as is, without warranty. The models and
-          parts it uses (DECIMER, MolNexTR, MolScribe, Docling) have their own licences. If you
+          parts it uses (DECIMER, MolParser, MolScribe, Docling) have their own licences.
+          The MolParser model weights are CC BY-NC-SA 4.0, for non-commercial use only. If you
           use MARCUS in your research, please cite it (<Link to="/about#cite">How to cite</Link>)
           and the tools it builds on (<Link to="/about">About</Link>).
         </p>

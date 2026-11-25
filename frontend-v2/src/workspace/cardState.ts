@@ -144,7 +144,7 @@ export const hasScaffold = (segment: SegmentOut, paperEngine: string): boolean =
 
 /**
  * "Edited", or the shown prediction's "<engine> · Valid|Invalid"; null with neither. The
- * structure two engines agree on names both ("MolNexTR + MolScribe · Valid"). A scaffold says
+ * structure two engines agree on names both ("MolParser + MolScribe · Valid"). A scaffold says
  * so instead, with its labels ("DECIMER · R-group scaffold (R1, R2)"), never a bare "Invalid"
  * (DECIMER's R tokens) or "Valid" (a dummy atom).
  */
