@@ -10,7 +10,14 @@ import "./pick.css";
  * Mode `ask` (a web upload; owner decision 2026-11-25): the paper's pages and text are read,
  * nothing is segmented yet. Two choices, no more copy: every page, or pick a structure.
  */
-export default function ModePrompt({ paperId }: { paperId: string }) {
+export default function ModePrompt({
+  paperId,
+  reconnect,
+}: {
+  paperId: string;
+  /** Reopens the live stream: a paper waiting for the choice is done and its stream has ended. */
+  reconnect: () => void;
+}) {
   const client = useQueryClient();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -18,7 +25,10 @@ export default function ModePrompt({ paperId }: { paperId: string }) {
     setBusy(true);
     api
       .setMode(paperId, mode)
-      .then(() => refreshPaper(client, paperId))
+      .then(() => {
+        reconnect();
+        refreshPaper(client, paperId);
+      })
       .catch((err: unknown) => toast(`Not started: ${errorText(err)}`, "error"))
       .finally(() => setBusy(false));
   };

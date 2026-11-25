@@ -40,15 +40,20 @@ export default function PickPanel({
   segments,
   candidates,
   allSteps,
+  reconnect,
 }: {
   paper: PaperDetail;
   segments: SegmentOut[];
   candidates: SegmentOut[];
   allSteps: StepOut[];
+  /** Reopens the live stream (a finished paper's has ended), so the new steps show live. */
+  reconnect: () => void;
 }) {
   const client = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState<number | null>(null);
+  // Pages whose boxes came at once (segmentation cache), none of them: nothing more will come.
+  const [cachedEmpty, setCachedEmpty] = useState<ReadonlySet<number>>(new Set());
   const pages = paper.pages ?? 0;
   const images = useMemo(
     () => pageImages(allSteps, pages, paper.status !== "done" && paper.status !== "failed"),
@@ -58,12 +63,21 @@ export default function PickPanel({
     () => (open === null ? [] : (pageSteps(allSteps).get(open) ?? []).filter((s) => s.kind === "segment_page")),
     [allSteps, open],
   );
-  const refresh = () => refreshPaper(client, paper.id);
+  const refresh = () => {
+    reconnect();
+    refreshPaper(client, paper.id);
+  };
   const fail = (err: unknown) => toast(`Not started: ${errorText(err)}`, "error");
 
   const openPage = (page0: number) => {
     setOpen(page0);
-    api.segmentPage(paper.id, page0).then(refresh).catch(fail);
+    api
+      .segmentPage(paper.id, page0)
+      .then((out) => {
+        if (out.step_id === null) setCachedEmpty((s) => new Set(s).add(page0));
+        refresh();
+      })
+      .catch(fail);
   };
   const readAll = () => api.setMode(paper.id, "auto").then(refresh).catch(fail);
   const onPick = (segmentId: string) => {
@@ -74,7 +88,13 @@ export default function PickPanel({
 
   const markers = open === null ? NO_MARKERS : markersOf(open, segments, candidates);
   const finding = segmentSteps.some(isActive);
-  const none = open !== null && markers.length === 0 && !finding && segmentSteps[0]?.status === "done";
+  const newest = segmentSteps[0]?.status;
+  const failed = open !== null && markers.length === 0 && !finding && newest === "failed";
+  const none =
+    open !== null &&
+    markers.length === 0 &&
+    !finding &&
+    (newest === "done" || (newest === undefined && cachedEmpty.has(open)));
 
   return (
     <section className="pick" aria-label="Pick a structure">
@@ -113,6 +133,14 @@ export default function PickPanel({
       ) : (
         <div className="pick__page">
           {none && <p className="pick__note">No structures found on this page</p>}
+          {failed && (
+            <div className="pick__note">
+              <p>Structures could not be found on this page.</p>
+              <GlassButton tint="clear" size="sm" onClick={() => openPage(open)}>
+                Try again
+              </GlassButton>
+            </div>
+          )}
           {finding && <p className="pick__note">Finding structures…</p>}
           <PageWithBoxes
             paperId={paper.id}

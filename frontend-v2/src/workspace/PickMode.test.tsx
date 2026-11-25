@@ -11,8 +11,9 @@ import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import Workspace from "./Workspace";
 
+const live = vi.hoisted(() => ({ reconnect: vi.fn() }));
 vi.mock("../api/useLiveEvents", () => ({
-  useLiveEvents: () => ({ mode: "live", reconnect: () => undefined }),
+  useLiveEvents: () => ({ mode: "live", reconnect: live.reconnect }),
 }));
 
 vi.mock("../api/depictions", async (importOriginal) => ({
@@ -119,6 +120,7 @@ async function loadPage(page: number) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  live.reconnect.mockClear();
 });
 
 describe("mode ask: the paper page asks", () => {
@@ -179,4 +181,41 @@ describe("mode pick", () => {
     expect(await screen.findByText("1 structure")).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(1);
   });
+
+  it("a finished paper's live stream is reopened by every pick action", async () => {
+    renderAt(paper([segment("s1")], { ocsr_mode: "pick" }));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    vi.spyOn(api, "readSegment").mockResolvedValue({ step_ids: ["a"] });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
+    await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
+    await loadPage(1);
+    fireEvent.click(await screen.findByRole("button", { name: "Read structure [01] on page 1" }));
+    await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(2));
+  });
+
+  it("says no structures for a page whose boxes came from the cache empty", async () => {
+    renderAt(paper([]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 3" }));
+    expect(await screen.findByText("No structures found on this page")).toBeInTheDocument();
+  });
+
+  it("a page whose segmentation failed says so and tries again", async () => {
+    renderAt(paper([]), [...RENDERED, step({ kind: "segment_page", page: 0, status: "failed", error_class: "engine_error" })]);
+    const seg = vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: "st-new" });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(seg).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/Structures could not be found/)).toBeInTheDocument();
+  });
+
+  it("Retry page in pick mode finds the page's structures again", async () => {
+    renderAt(paper([], { failed_pages: 1 }), [...RENDERED, step({ kind: "segment_page", page: 0, status: "failed", error_class: "engine_error" })]);
+    const seg = vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: "st-new" });
+    const render = vi.spyOn(api, "retryPage");
+    fireEvent.click(await screen.findByRole("button", { name: "Retry page 1" }));
+    await waitFor(() => expect(seg).toHaveBeenCalledWith(ID, 0));
+    expect(render).not.toHaveBeenCalled();
+  });
 });
+

@@ -259,7 +259,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       <StatusBar paper={paper} steps={ws.steps} live={ws.live} />
 
       {paper.ocsr_mode === "ask" && paper.status !== "failed" && (
-        <ModePrompt paperId={paper.id} />
+        <ModePrompt paperId={paper.id} reconnect={ws.live.reconnect} />
       )}
       {paper.ocsr_mode === "pick" && (
         <PickPanel
@@ -267,6 +267,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           segments={ws.segments}
           candidates={ws.candidates}
           allSteps={ws.allSteps}
+          reconnect={ws.live.reconnect}
         />
       )}
 

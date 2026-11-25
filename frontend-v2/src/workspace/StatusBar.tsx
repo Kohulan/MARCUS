@@ -10,7 +10,7 @@ import { GlassButton } from "../ui/GlassButton";
 import ReadingProgress, { useShownProgress } from "../ui/ReadingProgress";
 import StateBadge, { ItemState } from "../ui/StateBadge";
 import { useToast } from "../ui/Toasts";
-import { checkFailure as checkFailureOf, pageFailures } from "./pageFailures";
+import { checkFailure as checkFailureOf, pageFailures, pageSteps } from "./pageFailures";
 import { progressOf, readCounts } from "./readingProgress";
 import "./workspace.css";
 
@@ -79,7 +79,13 @@ export default function StatusBar({ paper, steps, live }: Props) {
   async function retry(page0: number) {
     setHeld((m) => new Map(m).set(page0, 0));
     try {
-      await api.retryPage(paper.id, page0);
+      // pick mode: a page whose segmentation failed is segmented again (a re-render would wait)
+      const newest = pageSteps(steps).get(page0)?.[0];
+      if (paper.ocsr_mode === "pick" && newest?.kind === "segment_page") {
+        await api.segmentPage(paper.id, page0);
+      } else {
+        await api.retryPage(paper.id, page0);
+      }
       setHeld((m) => new Map(m).set(page0, Date.now()));
       live.reconnect(); // a finished paper's stream has ended; the retry reopens it
       refreshPaper(client, paper.id);
