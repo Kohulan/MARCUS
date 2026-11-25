@@ -28,6 +28,11 @@ export type Workspace = {
    * (listedSegments).
    */
   segments: SegmentOut[];
+  /**
+   * Pick mode: the boxes the user has not picked (candidate). Drawn on their page in the pick
+   * panel only: never in `segments`, so no card, marker, count or COCONUT send has them.
+   */
+  candidates: SegmentOut[];
   /** The paper's read steps: background OCSR steps left out (readSteps). */
   steps: StepOut[];
   /** Every step, background OCSR steps too (Compare shows those engines reading). */
@@ -76,8 +81,16 @@ export function useWorkspace(id: string): Workspace {
   entryState.current = location.state;
 
   const segments = useMemo(
-    () => mainFirst(paper?.segments ?? [], paper?.main_figure_page),
+    () =>
+      mainFirst(
+        (paper?.segments ?? []).filter((s) => s.candidate !== true),
+        paper?.main_figure_page,
+      ),
     [paper?.segments, paper?.main_figure_page],
+  );
+  const candidates = useMemo(
+    () => (paper?.segments ?? []).filter((s) => s.candidate === true),
+    [paper?.segments],
   );
 
   const [open, setOpen] = useState<WorkspaceDialog | null>(null);
@@ -165,6 +178,7 @@ export function useWorkspace(id: string): Workspace {
   return {
     paper,
     segments,
+    candidates,
     steps,
     allSteps,
     selection,

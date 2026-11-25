@@ -1,0 +1,57 @@
+/* "All pages or pick a structure" (ModePrompt, PagePicker). */
+.pick-ask,
+.pick__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.pick__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.pick__tile {
+  position: relative;
+  aspect-ratio: 2480 / 3508;
+  padding: 0;
+  border: 1px solid var(--hair);
+  background-color: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.pick__tile:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.pick__tile:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.pick__tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.pick__num {
+  position: absolute;
+  inset: auto 4px 4px auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pick__page {
+  max-width: 720px;
+}
+
+.pick__note {
+  color: var(--text-2);
+}

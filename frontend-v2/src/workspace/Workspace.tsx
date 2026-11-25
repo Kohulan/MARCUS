@@ -16,6 +16,8 @@ import { paperName, structureTag } from "../ui/tag";
 import { SegmentCompare } from "./Compare";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
+import ModePrompt from "./ModePrompt";
+import PickPanel from "./PagePicker";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
@@ -255,6 +257,18 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       </span>
 
       <StatusBar paper={paper} steps={ws.steps} live={ws.live} />
+
+      {paper.ocsr_mode === "ask" && paper.status !== "failed" && (
+        <ModePrompt paperId={paper.id} />
+      )}
+      {paper.ocsr_mode === "pick" && (
+        <PickPanel
+          paper={paper}
+          segments={ws.segments}
+          candidates={ws.candidates}
+          allSteps={ws.allSteps}
+        />
+      )}
 
       {ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">

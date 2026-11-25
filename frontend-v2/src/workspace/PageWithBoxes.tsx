@@ -20,6 +20,8 @@ export type PageMarker = {
   bbox: SegmentOut["bbox"];
   /** R-group labels of the structure shown ([] for none): the marker carries the tag. */
   rgroups: string[];
+  /** Pick mode: a box not picked yet; a click reads it ("Read structure …"). */
+  read?: boolean;
 };
 
 /** Whether the page image can be shown: rendered, still to come, or failed with a reason. */
@@ -125,7 +127,7 @@ function PageWithBoxes({
                   style={boxStyle(m.bbox, natural.w, natural.h)}
                   data-marker={m.segmentId}
                   aria-label={
-                    `Structure ${structureTag(m.n)} on page ${page0 + 1}` +
+                    `${m.read ? "Read structure" : "Structure"} ${structureTag(m.n)} on page ${page0 + 1}` +
                     (m.rgroups.length > 0 ? `, ${rgroupTag(m.rgroups)}` : "")
                   }
                   aria-current={m.segmentId === selected ? "true" : undefined}
