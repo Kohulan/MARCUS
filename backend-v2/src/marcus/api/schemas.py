@@ -212,6 +212,23 @@ class ReadAccepted(BaseModel):
     step_ids: list[uuid.UUID]
 
 
+class BuildFailure(BaseModel):
+    """A row of a scaffold's R-group table that was not built, and why ("Could not build")."""
+
+    compound: str
+    reason: str
+
+
+class BuildOut(BaseModel):
+    """A build of a scaffold's rows (Markush Phase 3): new or refreshed cards, cards kept
+    (a curator's, or unchanged), cards removed, and the rows not built."""
+
+    built: int
+    kept: int
+    removed: int
+    failures: list[BuildFailure]
+
+
 class StepAccepted(BaseModel):
     step_id: uuid.UUID
 

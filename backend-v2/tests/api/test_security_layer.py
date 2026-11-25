@@ -79,6 +79,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/segments/{segment_id}/depiction"),
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
     ("POST", "/api/v2/segments/{segment_id}/read"),  # pick a structure
+    ("POST", "/api/v2/segments/{segment_id}/build"),  # Markush Phase 3
     ("PUT", "/api/v2/segments/{segment_id}/curation"),
     ("PUT", "/api/v2/papers/{paper_id}/curation"),
     ("PUT", "/api/v2/papers/{paper_id}/main-figure"),

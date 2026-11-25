@@ -28,6 +28,7 @@ ROUTES = [
     ("GET", "/api/v2/segments/{s}/image", None),
     ("GET", "/api/v2/segments/{s}/depiction", None),
     ("POST", "/api/v2/segments/{s}/predictions", {"engine": "molnextr"}),
+    ("POST", "/api/v2/segments/{s}/build", None),
     ("GET", "/api/v2/images/{i}", None),
     ("GET", "/api/v2/images/{i}/image", None),
     ("GET", "/api/v2/images/{i}/events", None),
