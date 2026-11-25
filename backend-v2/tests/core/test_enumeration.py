@@ -140,3 +140,14 @@ def test_a_row_without_compound_id_fails():
 def test_an_unreadable_scaffold_fails_every_row():
     (out,) = build_rows("C1CC(", None, [{"compound": "z", "groups": {"R1": "H"}}])
     assert out["reason"] == "the scaffold could not be read"
+
+
+def test_a_bridge_whose_partner_label_is_left_out_builds():
+    """The paper prints −OCH2O− once across R2 and R3; a reading may leave R3 out instead of
+    giving it empty: the bridge still takes it (and only a bridge does)."""
+    (out,) = build_rows(
+        SCAFFOLD_20, None, [{"compound": "d", "groups": {"R1": "H", "R2": "−OCH2O−"}}]
+    )
+    assert out["inchikey"] == key(FULL_20["20d"])
+    (no,) = build_rows(SCAFFOLD_20, None, [{"compound": "x", "groups": {"R1": "H", "R2": "OH"}}])
+    assert no["reason"] == "no value for R3"

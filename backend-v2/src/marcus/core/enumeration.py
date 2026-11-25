@@ -113,9 +113,9 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
             return NOT_ONE_BOND.format(lab)
     order = sorted(set(raw.values()), key=_label_order)
     values = {k.strip(): str(v or "").strip() for k, v in groups.items()}
+    # a label the row leaves out counts as empty: only a bridge may take it (else NO_VALUE below)
     for lab in order:
-        if lab not in values:
-            return NO_VALUE.format(lab)
+        values.setdefault(lab, "")
     for k, v in values.items():
         if v and k not in order:
             return NOT_IN_SCAFFOLD.format(k)
@@ -150,6 +150,7 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
         if lab not in partner.values():
             return NO_VALUE.format(lab)
     pieces = Chem.Mol()
+    quiet = BlockLogs()  # "[H]*" warns that its H has a dummy neighbour: expected here
     for lab, frag in frags.items():
         targets = (
             [[atoms_of[lab][0], atoms_of[partner[lab]][0]]]
@@ -162,6 +163,7 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
             for star, idx in zip(stars, points, strict=True):
                 star.SetAtomMapNum(mol.GetAtomWithIdx(idx).GetAtomMapNum())
             pieces = Chem.CombineMols(pieces, piece)
+    del quiet
     try:
         with BlockLogs():
             out = Chem.molzip(mol, pieces)
