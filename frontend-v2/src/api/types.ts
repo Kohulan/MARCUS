@@ -129,6 +129,10 @@ export interface SegmentOut {
   predictions: PredictionOut[];
   /** Pick mode: a box the user has not picked. Drawn on its page only: no card, in no count. */
   candidate?: boolean;
+  /** Markush Phase 3: a built structure's scaffold segment id (null otherwise). */
+  built_from?: string | null;
+  /** On a scaffold that was built: the rows that could not be (null when never built). */
+  build_failures?: BuildFailure[] | null;
   /**
    * The main-figure structure this one repeats (the same compound on another page: same
    * InChIKey). Null or absent for every other structure, and without a main figure.
@@ -204,6 +208,20 @@ export interface PaperDetail extends PaperSummary {
   links_ready?: boolean;
   counts: Counts;
   segments: SegmentOut[];
+}
+
+/** A scaffold row that was not built, and why ("Could not build"). */
+export interface BuildFailure {
+  compound: string;
+  reason: string;
+}
+
+/** POST /segments/{id}/build: new or refreshed cards, kept, removed, and the rows not built. */
+export interface BuildOut {
+  built: number;
+  kept: number;
+  removed: number;
+  failures: BuildFailure[];
 }
 
 export interface ModeOut {

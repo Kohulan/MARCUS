@@ -8,8 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { reasonText } from "../api/reasons";
 import { createQueryClient } from "../api/queries";
-import type { PredictionOut, RgroupExtractionOut, RgroupList, SegmentOut } from "../api/types";
+import type {
+  BuildFailure,
+  PredictionOut,
+  RgroupExtractionOut,
+  RgroupList,
+  SegmentOut,
+} from "../api/types";
 import { hasScaffold, scaffoldPrediction, shownStructure } from "./cardState";
+import { BUILD, COULD_NOT_BUILD, failureText } from "./built";
 import RgroupRows from "./RgroupRows";
 import {
   anyRgroupActive,
@@ -24,6 +31,7 @@ import { RGROUP_POLL_MS, RgroupPaper, useRgroupList } from "./useRgroupRows";
 
 const PAPER = "11111111-1111-4111-8111-111111111111";
 const PRED = "22222222-2222-4222-8222-222222222222";
+const SEG = "33333333-3333-4333-8333-333333333333";
 
 function extraction(over: Partial<RgroupExtractionOut> = {}): RgroupExtractionOut {
   return {
@@ -61,8 +69,19 @@ function wrap(children: ReactNode) {
   );
 }
 
-function show(compact = false) {
-  return render(wrap(<RgroupRows predictionId={PRED} labels={["R1", "R2"]} tag="[03]" compact={compact} />));
+function show(compact = false, failures: BuildFailure[] | null = null) {
+  return render(
+    wrap(
+      <RgroupRows
+        predictionId={PRED}
+        segmentId={SEG}
+        failures={failures}
+        labels={["R1", "R2"]}
+        tag="[03]"
+        compact={compact}
+      />,
+    ),
+  );
 }
 
 beforeEach(() => {
@@ -83,11 +102,12 @@ describe("RgroupRows", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("still shows rows read before the feature was turned off, without actions", async () => {
+  it("still shows rows read before the feature was turned off, with no reading action", async () => {
     vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(false, extraction()));
     show();
     expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    // building needs no model: the only action left
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([BUILD]);
   });
 
   it("starts a reading, then shows it queued", async () => {
@@ -215,13 +235,13 @@ describe("RgroupRows", () => {
 
   it("offers no reading for a structure whose only label is *, but shows rows read before", async () => {
     const get = vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true));
-    const only = render(wrap(<RgroupRows predictionId={PRED} labels={["*"]} tag="[03]" />));
+    const only = render(wrap(<RgroupRows predictionId={PRED} segmentId={SEG} labels={["*"]} tag="[03]" />));
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(only.container).toBeEmptyDOMElement();
     only.unmount();
     get.mockResolvedValue(list(true, extraction({ labels: ["*"], rows: [{ compound: "3a", groups: { "*": "H" } }] })));
     client = createQueryClient();
-    render(wrap(<RgroupRows predictionId={PRED} labels={["*"]} tag="[03]" />));
+    render(wrap(<RgroupRows predictionId={PRED} segmentId={SEG} labels={["*"]} tag="[03]" />));
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -336,3 +356,58 @@ describe("the words and choices", () => {
     expect(hasScaffold(seg(cur({ smiles: "Cc1ccccc1", rgroups: [] }), [scaffold]), "decimer")).toBe(false);
   });
 });
+
+describe("Build structures (Markush Phase 3)", () => {
+  it("shows Build structures once the rows are done", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    show();
+    expect(await screen.findByRole("button", { name: BUILD })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["queued", extraction({ status: "queued", rows: null })],
+    ["no rows", extraction({ rows: [] })],
+  ])("has no Build structures while %s", async (_, ext) => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, ext));
+    show();
+    await screen.findByRole("region", { name: "R-groups of [03]" });
+    expect(screen.queryByRole("button", { name: BUILD })).toBeNull();
+  });
+
+  it("Build posts and refreshes the paper", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    let done!: (v: { built: number; kept: number; removed: number; failures: [] }) => void;
+    const build = vi
+      .spyOn(api, "buildStructures")
+      .mockReturnValue(new Promise((r) => (done = r)));
+    const getPaper = vi.spyOn(api, "getPaper").mockResolvedValue({} as never);
+    show();
+    const button = await screen.findByRole("button", { name: BUILD });
+    fireEvent.click(button);
+    expect(build).toHaveBeenCalledWith(SEG);
+    await waitFor(() => expect(screen.getByRole("button", { name: BUILD })).toBeDisabled());
+    await act(async () => done({ built: 2, kept: 0, removed: 0, failures: [] }));
+    await waitFor(() => expect(screen.getByRole("button", { name: BUILD })).not.toBeDisabled());
+    void getPaper;
+  });
+
+  it("a failed build says why", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    vi.spyOn(api, "buildStructures").mockRejectedValue(new ApiError(503, "busy, try again"));
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: BUILD }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not built: busy, try again");
+  });
+
+  it("lists what could not be built", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    show(false, [{ compound: "3c", reason: 'unknown substituent "Tig"' }]);
+    expect(await screen.findByText(COULD_NOT_BUILD)).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveTextContent('3c: unknown substituent "Tig"');
+  });
+
+  it("failureText", () => {
+    expect(failureText({ compound: "3c", reason: "no value for R2" })).toBe("3c: no value for R2");
+  });
+});
+

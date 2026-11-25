@@ -77,10 +77,12 @@ async def _auto_pending(db: AsyncSession, paper_id: uuid.UUID) -> list[uuid.UUID
     """The paper's scaffolds whose reading is about to start by itself: candidates within the
     last few dispatcher passes (marcus.core.auto START_S). After that a reading that did not
     start leaves the card's action. One narrow query; never the broker."""
-    query = auto.candidates_query(
-        StepKind.RGROUPS, paper_id, within_s=auto.START_S, limit=MAX_LISTED
+    found = await db.run_sync(
+        lambda s: auto.candidates(
+            s, StepKind.RGROUPS, paper_id, within_s=auto.START_S, limit=MAX_LISTED
+        )
     )
-    return [] if query is None else list((await db.execute(query)).scalars())
+    return found or []
 
 
 @router.get("/predictions/{prediction_id}/rgroups", response_model=RgroupExtractionOut)

@@ -6,7 +6,8 @@ from tests.conftest import _assert_test_database, alembic_config
 EXPECTED = {
     "owners", "papers", "steps", "segments", "predictions", "curation",
     "image_jobs", "seg_cache", "ocsr_cache", "annotations", "rgroup_extractions", "main_figures",
-    "inherited_statuses", "drawing_flags", "background_steps",
+    "inherited_statuses", "drawing_flags", "background_steps", "built_segments",
+    "scaffold_builds",
 }  # fmt: skip
 
 # 0002: column + index
@@ -738,6 +739,65 @@ def test_migration_0022_pick_modes_up_down(migrated_db):
         with engine.begin() as conn:
             conn.execute(text("UPDATE papers SET ocsr_mode = 'auto' WHERE id = :p"), {"p": pid})
         command.downgrade(cfg, "0021")
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM owners"))
+        command.upgrade(cfg, "head")
+
+
+def test_migration_0023_built_structures_up_down(migrated_db):
+    """0023: built_segments and scaffold_builds (both cascading from segments); predictions and
+    steps accept the engine `enumerated`, papers do not; the downgrade refuses while an
+    enumerated prediction exists."""
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    from marcus.core.db import get_sync_engine, get_sync_sessionmaker
+    from tests.factories import make_paper
+
+    _assert_test_database()
+    cfg = alembic_config()
+    engine = get_sync_engine()
+    try:
+        command.upgrade(cfg, "head")
+        insp = inspect(engine)
+        assert {"built_segments", "scaffold_builds"} <= set(insp.get_table_names())
+        assert insp.get_pk_constraint("built_segments")["constrained_columns"] == ["segment_id"]
+        uniques = {
+            u["name"]: u["column_names"] for u in insp.get_unique_constraints("built_segments")
+        }
+        assert uniques["uq_built_segments_scaffold_row"] == ["scaffold_segment_id", "row_key"]
+        for table in ("built_segments", "scaffold_builds"):
+            assert {fk["options"].get("ondelete") for fk in insp.get_foreign_keys(table)} == {
+                "CASCADE"
+            }
+        with get_sync_sessionmaker()() as s:
+            paper = make_paper(s)
+            s.commit()
+            pid = paper.id
+        with engine.begin() as conn:
+            seg = conn.execute(
+                text("INSERT INTO segments (id, paper_id, page, idx, bbox, image_sha256) VALUES "
+                     "(gen_random_uuid(), :p, 0, 10000, '{0,0,1,1}', repeat('a', 64)) RETURNING id"),
+                {"p": pid},
+            ).scalar_one()  # fmt: skip
+            conn.execute(
+                text("INSERT INTO predictions (id, segment_id, engine, engine_version, smiles, "
+                     "valid, ms) VALUES (gen_random_uuid(), :s, 'enumerated', 'v', 'CCO', true, 0)"),
+                {"s": seg},
+            )  # fmt: skip
+        with pytest.raises(DBAPIError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE papers SET engine = 'enumerated' WHERE id = :p"), {"p": pid}
+                )
+        with pytest.raises(DBAPIError, match="enumerated"):
+            command.downgrade(cfg, "0022")
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM predictions WHERE engine = 'enumerated'"))
+        command.downgrade(cfg, "0022")
+        assert not {"built_segments", "scaffold_builds"} & set(inspect(engine).get_table_names())
     finally:
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM owners"))

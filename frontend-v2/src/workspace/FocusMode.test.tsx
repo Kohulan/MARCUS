@@ -987,3 +987,20 @@ describe("R-group scaffolds", () => {
     expect(getText).not.toHaveBeenCalled();
   });
 });
+
+describe("a built structure (Markush Phase 3)", () => {
+  it("has no Compare, and C opens nothing", async () => {
+    const built = segment("s2", {
+      idx: 10001,
+      built_from: "s1",
+      compound_id: "3a",
+      predictions: [prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" })],
+    });
+    renderAt(paper([segment("s1"), built]));
+    const region = await openWithEnter("[02]");
+    expect(within(region).queryByRole("button", { name: /^Compare/ })).toBeNull();
+    expect(within(region).getByRole("button", { name: "Built from [01]" })).toBeInTheDocument();
+    press("c");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});

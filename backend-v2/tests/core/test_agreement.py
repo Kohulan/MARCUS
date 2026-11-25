@@ -97,3 +97,12 @@ def test_molparser_wins_its_slot_over_an_older_molnextr_one():
     assert sorted(newest) == ["decimer", "molparser"]
     assert newest["molparser"].engine == "molparser"
     assert agreement.agree_count(ps) == 0
+
+
+def test_shown_prediction_falls_back_to_the_newest():
+    """The prediction a card shows: the pick, else (no valid one) the newest (cardState)."""
+    ps = [P("molscribe", None, valid=False), P("decimer", None, valid=False)]
+    assert agreement.shown_prediction(ps, "decimer") is ps[0]
+    assert agreement.shown_prediction([], "decimer") is None
+    ok = [P("molscribe", None, valid=False), P("decimer", ETHANOL)]
+    assert agreement.shown_prediction(ok, "decimer").engine == "decimer"

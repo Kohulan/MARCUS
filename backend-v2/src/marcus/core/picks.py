@@ -10,6 +10,7 @@ candidate its steps, so all count from then on.
 
 from sqlalchemy import and_, select
 
+from marcus.core.built import built_clause
 from marcus.core.enums import StepKind
 from marcus.core.models import Paper, Segment, Step
 
@@ -24,4 +25,4 @@ def candidate_clause():
         .where(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
         .exists()
     )
-    return and_(of_pick_paper, ~read)
+    return and_(of_pick_paper, ~read, ~built_clause())  # a built structure is no box to pick

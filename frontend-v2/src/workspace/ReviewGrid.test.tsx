@@ -973,3 +973,21 @@ describe("Review view while only the annotation runs (beside the read)", () => {
     expect(screen.queryByText("Structures appear here as pages are read.")).toBeNull();
   });
 });
+
+describe("built structures (Markush Phase 3)", () => {
+  it("a built card names its compound and its scaffold, and has no Compare", async () => {
+    const scaffold = segment("s1", { idx: 0 });
+    const built = segment("s2", {
+      idx: 10001,
+      built_from: "s1",
+      compound_id: "3a",
+      predictions: [prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" })],
+    });
+    renderGrid(paper([scaffold, built]));
+    const c = await waitFor(() => card("[02]"));
+    expect(within(c).getByText("Compound 3a")).toBeInTheDocument();
+    expect(within(c).getByRole("button", { name: "Built from [01]" })).toBeInTheDocument();
+    expect(within(c).queryByRole("button", { name: /^Compare/ })).toBeNull();
+    expect(within(c).getByRole("button", { name: /^Accept/ })).toBeInTheDocument();
+  });
+});

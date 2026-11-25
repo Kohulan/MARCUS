@@ -354,7 +354,7 @@ async def test_exports_carry_the_rows(app, async_db_session, ready):
     scaffold_mol = next(m for m in mols if m.GetProp("segment_id") == str(segment))
     assert json.loads(scaffold_mol.GetProp("MARCUS_RGROUP_ROWS")) == rows
     assert all(not m.HasProp("MARCUS_RGROUP_ROWS") for m in mols if m is not scaffold_mol)
-    assert csv.splitlines()[0].endswith(",rgroups")  # CSV columns unchanged
+    assert csv.splitlines()[0].endswith(",rgroups,built_from")  # rows go in JSON/SDF, not CSV
 
 
 def _sdf(text: str) -> list:

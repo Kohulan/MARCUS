@@ -206,3 +206,23 @@ def test_no_notify_when_status_unchanged(db_session):
         db_session.commit()
         notes = list(listener.notifies(timeout=1, stop_after=1))
     assert notes == []
+
+
+def test_deleting_a_paper_deletes_its_built_rows(db_session):
+    """A built structure (Markush Phase 3) and its side rows go with its paper."""
+    from marcus.core.models import BuiltSegment, ScaffoldBuild
+
+    s = db_session
+    paper = _paper(s, _owner(s))
+    scaffold = Segment(paper_id=paper.id, page=0, idx=0, bbox=[0, 0, 1, 1], image_sha256="a" * 64)
+    built = Segment(paper_id=paper.id, page=0, idx=10000, bbox=[0, 0, 1, 1], image_sha256="a" * 64)
+    s.add_all([scaffold, built])
+    s.flush()
+    s.add(BuiltSegment(segment_id=built.id, scaffold_segment_id=scaffold.id, row_key="3a",
+                       name=None, input_hash="0" * 64))  # fmt: skip
+    s.add(ScaffoldBuild(scaffold_segment_id=scaffold.id, failures=[]))
+    s.commit()
+    s.delete(s.get(Paper, paper.id))
+    s.commit()
+    assert s.execute(select(BuiltSegment)).first() is None
+    assert s.execute(select(ScaffoldBuild)).first() is None

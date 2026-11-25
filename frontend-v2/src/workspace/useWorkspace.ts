@@ -6,6 +6,7 @@ import { refreshPaper, snapshotIsCached, usePaper, useSteps } from "../api/queri
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
 import { useLiveEvents } from "../api/useLiveEvents";
 import { readSteps } from "./cardState";
+import { placeBuilt } from "./built";
 import { mainFirst } from "./mainFigure";
 
 export type WorkspaceView = "review" | "paper";
@@ -88,9 +89,11 @@ export function useWorkspace(id: string): Workspace {
 
   const segments = useMemo(
     () =>
-      mainFirst(
-        (paper?.segments ?? []).filter((s) => s.candidate !== true),
-        paper?.main_figure_page,
+      placeBuilt(
+        mainFirst(
+          (paper?.segments ?? []).filter((s) => s.candidate !== true),
+          paper?.main_figure_page,
+        ),
       ),
     [paper?.segments, paper?.main_figure_page],
   );

@@ -37,6 +37,7 @@ from marcus.api.deps import (
 from marcus.api.limits import enforce_active_limits
 from marcus.api.read import (
     IMAGE_HEADERS,
+    built_of,
     inherited_of,
     list_count_fix,
     load_segments,
@@ -421,10 +422,11 @@ async def export_paper(
         paper, main_page, segments, curations, predictions, strict=True, inherited=inherited
     )
     stale = stale_members(inherited, repeats)
+    built_from = {sid: b.scaffold_segment_id for sid, b in (await built_of(db, paper.id)).items()}
     # RDKit (molfile -> SMILES, SDF) holds the GIL: the whole build runs in the chem process
     content = await CHEM.run(
         export.build, format, paper, segments, curations, predictions, status, annotation, rows,
-        repeats, main_page, stale,
+        repeats, main_page, stale, built_from,
     )  # fmt: skip
     return Response(
         content=content,

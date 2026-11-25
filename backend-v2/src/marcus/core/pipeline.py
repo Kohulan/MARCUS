@@ -47,6 +47,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from marcus.core import agreement, annotation, rgroup_extraction, rgroup_labels, storage
+from marcus.core.built import IsBuilt, built_clause, is_built_idx
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -716,7 +717,7 @@ def _store_seg_cache(session: Session, paper: Paper, seg_version: str) -> None:
             DrawingFlag.segment_id.is_not(None).label("check_drawing"),
         )
         .outerjoin(DrawingFlag, DrawingFlag.segment_id == Segment.id)
-        .where(Segment.paper_id == paper.id)
+        .where(Segment.paper_id == paper.id, ~built_clause())  # built: not the segmenter's
         .order_by(Segment.page, Segment.idx)
     ).all()
     payload = {
@@ -1143,6 +1144,8 @@ def request_ocsr(
     segment = session.get(Segment, segment_id)
     if segment is None:
         raise ValueError("segment not found")
+    if is_built_idx(segment.idx):
+        raise IsBuilt()  # a built structure is no drawing an engine reads
     paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
@@ -1255,7 +1258,7 @@ def _unread_segments(session: Session, paper: Paper, page: int | None = None) ->
         .where(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
         .exists()
     )
-    q = select(Segment).where(Segment.paper_id == paper.id, ~has_step)
+    q = select(Segment).where(Segment.paper_id == paper.id, ~has_step, ~built_clause())
     if page is not None:
         q = q.where(Segment.page == page)
     return list(session.execute(q.order_by(Segment.page, Segment.idx)).scalars())
@@ -1371,6 +1374,8 @@ def read_segment(
     segment = session.get(Segment, segment_id)
     if segment is None:
         raise ValueError("segment not found")
+    if is_built_idx(segment.idx):
+        raise IsBuilt()
     paper = _lock(session, Paper, segment.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")

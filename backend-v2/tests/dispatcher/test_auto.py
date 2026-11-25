@@ -119,7 +119,9 @@ def test_a_paper_deleted_meanwhile_is_skipped(db_session, features, monkeypatch)
     cancel_paper(s, paper.id, remove_files=False)
     s.commit()
     # found before the delete, asked for after it
-    monkeypatch.setattr(pass_, "_ids", lambda session, query: found if query is not None else [])
+    monkeypatch.setattr(
+        pass_.auto, "candidates", lambda session, kind, *a, **k: found if kind == "annotate" else []
+    )
     started = auto_once(s, lambda: BOTH)
     assert started == 0
     assert _kinds(s) == []

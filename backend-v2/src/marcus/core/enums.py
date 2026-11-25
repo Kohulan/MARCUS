@@ -42,6 +42,12 @@ class Engine(StrEnum):
     FAKE = "fake"
 
 
+# The engine name of a structure MARCUS built from a scaffold and one R-group row (Markush
+# Phase 3, marcus.core.enumeration): allowed on predictions and steps only, never an engine a
+# paper, an image job or a request names.
+BUILT_ENGINE = "enumerated"
+
+
 class OwnerKind(StrEnum):
     BROWSER = "browser"
     API_KEY = "api_key"

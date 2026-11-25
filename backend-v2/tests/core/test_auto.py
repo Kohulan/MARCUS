@@ -7,7 +7,7 @@ from sqlalchemy import update
 
 from marcus.core import auto
 from marcus.core.enums import ErrorClass
-from marcus.core.models import Annotation, Paper, Prediction, RgroupExtraction, Step
+from marcus.core.models import Annotation, Curation, Paper, Prediction, RgroupExtraction, Step
 from marcus.core.pipeline import (
     cancel_paper,
     complete_step,
@@ -252,3 +252,60 @@ def test_the_scaffold_query_narrows_to_the_window_before_picking_the_newest():
     inner = sql[sql.index("DISTINCT ON") :]
     inner = inner[: inner.index(") AS anon")]
     assert "make_interval" in inner
+
+
+# --- the scaffold the card shows (Markush Phase 3 rows gap, live test 2026-11-25) -------------
+
+VALID_SCAFFOLD = {**SCAFFOLD, "smiles": "[1*]c1ccccc1[2*]", "valid": True, "engine_version": "1"}
+
+
+def _read_by(s, segment_id, engine, result):
+    step = request_ocsr(s, segment_id, engine)
+    finish(s, step, result)
+    return (
+        s.query(Prediction)
+        .filter(Prediction.segment_id == segment_id, Prediction.engine == engine)
+        .order_by(Prediction.created_at.desc())
+        .first()
+    )
+
+
+def test_the_shown_scaffold_of_another_engine_is_read_by_itself(db_session):
+    """JNP live case: DECIMER could not read the drawing (invalid), MolScribe could: the card
+    shows MolScribe's scaffold, and that one is read."""
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    molscribe = _read_by(s, scaffold.segment_id, "molscribe", VALID_SCAFFOLD)
+    assert auto.rgroup_candidates(s) == [molscribe.id]
+
+
+def test_a_scaffold_the_card_does_not_show_is_not_read_by_itself(db_session):
+    s = db_session
+    paper, scaffold, plain = done_paper(s)
+    _read_by(s, plain.segment_id, "molparser", {**PLAIN, "engine_version": "1"})
+    other = _read_by(s, plain.segment_id, "molscribe", VALID_SCAFFOLD)
+    assert other.id not in auto.rgroup_candidates(s)
+
+
+def test_the_frozen_prediction_is_the_one_read(db_session):
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    _read_by(s, scaffold.segment_id, "molscribe", VALID_SCAFFOLD)
+    s.execute(
+        update(Curation)
+        .where(Curation.segment_id == scaffold.segment_id)
+        .values(shown_prediction_id=scaffold.id, status="accepted")
+    )
+    s.flush()
+    assert auto.rgroup_candidates(s) == [scaffold.id]
+
+
+def test_built_segments_are_never_rgroup_candidates(db_session):
+    from tests.core.test_built import make_built
+
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    built = {b.id for b in make_built(s, scaffold.segment_id, {"3a": "Cc1ccccc1"})}
+    found = set(auto.rgroup_candidates(s))
+    preds = {p.id for p in s.query(Prediction).filter(Prediction.segment_id.in_(built))}
+    assert not found & preds

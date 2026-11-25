@@ -19,6 +19,7 @@ from marcus.core import compound_ids, storage
 from marcus.core.agreement import COUNTED as AGREE_ENGINES
 from marcus.core.agreement import SLOTS as AGREE_SLOTS
 from marcus.core.agreement import majority, newest_by_engine, pick_prediction
+from marcus.core.built import is_built_idx
 from marcus.core.enums import (
     FINISHED_STEPS,
     Engine,
@@ -34,12 +35,14 @@ from marcus.core.main_figure import (
     stale_members,
 )
 from marcus.core.models import (
+    BuiltSegment,
     Curation,
     DrawingFlag,
     InheritedStatus,
     MainFigure,
     Paper,
     Prediction,
+    ScaffoldBuild,
     Segment,
     Step,
 )
@@ -453,10 +456,12 @@ async def figure_labels(paper_id: uuid.UUID, strict: bool = False) -> tuple[dict
 
 def segment_ids(segments: list[Segment], boxes: dict) -> dict[uuid.UUID, str]:
     """segment id -> the compound ID printed by its drawing (compound_ids.read_ids, each page's
-    crops together); segments without one are left out."""
+    crops together); segments without one are left out. A built structure (Markush Phase 3)
+    shares its scaffold's crop: it never reads a printed ID (its ID is its row's)."""
     by_page: dict[int, list[Segment]] = {}
     for seg in segments:
-        by_page.setdefault(seg.page, []).append(seg)
+        if not is_built_idx(seg.idx):
+            by_page.setdefault(seg.page, []).append(seg)
     out = {}
     for page, segs in by_page.items():
         found = compound_ids.read_ids([s.bbox for s in segs], boxes.get(page, []))
@@ -705,6 +710,26 @@ def agreement_out(
     }
 
 
+async def built_of(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, BuiltSegment]:
+    """The paper's built structures (Markush Phase 3): segment id -> its link to the scaffold."""
+    rows = await db.execute(
+        select(BuiltSegment)
+        .join(Segment, Segment.id == BuiltSegment.segment_id)
+        .where(Segment.paper_id == paper_id)
+    )
+    return {b.segment_id: b for b in rows.scalars()}
+
+
+async def build_failures_of(db: AsyncSession, paper_id: uuid.UUID) -> dict[uuid.UUID, list]:
+    """Scaffold segment id -> the rows its last build could not build ([{compound, reason}])."""
+    rows = await db.execute(
+        select(ScaffoldBuild.scaffold_segment_id, ScaffoldBuild.failures)
+        .join(Segment, Segment.id == ScaffoldBuild.scaffold_segment_id)
+        .where(Segment.paper_id == paper_id)
+    )
+    return {sid: failures for sid, failures in rows.all()}
+
+
 async def segments_out(
     db: AsyncSession, paper: Paper, main_page: int | None
 ) -> tuple[list[SegmentOut], CountFix, bool]:
@@ -748,6 +773,15 @@ async def segments_out(
             out.status = "unchecked"
         return out
 
+    built = await built_of(db, paper.id)
+    failures = await build_failures_of(db, paper.id)
+    shown_ids = {**ids, **{sid: b.row_key for sid, b in built.items()}}
+
+    def name_of(seg_id: uuid.UUID) -> str | None:
+        if seg_id in built and built[seg_id].name:
+            return built[seg_id].name
+        return names.get(shown_ids[seg_id]) if seg_id in shown_ids else None
+
     flagged = set(
         await db.scalars(
             select(DrawingFlag.segment_id)
@@ -764,8 +798,8 @@ async def segments_out(
             bbox=list(seg.bbox),
             repeat_of=repeats.get(seg.id),
             check_drawing=seg.id in flagged,
-            compound_id=ids.get(seg.id),
-            compound_name=names.get(ids[seg.id]) if seg.id in ids else None,
+            compound_id=shown_ids.get(seg.id),
+            compound_name=name_of(seg.id),
             same_id_pages=sorted({page_of[o] for o in conflicts.get(seg.id, [])}),
             **agreement_out(
                 paper.engine,
@@ -782,6 +816,8 @@ async def segments_out(
                 for p in predictions[seg.id]
             ],
             candidate=seg.id in candidates,
+            built_from=built[seg.id].scaffold_segment_id if seg.id in built else None,
+            build_failures=failures.get(seg.id),
         )
         for seg in shown
     ]

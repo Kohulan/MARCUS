@@ -100,6 +100,17 @@ def pick_prediction(
     return next((p for p in valid if p.engine == paper_engine), None) or next(iter(valid), None)
 
 
+def shown_prediction(
+    predictions: Sequence[_Prediction], paper_engine: str, frozen: object | None = None
+):
+    """The prediction a card shows (frontend cardState.shownPrediction): the pick
+    (pick_prediction), else the newest one (none valid); None without a prediction."""
+    pick = pick_prediction(predictions, paper_engine, frozen)
+    if pick is not None:
+        return pick
+    return predictions[0] if predictions else None
+
+
 def inchikey_of(smiles: str, valid: bool) -> str | None:
     """Prediction.inchikey: the InChIKey of a valid SMILES; None when invalid, unreadable, or a
     scaffold with placeholder atoms (as marcus.api.chem.inchikey). RDKit: call it where RDKit

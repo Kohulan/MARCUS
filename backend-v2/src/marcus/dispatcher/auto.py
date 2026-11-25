@@ -78,15 +78,11 @@ def _ask(session: Session, request, item, refused) -> bool:
         return False
 
 
-def _ids(session: Session, query) -> list:
-    return [] if query is None else list(session.execute(query).scalars())
-
-
 def auto_once(session: Session, live_queues: LiveQueues) -> int:
     """Ask for every candidate whose feature is on and whose queue is served. Returns the
     number of steps made."""
-    annotate = _ids(session, auto.candidates_query(StepKind.ANNOTATE))
-    rgroups = _ids(session, auto.candidates_query(StepKind.RGROUPS))
+    annotate = auto.candidates(session, StepKind.ANNOTATE) or []
+    rgroups = auto.candidates(session, StepKind.RGROUPS) or []
     session.rollback()  # end the read; each request below has its own transaction
     if not annotate and not rgroups:
         return 0

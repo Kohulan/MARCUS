@@ -17,19 +17,40 @@ from marcus.api.deps import (
     require_engine_enabled,
     work_ip,
 )
-from marcus.api.read import IMAGE_HEADERS, named_on, structure_out, waiting_ocsr_step
+from marcus.api.read import (
+    IMAGE_HEADERS,
+    figure_labels,
+    named_on,
+    structure_out,
+    waiting_ocsr_step,
+)
 from marcus.api.schemas import (
+    BuildFailure,
+    BuildOut,
     CurationIn,
     CurationOut,
     PredictionRequest,
     ReadAccepted,
     StepAccepted,
 )
+from marcus.api.security import tools_limit
 from marcus.core import storage
+from marcus.core.agreement import shown_prediction
+from marcus.core.built import IsBuilt, apply_build
 from marcus.core.db import get_db
+from marcus.core.enumeration import build_rows
 from marcus.core.enums import Engine
-from marcus.core.models import Curation, InheritedStatus, Owner, Prediction, Step
+from marcus.core.models import (
+    BuiltSegment,
+    Curation,
+    InheritedStatus,
+    Owner,
+    Prediction,
+    RgroupExtraction,
+    Step,
+)
 from marcus.core.pipeline import ModeNotAllowed, read_segment, request_ocsr
+from marcus.core.rgroup_labels import drawn_labels
 
 router = APIRouter()
 
@@ -109,6 +130,9 @@ async def run_prediction(
     try:
         ip = work_ip(request)
         step = await db.run_sync(lambda s: request_ocsr(s, segment.id, body.engine, started_ip=ip))
+    except IsBuilt:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="built") from None
     except ValueError:
         await db.rollback()
         raise not_found() from None  # the paper was deleted meanwhile
@@ -129,6 +153,9 @@ async def read_segment_route(
     try:
         ip = work_ip(request)
         steps = await db.run_sync(lambda s: read_segment(s, segment.id, started_ip=ip))
+    except IsBuilt:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="built") from None
     except ModeNotAllowed:
         await db.rollback()
         raise HTTPException(status_code=409, detail="mode") from None
@@ -137,6 +164,70 @@ async def read_segment_route(
         raise not_found() from None
     await db.commit()
     return ReadAccepted(step_ids=[st.id for st in steps])
+
+
+@router.post(
+    "/segments/{segment_id}/build",
+    response_model=BuildOut,
+    dependencies=[Depends(tools_limit)],
+)
+async def build_structures(
+    segment_id: uuid.UUID,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> BuildOut:
+    """Markush Phase 3, "Build structures": each R-group row of the scaffold the card shows
+    becomes its own card (marcus.core.built); the rows that cannot be built are listed with the
+    reason. The scaffold is the curated structure when there is one, else the shown prediction;
+    the rows are the shown prediction's. 409 {"detail": "built" | "no_rgroups" | "no_rows"}."""
+    segment, paper = await get_owned_segment(db, owner, segment_id)
+    if await db.get(BuiltSegment, segment.id) is not None:
+        raise HTTPException(status_code=409, detail="built")
+    curation = await db.get(Curation, segment.id)
+    predictions = list(
+        (
+            await db.execute(
+                select(Prediction)
+                .where(Prediction.segment_id == segment.id)
+                .order_by(Prediction.created_at.desc(), Prediction.id)
+            )
+        ).scalars()
+    )
+    frozen = curation.shown_prediction_id if curation is not None else None
+    shown = shown_prediction(predictions, paper.engine, frozen)
+    curated = curation is not None and bool(curation.smiles or curation.molfile)
+    if curated:
+        smiles, molfile, labels = curation.smiles, curation.molfile, curation.rgroups or []
+    elif shown is not None:
+        smiles, molfile, labels = shown.smiles, shown.molfile, shown.rgroups or []
+    else:
+        smiles, molfile, labels = None, None, []
+    if not drawn_labels(labels):
+        raise HTTPException(status_code=409, detail="no_rgroups")
+    extraction = await db.get(RgroupExtraction, shown.id) if shown is not None else None
+    if extraction is None or extraction.status != "done" or not extraction.rows:
+        raise HTTPException(status_code=409, detail="no_rows")
+    found = await figure_labels(paper.id)
+    names = found[1] if found is not None else {}
+    outcomes = await CHEM.run(build_rows, smiles, molfile, extraction.rows)
+    scaffold = ("molfile", molfile) if molfile else ("smiles", smiles or "")
+    try:
+        summary = await db.run_sync(
+            lambda s: apply_build(s, segment.id, scaffold, outcomes, names)
+        )
+    except IsBuilt:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="built") from None
+    except ValueError:
+        await db.rollback()
+        raise not_found() from None
+    await db.commit()
+    return BuildOut(
+        built=len(summary.built) + summary.refreshed,
+        kept=summary.kept,
+        removed=summary.removed,
+        failures=[BuildFailure(**f) for f in summary.failures],
+    )
 
 
 @router.put("/segments/{segment_id}/curation", response_model=CurationOut)

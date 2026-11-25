@@ -22,6 +22,8 @@ export type ReviewRow = {
   rgroups: string[];
   /** A main-figure structure with repeats on other pages: "Also on page N"; else null. */
   alsoOn: string | null;
+  /** A built structure (Markush Phase 3): its scaffold's id and tag number; null otherwise. */
+  builtFrom: { segmentId: string; n: number } | null;
 };
 
 const NO_STEPS: StepOut[] = [];
@@ -53,7 +55,9 @@ export function useReviewRows(
   return useMemo<ReviewRow[]>(() => {
     const repeats = repeatPages(segments);
     const groups = repeatsOf(segments);
-    return listedSegments(segments).map((segment, i) => {
+    const listed = listedSegments(segments);
+    const nOf = new Map(listed.map((s, i) => [s.id, i + 1]));
+    return listed.map((segment, i) => {
       const own = stepsBySegment.get(segment.id) ?? NO_STEPS;
       const state = groupState(stateOf(segment, own, paper), segment, groups.get(segment.id) ?? []);
       const newest = state === "failed" ? own[0] : undefined;
@@ -67,6 +71,10 @@ export function useReviewRows(
           state === "reading" ? firstRunNote(own.find((s) => isStepActive(s.status))?.engine) : null,
         rgroups: shownStructure(segment, paper.engine).rgroups,
         alsoOn: alsoOnText(repeats.get(segment.id)),
+        builtFrom:
+          segment.built_from && nOf.has(segment.built_from)
+            ? { segmentId: segment.built_from, n: nOf.get(segment.built_from)! }
+            : null,
       };
     });
   }, [segments, stepsBySegment, paper]);

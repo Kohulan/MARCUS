@@ -97,6 +97,12 @@ def _mol_labels(mol: Chem.Mol | None) -> list[str]:
     return [_atom_label(a) for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
 
 
+def dummy_labels(mol: Chem.Mol) -> list[tuple[int, str]]:
+    """(atom index, raw label) of each dummy atom (atomic number 0), as _atom_label reads it:
+    the drawn label, not yet checked against the label form (marcus.core.enumeration)."""
+    return [(a.GetIdx(), _atom_label(a)) for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+
+
 def _token_label(m: re.Match) -> str:
     if m.group(1):
         return f"R{m.group(2)}{m.group(3)}"
