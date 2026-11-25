@@ -20,6 +20,7 @@ from marcus.core.db import Base
 from marcus.core.enums import (
     Engine,
     ErrorClass,
+    OCSR_MODES,
     ImageJobStatus,
     OwnerKind,
     PaperStatus,
@@ -71,7 +72,7 @@ class Owner(Base):
 class Paper(Base):
     __tablename__ = "papers"
     __table_args__ = (
-        CheckConstraint("ocsr_mode IN ('auto', 'off')", name="ck_papers_ocsr_mode"),
+        CheckConstraint(_in("ocsr_mode", OCSR_MODES), name="ck_papers_ocsr_mode"),
         CheckConstraint(_in("status", [s.value for s in PaperStatus]), name="ck_papers_status"),
         CheckConstraint(_in("engine", ENGINES), name="ck_papers_engine"),
         Index("ix_papers_owner_id_status", "owner_id", "status"),

@@ -236,3 +236,19 @@ async def test_uploads_refused_with_503_below_the_free_disk_floor(app, monkeypat
     monkeypatch.setattr(storage.shutil, "disk_usage", lambda p: usage(10 * floor, 0, floor))
     async with make_client(app) as c:
         assert (await upload(c)).status_code == 202
+
+
+async def test_upload_with_ocsr_ask(app, async_db_session):
+    """The web UI uploads with `ask`: the paper page asks "all pages or pick a structure"."""
+    async with make_client(app) as c:
+        r = await upload(c, ocsr="ask")
+    assert r.status_code == 202
+    paper = await async_db_session.get(Paper, __import__("uuid").UUID(r.json()["paper_id"]))
+    assert paper.ocsr_mode == "ask"
+
+
+async def test_upload_with_ocsr_pick_is_422(app):
+    """`pick` is the user's answer on the paper page, never an upload value."""
+    async with make_client(app) as c:
+        r = await upload(c, ocsr="pick")
+    assert r.status_code == 422

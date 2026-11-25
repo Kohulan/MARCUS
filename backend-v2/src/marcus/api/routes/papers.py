@@ -85,7 +85,8 @@ async def upload_paper(
     request: Request,
     file: UploadFile = File(...),
     engine: Engine = Form(Engine.DECIMER),
-    ocsr: Literal["auto", "off"] = Form("auto"),
+    # ask: the web UI (the paper page asks); pick is only ever the user's answer there
+    ocsr: Literal["auto", "off", "ask"] = Form("auto"),
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
