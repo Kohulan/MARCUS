@@ -10,6 +10,12 @@ import { mainFirst } from "./mainFigure";
 
 export type WorkspaceView = "review" | "paper";
 
+/**
+ * The paper waits for the user ("ask": the choice; "pick": boxes to pick): an empty structure
+ * list is no "No structures found".
+ */
+export const waitsForPicks = (mode: string) => mode === "ask" || mode === "pick";
+
 const FOCUS_PUSHED = { focusPushed: true } as const;
 const isFocusPushed = (state: unknown) =>
   typeof state === "object" && state !== null && (state as { focusPushed?: unknown }).focusPushed === true;

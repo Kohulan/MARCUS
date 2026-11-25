@@ -22,7 +22,7 @@ import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
 import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
-import type { Workspace } from "./useWorkspace";
+import { type Workspace, waitsForPicks } from "./useWorkspace";
 import "./paper.css";
 
 const NO_MARKERS: PageMarker[] = [];
@@ -266,9 +266,11 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           {rows.length > 0 && <span className="pv-cap__count">{rows.length}</span>}
         </div>
         {rows.length === 0 ? (
-          <p className="pv-empty">
-            {busy ? "Structures appear here as pages are read." : "No structures found."}
-          </p>
+          waitsForPicks(paper.ocsr_mode) ? null : (
+            <p className="pv-empty">
+              {busy ? "Structures appear here as pages are read." : "No structures found."}
+            </p>
+          )
         ) : (
           <div className="pv-list">
             {rows.map((r) => {
