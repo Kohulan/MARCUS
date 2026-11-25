@@ -3,10 +3,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
 import { usePaper, useSteps } from "../api/queries";
-import type { AnnotationOut, PaperDetail } from "../api/types";
+import type { PaperDetail } from "../api/types";
 import { heldOnlyReason } from "../coconut/held";
 import SubmitForm from "../coconut/SubmitForm";
-import type { OrganismDraft } from "../coconut/types";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
@@ -16,6 +15,7 @@ import { paperName, structureTag } from "../ui/tag";
 import { SegmentCompare } from "./Compare";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
+import { type CoconutStart, coconutStart } from "./coconutList";
 import ModePrompt from "./ModePrompt";
 import PickPanel from "./PagePicker";
 import PaperView from "./PaperView";
@@ -32,24 +32,6 @@ import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } fr
 import "./workspace.css";
 
 /** The COCONUT form's starting organisms, and the note they carry when they are the model's. */
-type CoconutStart = { organisms: OrganismDraft[]; note: string | undefined };
-
-/**
- * The annotation's organisms start the COCONUT form (the curator can change them), labelled as
- * the model's suggestion unless they come from the curator's corrections; COCONUT has no
- * kingdom field, so the kingdom is not carried over.
- */
-function coconutStart(annotation: AnnotationOut | undefined): CoconutStart {
-  const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
-    name: o.name,
-    parts: o.parts,
-    location: o.location,
-    ecosystems: o.ecosystems,
-  }));
-  const suggested = organisms.length > 0 && annotation?.curated === null;
-  return { organisms, note: suggested ? "Organisms: model suggestion" : undefined };
-}
-
 /**
  * How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI).
  * An answer is kept for the tab (each open of the paper, each Back to it, reads it); no
