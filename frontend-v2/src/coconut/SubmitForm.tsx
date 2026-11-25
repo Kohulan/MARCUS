@@ -528,7 +528,7 @@ type FieldProps = { id: string; label: string; required?: boolean | undefined; c
  * A labelled field. Required: a visible "Required" beside the label, kept out of the name
  * (the input carries aria-required, so a screen reader hears the state with the name).
  */
-function Field({ id, label, required, children }: FieldProps) {
+export function Field({ id, label, required, children }: FieldProps) {
   const name = (
     <label className="mono-label coconut-field__label" htmlFor={id}>
       {label}
@@ -565,7 +565,7 @@ type OrganismFieldsProps = {
 };
 
 /** An organism: name, parts, one location and its ecosystems (lists are comma-separated). */
-function OrganismFields({
+export function OrganismFields({
   idBase,
   label,
   placeholder,
