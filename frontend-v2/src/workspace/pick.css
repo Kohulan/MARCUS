@@ -1,4 +1,10 @@
 /* "All pages or pick a structure" (ModePrompt, PagePicker). */
+/* The page's side gutter (as .ws-tools and .ws-status): nothing sits on the frame's edge. */
+.pick-ask,
+.pick {
+  padding-inline: 24px;
+}
+
 .pick-ask,
 .pick__bar {
   display: flex;

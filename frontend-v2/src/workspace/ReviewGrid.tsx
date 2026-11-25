@@ -11,7 +11,7 @@ import GridFilters from "./GridFilters";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
-import type { Workspace } from "./useWorkspace";
+import { type Workspace, waitsForPicks } from "./useWorkspace";
 import "./grid.css";
 
 /** At most this many prediction requests in flight from one bulk "Read N". */
@@ -213,7 +213,7 @@ export default function ReviewGrid({
         onSelectAll={() => setPicked(new Set(shown.map((r) => r.segmentId)))}
         onReview={firstOpen === undefined ? null : () => onOpen(firstOpen.segmentId)}
       />
-      {shown.length === 0 ? (
+      {shown.length === 0 && rows.length === 0 && waitsForPicks(paper.ocsr_mode) ? null : shown.length === 0 ? (
         <p className="rg-empty">
           {rows.length > 0
             ? "None here."

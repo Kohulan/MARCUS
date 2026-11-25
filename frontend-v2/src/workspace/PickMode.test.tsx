@@ -217,5 +217,18 @@ describe("mode pick", () => {
     await waitFor(() => expect(seg).toHaveBeenCalledWith(ID, 0));
     expect(render).not.toHaveBeenCalled();
   });
+
+  it("before any pick the empty grid says nothing (the boxes are not 'no structures')", async () => {
+    renderAt(paper([segment("s1")]));
+    await screen.findByRole("group", { name: "Pick a page" });
+    expect(screen.queryByText("No structures found.")).toBeNull();
+  });
 });
 
+describe("mode ask: the empty grid", () => {
+  it("says nothing before the choice", async () => {
+    renderAt(paper([], { ocsr_mode: "ask" }));
+    await screen.findByRole("button", { name: "Pick a structure" });
+    expect(screen.queryByText("No structures found.")).toBeNull();
+  });
+});
