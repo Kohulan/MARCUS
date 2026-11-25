@@ -150,28 +150,20 @@ describe("Upload checks in the browser", () => {
 });
 
 describe("Where an upload goes", () => {
-  it("sends a PDF with DECIMER and ocsr auto, then opens the paper", async () => {
+  it("sends a PDF with DECIMER and ocsr ask, then opens the paper", async () => {
     const { container } = renderHome();
     pick(container, fileOf("paper.pdf", "application/pdf"));
     expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
     expect(api.uploadPaper).toHaveBeenCalledTimes(1);
     const [file, opts] = vi.mocked(api.uploadPaper).mock.calls[0]!;
     expect(file.name).toBe("paper.pdf");
-    expect(opts).toEqual({ engine: "decimer", ocsr: "auto" });
+    expect(opts).toEqual({ engine: "decimer", ocsr: "ask" });
   });
 
-  it("sends ocsr off when the switch is off", async () => {
-    const { container } = renderHome();
-    const toggle = screen.getByRole("switch", { name: "Find structures automatically" });
-    expect(toggle).toBeChecked();
-    fireEvent.click(toggle);
-    expect(toggle).not.toBeChecked();
-    pick(container, fileOf("paper.pdf", "application/pdf"));
-    await screen.findByText("paper page new-paper");
-    expect(vi.mocked(api.uploadPaper).mock.calls[0]![1]).toEqual({
-      engine: "decimer",
-      ocsr: "off",
-    });
+  it("has no switch: the paper page asks what to read", () => {
+    renderHome();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByText("Find structures automatically")).toBeNull();
   });
 
   it("offers the four engines, DECIMER first, and sends the chosen one", async () => {
@@ -188,7 +180,7 @@ describe("Where an upload goes", () => {
     await screen.findByText("paper page new-paper");
     expect(vi.mocked(api.uploadPaper).mock.calls[0]![1]).toEqual({
       engine: "molscribe",
-      ocsr: "auto",
+      ocsr: "ask",
     });
   });
 
@@ -288,7 +280,7 @@ describe("A PDF handed over by the landing's drop zone", () => {
     renderHome({ at: at(handOff(file)) });
     expect(await screen.findByText("paper page new-paper")).toBeInTheDocument();
     expect(api.uploadPaper).toHaveBeenCalledTimes(1);
-    expect(api.uploadPaper).toHaveBeenCalledWith(file, { engine: "decimer", ocsr: "auto" });
+    expect(api.uploadPaper).toHaveBeenCalledWith(file, { engine: "decimer", ocsr: "ask" });
     expect(api.uploadImage).not.toHaveBeenCalled();
   });
 
@@ -355,7 +347,7 @@ describe("The sample paper", () => {
     const [file, opts] = vi.mocked(api.uploadPaper).mock.calls[0]!;
     expect(file.name).toBe(SAMPLE_NAME);
     expect(file.type).toBe("application/pdf");
-    expect(opts).toEqual({ engine: "decimer", ocsr: "auto" });
+    expect(opts).toEqual({ engine: "decimer", ocsr: "ask" });
   });
 
   it("the button uploads the sample when it is not listed", async () => {
@@ -456,6 +448,12 @@ describe("Papers list", () => {
     renderHome({ papers: [paper({ ocsr_mode: "off" })] });
     const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
     expect(within(row).getByText("Not read yet")).toBeInTheDocument();
+  });
+
+  it("says Choose for a paper waiting for the choice", async () => {
+    renderHome({ papers: [paper({ ocsr_mode: "ask" })] });
+    const row = (await screen.findByText("Alkaloids from Coffea leaves")).closest("li")!;
+    expect(within(row).getByText("Choose")).toBeInTheDocument();
   });
 
   it("says Failed for a failed paper", async () => {

@@ -18,12 +18,15 @@ import type {
   ImageJobOut,
   MainFigureOut,
   McsReply,
+  ModeOut,
   OcsrMode,
   PaperDetail,
   PaperList,
   QueueOut,
+  ReadAccepted,
   RgroupList,
   RgroupStarted,
+  SegmentAccepted,
   StepAccepted,
   StepList,
   UploadImageReply,
@@ -269,6 +272,17 @@ export const api = {
     sendJson<MainFigureOut>("PUT", `/papers/${enc(paperId)}/main-figure`, { page: page0 }),
   retryPage: (paperId: string, page0: number) =>
     request<StepAccepted>(`/papers/${enc(paperId)}/pages/${page0}/retry`, { method: "POST" }),
+  /** The paper page's answer: read all pages ("auto") or pick a structure ("pick"). */
+  setMode: (paperId: string, mode: "auto" | "pick") =>
+    sendJson<ModeOut>("PUT", `/papers/${enc(paperId)}/mode`, { mode }),
+  /** Pick mode: find the boxes on one page (0-based). */
+  segmentPage: (paperId: string, page0: number) =>
+    request<SegmentAccepted>(`/papers/${enc(paperId)}/pages/${page0}/segment`, {
+      method: "POST",
+    }),
+  /** Pick mode: read one box with the three engines. */
+  readSegment: (segmentId: string) =>
+    request<ReadAccepted>(`/segments/${enc(segmentId)}/read`, { method: "POST" }),
   getQueue: (opts?: ReadOpts) => get<QueueOut>("/queue", opts),
   getText: (id: string, opts?: ReadOpts) => get<DoclingDoc>(`/papers/${enc(id)}/text`, opts),
   exportUrl(id: string, format: ExportFormat, status?: ExportStatus): string {

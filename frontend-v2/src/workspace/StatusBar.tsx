@@ -100,7 +100,11 @@ export default function StatusBar({ paper, steps, live }: Props) {
     <section className="ws-status" aria-label="Status">
       <div className="ws-status__line">
         <span className="ws-status__cell">
-          <ItemState status={paper.status} notRead={paper.ocsr_mode === "off"} />
+          <ItemState
+            status={paper.status}
+            notRead={paper.ocsr_mode === "off"}
+            choose={paper.ocsr_mode === "ask"}
+          />
         </span>
         {checkFailure !== null && (
           <p className="ws-status__cell ws-status__problem hatch">

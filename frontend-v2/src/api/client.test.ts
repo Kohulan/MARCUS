@@ -266,6 +266,19 @@ describe("api", () => {
     expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ engine: "molscribe" });
   });
 
+  it("pick a structure: choose the mode, open a page, read a box", async () => {
+    reply = json(202, { step_id: null });
+    await api.setMode("p1", "pick");
+    await api.segmentPage("p1", 3);
+    await api.readSegment("s1");
+    expect(calls.map((c) => [c.init.method ?? "GET", c.url])).toEqual([
+      ["PUT", "/api/v2/papers/p1/mode"],
+      ["POST", "/api/v2/papers/p1/pages/3/segment"],
+      ["POST", "/api/v2/segments/s1/read"],
+    ]);
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({ mode: "pick" });
+  });
+
   it("annotation calls: read, start, save the curator's values, reset", async () => {
     reply = json(200, {});
     await api.getAnnotation("p1");
