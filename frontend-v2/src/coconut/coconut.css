@@ -586,3 +586,65 @@
     margin-left: 0;
   }
 }
+
+/* The Paper view's side form (one structure; coconut/CoconutSidePanel). */
+.coconut-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  background-color: var(--paper);
+  overflow-y: auto;
+}
+
+.coconut-side__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coconut-side__title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.coconut-side__drawing {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  background-color: var(--surface);
+  border: 1px solid var(--hair);
+}
+
+.coconut-side__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coconut-side__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.coconut-side__sent,
+.coconut-side__held {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.coconut-side__problem {
+  margin: 0;
+  color: var(--ink);
+}
+
+.coconut-side__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}

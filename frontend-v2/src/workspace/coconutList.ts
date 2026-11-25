@@ -1,7 +1,7 @@
 // What "Send N to COCONUT" hands the submit form. Pure, so the rules are pinned by tests.
-import type { SegmentOut } from "../api/types";
+import type { AnnotationOut, SegmentOut } from "../api/types";
 import { hasDummyAtom, type HeldStructure } from "../coconut/held";
-import type { SubmitStructure } from "../coconut/types";
+import type { OrganismDraft, SubmitStructure } from "../coconut/types";
 import { hasDrawing, shownStructure } from "./cardState";
 import { chosenMember, listedSegments, repeatsOf } from "./mainFigure";
 import { UNLABELLED } from "./rgroups";
@@ -53,4 +53,22 @@ export function submissionTitle(meta: {
   return ["MARCUS_Submission", author, meta.year ?? undefined]
     .filter((part) => part !== undefined && part !== "")
     .join(" ");
+}
+
+export type CoconutStart = { organisms: OrganismDraft[]; note: string | undefined };
+
+/**
+ * The annotation's organisms start the COCONUT form (the curator can change them), labelled as
+ * the model's suggestion unless they come from the curator's corrections; COCONUT has no
+ * kingdom field, so the kingdom is not carried over.
+ */
+export function coconutStart(annotation: AnnotationOut | undefined): CoconutStart {
+  const organisms = (annotation?.coconut?.organisms ?? []).map((o) => ({
+    name: o.name,
+    parts: o.parts,
+    location: o.location,
+    ecosystems: o.ecosystems,
+  }));
+  const suggested = organisms.length > 0 && annotation?.curated === null;
+  return { organisms, note: suggested ? "Organisms: model suggestion" : undefined };
 }

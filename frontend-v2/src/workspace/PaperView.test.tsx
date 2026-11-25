@@ -1266,3 +1266,23 @@ describe("built structures (Markush Phase 3)", () => {
     expect(sheet.querySelector('[data-marker="s2"]')).toBeNull();
   });
 });
+
+describe("COCONUT side form (owner decision 2026-11-25)", () => {
+  it("Accept in the Paper view opens the form for that structure; Close hides it", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation(() => new Promise<never>(() => undefined));
+    renderAt(paper([segment("s1", { page: 0, compound_id: "12" })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept [01]" }));
+    const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
+    expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12"); // once the status lands
+    fireEvent.click(within(form).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "COCONUT [01]" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(card("[01]")));
+  });
+
+  it("Reject opens nothing", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation(() => new Promise<never>(() => undefined));
+    renderAt(paper([segment("s1", { page: 0 })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Reject [01]" }));
+    expect(screen.queryByRole("complementary", { name: /^COCONUT/ })).toBeNull();
+  });
+});

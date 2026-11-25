@@ -20,6 +20,27 @@
   border-top: 1px solid var(--line);
 }
 
+/* COCONUT side form open (owner decision 2026-11-25): the three columns move left, the form
+   takes a fourth column; narrow screens get it as a drawer over the right side. */
+.pv--side {
+  grid-template-columns:
+    minmax(240px, 1fr) minmax(200px, 0.8fr) minmax(280px, 340px) minmax(340px, 400px);
+}
+
+@media (max-width: 1100px) {
+  .pv--side {
+    grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
+  }
+
+  .pv--side .coconut-side {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 30;
+    width: min(400px, 100vw);
+    box-shadow: var(--lift-dialog);
+  }
+}
+
 /* A control the keyboard reaches is scrolled clear of the sticky caption, and on the pages a
    marker's tag too (WCAG 2.4.11). */
 .pv-col {
