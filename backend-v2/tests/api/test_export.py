@@ -13,7 +13,7 @@ from tests.api.conftest import make_client, new_owner, seed_paper
 
 HEADER = [
     "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
-    "organism", "organism_part", "geo_location", "kingdom", "rgroups",
+    "organism", "organism_part", "geo_location", "kingdom", "rgroups", "built_from",
 ]  # fmt: skip
 
 
@@ -109,7 +109,7 @@ async def test_export_prefers_paper_engine_and_accepted_filter_skips_rejected(
     assert rows == [
         HEADER,
         [str(s0), "0", "0", "CCO", "accepted", "decimer", "", "false", "predicted",
-         "", "", "", "", ""],
+         "", "", "", "", "", ""],
     ]  # fmt: skip
 
 
@@ -405,8 +405,8 @@ async def test_scaffold_is_exported_flagged_not_as_a_finished_compound(app, asyn
     assert flags == {str(s0): ["R1", "*"], str(s1): []}
 
     rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
-    assert rows[0][-1] == "rgroups"
-    assert {r[0]: r[-1] for r in rows[1:]} == {str(s0): "R1; *", str(s1): ""}
+    assert rows[0][-2] == "rgroups"
+    assert {r[0]: r[-2] for r in rows[1:]} == {str(s0): "R1; *", str(s1): ""}
 
     r = await _export(app, token, seeded.paper_id, "sdf", "all")
     by_seg = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
@@ -454,7 +454,7 @@ async def test_exports_name_the_labels_the_page_text_names(app, async_db_session
     body = json.loads((await _export(app, token, seeded.paper_id, "json")).content)
     assert {s["segment_id"]: s["rgroups"] for s in body["segments"]}[str(s0)] == ["R1", "R2"]
     rows = list(csv.reader(io.StringIO((await _export(app, token, seeded.paper_id, "csv")).text)))
-    assert {r[0]: r[-1] for r in rows[1:]}[str(s0)] == "R1; R2"
+    assert {r[0]: r[-2] for r in rows[1:]}[str(s0)] == "R1; R2"
     r = await _export(app, token, seeded.paper_id, "sdf", "all")
     by_seg = {m.GetProp("segment_id"): m for m in Chem.ForwardSDMolSupplier(io.BytesIO(r.content))}
     assert by_seg[str(s0)].GetProp("MARCUS_RGROUPS") == "R1; R2"

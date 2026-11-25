@@ -130,6 +130,9 @@ async def run_prediction(
     try:
         ip = work_ip(request)
         step = await db.run_sync(lambda s: request_ocsr(s, segment.id, body.engine, started_ip=ip))
+    except IsBuilt:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="built") from None
     except ValueError:
         await db.rollback()
         raise not_found() from None  # the paper was deleted meanwhile
@@ -150,6 +153,9 @@ async def read_segment_route(
     try:
         ip = work_ip(request)
         steps = await db.run_sync(lambda s: read_segment(s, segment.id, started_ip=ip))
+    except IsBuilt:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="built") from None
     except ModeNotAllowed:
         await db.rollback()
         raise HTTPException(status_code=409, detail="mode") from None

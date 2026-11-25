@@ -69,7 +69,7 @@ class Chosen:
     idx: int
     smiles: str | None
     molfile: str | None
-    source: Literal["curated", "predicted"]
+    source: Literal["curated", "predicted", "enumerated"]
     status: Status = "unchecked"
     engine: str | None = None  # engine of the chosen prediction; None for a curated structure
     note: str | None = None
@@ -77,6 +77,7 @@ class Chosen:
     rgroups: tuple[str, ...] = ()  # R-group labels: a scaffold, not a finished compound
     rgroup_rows: dict | None = None  # the R-group model's rows (api.rgroups.for_export)
     also_on_pages: tuple[int, ...] = ()  # pages of the other members of its linked group
+    built_from: uuid.UUID | None = None  # a built structure's scaffold segment (Markush Phase 3)
 
 
 def _labels(row: Curation | Prediction, named: list[str] | None) -> tuple[str, ...]:
@@ -96,13 +97,16 @@ def choose(
     rgroup_rows: dict[uuid.UUID, dict] | None = None,
     repeat_of: dict[uuid.UUID, uuid.UUID] | None = None,
     stale: frozenset[uuid.UUID] = frozenset(),
+    built_from: dict[uuid.UUID, uuid.UUID] | None = None,
 ) -> list[Chosen]:
     """`segments` in (page, idx) order; `predictions` per segment, newest first; `rgroup_rows`
     per prediction id (api.rgroups.for_export); `repeat_of`: repeat segment id -> its
     main-figure segment id (api.read.repeat_links). A main structure and its repeats are one
     record, at the main one's place, with the group's status (core.main_figure.group_status);
     an accepted group's record is its accepted member (chosen_member). `stale`: inherited
-    statuses that no longer hold (core.main_figure.stale_members): unchecked."""
+    statuses that no longer hold (core.main_figure.stale_members): unchecked. `built_from`: built
+    structure -> its scaffold segment (Markush Phase 3): source `enumerated` unless edited."""
+    built = built_from or {}
     rows_of = rgroup_rows or {}
     groups = groups_of(repeat_of or {})
     hidden = set(repeat_of or {})
@@ -123,6 +127,9 @@ def choose(
             paper, member, curations.get(member.id), predictions, rows_of, member.id in stale
         )
         if record is not None:
+            if member.id in built:
+                source = "enumerated" if record.source == "predicted" else record.source
+                record = replace(record, built_from=built[member.id], source=source)
             out.append(replace(record, status=status, also_on_pages=tuple(sorted(others))))
     return out
 
@@ -221,6 +228,7 @@ def to_json(
                 "rgroups": list(c.rgroups),
                 "rgroup_rows": c.rgroup_rows,
                 "also_on_pages": list(c.also_on_pages),
+                "built_from": str(c.built_from) if c.built_from else None,
             }
             for c in chosen
         ],
@@ -240,7 +248,7 @@ def csv_cell(value: object) -> str:
 
 CSV_HEADER = [
     "segment_id", "page", "idx", "smiles", "status", "engine", "note", "edited", "source",
-    *(column for column, _, _ in SOURCE_FIELDS), "rgroups",
+    *(column for column, _, _ in SOURCE_FIELDS), "rgroups", "built_from",
 ]  # fmt: skip
 
 
@@ -253,6 +261,7 @@ def to_csv(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
         row = [
             c.segment_id, c.page, c.idx, c.smiles, c.status, c.engine, c.note,
             "true" if c.edited else "false", c.source, *source, VALUE_SEPARATOR.join(c.rgroups),
+            c.built_from,
         ]  # fmt: skip
         writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue().encode("utf-8")
@@ -297,6 +306,8 @@ def to_sdf(chosen: list[Chosen], annotation: dict | None = None) -> bytes:
             mol.SetProp("MARCUS_RGROUPS", sdf_text(VALUE_SEPARATOR.join(c.rgroups)))
         if c.rgroup_rows is not None:
             mol.SetProp("MARCUS_RGROUP_ROWS", sdf_text(rgroup_rows_json(c.rgroup_rows)))
+        if c.built_from is not None:
+            mol.SetProp("MARCUS_BUILT_FROM", str(c.built_from))
         for prop, value in source:
             mol.SetProp(prop, sdf_text(value))
         writer.write(mol)
@@ -316,13 +327,14 @@ def build(
     repeat_of: dict[uuid.UUID, uuid.UUID] | None = None,
     main_figure_page: int | None = None,
     stale: frozenset[uuid.UUID] = frozenset(),
+    built_from: dict[uuid.UUID, uuid.UUID] | None = None,
 ) -> bytes:
     """choose + render: all the RDKit work of an export (molfile to SMILES, SDF records), for
     marcus.api.chempool (RDKit holds the GIL; the rows travel pickled, detached)."""
     status = status or ("accepted" if fmt == "sdf" else "all")
     chosen = choose(
         paper, segments, curations, predictions, include_rejected=status == "all",
-        rgroup_rows=rgroup_rows, repeat_of=repeat_of, stale=stale,
+        rgroup_rows=rgroup_rows, repeat_of=repeat_of, stale=stale, built_from=built_from,
     )  # fmt: skip
     if status == "accepted":
         chosen = [c for c in chosen if c.status == "accepted"]

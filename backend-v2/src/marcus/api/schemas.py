@@ -112,6 +112,13 @@ class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     created_at: datetime
 
 
+class BuildFailure(BaseModel):
+    """A row of a scaffold's R-group table that was not built, and why ("Could not build")."""
+
+    compound: str
+    reason: str
+
+
 class SegmentOut(BaseModel):
     id: uuid.UUID
     page: int
@@ -141,6 +148,10 @@ class SegmentOut(BaseModel):
     # Pick mode (marcus.core.picks): a box the user has not picked; drawn on its page only, no
     # card, in no count, export or bulk action.
     candidate: bool = False
+    # Markush Phase 3: a built structure's scaffold segment (None for every other segment), and
+    # on a scaffold that was built, the rows that could not be (None when never built).
+    built_from: uuid.UUID | None = None
+    build_failures: list[BuildFailure] | None = None
     # The engines that agree ([] none), in DECIMER, MolParser (MolNexTR on old papers), MolScribe
     # order.
     agree_engines: list[str] = []
@@ -210,13 +221,6 @@ class ReadAccepted(BaseModel):
     """A box picked in pick mode: its OCSR steps (the three engines)."""
 
     step_ids: list[uuid.UUID]
-
-
-class BuildFailure(BaseModel):
-    """A row of a scaffold's R-group table that was not built, and why ("Could not build")."""
-
-    compound: str
-    reason: str
 
 
 class BuildOut(BaseModel):
