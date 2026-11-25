@@ -15,9 +15,9 @@ import Editor, { editorChange, type EditorStructure } from "./Editor";
 function editorStart(
   segment: SegmentOut,
   paperEngine: string,
-): { smiles: string | null; molfile: string | null } {
-  const { smiles, molfile } = shownStructure(segment, paperEngine);
-  return { smiles, molfile };
+): { smiles: string | null; molfile: string | null; engine: string | null } {
+  const { smiles, molfile, edited, prediction } = shownStructure(segment, paperEngine);
+  return { smiles, molfile, engine: edited ? null : (prediction?.engine ?? null) };
 }
 
 export function SegmentEditor({

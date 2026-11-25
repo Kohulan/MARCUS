@@ -14,7 +14,7 @@ CASES = [
     (StepKind.SEGMENT_PAGE, None, "q.segment"),
     (StepKind.OCSR, Engine.DECIMER, "q.decimer"),
     (StepKind.OCSR, Engine.DECIMER_HAND, "q.decimer"),
-    (StepKind.OCSR, Engine.MOLNEXTR, "q.molnextr"),
+    (StepKind.OCSR, Engine.MOLPARSER, "q.molparser"),
     (StepKind.OCSR, Engine.MOLSCRIBE, "q.molscribe"),
     (StepKind.OCSR, Engine.FAKE, "q.fake"),
     (StepKind.ANNOTATE, None, "q.llm"),
@@ -60,7 +60,7 @@ def test_queue_wait_covers_every_queue():
     """Queued steps wait up to QUEUE_WAIT_S[queue], independent of the run limit: model
     queues cover a worker (re)start with its model preload (decimer ~85-105 s on CPU)."""
     assert set(queues.QUEUE_WAIT_S) == set(SLOTS)
-    for q in ("q.segment", "q.decimer", "q.molnextr", "q.molscribe", "q.llm", "q.rgroup"):
+    for q in ("q.segment", "q.decimer", "q.molparser", "q.molscribe", "q.llm", "q.rgroup"):
         assert queues.QUEUE_WAIT_S[q] == 300
     assert queues.QUEUE_WAIT_S["q.cpu"] == 120
     assert queues.QUEUE_WAIT_S["q.fake"] == 120

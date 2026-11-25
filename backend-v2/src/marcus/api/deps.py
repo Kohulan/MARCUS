@@ -311,8 +311,11 @@ def not_found() -> HTTPException:
 
 
 def require_engine_enabled(engine: Engine) -> None:
-    """422 for the fake engine unless fake engines are enabled (every route that takes one)."""
+    """422 for the fake engine unless fake engines are enabled, and for MolNexTR (legacy: old
+    papers keep its predictions, but MolParser replaced it), on every route that takes one."""
     if engine == Engine.FAKE and not fake_enabled():
+        raise HTTPException(status_code=422, detail="Engine not available")
+    if engine == Engine.MOLNEXTR:
         raise HTTPException(status_code=422, detail="Engine not available")
 
 

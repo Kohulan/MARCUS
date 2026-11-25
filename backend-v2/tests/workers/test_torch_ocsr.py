@@ -1,16 +1,16 @@
-"""MolNexTR and MolScribe OCSR engines in the torch image.
+"""The MolScribe OCSR engine in the torch image (MolNexTR left it on 2026-11-25: MolParser
+replaced it, test_molparser_ocsr.py).
 
-Runs only in the torch image (needs torch, MolNexTR, MolScribe and the baked weights), with no
-network:
+Runs only in the torch image (needs torch, MolScribe and the baked weights), with no network:
 
   docker compose -p marcus-v2 run --rm worker-torch-test
   (= pytest -m ml tests/workers/test_torch_ocsr.py -q -s)
 
 The expected SMILES and molfiles were recorded once from the local v1 copy on the three crops
 B2 stored (v2's segmenter output for synth_015.pdf); commands and provenance in
-tests/fixtures/v1_molnextr.json and v1_molscribe.json. v1 is never called here.
+tests/fixtures/v1_molscribe.json. v1 is never called here.
 
-The tests share one process and its loaded models, in file order: each engine is preloaded the
+The tests share one process and its loaded model, in file order: the engine is preloaded the
 way a worker pool process does it at start, then asked for the three crops. Timings are printed
 (and recorded in the task report), never asserted.
 """
@@ -32,17 +32,11 @@ pytestmark = pytest.mark.ml
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 V1 = {
-    Engine.MOLNEXTR: json.loads((FIXTURES / "v1_molnextr.json").read_text()),
     Engine.MOLSCRIBE: json.loads((FIXTURES / "v1_molscribe.json").read_text()),
 }
-# docker/MODEL_PINS.md: the commits installed (v1's, MolNexTR with PR #1); engine version = short
-# hash.
-VERSIONS = {Engine.MOLNEXTR: "7a4e03f", Engine.MOLSCRIBE: "250f683"}
+# docker/MODEL_PINS.md: the commit installed (v1's); engine version = short hash.
+VERSIONS = {Engine.MOLSCRIBE: "250f683"}
 WEIGHTS = {
-    Engine.MOLNEXTR: (
-        "/opt/pystow/molnextr/molnextr_best.pth",
-        "5990bc19aaafa5cf44e9d04e06fb8e2b5aea50c66e1e925f662bdff7d2a6422c",
-    ),
     Engine.MOLSCRIBE: (
         "/opt/pystow/molscribe/swin_base_char_aux_1m.pth",
         "6f0df56fa32b5ffc21f8c7f311ef333da522f590bf5622e966c6bcb1f2d9ea1d",
@@ -73,7 +67,7 @@ def ocsr_modules():
 
 
 def preload(monkeypatch, ocsr, base, engine: Engine):
-    """What a q.molnextr / q.molscribe pool process does at start."""
+    """What a q.molscribe pool process does at start."""
     monkeypatch.setenv("MARCUS_OCSR_ENGINES", engine.value)
     ocsr.register_configured_engines()
     assert engine.value in base.PRELOAD
@@ -116,7 +110,7 @@ def test_torch_threads_are_capped_before_any_model_loads():
     assert gpu.limit_torch_memory(0.5) is False
 
 
-@pytest.mark.parametrize("engine", [Engine.MOLNEXTR, Engine.MOLSCRIBE])
+@pytest.mark.parametrize("engine", [Engine.MOLSCRIBE])
 def test_weights_are_baked_with_the_pinned_checksum(engine):
     path, sha256 = WEIGHTS[engine]
     digest = hashlib.sha256()
@@ -124,16 +118,6 @@ def test_weights_are_baked_with_the_pinned_checksum(engine):
         for block in iter(lambda: f.read(1 << 24), b""):
             digest.update(block)
     assert digest.hexdigest() == sha256
-
-
-def test_molnextr_preload(monkeypatch, ocsr_modules):
-    ocsr, base = ocsr_modules
-    preload(monkeypatch, ocsr, base, Engine.MOLNEXTR)
-
-
-def test_molnextr_same_smiles_as_v1_on_three_segments(ocsr_modules):
-    _, base = ocsr_modules
-    same_as_v1(base, Engine.MOLNEXTR)
 
 
 def test_molscribe_preload(monkeypatch, ocsr_modules):
@@ -152,7 +136,7 @@ def test_molscribe_runs_on_the_configured_device(ocsr_modules):
     assert str(model.device) == "cpu"  # MARCUS_MOLSCRIBE_DEVICE default, as v1
 
 
-@pytest.mark.parametrize("engine", [Engine.MOLNEXTR, Engine.MOLSCRIBE])
+@pytest.mark.parametrize("engine", [Engine.MOLSCRIBE])
 def test_version_is_the_pinned_commit(ocsr_modules, engine):
     _, base = ocsr_modules
     model = base.get_engine(engine)
@@ -160,7 +144,7 @@ def test_version_is_the_pinned_commit(ocsr_modules, engine):
     assert model.version == VERSIONS[engine]
 
 
-@pytest.mark.parametrize("engine", [Engine.MOLNEXTR, Engine.MOLSCRIBE])
+@pytest.mark.parametrize("engine", [Engine.MOLSCRIBE])
 def test_ocsr_handler(ocsr_modules, engine):
     """The real handler path (image job input)."""
     from marcus.workers.ocsr.handler import ocsr

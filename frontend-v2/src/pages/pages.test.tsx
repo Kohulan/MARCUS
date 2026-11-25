@@ -260,7 +260,7 @@ describe("About", () => {
       "[02]",
       "[03]",
     ]);
-    expect(how.textContent).toContain("MolNexTR, MolScribe and DECIMER hand-drawn");
+    expect(how.textContent).toContain("MolParser, MolScribe and DECIMER hand-drawn");
     const crop = within(how).getByRole("img", {
       name: "Example: a structure drawing that DECIMER Segmentation cut from page 1 of the sample paper",
     });

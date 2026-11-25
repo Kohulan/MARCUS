@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { useParams } from "react-router-dom";
 import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
 import { depictQuery, useReplyUrl } from "../api/depictions";
-import { engineName, firstRunNote, orientationTemplate } from "../api/engines";
+import { engineName, firstRunNote, isLegacyEngine, orientationTemplate } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isImageActive } from "../api/status";
@@ -274,9 +274,12 @@ function Result({
             <div className="ir-failed hatch">
               <StateBadge state="failed" />
               <p className="ir-failed__why">{`Could not read a structure: ${reasonText(failedClass)}`}</p>
-              <GlassButton tint="clear" size="sm" disabled={retrying} onClick={() => void retry()}>
-                Retry
-              </GlassButton>
+              {/* a legacy engine (old jobs' MolNexTR) is never run again: no Retry */}
+              {!isLegacyEngine(job.engine) && (
+                <GlassButton tint="clear" size="sm" disabled={retrying} onClick={() => void retry()}>
+                  Retry
+                </GlassButton>
+              )}
             </div>
           )}
           {active && live.mode === "polling" && (
@@ -360,7 +363,7 @@ function Result({
 
       {editing && (
         <Editor
-          initial={{ smiles, molfile }}
+          initial={{ smiles, molfile, engine: edit ? null : (prediction?.engine ?? null) }}
           source={{ image: api.imageUrl(job.id), page: null }}
           onSave={async (structure) => {
             setEdit(structure);

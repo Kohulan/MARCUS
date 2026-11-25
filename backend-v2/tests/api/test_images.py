@@ -320,7 +320,7 @@ async def test_image_predictions_second_engine(app, async_db_session):
         job_id, first = await _job_and_step(c, db)
         await run_and_finish(db, first)
         assert (await c.get(f"/api/v2/images/{job_id}")).json()["status"] == "done"
-        r = await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+        r = await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molparser"})
         assert r.status_code == 202
         step_id = r.json()["step_id"]
         body = (await c.get(f"/api/v2/images/{job_id}")).json()
@@ -328,11 +328,11 @@ async def test_image_predictions_second_engine(app, async_db_session):
     new = await db.get(Step, uuid.UUID(step_id))
     assert (new.kind, new.engine, new.status, new.image_job_id) == (
         "ocsr",
-        "molnextr",
+        "molparser",
         "pending",
         uuid.UUID(job_id),
     )
-    assert new.queue == "q.molnextr"
+    assert new.queue == "q.molparser"
 
 
 async def test_image_predictions_repeat_click_same_step(app, async_db_session):
@@ -366,7 +366,7 @@ async def test_image_job_out_lists_all_predictions_and_steps(app, async_db_sessi
         job_id, first = await _job_and_step(c, db)
         await run_and_finish(db, first, ocsr_result("CCO"))
         step_id = (
-            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molparser"})
         ).json()["step_id"]
         second = await db.get(Step, uuid.UUID(step_id))
         await run_and_finish(db, second, ocsr_result("CCC"))
@@ -375,7 +375,7 @@ async def test_image_job_out_lists_all_predictions_and_steps(app, async_db_sessi
     assert [p["smiles"] for p in body["predictions"]] == ["CCC", "CCO"]
     assert body["prediction"]["smiles"] == "CCC"
     assert [(s["engine"], s["status"], s["error_class"]) for s in body["steps"]] == [
-        ("molnextr", "done", None),
+        ("molparser", "done", None),
         ("decimer", "done", None),
     ]
     assert body["error_class"] is None
@@ -387,13 +387,13 @@ async def test_image_job_second_engine_fails_job_stays_done(app, async_db_sessio
         job_id, first = await _job_and_step(c, db)
         await run_and_finish(db, first)
         step_id = (
-            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molnextr"})
+            await c.post(f"/api/v2/images/{job_id}/predictions", json={"engine": "molparser"})
         ).json()["step_id"]
         await run_and_finish(db, await db.get(Step, uuid.UUID(step_id)), fail="timeout")
         body = (await c.get(f"/api/v2/images/{job_id}")).json()
     assert body["status"] == "done" and body["error"] is None
     assert body["error_class"] == "timeout"
-    assert body["steps"][0] == {"engine": "molnextr", "status": "failed", "error_class": "timeout"}
+    assert body["steps"][0] == {"engine": "molparser", "status": "failed", "error_class": "timeout"}
     assert len(body["predictions"]) == 1
 
 

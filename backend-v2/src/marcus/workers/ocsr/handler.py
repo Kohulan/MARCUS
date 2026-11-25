@@ -2,10 +2,13 @@
 
 Engine input (owner decision, D4 fix round 2): segment crops are stored in true colour (what
 users see), but v1 fed its engines crop files with red and blue swapped (its `cv2.imwrite` of an
-RGB array). For v1-identical accuracy every engine gets that swapped image for a segment crop
-(`v1_engine_input`, written to a temporary PNG on /tmp). Image jobs (a user's own image) reach
-the engine unchanged, as in v1's image path. This module is the ONLY place that builds engine
-input from a crop: a new consumer that feeds crops to a model must use `v1_engine_input` too.
+RGB array). For v1-identical accuracy every v1 engine gets that swapped image for a segment crop
+(`v1_engine_input`, written to a temporary PNG on /tmp). MolParser, not a v1 engine, gets the
+crop in true colour (TRUE_COLOUR_ENGINES; MARCUS-training review-feedback/molparser-eval: 64/119
+right either way, true colour is what it was measured and trained on). Image jobs (a user's own
+image) reach every engine unchanged, as in v1's image path. This module is the ONLY place that
+builds engine input from a crop: a new consumer that feeds crops to a model must use
+`_engine_input` too.
 
 OCSR cache (spec §7): before predicting, the handler looks up (owner, sha256 of the bytes the
 ENGINE gets, engine, engine version) in `ocsr_cache`: for a crop the swapped PNG, for an image
@@ -94,10 +97,17 @@ def _input_image(step, session) -> tuple[Path, bool, uuid.UUID | None]:
     return segment_crop_path(row.paper_id, row.image_sha256), True, row.owner_id
 
 
-def _engine_input(image: Path, is_crop: bool) -> bytes:
+# Engines that read a segment crop in true colour (not v1 engines: no v1 parity to keep).
+TRUE_COLOUR_ENGINES = frozenset({Engine.MOLPARSER})
+
+
+def _engine_input(image: Path, is_crop: bool, engine: Engine) -> bytes:
     """The bytes the engine reads (and the OCSR cache key hashes): a crop's v1 red/blue-swapped
-    PNG, an image job's own file. Dropping the swap would be a change here only."""
-    return v1_engine_input(image) if is_crop else image.read_bytes()
+    PNG (a true-colour engine: the stored crop), an image job's own file. Dropping the swap would
+    be a change here only."""
+    if is_crop and engine not in TRUE_COLOUR_ENGINES:
+        return v1_engine_input(image)
+    return image.read_bytes()
 
 
 def _cache_get(session, owner_id: uuid.UUID, sha: str, engine: str, version: str):
@@ -159,7 +169,7 @@ def ocsr(step, session) -> dict:
     image, is_crop, owner_id = _input_image(step, session)
     if not image.is_file():
         raise BadInput("input image is missing")
-    data = _engine_input(image, is_crop)
+    data = _engine_input(image, is_crop, name)
     use_cache = name is not Engine.FAKE and owner_id is not None
     if use_cache:
         sha = hashlib.sha256(data).hexdigest()  # the engine's input, not the stored file

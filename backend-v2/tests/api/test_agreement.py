@@ -62,14 +62,14 @@ async def test_badge_waits_for_the_engines_then_says_how_many_agree(app, async_d
     assert {s["agree"] for s in paper["segments"]} == {None}  # the others still read
     await _read(
         db, pid,
-        {(0, "molnextr"): "OCC", (0, "molscribe"): "C(C)O", (1, "molnextr"): "CCN"},
+        {(0, "molparser"): "OCC", (0, "molscribe"): "C(C)O", (1, "molparser"): "CCN"},
         fail={(1, "molscribe")},
     )  # fmt: skip
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     by_id = {s["id"]: s for s in paper["segments"]}
     first, second = by_id[str(segs[0])], by_id[str(segs[1])]
     assert (first["agree"], first["agree_of"]) == (3, 3)
-    assert first["agree_engines"] == ["decimer", "molnextr", "molscribe"]
+    assert first["agree_engines"] == ["decimer", "molparser", "molscribe"]
     # MolScribe failed: it read, so this is "Differ" of three, never "2 of 2"
     assert (second["agree"], second["agree_of"], second["agree_engines"]) == (0, 3, [])
     shown = {p["id"]: p["engine"] for p in second["predictions"]}
@@ -83,19 +83,19 @@ async def test_two_agree_against_the_papers_engine(app, async_db_session):
     alice, token = await new_owner(db)
     seeded = await seed_paper(db, alice, ocsr=False)
     pid = seeded.paper_id
-    await _read(db, pid, {(0, "decimer"): "CCN", (0, "molnextr"): "CCO", (0, "molscribe"): "OCC",
+    await _read(db, pid, {(0, "decimer"): "CCN", (0, "molparser"): "CCO", (0, "molscribe"): "OCC",
                           (1, "decimer"): "CCO"})  # fmt: skip
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     seg = next(s for s in paper["segments"] if s["agree"] is not None)
-    assert seg["agree"] == 2 and seg["agree_engines"] == ["molnextr", "molscribe"]
+    assert seg["agree"] == 2 and seg["agree_engines"] == ["molparser", "molscribe"]
     shown = next(p for p in seg["predictions"] if p["id"] == seg["default_prediction_id"])
-    assert shown["engine"] == "molnextr" and shown["smiles"] == "CCO"
+    assert shown["engine"] == "molparser" and shown["smiles"] == "CCO"
     # the export takes the same structure
     async with make_client(app, token) as client:
         r = await client.get(f"/api/v2/papers/{pid}/export", params={"format": "json"})
     exported = {s["segment_id"]: s for s in json.loads(r.content)["segments"]}
     assert exported[seg["id"]]["smiles"] == "CCO"
-    assert exported[seg["id"]]["engine"] == "molnextr"
+    assert exported[seg["id"]]["engine"] == "molparser"
 
 
 async def test_steps_list_background_steps_marked(app, async_db_session):
@@ -107,7 +107,7 @@ async def test_steps_list_background_steps_marked(app, async_db_session):
     ocsr = [st for st in listed if st["kind"] == "ocsr"]
     assert sorted((st["engine"], st["background"]) for st in ocsr) == [
         ("decimer", False), ("decimer", False),
-        ("molnextr", True), ("molnextr", True), ("molscribe", True), ("molscribe", True),
+        ("molparser", True), ("molparser", True), ("molscribe", True), ("molscribe", True),
     ]  # fmt: skip
     background = set(await db.scalars(select(BackgroundStep.step_id)))
     assert {st["id"] for st in ocsr if st["background"]} == {str(b) for b in background}
@@ -141,7 +141,6 @@ async def test_a_background_step_asked_for_becomes_the_papers_own(app, async_db_
     assert [st["background"] for st in listed if st["id"] == str(step_id)] == [False]
 
 
-
 ETHANOL = "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
 PROPANOL = "BDERNNFJNOPAEC-UHFFFAOYSA-N"
 
@@ -163,13 +162,13 @@ def _badge(predictions, ran):
 def test_badge_counts_the_engines_that_read():
     """Owner decision 2026-11-22: "3 agree" / "2 agree" / differ of three; "2 of 2 agree" /
     "2 differ" when only two engines read; nothing while one still reads."""
-    done3 = {"decimer": False, "molnextr": False, "molscribe": False}
-    three = [_p("molscribe", ETHANOL), _p("molnextr", ETHANOL), _p("decimer", PROPANOL)]
+    done3 = {"decimer": False, "molparser": False, "molscribe": False}
+    three = [_p("molscribe", ETHANOL), _p("molparser", ETHANOL), _p("decimer", PROPANOL)]
     assert _badge(three, done3) == (2, 3)
     assert _badge(three, {**done3, "molscribe": True}) == (None, None)
     # one engine failed (a step, no prediction): still of three
     assert _badge(three[1:], done3) == (0, 3)
-    assert _badge([_p("molnextr", ETHANOL), _p("decimer", ETHANOL)], done3) == (2, 3)
+    assert _badge([_p("molparser", ETHANOL), _p("decimer", ETHANOL)], done3) == (2, 3)
     # only two engines ever ran (an older paper, a second engine run in Compare)
     two = {"decimer": False, "molscribe": False}
     assert _badge([_p("molscribe", ETHANOL), _p("decimer", ETHANOL)], two) == (2, 2)
@@ -178,20 +177,20 @@ def test_badge_counts_the_engines_that_read():
 
 
 def test_no_badge_without_two_inchikeys_or_for_a_scaffold():
-    done3 = {"decimer": False, "molnextr": False, "molscribe": False}
+    done3 = {"decimer": False, "molparser": False, "molscribe": False}
     # predictions from before 0019 have no InChIKey: they can never agree, so no false "Differ"
-    old = [_p("molscribe", None), _p("molnextr", ETHANOL), _p("decimer", None)]
+    old = [_p("molscribe", None), _p("molparser", ETHANOL), _p("decimer", None)]
     assert _badge(old, done3) == (None, None)
-    invalid = [_p("molscribe", None, valid=False), _p("molnextr", None), _p("decimer", ETHANOL)]
+    invalid = [_p("molscribe", None, valid=False), _p("molparser", None), _p("decimer", ETHANOL)]
     assert _badge(invalid, done3) == (None, None)
     scaffold = [
-        _p("molscribe", ETHANOL), _p("molnextr", ETHANOL), _p("decimer", None, rgroups=["R1"])
+        _p("molscribe", ETHANOL), _p("molparser", ETHANOL), _p("decimer", None, rgroups=["R1"])
     ]  # fmt: skip
     from marcus.api.read import agreement_out
 
     shown = agreement_out("decimer", scaffold, done3)
     assert shown["agree"] == 2  # the majority is a plain structure, shown
-    scaffold_shown = [_p("decimer", ETHANOL, rgroups=["R1"]), _p("molnextr", PROPANOL)]
+    scaffold_shown = [_p("decimer", ETHANOL, rgroups=["R1"]), _p("molparser", PROPANOL)]
     assert _badge(scaffold_shown, done3) == (None, None)
 
 
@@ -203,11 +202,11 @@ async def test_an_engine_whose_step_never_ran_does_not_count(app, async_db_sessi
     alice, token = await new_owner(db)
     seeded = await seed_paper(db, alice, ocsr=False)
     pid = seeded.paper_id
-    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("decimer", "molnextr")})
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("decimer", "molparser")})
     await db.execute(
-        update(Step).where(Step.paper_id == pid, Step.engine == "molscribe").values(
-            status="cancelled"
-        )
+        update(Step)
+        .where(Step.paper_id == pid, Step.engine == "molscribe")
+        .values(status="cancelled")
     )
     await db.commit()
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
@@ -234,7 +233,7 @@ async def test_a_decision_freezes_the_structure_it_was_made_on(app, async_db_ses
     seg = paper["segments"][0]
     own = seg["default_prediction_id"]
     await _decide(app, token, seg["id"], "accepted")
-    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molparser", "molscribe")})
 
     def shown(paper, sid):
         s = next(x for x in paper["segments"] if x["id"] == sid)
@@ -292,8 +291,7 @@ async def test_bulk_and_group_decisions_freeze_each_structure(app, async_db_sess
         for c in (await db.scalars(select(Curation).execution_options(populate_existing=True)))
     }
     preds = {
-        p.id: p
-        for p in await db.scalars(select(Prediction).where(Prediction.segment_id.in_(rows)))
+        p.id: p for p in await db.scalars(select(Prediction).where(Prediction.segment_id.in_(rows)))
     }
     for sid in [*seeded.segment_ids, repeat]:
         assert rows[sid].status == "accepted"
@@ -312,16 +310,16 @@ async def _put(app, token, seg, status, shown=None):
 async def _frozen(db, seg):
     row = (
         await db.execute(
-            select(Curation).where(Curation.segment_id == seg).execution_options(
-                populate_existing=True
-            )
+            select(Curation)
+            .where(Curation.segment_id == seg)
+            .execution_options(populate_existing=True)
         )
     ).scalar_one()
     return row.shown_prediction_id
 
 
 async def test_a_decision_freezes_the_prediction_the_card_showed(app, async_db_session):
-    """The race: the card showed DECIMER's CCN (A); MolNexTR and MolScribe land CCO (B) before
+    """The race: the card showed DECIMER's CCN (A); MolParser and MolScribe land CCO (B) before
     the click reaches the server, so the server's own pick would be B. The browser names A:
     A is frozen."""
     db = async_db_session
@@ -332,12 +330,14 @@ async def test_a_decision_freezes_the_prediction_the_card_showed(app, async_db_s
     paper = await _get(app, token, f"/api/v2/papers/{pid}")  # what the client read
     seg = paper["segments"][0]
     seen = seg["default_prediction_id"]
-    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molparser", "molscribe")})
     r = await _put(app, token, seg["id"], "accepted", seen)
     assert r.status_code == 200, r.text
     assert await _frozen(db, uuid.UUID(seg["id"])) == uuid.UUID(seen)
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
-    assert next(s for s in paper["segments"] if s["id"] == seg["id"])["default_prediction_id"] == seen
+    assert (
+        next(s for s in paper["segments"] if s["id"] == seg["id"])["default_prediction_id"] == seen
+    )
     # without it (an older client), the server's pick when the decision lands: the majority
     other = next(s for s in paper["segments"] if s["id"] != seg["id"])
     assert (await _put(app, token, other["id"], "accepted")).status_code == 200
@@ -382,7 +382,7 @@ async def test_a_structure_edit_drops_the_frozen_prediction(app, async_db_sessio
     async with make_client(app, token) as client:
         assert (await client.put(f"/api/v2/segments/{seg}/curation", json=edit)).is_success
     assert await _frozen(db, seg) is None
-    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molnextr", "molscribe")})
+    await _read(db, pid, {(n, e): "CCO" for n in (0, 1) for e in ("molparser", "molscribe")})
     back = {**edit, "smiles": None}
     async with make_client(app, token) as client:
         assert (await client.put(f"/api/v2/segments/{seg}/curation", json=back)).is_success
@@ -394,7 +394,7 @@ async def test_a_structure_edit_drops_the_frozen_prediction(app, async_db_sessio
 
 async def test_a_stale_inherited_decision_drops_its_frozen_structure(app, async_db_session):
     """Review finding: a repeat inherits the main card's accept and freezes its own OCC; later
-    MolNexTR and MolScribe agree on CCN for it, and the main figure is unmarked, so the
+    MolParser and MolScribe agree on CCN for it, and the main figure is unmarked, so the
     inherited status no longer holds ("to review"). Its card, export and links take the
     default pick (CCN), not the frozen OCC; a decision on the card itself freezes what it
     shows."""
@@ -432,7 +432,7 @@ async def test_a_stale_inherited_decision_drops_its_frozen_structure(app, async_
     assert (await db.get(Prediction, occ)).smiles == "OCC"
 
     def later(s):
-        for engine in ("molnextr", "molscribe"):
+        for engine in ("molparser", "molscribe"):
             s.add(Prediction(segment_id=repeat, engine=engine, engine_version="t",
                              smiles="CCN", valid=True, ms=1, rgroups=[],
                              inchikey=inchikey_of("CCN", True)))  # fmt: skip
@@ -440,7 +440,9 @@ async def test_a_stale_inherited_decision_drops_its_frozen_structure(app, async_
     await db.run_sync(later)
     await db.commit()
     async with make_client(app, token) as client:
-        assert (await client.put(f"/api/v2/papers/{pid}/main-figure", json={"page": None})).is_success
+        assert (
+            await client.put(f"/api/v2/papers/{pid}/main-figure", json={"page": None})
+        ).is_success
     paper = await _get(app, token, f"/api/v2/papers/{pid}")
     card = next(s for s in paper["segments"] if s["id"] == str(repeat))
     assert card["curation"]["status"] == "unchecked"  # stale
@@ -452,3 +454,43 @@ async def test_a_stale_inherited_decision_drops_its_frozen_structure(app, async_
     assert exported[str(repeat)] == "CCN"
     assert (await _put(app, token, repeat, "accepted", shown["id"])).status_code == 200
     assert await _frozen(db, repeat) == uuid.UUID(shown["id"])
+
+
+async def test_an_old_paper_keeps_its_molnextr_badge(app, async_db_session):
+    """A paper read before MolParser replaced MolNexTR (2026-11-25): its MolNexTR steps and
+    predictions count in MolParser's slot, so the badge stays "3 agree" of three. A MolParser
+    read asked for later (Compare) takes the slot: still three engines, never four."""
+    from sqlalchemy import update
+
+    db = async_db_session
+    alice, token = await new_owner(db)
+    seeded = await seed_paper(db, alice, ocsr=False)
+    pid = seeded.paper_id
+    await db.execute(
+        update(Step)
+        .where(Step.paper_id == pid, Step.engine == "molparser")
+        .values(engine="molnextr", queue="q.molnextr")
+    )
+    await db.commit()
+    segs = await _read(
+        db, pid,
+        {(n, e): "CCO" for n in (0, 1) for e in ("decimer", "molnextr", "molscribe")},
+    )  # fmt: skip
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    first = {s["id"]: s for s in paper["segments"]}[str(segs[0])]
+    assert (first["agree"], first["agree_of"]) == (3, 3)
+    assert first["agree_engines"] == ["decimer", "molnextr", "molscribe"]
+
+    async with make_client(app, token) as client:
+        r = await client.post(
+            f"/api/v2/segments/{segs[0]}/predictions", json={"engine": "molparser"}
+        )
+    assert r.status_code == 202
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    first = {s["id"]: s for s in paper["segments"]}[str(segs[0])]
+    assert first["agree"] is None  # MolParser's slot is reading again: the badge waits
+    await _read(db, pid, {(0, "molparser"): "CCN"})
+    paper = await _get(app, token, f"/api/v2/papers/{pid}")
+    first = {s["id"]: s for s in paper["segments"]}[str(segs[0])]
+    assert (first["agree"], first["agree_of"]) == (2, 3)
+    assert first["agree_engines"] == ["decimer", "molscribe"]

@@ -70,13 +70,14 @@ docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -
 #   scrapes dcgm-exporter:9400 (GPU metrics, internal network only)
 ```
 
-The override builds the CUDA images (`VARIANT=cuda`: `marcus-v2-tf:cuda`, `marcus-v2-torch:cuda`;
-the CPU images keep their `:local` tags), reserves the GPU for worker-segment, worker-decimer,
-worker-molnextr and worker-molscribe, and sets their memory budgets: TensorFlow
-`MARCUS_GPU_MEM_MB` 2048 (segment, measured peak under 1 GB) and 4096 (decimer), torch `MARCUS_TORCH_MEM_FRACTION` 0.09
-each (about 2.9 GB of the 32 GB card); the sum stays under 20 GB (deploy test). Each budget can be
+The override builds the CUDA images (`VARIANT=cuda`: `marcus-v2-tf:cuda`, `marcus-v2-torch:cuda`,
+`marcus-v2-molparser:cuda`; the CPU images keep their `:local` tags), reserves the GPU for
+worker-segment, worker-decimer, worker-molparser and worker-molscribe, and sets their memory
+budgets: TensorFlow `MARCUS_GPU_MEM_MB` 2048 (segment, measured peak under 1 GB) and 4096
+(decimer), torch `MARCUS_TORCH_MEM_FRACTION` 0.03 for MolParser (about 1 GB of the 32 GB card)
+and 0.09 for MolScribe (about 2.9 GB); the sum stays under 20 GB (deploy test). Each budget can be
 overridden from the environment (`MARCUS_SEGMENT_GPU_MEM_MB`, `MARCUS_DECIMER_GPU_MEM_MB`,
-`MARCUS_MOLNEXTR_TORCH_MEM_FRACTION`, `MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION`). MolScribe runs on
+`MARCUS_MOLPARSER_TORCH_MEM_FRACTION`, `MARCUS_MOLSCRIBE_TORCH_MEM_FRACTION`). MolScribe runs on
 the GPU here (`MARCUS_MOLSCRIBE_DEVICE=cuda`; v1 and the CPU stack use cpu): the D4 fixture judge
 showed no loss (the same SMILES on 205 of 205 crops).
 CUDA library versions: `docker/MODEL_PINS.md`.

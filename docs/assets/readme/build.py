@@ -333,7 +333,7 @@ def hero(theme: str) -> str:
     # the title block
     cells = [
         (16, "INPUT", "A journal PDF or one image"),
-        (336, "ENGINES", "DECIMER · MolNexTR · MolScribe"),
+        (336, "ENGINES", "DECIMER · MolParser · MolScribe"),
         (656, "OUTPUT", "SMILES · molfile · SDF · COCONUT"),
         (976, "LICENCE", "Open source, MIT"),
     ]
@@ -478,7 +478,7 @@ def architecture(theme: str) -> str:
         ("q.tools", "CDK depictions, similarity", False),
         ("q.segment", "DECIMER Segmentation", True),
         ("q.decimer", "DECIMER, DECIMER hand-drawn", True),
-        ("q.molnextr", "MolNexTR", True),
+        ("q.molparser", "MolParser", True),
         ("q.molscribe", "MolScribe", True),
         ("q.llm", "the MARCUS model (llama.cpp)", True),
     ]

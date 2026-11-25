@@ -145,14 +145,14 @@ describe("api", () => {
   it("uploadPaper sends multipart/form-data with engine and ocsr", async () => {
     reply = json(202, { paper_id: "p9", status: "checking" });
     const file = new File(["%PDF-1.4"], "a.pdf", { type: "application/pdf" });
-    const out = await api.uploadPaper(file, { engine: "molnextr", ocsr: "off" });
+    const out = await api.uploadPaper(file, { engine: "molparser", ocsr: "off" });
     expect(out.paper_id).toBe("p9");
     const { url, init } = calls[0]!;
     expect(url).toBe("/api/v2/papers");
     expect(init.method).toBe("POST");
     const body = init.body as FormData;
     expect(body).toBeInstanceOf(FormData);
-    expect(body.get("engine")).toBe("molnextr");
+    expect(body.get("engine")).toBe("molparser");
     expect(body.get("ocsr")).toBe("off");
     expect((body.get("file") as File).name).toBe("a.pdf");
     // the browser sets the multipart boundary itself
@@ -291,8 +291,8 @@ describe("api", () => {
   });
 
   it("builds URLs", () => {
-    expect(api.depictionUrl("s1", "abc", "molnextr")).toBe(
-      "/api/v2/segments/s1/depiction?v=abc&engine=molnextr",
+    expect(api.depictionUrl("s1", "abc", "molparser")).toBe(
+      "/api/v2/segments/s1/depiction?v=abc&engine=molparser",
     );
     expect(api.depictionUrl("s1", "abc")).toBe("/api/v2/segments/s1/depiction?v=abc");
     expect(api.exportUrl("p1", "sdf", "accepted")).toBe(

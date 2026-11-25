@@ -22,7 +22,8 @@
 #
 # Images: api (api, api-migrate, dispatcher), cpu (worker-cpu), tools (worker-tools), tf
 # (worker-segment: DECIMER Segmentation; worker-decimer: DECIMER OCSR, normal and hand-drawn),
-# torch (worker-molnextr: MolNexTR; worker-molscribe: MolScribe); all weights baked into the
+# torch (worker-molscribe: MolScribe), molparser (worker-molparser: MolParser, which replaced
+# MolNexTR on 2026-11-25); all weights baked into the
 # images. Every app container runs as uid 10001 with a read-only root filesystem, /tmp on tmpfs
 # and the shared named volume `data` at /data.
 #
@@ -33,6 +34,8 @@
 #   (= pytest -m ml tests/workers/test_decimer_ocsr.py -q -s)
 #   docker compose -p marcus-v2 run --rm worker-torch-test
 #   (= pytest -m ml tests/workers/test_torch_ocsr.py -q -s)
+#   docker compose -p marcus-v2 run --rm worker-molparser-test
+#   (= pytest -m ml tests/workers/test_molparser_ocsr.py -q -s)
 
 name: marcus-v2
 
@@ -125,6 +128,15 @@ x-torch-image: &torch-image
       VARIANT: cpu  # cuda (the CUDA 12.8 build v1 runs): docker-compose.gpu.yml
   image: marcus-v2-torch:local
 
+x-molparser-image: &molparser-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.molparser
+    target: runtime
+    args:
+      VARIANT: cpu  # cuda: docker-compose.gpu.yml
+  image: marcus-v2-molparser:local
+
 # torch CPU threads, set before the model loads (marcus.workers.gpu.limit_torch_threads). The
 # OpenMP / MKL / OpenBLAS variables must be in the environment before numpy or torch is first
 # imported (the worker's main process imports numpy through RDKit), so compose sets them too.
@@ -204,7 +216,7 @@ services:
     environment:
       <<: [*env, *seg-version]
       MARCUS_TRUSTED_PROXIES: '["172.30.0.10"]'
-      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molnextr,q.molscribe}
+      MARCUS_EXPECTED_QUEUES: ${MARCUS_EXPECTED_QUEUES:-q.cpu,q.tools,q.segment,q.decimer,q.molparser,q.molscribe}
       MARCUS_COOKIE_SECURE: ${MARCUS_COOKIE_SECURE:-true}
       MARCUS_EXPOSE_DOCS: ${MARCUS_EXPOSE_DOCS:-false}
       MARCUS_CORS_ORIGINS: ${MARCUS_CORS_ORIGINS:-[]}
@@ -330,27 +342,27 @@ services:
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
     mem_limit: 8g
 
-  worker-molnextr:
-    <<: [*app, *torch-image]
-    # ocsr steps of the engine molnextr (q.molnextr). ONE prefork process (= q.molnextr slots).
-    # The model loads when the pool process starts (hence the long proc-alive timeout); a
-    # failed load stops the container (exit 1) and compose restarts it. Device as v1: CUDA when
+  worker-molparser:
+    <<: [*app, *molparser-image]
+    # ocsr steps of the engine molparser (q.molparser). ONE prefork process (= q.molparser
+    # slots). The model loads when the pool process starts (hence the long proc-alive timeout);
+    # a failed load stops the container (exit 1) and compose restarts it. Device: CUDA when
     # torch sees a GPU, else CPU.
-    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molnextr",
+    command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molparser",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
-              "-n", "molnextr@%h", "--loglevel", "INFO"]
+              "-n", "molparser@%h", "--loglevel", "INFO"]
     environment:
       <<: [*env, *torch-threads]
-      MARCUS_OCSR_ENGINES: molnextr
+      MARCUS_OCSR_ENGINES: molparser
       # Share of the GPU's memory for this process (torch); empty = no limit / CPU only.
-      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLNEXTR_TORCH_MEM_FRACTION:-}
+      MARCUS_TORCH_MEM_FRACTION: ${MARCUS_MOLPARSER_TORCH_MEM_FRACTION:-}
       MARCUS_WORKER_PROC_ALIVE_TIMEOUT: "300"
-    mem_limit: 4g
+    mem_limit: 2g
 
   worker-molscribe:
     <<: [*app, *torch-image]
     # ocsr steps of the engine molscribe (q.molscribe), same torch image. ONE prefork process
-    # (= q.molscribe slots), model loaded at pool process start like worker-molnextr. Device:
+    # (= q.molscribe slots), model loaded at pool process start like worker-molparser. Device:
     # MARCUS_MOLSCRIBE_DEVICE, cpu by default (v1 forces CPU); docker-compose.gpu.yml sets cuda.
     command: ["celery", "-A", "marcus.core.celery_app:celery_app", "worker", "-Q", "q.molscribe",
               "-c", "1", "--pool", "prefork", "--include", "marcus.workers.ocsr",
@@ -393,6 +405,29 @@ services:
       <<: *torch-threads
     mem_limit: 8g
     command: ["pytest", "-m", "ml", "tests/workers/test_torch_ocsr.py", "-q", "-s"]
+
+  # Test-only service of the MolParser image's `test` target (profile "test"), no network at all.
+  worker-molparser-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.molparser
+      target: test
+      args:
+        VARIANT: cpu
+    image: marcus-v2-molparser-test:local
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    environment:
+      <<: *torch-threads
+    mem_limit: 2g
+    command: ["pytest", "-m", "ml", "tests/workers/test_molparser_ocsr.py", "-q", "-s"]
 
   nginx:
     # The edge image with the web UI baked in (frontend-v2/Dockerfile: dist/ and

@@ -1,4 +1,4 @@
-"""Every new segment read by DECIMER, MolNexTR and MolScribe (phase B item 3): the paper's own
+"""Every new segment read by DECIMER, MolParser and MolScribe (phase B item 3): the paper's own
 engine in its read, the other two in the background (marcus.core.pipeline.background_engines)."""
 
 from sqlalchemy import func, select
@@ -56,11 +56,11 @@ def test_each_segment_gets_the_three_engines(db_session):
     ocsr = steps(s, paper, "ocsr")
     got = sorted((st.seq, st.engine, st.queue) for st in ocsr)
     assert got == [
-        (0, "decimer", "q.decimer"), (0, "molnextr", "q.molnextr"), (0, "molscribe", "q.molscribe"),
-        (1, "decimer", "q.decimer"), (1, "molnextr", "q.molnextr"), (1, "molscribe", "q.molscribe"),
+        (0, "decimer", "q.decimer"), (0, "molparser", "q.molparser"), (0, "molscribe", "q.molscribe"),
+        (1, "decimer", "q.decimer"), (1, "molparser", "q.molparser"), (1, "molscribe", "q.molscribe"),
     ]  # fmt: skip
     background = background_ids(s)
-    assert {st.engine for st in ocsr if st.id in background} == {"molnextr", "molscribe"}
+    assert {st.engine for st in ocsr if st.id in background} == {"molparser", "molscribe"}
     assert len(background) == 4
 
 
@@ -74,7 +74,7 @@ def test_the_paper_engine_is_the_read_whatever_it_is(db_session):
     hand = segmented(s, engine=Engine.DECIMER_HAND)
     first = steps(s, hand, "ocsr")[0].segment_id
     engines = sorted(st.engine for st in steps(s, hand, "ocsr") if st.segment_id == first)
-    assert engines == ["decimer", "decimer-hand", "molnextr", "molscribe"]
+    assert engines == ["decimer", "decimer-hand", "molparser", "molscribe"]
 
 
 def test_the_fake_engine_has_no_background(db_session):
@@ -119,14 +119,14 @@ def test_a_prediction_keeps_its_inchikey(db_session):
 
 
 def test_the_dispatcher_sends_a_papers_own_steps_before_background_ones(db_session):
-    """On q.molnextr, an older DECIMER paper's background steps wait behind a newer MolNexTR
+    """On q.molparser, an older DECIMER paper's background steps wait behind a newer MolParser
     paper's own read."""
     s = db_session
     owner = make_owner(s)
     older = segmented(s, owner=owner)
-    newer = segmented(s, engine=Engine.MOLNEXTR, owner=owner)
+    newer = segmented(s, engine=Engine.MOLPARSER, owner=owner)
     s.commit()
-    step = pick_next(s, "q.molnextr")
+    step = pick_next(s, "q.molparser")
     assert step is not None and step.paper_id == newer.id
     assert step.id not in background_ids(s)
     s.rollback()
@@ -135,14 +135,14 @@ def test_the_dispatcher_sends_a_papers_own_steps_before_background_ones(db_sessi
 
 def test_background_steps_wait_behind_every_owners_own_steps(db_session):
     """A browser owner (priority class 0) outranks an API-key owner (1), but not with a
-    background step: on q.molnextr the API owner's own read goes first."""
+    background step: on q.molparser the API owner's own read goes first."""
     from marcus.core.enums import OwnerKind
 
     s = db_session
     browser = segmented(s, owner=make_owner(s))
-    api = segmented(s, engine=Engine.MOLNEXTR, owner=make_owner(s, OwnerKind.API_KEY))
+    api = segmented(s, engine=Engine.MOLPARSER, owner=make_owner(s, OwnerKind.API_KEY))
     s.commit()
-    step = pick_next(s, "q.molnextr")
+    step = pick_next(s, "q.molparser")
     assert step is not None and step.paper_id == api.id
     assert step.id not in background_ids(s)
     s.rollback()
@@ -175,7 +175,7 @@ def _decimer_done(s, paper):
 
 def test_waiting_background_steps_expire_without_failing_anything(db_session):
     """q.molscribe has no live worker: its background steps are cancelled once it was seen
-    unserved for its whole wait allowance; MolNexTR's (served) wait up to
+    unserved for its whole wait allowance; MolParser's (served) wait up to
     BACKGROUND_MAX_WAIT_S. Cancelled, not failed: the paper stays done."""
     from marcus.core.queues import QUEUE_WAIT_S
     from marcus.dispatcher.pick import BACKGROUND_MAX_WAIT_S, BackgroundWatch, watchdog_once
@@ -184,19 +184,19 @@ def test_waiting_background_steps_expire_without_failing_anything(db_session):
     paper = segmented(s)
     _decimer_done(s, paper)
     _age(s, paper, "molscribe", 400)
-    _age(s, paper, "molnextr", 400)
+    _age(s, paper, "molparser", 400)
     clock = Clock()
     watch = BackgroundWatch(clock)
-    live = {"q.decimer", "q.molnextr", "q.cpu"}
+    live = {"q.decimer", "q.molparser", "q.cpu"}
     watchdog_once(s, live_queues=lambda: live, watch=watch)  # first seen unserved: nothing yet
     assert {st.status for st in steps(s, paper, "ocsr") if st.engine != "decimer"} == {"pending"}
     clock.t += QUEUE_WAIT_S["q.molscribe"]
     watchdog_once(s, live_queues=lambda: live, watch=watch)
     by_engine = {st.engine: st.status for st in steps(s, paper, "ocsr")}
-    assert by_engine == {"decimer": "done", "molnextr": "pending", "molscribe": "cancelled"}
-    _age(s, paper, "molnextr", BACKGROUND_MAX_WAIT_S + 60)
+    assert by_engine == {"decimer": "done", "molparser": "pending", "molscribe": "cancelled"}
+    _age(s, paper, "molparser", BACKGROUND_MAX_WAIT_S + 60)
     watchdog_once(s, watch=watch)  # no liveness known: only the time limit
-    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molnextr"} == {
+    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molparser"} == {
         "cancelled"
     }
     s.refresh(paper)
@@ -215,14 +215,12 @@ def test_one_missed_probe_cancels_nothing(db_session):
     _age(s, paper, "molscribe", 1200)  # waited long, but the queue is what counts
     clock = Clock()
     watch = BackgroundWatch(clock)
-    served = {"q.molnextr", "q.molscribe"}
-    unserved = {"q.molnextr"}
+    served = {"q.molparser", "q.molscribe"}
+    unserved = {"q.molparser"}
     for live in (unserved, served, unserved):
         watchdog_once(s, live_queues=lambda live=live: live, watch=watch)
         clock.t += max(QUEUE_WAIT_S["q.molscribe"] - 10, BACKGROUND_PROBE_EVERY_S)
-    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molscribe"} == {
-        "pending"
-    }
+    assert {st.status for st in steps(s, paper, "ocsr") if st.engine == "molscribe"} == {"pending"}
 
 
 def test_background_steps_alone_probe_at_most_once_a_minute(db_session):
@@ -237,7 +235,7 @@ def test_background_steps_alone_probe_at_most_once_a_minute(db_session):
 
     def live():
         calls.append(clock.t)
-        return {"q.molnextr", "q.molscribe", "q.decimer"}
+        return {"q.molparser", "q.molscribe", "q.decimer"}
 
     for _ in range(3):  # watchdog runs 10 s apart
         watchdog_once(s, live_queues=live, watch=watch)
@@ -282,3 +280,28 @@ def test_a_young_background_step_is_left_alone(db_session):
     s.commit()
     watchdog_once(s, live_queues=set)
     assert {st.status for st in steps(s, paper, "ocsr")} == {"pending"}
+
+
+def test_an_old_molnextr_paper_is_read_by_molparser(db_session):
+    """A paper whose engine was MolNexTR (before 2026-11-25) gets MolParser as its own read on
+    new segments (a page retried, a late page), DECIMER and MolScribe in the background."""
+    s = db_session
+    paper = segmented(s, engine=Engine.MOLNEXTR)
+    ocsr = steps(s, paper, "ocsr")
+    assert sorted({(st.engine, st.queue) for st in ocsr}) == [
+        ("decimer", "q.decimer"), ("molparser", "q.molparser"), ("molscribe", "q.molscribe"),
+    ]  # fmt: skip
+    background = background_ids(s)
+    assert {st.engine for st in ocsr if st.id not in background} == {"molparser"}
+
+
+def test_molnextr_requests_are_refused_by_the_planner(db_session):
+    import pytest
+
+    from marcus.core.pipeline import request_ocsr
+
+    s = db_session
+    paper = segmented(s)
+    seg = steps(s, paper, "ocsr")[0].segment_id
+    with pytest.raises(ValueError, match="no longer run"):
+        request_ocsr(s, seg, Engine.MOLNEXTR)

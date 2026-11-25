@@ -79,6 +79,9 @@ async def test_step_out_has_engine(app, async_db_session):
     ocsr = [s for s in steps if s["kind"] == "ocsr"]
     assert sorted(s["engine"] for s in ocsr if not s["background"]) == ["decimer", "decimer"]
     assert sorted(s["engine"] for s in ocsr if s["background"]) == [
-        "molnextr", "molnextr", "molscribe", "molscribe"
+        "molparser",
+        "molparser",
+        "molscribe",
+        "molscribe",
     ]
     assert all(s["engine"] is None for s in steps if s["kind"] != "ocsr")

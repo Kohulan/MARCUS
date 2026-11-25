@@ -108,7 +108,8 @@ export default function Compare({
   const [common, setCommon] = useState(false);
   const part = useCommonPart(valid, common);
 
-  // "Use coordinates" of MolScribe and MolNexTR (on at every opening; this dialog only). On: the
+  // "Use coordinates" of MolScribe and MolNexTR (old papers; never MolParser, which has no image
+  // positions) (on at every opening; this dialog only). On: the
   // engine's drawing uses its own positions from the image, and it can be the template of the
   // others (MolScribe first). Off, or a molfile without the image's positions: the normal layout,
   // and no template.
@@ -232,6 +233,7 @@ export default function Compare({
               {rows.map((r) => (
                 <td key={r.engine} className={`cmp-result cmp-result--${resultTone(r)}`}>
                   {resultText(r)}
+                  {/* offered engines only: an old paper's MolNexTR shows its result, no Retry */}
                   {r.state === "failed" && asEngine(r.engine) !== null && (
                     <span className="cmp-result__retry">
                       <GlassButton

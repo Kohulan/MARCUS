@@ -16,7 +16,7 @@ from marcus.workers.ocsr.base import configured_engines
 ENGINE_MODULES: dict[Engine, str] = {
     Engine.DECIMER: "marcus.workers.ocsr.decimer",
     Engine.DECIMER_HAND: "marcus.workers.ocsr.decimer",
-    Engine.MOLNEXTR: "marcus.workers.ocsr.molnextr",
+    Engine.MOLPARSER: "marcus.workers.ocsr.molparser",
     Engine.MOLSCRIBE: "marcus.workers.ocsr.molscribe",
 }
 

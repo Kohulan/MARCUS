@@ -28,7 +28,7 @@ export type EngineRow = {
 };
 
 /** The three main engines, Compare's columns. DECIMER hand-drawn is the DECIMER column's toggle. */
-export const MAIN_ENGINES: readonly Engine[] = ["decimer", "molnextr", "molscribe"];
+export const MAIN_ENGINES: readonly Engine[] = ["decimer", "molparser", "molscribe"];
 const HAND: Engine = "decimer-hand";
 
 /**

@@ -65,7 +65,7 @@ a synthetic article made for MARCUS (no copyrighted content).</sub>
 | Step | What does it | What you get |
 | :--- | :--- | :--- |
 | Find the structures | [DECIMER Segmentation](https://github.com/Kohulan/DECIMER-Image-Segmentation) | a crop of every structure drawing, with its page and box |
-| Read them | [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer) (default), DECIMER hand-drawn, [MolNexTR](https://github.com/CYF2000127/MolNexTR), [MolScribe](https://github.com/thomas0809/MolScribe) | SMILES and molfiles; run all four and compare them side by side |
+| Read them | [DECIMER](https://github.com/Kohulan/DECIMER-Image_Transformer) (default), DECIMER hand-drawn, [MolParser](https://github.com/dptech-corp/MolParser), [MolScribe](https://github.com/thomas0809/MolScribe) | SMILES and molfiles; run all four and compare them side by side |
 | Read the text | [Docling](https://github.com/docling-project/docling) | the paper's text and layout, and its DOI |
 | Annotate | the MARCUS model, on [llama.cpp](https://github.com/ggml-org/llama.cpp) on the server's GPU | organism, part, place and compound names, each found in the text |
 | Read R-group tables | the same MARCUS model, from the page image and its text | the compounds a scaffold with R-groups stands for (`3a: R1 = OMe`), to check against the paper |
@@ -106,7 +106,7 @@ stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/architecture-dark.svg">
-  <img src="docs/assets/readme/architecture-light.svg" width="100%" alt="The browser talks to nginx, which serves the web UI and passes /api/v2 to FastAPI on Postgres and Redis. Celery workers, one queue per kind of work, run the engines: segmentation, DECIMER, MolNexTR, MolScribe and the MARCUS model on the GPU.">
+  <img src="docs/assets/readme/architecture-light.svg" width="100%" alt="The browser talks to nginx, which serves the web UI and passes /api/v2 to FastAPI on Postgres and Redis. Celery workers, one queue per kind of work, run the engines: segmentation, DECIMER, MolParser, MolScribe and the MARCUS model on the GPU.">
 </picture>
 
 - **Web UI** ([`frontend-v2/`](frontend-v2)): React 18, TypeScript and Vite; the static pages are
@@ -171,7 +171,7 @@ MARCUS stands on open tools:
 [Docling](https://github.com/docling-project/docling) ·
 [Ketcher](https://github.com/epam/ketcher) ·
 [llama.cpp](https://github.com/ggml-org/llama.cpp) ·
-[MolNexTR](https://github.com/CYF2000127/MolNexTR) ·
+[MolParser](https://github.com/dptech-corp/MolParser) ·
 [MolScribe](https://github.com/thomas0809/MolScribe) ·
 [RDKit](https://www.rdkit.org/)
 

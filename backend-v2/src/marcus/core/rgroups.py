@@ -3,8 +3,9 @@
 A drawing with R1, X, Ar... stands for several compounds, not one. What the engines emit for one
 (MARKUSH-RESEARCH.md section 2.4):
 
-- MolScribe and MolNexTR: a dummy atom (atomic number 0), `*` or `[1*]` in the SMILES, with the
-  drawn label kept as the atom's alias in the molfile (`A  1` / `R1`). Ketcher writes `R#` atoms
+- MolScribe, MolNexTR (old predictions) and MolParser: a dummy atom (atomic number 0), `*` or
+  `[1*]` in the SMILES, with the drawn label kept as the atom's alias in the molfile (`A  1` /
+  `R1`; MolParser's from its E-SMILES labels, marcus.workers.ocsr.molparser). Ketcher writes `R#` atoms
   with an `M  RGP` line. RDKit reads all of them as atomic number 0.
 - DECIMER: bracket tokens `[R]`, `[R1]`, `[R']`, `[X]`, `[Z1]`... that RDKit cannot parse, so
   the prediction is invalid. Such a SMILES counts as an R-group scaffold only when it parses

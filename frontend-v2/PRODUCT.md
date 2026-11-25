@@ -23,7 +23,7 @@ MARCUS (Molecular Annotation and Recognition for Curating Unravelled Structures)
 
 ## Positioning
 
-The whole pipeline in one open tool: segment, recognise with several engines (DECIMER by default, MolNexTR, MolScribe, DECIMER hand-drawn) and compare them, curate with a human in the loop, and submit to COCONUT. Open source (MIT), free, no login, runs on the group's own GPU, and sends no paper data to outside AI services.
+The whole pipeline in one open tool: segment, recognise with several engines (DECIMER by default, MolParser, MolScribe, DECIMER hand-drawn) and compare them, curate with a human in the loop, and submit to COCONUT. Open source (MIT), free, no login, runs on the group's own GPU, and sends no paper data to outside AI services.
 
 ## Operating Context
 

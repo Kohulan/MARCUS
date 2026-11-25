@@ -173,8 +173,8 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
       compound_id: "12",
       compound_name: "salsubstolin A",
     });
-    Object.assign(shown.segments[1]!, { agree: 3, agree_engines: ["decimer", "molnextr", "molscribe"] });
-    Object.assign(shown.segments[2]!, { agree: 2, agree_engines: ["molnextr", "molscribe"] });
+    Object.assign(shown.segments[1]!, { agree: 3, agree_engines: ["decimer", "molparser", "molscribe"] });
+    Object.assign(shown.segments[2]!, { agree: 2, agree_engines: ["molparser", "molscribe"] });
     await page.route(`**/api/v2/papers/${PID}`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(shown) }),
     );
@@ -196,7 +196,7 @@ test.describe("accessibility", { tag: "@mocked" }, () => {
     await page.keyboard.press("c");
     const dialog = page.getByRole("dialog", { name: /Compare engines/ });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText("MolNexTR").first()).toBeVisible();
+    await expect(dialog.getByText("MolParser").first()).toBeVisible();
     await expectNoA11yViolations(page);
   });
 

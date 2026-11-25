@@ -1,5 +1,5 @@
-"""Helpers shared by the torch OCSR engines (MolNexTR, MolScribe). Nothing here imports torch or
-the model packages at import time.
+"""Helpers shared by the torch OCSR engines (MolScribe, MolParser; MolNexTR until 2026-11-25).
+Nothing here imports torch or the model packages at import time.
 
 - `package_commit`: the engine version is the git commit the package was installed from
   (PEP 610 direct_url.json, written by the installer), short form.

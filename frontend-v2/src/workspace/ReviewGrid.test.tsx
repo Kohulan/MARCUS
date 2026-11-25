@@ -206,26 +206,26 @@ describe("cards and their states", () => {
 
   it("the engines' badge: 3 agree, 2 agree naming both, Differ; nothing while they read", async () => {
     const decimer = prediction({ smiles: "OCC" });
-    const molnextr = prediction({ engine: "molnextr", smiles: "CCO" });
+    const molparser = prediction({ engine: "molparser", smiles: "CCO" });
     const molscribe = prediction({ engine: "molscribe", smiles: "CCO" });
-    const three = [prediction({ engine: "molscribe" }), prediction({ engine: "molnextr" }), prediction()];
+    const three = [prediction({ engine: "molscribe" }), prediction({ engine: "molparser" }), prediction()];
     renderGrid(
       paper([
         segment("s1", {
           predictions: three,
           agree: 3,
           agree_of: 3,
-          agree_engines: ["decimer", "molnextr", "molscribe"],
+          agree_engines: ["decimer", "molparser", "molscribe"],
         }),
         segment("s2", {
-          predictions: [molscribe, molnextr, decimer],
+          predictions: [molscribe, molparser, decimer],
           agree: 2,
           agree_of: 3,
-          agree_engines: ["molnextr", "molscribe"],
-          default_prediction_id: molnextr.id,
+          agree_engines: ["molparser", "molscribe"],
+          default_prediction_id: molparser.id,
         }),
         segment("s3", { predictions: three, agree: 0, agree_of: 3, agree_engines: [] }),
-        segment("s4", { predictions: three, agree: null, agree_engines: ["molnextr", "molscribe"] }),
+        segment("s4", { predictions: three, agree: null, agree_engines: ["molparser", "molscribe"] }),
       ]),
     );
     await waitFor(() => expect(cards()).toHaveLength(4));
@@ -234,9 +234,9 @@ describe("cards and their states", () => {
     // The majority's structure is shown (the server's pick), naming its two engines.
     expect(within(card("[02]")).getByText("2 agree")).toHaveAttribute(
       "title",
-      "MolNexTR and MolScribe agree",
+      "MolParser and MolScribe agree",
     );
-    expect(within(card("[02]")).getByText("MolNexTR + MolScribe · Valid")).toBeInTheDocument();
+    expect(within(card("[02]")).getByText("MolParser + MolScribe · Valid")).toBeInTheDocument();
     expect(within(card("[02]")).getByText("CCO")).toBeInTheDocument();
     expect(within(card("[03]")).getByText("Differ")).toBeInTheDocument();
     for (const word of ["agree", "Differ"]) {
@@ -300,12 +300,31 @@ describe("cards and their states", () => {
     expect(filter("To check")).toHaveTextContent("1");
   });
 
+  it("an old paper's badge still names MolNexTR", async () => {
+    const molnextr = prediction({ engine: "molnextr", smiles: "CCO" });
+    renderGrid(
+      paper([
+        segment("s1", {
+          predictions: [prediction({ engine: "molscribe", smiles: "CCO" }), molnextr, prediction({ smiles: "CCO" })],
+          agree: 3,
+          agree_of: 3,
+          agree_engines: ["decimer", "molnextr", "molscribe"],
+        }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(within(card("[01]")).getByText("3 agree")).toHaveAttribute(
+      "title",
+      "DECIMER, MolNexTR and MolScribe agree",
+    );
+  });
+
   it("a card read again with DECIMER hand-drawn says its first run loads the model", async () => {
     const note = "The first run can take about 30 s";
     renderGrid(paper([segment("s1", { predictions: [] }), segment("s2", { predictions: [] })], { status: "processing" }), [
       step({ segment_id: "s1", status: "failed", error_class: "timeout" }),
       step({ segment_id: "s1", status: "queued", engine: "decimer-hand" }),
-      step({ segment_id: "s2", status: "running", engine: "molnextr" }),
+      step({ segment_id: "s2", status: "running", engine: "molparser" }),
     ]);
     await waitFor(() => expect(cards()).toHaveLength(2));
     await waitFor(() => expect(within(card("[01]")).getByText("Reading…")).toBeInTheDocument());
@@ -327,12 +346,12 @@ describe("cards and their states", () => {
     // the other three engines, not the one that failed, then Compare
     expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "DECIMER hand-drawn",
-      "MolNexTR",
+      "MolParser",
       "MolScribe",
       "Compare",
     ]);
-    fireEvent.click(within(menu).getByRole("button", { name: "MolNexTR" }));
-    await waitFor(() => expect(run).toHaveBeenCalledWith("s1", "molnextr"));
+    fireEvent.click(within(menu).getByRole("button", { name: "MolParser" }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith("s1", "molparser"));
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
   });
 
@@ -589,7 +608,7 @@ describe("Compare and the background engines", () => {
     const run = vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "x" });
     renderGrid(paper([segment("s1")]), [
       step({ segment_id: "s1", status: "done" }),
-      step({ segment_id: "s1", engine: "molnextr", status: "running", background: true }),
+      step({ segment_id: "s1", engine: "molparser", status: "running", background: true }),
     ]);
     await waitFor(() => expect(cards()).toHaveLength(1));
     fireEvent.click(within(card("[01]")).getByRole("button", { name: "Compare [01]" }));

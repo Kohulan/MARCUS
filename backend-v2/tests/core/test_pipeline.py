@@ -99,7 +99,7 @@ def test_render_creates_segment_step_for_same_page(db_session):
 @pytest.mark.parametrize("mode", ["auto", "off"])
 def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode):
     s = db_session
-    paper = make_paper(s, engine=Engine.MOLNEXTR, ocsr_mode=mode)
+    paper = make_paper(s, engine=Engine.MOLPARSER, ocsr_mode=mode)
     to_processing(s, paper, pages=3)
     render_p2 = steps(s, paper, "render_page")[2]
     (seg_step,) = finish(s, render_p2, {})
@@ -119,10 +119,10 @@ def test_segment_creates_ocsr_steps_when_auto_and_none_when_off(db_session, mode
     got = [(st.kind, st.engine, st.queue, st.page, st.seq, st.segment_id) for st in new]
     # the paper's engine, then the other two in the background (phase B item 3)
     assert got == [
-        ("ocsr", "molnextr", "q.molnextr", 2, 2000, segs[0].id),
+        ("ocsr", "molparser", "q.molparser", 2, 2000, segs[0].id),
         ("ocsr", "decimer", "q.decimer", 2, 2000, segs[0].id),
         ("ocsr", "molscribe", "q.molscribe", 2, 2000, segs[0].id),
-        ("ocsr", "molnextr", "q.molnextr", 2, 2001, segs[1].id),
+        ("ocsr", "molparser", "q.molparser", 2, 2001, segs[1].id),
         ("ocsr", "decimer", "q.decimer", 2, 2001, segs[1].id),
         ("ocsr", "molscribe", "q.molscribe", 2, 2001, segs[1].id),
     ]
@@ -736,12 +736,12 @@ def test_request_image_ocsr_reopens_done_job(db_session):
     finish(s, step, OCSR)
     s.refresh(job)
     assert job.status == "done"
-    new = request_image_ocsr(s, job.id, Engine.MOLNEXTR)
+    new = request_image_ocsr(s, job.id, Engine.MOLPARSER)
     s.refresh(job)
     assert job.status == "queued"
     assert (new.kind, new.engine, new.status, new.image_job_id, new.seq) == (
         "ocsr",
-        "molnextr",
+        "molparser",
         "pending",
         job.id,
         1,
@@ -901,7 +901,7 @@ def test_a_settled_image_job_keeps_no_address(db_session):
     finish(s, step, OCSR)
     s.refresh(job)
     assert job.status == "done" and job.started_ip is None and job.started_ip_at is None
-    request_image_ocsr(s, job.id, Engine.MOLNEXTR, started_ip="198.51.100.9")
+    request_image_ocsr(s, job.id, Engine.MOLPARSER, started_ip="198.51.100.9")
     assert job.status == "queued" and job.started_ip == "198.51.100.9"  # active again
     assert _just_now(job.started_ip_at)
 
@@ -929,19 +929,19 @@ def test_an_ocsr_request_while_one_waits_gets_it_back(db_session):
     s.add(Segment(paper_id=paper.id, page=0, idx=0, bbox=[0, 0, 1, 1], image_sha256="0" * 64))
     s.flush()
     seg = s.execute(select(Segment).where(Segment.paper_id == paper.id)).scalar_one()
-    first = request_ocsr(s, seg.id, Engine.MOLNEXTR)
-    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id == first.id
+    first = request_ocsr(s, seg.id, Engine.MOLPARSER)
+    assert request_ocsr(s, seg.id, Engine.MOLPARSER).id == first.id
     other = request_ocsr(s, seg.id, Engine.MOLSCRIBE)
     assert other.id != first.id
     run(s, first)
-    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id == first.id  # running counts too
+    assert request_ocsr(s, seg.id, Engine.MOLPARSER).id == first.id  # running counts too
     complete_step(s, first.id, OCSR)
-    assert request_ocsr(s, seg.id, Engine.MOLNEXTR).id != first.id  # ended: a new run
+    assert request_ocsr(s, seg.id, Engine.MOLPARSER).id != first.id  # ended: a new run
 
 
 def test_an_image_ocsr_request_while_one_waits_gets_it_back(db_session):
     s = db_session
     job, step = make_image_job(s)
-    first = request_image_ocsr(s, job.id, Engine.MOLNEXTR)
-    assert request_image_ocsr(s, job.id, Engine.MOLNEXTR).id == first.id
+    first = request_image_ocsr(s, job.id, Engine.MOLPARSER)
+    assert request_image_ocsr(s, job.id, Engine.MOLPARSER).id == first.id
     assert request_image_ocsr(s, job.id, Engine.DECIMER).id == step.id  # the job's own, waiting
