@@ -24,34 +24,60 @@ test.describe("COCONUT side form", { tag: "@mocked" }, () => {
     };
     let current: unknown = paper;
     await page.route(`**/api/v2/papers/${PID}`, (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(current) }),
-    );
-    await page.route(`**/api/v2/segments/${FIRST}/curation`, (route) => {
-      current = accepted;
-      return route.fulfill({
+      route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ status: "accepted", smiles: null, molfile: null, note: null }),
-      });
-    });
+        body: JSON.stringify(current),
+      }),
+    );
+    // the path only: a decision adds ?decision=true&shown_prediction_id=...
+    await page.route(
+      (url) => url.pathname === `/api/v2/segments/${FIRST}/curation`,
+      (route) => {
+        current = accepted;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            status: "accepted",
+            smiles: null,
+            molfile: null,
+            note: null,
+          }),
+        });
+      },
+    );
   });
 
   test.afterEach(async () => {
     expect(await csp()).toEqual([]);
   });
 
-  test("Accept opens the filled form; login at the end; Download JSON", async ({ page }) => {
+  test("Accept opens the filled form; login at the end; Download JSON", async ({
+    page,
+  }) => {
     await page.goto(`/app/papers/${PID}?view=paper`);
     await page.getByRole("button", { name: "Accept [01]" }).click();
     const form = page.getByRole("complementary", { name: "COCONUT [01]" });
     await expect(form).toBeVisible();
-    await expect(form.getByRole("heading", { name: "Log in to COCONUT" })).toBeVisible();
-    await expect(form.getByRole("button", { name: "Send to COCONUT" })).toHaveCount(0);
+    await expect(page.getByRole("article", { name: "[01] · Page 1, Accepted" })).toBeVisible();
+    await expect(
+      form.getByRole("heading", { name: "Log in to COCONUT" }),
+    ).toBeVisible();
+    await expect(
+      form.getByRole("button", { name: "Send to COCONUT" }),
+    ).toHaveCount(0);
     const download = page.waitForEvent("download");
     await form.getByRole("button", { name: "Download JSON" }).click();
     const file = await download;
     expect(file.suggestedFilename()).toMatch(/^marcus-coconut-.+\.json$/);
-    const doc = JSON.parse(await (await file.createReadStream()).toArray().then((c) => Buffer.concat(c).toString()));
+    const doc = JSON.parse(
+      await (
+        await file.createReadStream()
+      )
+        .toArray()
+        .then((c) => Buffer.concat(c).toString()),
+    );
     expect(doc.format).toBe("marcus-coconut-1");
     expect(doc.structure.tag).toBe("[01]");
     await expectNoA11yViolations(page);
