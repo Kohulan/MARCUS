@@ -82,6 +82,10 @@ RGROUPS_SEQ = 100_003
 MAX_ATTEMPTS = 2  # a step is retried once; the second failure is final
 
 ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.value)
+# ocsr_mode values in which a rendered page waits for the user (no segment_page step).
+WAITING_MODES = ("ask", "pick")
+# choose_mode's allowed (from, to) mode changes.
+MODE_CHANGES = {("ask", "auto"), ("ask", "pick"), ("pick", "auto")}
 
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
@@ -115,11 +119,20 @@ class BadResult(ValueError):
 
 
 class RetryNotAllowed(Exception):
-    """retry_page refused: the page has not failed, is still running, or has no retries left."""
+    """retry_page refused: the page has not failed, is still running, or has no retries left;
+    segment_page_on_request also: the page is not rendered yet."""
 
-    def __init__(self, reason: Literal["not_failed", "busy", "limit"]):
+    def __init__(self, reason: Literal["not_failed", "busy", "limit", "not_rendered"]):
         super().__init__(reason)
         self.reason = reason
+
+
+class ModeNotAllowed(Exception):
+    """A pick-mode request the paper's ocsr_mode does not allow (choose_mode: a transition other
+    than ask -> auto|pick or pick -> auto; segment_page_on_request / read_segment: the paper is
+    not in mode pick). Not a ValueError: the routes answer 409, not 404."""
+
+    reason = "mode"
 
 
 class RgroupsNotAllowed(Exception):
@@ -599,6 +612,8 @@ def _after_check_pdf(session: Session, paper: Paper, step: Step, result: dict) -
 
 
 def _after_render_page(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
+    if paper.ocsr_mode in WAITING_MODES:
+        return []  # segmented when the user chooses (ask) or opens the page (pick)
     cached = _cached_page(session, paper, step.page)
     if cached is not None:
         return _add_segments(session, paper, step.page, cached)
@@ -626,7 +641,13 @@ def _add_segments(session: Session, paper: Paper, page: int, items: list[dict]) 
     )
     session.add_all(Curation(segment_id=seg.id, status="unchecked") for seg in segments)
     if paper.ocsr_mode != "auto":
-        return []
+        return []  # off: read nothing; pick: a box is read when the user picks it
+    return _read_steps(session, paper, segments)
+
+
+def _read_steps(session: Session, paper: Paper, segments: list[Segment]) -> list[Step]:
+    """Each segment's OCSR steps: the paper's engine as its own read, the other agreement
+    engines in the background (phase B item 3). Flushed, with their background_steps rows."""
     own = run_engine(paper.engine)
     steps = []
     for seg in segments:
@@ -1202,6 +1223,170 @@ def retry_page(
         keep_address(paper, started_ip)
     session.flush()
     return step
+
+
+# --- all pages or pick a structure (owner decision 2026-11-25) ------------------------------
+
+
+def _reopen(paper: Paper, started_ip: str | None) -> None:
+    """A done or failed paper with new work goes back to `processing` (as retry_page)."""
+    if paper.status in (PaperStatus.DONE.value, PaperStatus.FAILED.value):
+        paper.status = PaperStatus.PROCESSING.value
+        paper.error = None
+        keep_address(paper, started_ip)
+
+
+def _rendered_pages(session: Session, paper: Paper) -> set[int]:
+    return set(
+        session.execute(
+            select(Step.page).where(
+                Step.paper_id == paper.id,
+                Step.kind == StepKind.RENDER_PAGE.value,
+                Step.status == StepStatus.DONE.value,
+            )
+        ).scalars()
+    )
+
+
+def _unread_segments(session: Session, paper: Paper, page: int | None = None) -> list[Segment]:
+    """The paper's segments (of one page) that have no OCSR step: pick-mode candidates."""
+    has_step = (
+        select(Step.id)
+        .where(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
+        .exists()
+    )
+    q = select(Segment).where(Segment.paper_id == paper.id, ~has_step)
+    if page is not None:
+        q = q.where(Segment.page == page)
+    return list(session.execute(q.order_by(Segment.page, Segment.idx)).scalars())
+
+
+def choose_mode(
+    session: Session,
+    paper_id: uuid.UUID,
+    mode: Literal["auto", "pick"],
+    started_ip: str | None = None,
+) -> list[Step]:
+    """The user's answer on the paper page (ask -> auto | pick), or "Read all pages" in pick
+    mode (pick -> auto). Caller commits.
+
+    To `auto`: every rendered page with no segment_page step and no segments gets its cached
+    segments (then read like any page) or a segment_page step; every segment with no OCSR step
+    (a pick-mode candidate) gets the three engines' steps. Pages rendered later follow the normal
+    path. A done paper with new work goes back to processing. To `pick`: nothing runs yet.
+    Returns the new steps. Raises ValueError for a missing or deleted paper and ModeNotAllowed
+    for any other change."""
+    paper = _lock(session, Paper, paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper not found")
+    if (paper.ocsr_mode, mode) not in MODE_CHANGES:
+        raise ModeNotAllowed()
+    paper.ocsr_mode = mode
+    session.flush()
+    if mode == "pick":
+        return []
+    new = _read_steps(session, paper, _unread_segments(session, paper))
+    handled = set(
+        session.execute(
+            select(Step.page).where(
+                Step.paper_id == paper.id, Step.kind == StepKind.SEGMENT_PAGE.value
+            )
+        ).scalars()
+    ) | set(session.execute(select(Segment.page).where(Segment.paper_id == paper.id)).scalars())
+    for page in sorted(_rendered_pages(session, paper) - handled):
+        cached = _cached_page(session, paper, page)
+        if cached is not None:
+            new += _add_segments(session, paper, page, cached)
+        else:
+            step = _new_step(paper, StepKind.SEGMENT_PAGE, page, page=page, created_at=_now())
+            session.add(step)
+            new.append(step)
+    if new:
+        _reopen(paper, started_ip)
+    session.flush()
+    return new
+
+
+def segment_page_on_request(
+    session: Session, paper_id: uuid.UUID, page: int, started_ip: str | None = None
+) -> Step | None:
+    """Pick mode: the user opened a page (0-based). Its segments appear as candidates (no OCSR).
+    None when its boxes are there (found before, or now from the segmentation cache); else the
+    page's segment_page step: the one waiting or running, the done one that found no box, or a
+    new one (the first, or a retry after a failure within MANUAL_PAGE_RETRIES). Caller commits.
+
+    Raises ValueError for a missing or deleted paper or a page outside it, ModeNotAllowed when
+    the paper is not in pick mode, RetryNotAllowed("not_rendered") before the page's image
+    exists and ("limit") when no retry is left."""
+    paper = _lock(session, Paper, paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper not found")
+    if paper.ocsr_mode != "pick":
+        raise ModeNotAllowed()
+    if paper.pages is None or not 0 <= page < paper.pages:
+        raise ValueError("page not found")
+    session.flush()
+    if page not in _rendered_pages(session, paper):
+        raise RetryNotAllowed("not_rendered")
+    if session.execute(
+        select(Segment.id).where(Segment.paper_id == paper.id, Segment.page == page).limit(1)
+    ).first():
+        return None
+    tried = list(
+        session.execute(
+            select(Step)
+            .where(
+                Step.paper_id == paper.id,
+                Step.page == page,
+                Step.kind == StepKind.SEGMENT_PAGE.value,
+            )
+            .order_by(Step.created_at.desc(), Step.id.desc())
+        ).scalars()
+    )
+    if tried and (tried[0].status in ACTIVE or tried[0].status == StepStatus.DONE.value):
+        return tried[0]  # still running, or done without a box
+    if not tried:
+        cached = _cached_page(session, paper, page)
+        if cached is not None:
+            _add_segments(session, paper, page, cached)
+            session.flush()
+            return None
+    elif len(tried) - 1 >= MANUAL_PAGE_RETRIES:
+        raise RetryNotAllowed("limit")
+    step = _new_step(paper, StepKind.SEGMENT_PAGE, page, page=page, created_at=_now())
+    session.add(step)
+    _reopen(paper, started_ip)
+    session.flush()
+    return step
+
+
+def read_segment(
+    session: Session, segment_id: uuid.UUID, started_ip: str | None = None
+) -> list[Step]:
+    """Pick mode: the user picked a box. Its OCSR steps (the three engines, as a segment of an
+    auto paper); the ones it already has when it was picked before. Caller commits.
+
+    Raises ValueError for a missing segment or a deleted paper and ModeNotAllowed when the paper
+    is not in pick mode."""
+    segment = session.get(Segment, segment_id)
+    if segment is None:
+        raise ValueError("segment not found")
+    paper = _lock(session, Paper, segment.paper_id)
+    if paper is None or paper.status == PaperStatus.DELETED.value:
+        raise ValueError("paper is deleted")
+    if paper.ocsr_mode != "pick":
+        raise ModeNotAllowed()
+    existing = list(
+        session.execute(
+            select(Step).where(Step.segment_id == segment.id, Step.kind == StepKind.OCSR.value)
+        ).scalars()
+    )
+    if existing:
+        return existing
+    new = _read_steps(session, paper, [segment])
+    _reopen(paper, started_ip)
+    session.flush()
+    return new
 
 
 def request_image_ocsr(
