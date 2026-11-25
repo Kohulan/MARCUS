@@ -4,6 +4,7 @@ import type {
   AnnotationOut,
   AnnotationStarted,
   AnnotationValues,
+  BuildOut,
   BulkCurationItem,
   BulkCurationOut,
   CompareReply,
@@ -280,6 +281,9 @@ export const api = {
     request<SegmentAccepted>(`/papers/${enc(paperId)}/pages/${page0}/segment`, {
       method: "POST",
     }),
+  /** Markush Phase 3: build each R-group row of the scaffold into its own structure. */
+  buildStructures: (segmentId: string) =>
+    request<BuildOut>(`/segments/${enc(segmentId)}/build`, { method: "POST" }),
   /** Pick mode: read one box with the three engines. */
   readSegment: (segmentId: string) =>
     request<ReadAccepted>(`/segments/${enc(segmentId)}/read`, { method: "POST" }),

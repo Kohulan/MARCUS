@@ -317,7 +317,14 @@ function StructureCard({
           <p className="card__reason">{readingNote}</p>
         )}
         {scaffold !== null && (
-          <RgroupRows predictionId={scaffold.id} labels={rgroups} tag={tag} compact />
+          <RgroupRows
+            predictionId={scaffold.id}
+            segmentId={segment.id}
+            failures={segment.build_failures ?? null}
+            labels={rgroups}
+            tag={tag}
+            compact
+          />
         )}
         {/* Compact (Paper view): the stamp sits in the text column, clear of the drawing. */}
         {compact && stamp}

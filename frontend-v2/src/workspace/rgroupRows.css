@@ -85,3 +85,11 @@
   align-items: center;
   gap: 6px;
 }
+
+/* Markush Phase 3: the rows a build could not build, each with its reason. */
+.rg__failed {
+  margin: 0;
+  padding-inline-start: 1.2em;
+  font-size: 13px;
+  color: var(--text-2);
+}

@@ -2,9 +2,11 @@
 // page's text are read, or by hand): its progress or failure, the rows as a table (one row per
 // compound, one column per label), then a small action (Run again).
 // Every value is model text: rendered as React text only, and marked as output to check.
-import { useState } from "react";
-import { errorText } from "../api/client";
-import type { RgroupRow } from "../api/types";
+import { useQueryClient } from "@tanstack/react-query";
+import { useContext, useState } from "react";
+import { api, errorText } from "../api/client";
+import { refreshPaper } from "../api/queries";
+import type { BuildFailure, RgroupRow } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import {
   compoundCount,
@@ -14,12 +16,17 @@ import {
   rgroupProgress,
   UNLABELLED,
 } from "./rgroups";
-import { useRgroupReading } from "./useRgroupRows";
+import { BUILD, COULD_NOT_BUILD, failureText } from "./built";
+import { RgroupPaper, useRgroupReading } from "./useRgroupRows";
 import "./rgroupRows.css";
 
 type Props = {
   /** The prediction the rows belong to (the scaffold shown). */
   predictionId: string;
+  /** The scaffold's segment: "Build structures" builds its rows (Markush Phase 3). */
+  segmentId: string;
+  /** The rows its last build could not build, with the reason (null: never built). */
+  failures?: BuildFailure[] | null;
   /** Its R-group labels: the columns until the server names its own. */
   labels: readonly string[];
   /** "[03]": names the table for a screen reader. */
@@ -32,9 +39,19 @@ const cell = (row: RgroupRow, label: string): string =>
   Object.hasOwn(row.groups, label) ? (row.groups[label] ?? "") : "";
 
 /** Nothing where the deployment cannot read R-groups and nothing was read before. */
-export default function RgroupRows({ predictionId, labels, tag, compact = false }: Props) {
+export default function RgroupRows({
+  predictionId,
+  segmentId,
+  failures = null,
+  labels,
+  tag,
+  compact = false,
+}: Props) {
   const { available, extraction, pending, start } = useRgroupReading(predictionId);
+  const client = useQueryClient();
+  const paperId = useContext(RgroupPaper);
   const [starting, setStarting] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   // about to start by itself: as good as queued
   const status = extraction?.status ?? (pending ? "queued" : "none");
@@ -57,6 +74,21 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
       setStarting(false);
     }
   }
+
+  async function build() {
+    setProblem(null);
+    setBuilding(true);
+    try {
+      await api.buildStructures(segmentId);
+      if (paperId !== null) refreshPaper(client, paperId);
+    } catch (err) {
+      setProblem(`Not built: ${errorText(err)}`);
+    } finally {
+      setBuilding(false);
+    }
+  }
+  // a placeholder without a label (*) can never be built (marcus.core.enumeration)
+  const buildable = askable && !active && status === "done" && rows !== null && rows.length > 0;
 
   const action = rows !== null ? "Run again" : status === "failed" ? "Try again" : "Extract R-groups";
   const said = active
@@ -107,6 +139,16 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
       {rows !== null && extraction?.truncated && (
         <p className="rg__note">Cut short: later rows are missing.</p>
       )}
+      {failures !== null && failures.length > 0 && (
+        <div className="rg__failures">
+          <p className="rg__note">{COULD_NOT_BUILD}</p>
+          <ul className="rg__failed">
+            {failures.map((f, i) => (
+              <li key={`${i}:${f.compound}`}>{failureText(f)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {status === "failed" && !active && (
         <p className="rg__problem">{rgroupFailure(extraction?.error ?? null)}</p>
       )}
@@ -116,12 +158,18 @@ export default function RgroupRows({ predictionId, labels, tag, compact = false 
             {rgroupProgress(status === "none" ? "queued" : status)}
           </span>
         ) : (
-          available &&
-          askable && (
-            <GlassButton tint="clear" size="sm" onClick={() => void run()}>
-              {action}
-            </GlassButton>
-          )
+          <>
+            {buildable && (
+              <GlassButton tint="orange" size="sm" disabled={building} onClick={() => void build()}>
+                {BUILD}
+              </GlassButton>
+            )}
+            {available && askable && (
+              <GlassButton tint="clear" size="sm" onClick={() => void run()}>
+                {action}
+              </GlassButton>
+            )}
+          </>
         )}
       </div>
       {problem !== null && (

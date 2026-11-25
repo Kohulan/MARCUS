@@ -354,7 +354,13 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
 
           {/* Under the decision row: a long table never pushes it below the fold. */}
           {scaffold !== null && (
-            <RgroupRows predictionId={scaffold.id} labels={rgroups} tag={tag} />
+            <RgroupRows
+              predictionId={scaffold.id}
+              segmentId={segment.id}
+              failures={segment.build_failures ?? null}
+              labels={rgroups}
+              tag={tag}
+            />
           )}
 
           {segment.predictions.length > 0 && (
