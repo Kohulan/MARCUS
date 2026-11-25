@@ -12,15 +12,20 @@ import { errorText } from "../api/client";
 import { useMainFigure } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
-import type { StepOut } from "../api/types";
+import type { CurationStatus, StepOut } from "../api/types";
+import CoconutSidePanel from "../coconut/CoconutSidePanel";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { useToast } from "../ui/Toasts";
+import { shownPrediction } from "./cardState";
+import { type CoconutStart, coconutStart } from "./coconutList";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
+import { useAnnotation } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
+import { useRgroupReading } from "./useRgroupRows";
 import type { ReviewRow } from "./useReviewRows";
 import { type Workspace, waitsForPicks } from "./useWorkspace";
 import "./paper.css";
@@ -99,7 +104,17 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
-  const { decide: onDecide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
+  const { decide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
+  // COCONUT side form (owner decision 2026-11-25): Accept here opens it for that structure.
+  const [side, setSide] = useState<string | null>(null);
+  const onDecide = useCallback(
+    (segmentId: string, status: CurationStatus) => {
+      decide(segmentId, status);
+      if (status === "accepted") setSide(segmentId);
+    },
+    [decide],
+  );
+  const annotation = useAnnotation(paper.id).data;
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -220,7 +235,7 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const hoveredPage = pageOf(hovered);
 
   return (
-    <div className="pv" ref={view}>
+    <div className={side !== null ? "pv pv--side" : "pv"} ref={view}>
       <section className="pv-col pv-col--pages" aria-labelledby={pagesHead} ref={pagesCol}>
         <div className="pv-cap">
           <h2 id={pagesHead} className="pv-cap__title">
@@ -304,6 +319,53 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           </div>
         )}
       </section>
+      {side !== null && (
+        <SideForm
+          key={side}
+          ws={ws}
+          rows={rows}
+          segmentId={side}
+          start={coconutStart(annotation)}
+          onClose={() => setSide(null)}
+        />
+      )}
     </div>
+  );
+}
+
+
+/** The side form of one structure; its scaffold row when it was built (Markush Phase 3). */
+function SideForm({
+  ws,
+  rows,
+  segmentId,
+  start,
+  onClose,
+}: {
+  ws: Workspace;
+  rows: ReviewRow[];
+  segmentId: string;
+  start: CoconutStart;
+  onClose: () => void;
+}) {
+  const paper = ws.paper!;
+  const segment = ws.segments.find((s) => s.id === segmentId);
+  const row = rows.find((r) => r.segmentId === segmentId);
+  const built = row?.builtFrom ?? null;
+  const scaffold = built ? ws.segments.find((s) => s.id === built.segmentId) : undefined;
+  const reading = useRgroupReading(scaffold ? shownPrediction(scaffold, paper.engine)?.id : undefined);
+  if (!segment || !row) return null;
+  const rgroupRow =
+    reading.extraction?.rows?.find((r) => r.compound === segment.compound_id) ?? null;
+  return (
+    <CoconutSidePanel
+      paper={paper}
+      segment={segment}
+      n={row.n}
+      start={start}
+      built={built}
+      row={rgroupRow}
+      onClose={onClose}
+    />
   );
 }
