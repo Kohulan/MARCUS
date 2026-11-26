@@ -42,6 +42,13 @@ AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
 MAX_HIGHLIGHT_MAPPINGS = 1000
 MAX_HIGHLIGHT_MATCHES = 32
 MAX_HIGHLIGHT_ATOMS = 128
+# Marks (owner decision 2026-11-26): atoms of the drawn SMILES, by index in SMILES order (CDK's
+# and RDKit's, as the highlight), drawn with an outer glow in the brand orange: where an answer
+# differs from the other answers of its image. No search: the caller names the atoms
+# (marcus.workers.paper_view.differences, or the trust-agreement rule). Bonds between two marked
+# atoms glow too.
+MAX_MARKS = 250  # = marcus.workers.orient.MAX_ATOMS
+MARK_COLOUR = (250, 54, 0)  # frontend tokens.css --orange #FA3600
 
 
 class ToolInputError(ValueError):
@@ -195,15 +202,18 @@ def depict(
     height: int,
     highlight: str = "",
     template: str | list[str] = "",
+    marks: list[int] | None = None,
 ) -> str:
     """CDK StandardGenerator depiction (v1 defaults: kekulize, CIP, CDK2D colours, white
     background, fill-to-fit). SVG as text; PNG as base64. `highlight` is an optional SMARTS.
     `template`: an OCSR molfile with the image's atom positions, or candidates in order; the
-    drawing then follows the paper's orientation where it can (_layout)."""
+    drawing then follows the paper's orientation where it can (_layout). `marks`: atom indices
+    (SMILES order) drawn with an orange outer glow."""
     jpype = _jvm()
     J = jpype.JClass
     mol = _smiles_to_cdk(smiles)
     try:
+        marked = _mark_objects(mol, marks) if marks else None
         mol = _cip_annotate(_layout(mol, smiles, template))
         try:
             J(f"{CDK}.aromaticity.Kekulization").kekulize(mol)
@@ -224,6 +234,10 @@ def depict(
             gen = gen.withHighlight(
                 _highlight_objects(mol, matches), J("java.awt.Color")(173, 216, 230)
             ).withOuterGlowHighlight()
+        if marked is not None:
+            # after the common part: an atom in both shows the mark
+            gen = gen.withHighlight(marked, J("java.awt.Color")(*MARK_COLOUR))
+            gen = gen.withOuterGlowHighlight()
 
         depiction = gen.depict(mol)
         if fmt == "svg":
@@ -286,6 +300,28 @@ def _highlight_matches(
         if len(found) == MAX_HIGHLIGHT_MATCHES:
             break
     return found
+
+
+def _mark_objects(mol, marks):
+    """The CDK atoms of `marks` and the bonds between two of them. ToolInputError unless
+    `marks` is a list of at most MAX_MARKS distinct atom indices of the molecule. Read before
+    the layout: the atoms are CDK's own objects, whatever positions they get."""
+    count = mol.getAtomCount()
+    if (
+        not isinstance(marks, list)
+        or len(marks) > MAX_MARKS
+        or not all(type(i) is int and 0 <= i < count for i in marks)
+        or len(set(marks)) != len(marks)
+    ):
+        raise ToolInputError("marks do not fit the drawn molecule")
+    chosen = _jvm().JClass("java.util.LinkedHashSet")()
+    wanted = set(marks)
+    for i in marks:
+        chosen.add(mol.getAtom(i))
+    for bond in mol.bonds():
+        if bond.getBegin().getIndex() in wanted and bond.getEnd().getIndex() in wanted:
+            chosen.add(bond)
+    return chosen
 
 
 def _highlight_objects(mol, matches):
@@ -423,8 +459,9 @@ def depict_task(
     height: int = 512,
     highlight: str = "",
     template: str | list[str] = "",
+    marks: list[int] | None = None,
 ) -> dict:
-    return _envelope(depict, smiles, fmt, width, height, highlight, template)
+    return _envelope(depict, smiles, fmt, width, height, highlight, template, marks)
 
 
 @celery_app.task(name="marcus.tools.smiles_to_molfile", **_LIMITS)
@@ -440,3 +477,12 @@ def mcs_task(molfiles: list[str]) -> dict:
 @celery_app.task(name="marcus.tools.compare", **_LIMITS)
 def compare_task(smiles_a: str, smiles_b: str) -> dict:
     return _envelope(compare, smiles_a, smiles_b)
+
+
+@celery_app.task(name="marcus.tools.paper_view", **_LIMITS)
+def paper_view_task(smiles: list[str], layout: str) -> dict:
+    """An image's answers on its paper layout: overlay geometry and marks
+    (marcus.workers.paper_view; RDKit only, its searches share one budget under the limit)."""
+    from marcus.workers.paper_view import paper_view  # RDKit: only where it runs
+
+    return _envelope(paper_view, smiles, layout)
