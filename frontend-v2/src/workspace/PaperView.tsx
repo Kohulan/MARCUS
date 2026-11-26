@@ -101,12 +101,24 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
  * or hovering a card brings its page into view and outlines its marker; hovering a marker
  * outlines its card.
  */
-export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow[] }) {
+export default function PaperView({
+  ws,
+  rows,
+  formRequest = null,
+}: {
+  ws: Workspace;
+  rows: ReviewRow[];
+  /** Open the COCONUT side form for this structure (accepted in Compare; owner, 2026-11-26). */
+  formRequest?: { id: string } | null;
+}) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
   const { decide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
   // COCONUT side form (owner decision 2026-11-25): Accept here opens it for that structure.
   const [side, setSide] = useState<string | null>(null);
+  useEffect(() => {
+    if (formRequest) setSide(formRequest.id);
+  }, [formRequest]);
   const onDecide = useCallback(
     (segmentId: string, status: CurationStatus) => {
       decide(segmentId, status);

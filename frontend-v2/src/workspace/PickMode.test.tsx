@@ -261,6 +261,21 @@ describe("mode pick", () => {
     expect(screen.queryByRole("complementary", { name: "COCONUT [01]" })).toBeNull();
   });
 
+  it("Use this one in Compare (an accept) opens the COCONUT form too (owner, 2026-11-26)", async () => {
+    const pred = (id: string, engine: string) => ({ id, engine, engine_version: "1", smiles: "c1ccccc1", molfile: null, valid: true, ms: 1, cached: false, created_at: "2026-11-18T10:00:00Z" });
+    renderAt(paper([segment("s1", { page: 1, candidate: false, compound_id: "12", predictions: [pred("pm", "molparser"), pred("pd", "decimer"), pred("ps", "molscribe")] })]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 2" }));
+    const side = await screen.findByRole("region", { name: "Picked on page 2" });
+    fireEvent.click(within(side).getByRole("button", { name: "Compare [01]" }));
+    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
+    const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
+    expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12");
+  });
+
   it("before a pick, the column next to the page says what to do", async () => {
     renderAt(paper([]));
     vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
