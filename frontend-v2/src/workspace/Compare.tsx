@@ -103,10 +103,15 @@ export default function Compare({
   const batchRunning = batch.length > 0 && (sending || batchDone < batchRows.length);
   const showBatch = useHeldAfter(batchRunning, END_HOLD_MS) && batchRows.length > 0;
   const pairs = useSimilarity(rows);
-  const valid = rows.filter((r) => r.prediction?.valid).map((r) => r.prediction!);
-  const canCommon = new Set(valid.map((p) => p.smiles)).size >= 2;
+  // The common part of every structure drawn, DECIMER's R-group answer ([R1]) too: its molfile
+  // comes from CDK, as in v1 (owner, 2026-11-26).
+  const drawn = rows.filter((r) => r.prediction !== null && drawable(r.prediction));
+  const canCommon = new Set(drawn.map((r) => r.prediction!.smiles)).size >= 2;
   const [common, setCommon] = useState(false);
-  const part = useCommonPart(valid, common);
+  const part = useCommonPart(
+    drawn.map((r) => r.prediction!),
+    common,
+  );
 
   // "Use coordinates" of MolScribe and MolNexTR (old papers; never MolParser, which has no image
   // positions) (on at every opening; this dialog only). On: the
@@ -126,7 +131,6 @@ export default function Compare({
   // Every drawing from /tools/depict, each with its own template (the toggles decide), and with
   // the common part when it is shown. DECIMER's R-group scaffold ([R1], invalid for RDKit) is
   // drawn too (CDK reads it; owner, 2026-11-26), never highlighted (the highlight is RDKit's).
-  const drawn = rows.filter((r) => r.prediction !== null && drawable(r.prediction));
   const depicts = useQueries({
     queries: drawn.map((r) =>
       depictQuery(
@@ -260,7 +264,7 @@ export default function Compare({
               <td className="cmp-table__corner" />
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__use">
-                  {r.prediction?.valid && (
+                  {r.prediction && drawable(r.prediction) && (
                     <GlassButton
                       tint="green"
                       size="sm"
@@ -440,13 +444,17 @@ export function SegmentCompare({
   const own = useMemo(() => ocsrSteps(segment, steps), [segment, steps]);
   const pick = (p: PredictionOut) => {
     onClose();
-    save(segment.id, {
-      status: "accepted",
-      structure: { smiles: p.smiles, molfile: p.molfile ?? null },
-    }).then(
-      () => onSaved?.(),
-      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
-    );
+    // DECIMER's R-group answer ([R1], [X]) RDKit cannot read: saved as CDK's molfile of it,
+    // which RDKit reads with its R atoms (as v1 did; owner, 2026-11-26).
+    const structure = p.valid
+      ? Promise.resolve({ smiles: p.smiles, molfile: p.molfile ?? null })
+      : api.smilesToMolfile(p.smiles).then((molfile) => ({ smiles: null, molfile }));
+    structure
+      .then((s) => save(segment.id, { status: "accepted", structure: s }))
+      .then(
+        () => onSaved?.(),
+        (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
+      );
   };
   return (
     <Compare
