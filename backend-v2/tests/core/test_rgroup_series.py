@@ -174,7 +174,7 @@ CASES = [
 ]
 
 
-@pytest.mark.parametrize(("name", "page", "idx"), CASES, ids=lambda v: str(v))
+@pytest.mark.parametrize(("name", "page", "idx"), CASES, ids=str)
 def test_three_papers_each_drawing_keeps_its_own_rows(name, page, idx):
     """Real data (live site, 2026-11-26; tests/fixtures/rgroup_series/papers.json): the Docling
     text of the pages, every drawing's box, the rows the reader gave (`rows`) and the compounds
