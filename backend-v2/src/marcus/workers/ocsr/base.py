@@ -27,6 +27,9 @@ log = logging.getLogger(__name__)
 class OcsrResult:
     smiles: str
     molfile: str | None = None
+    # The raw reading with positions, {"atoms": [...], "bonds": [...]} (MolScribe's
+    # return_atoms_bonds), for the paper layout (marcus.workers.ocsr.layout); None without one.
+    graph: dict | None = None
 
 
 class OcsrEngine(Protocol):

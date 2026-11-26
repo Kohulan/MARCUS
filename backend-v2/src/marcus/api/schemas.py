@@ -120,6 +120,9 @@ class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     ms: int
     cached: bool
     created_at: datetime
+    # The paper layout (marcus.core.paper_layout): MolScribe's atom positions in the image's
+    # pixels, also of an invalid answer. Only for drawing; null without one.
+    layout: str | None = None
     # the server can draw it (marcus.core.drawable): valid, or an R-group scaffold
     drawable: bool = False
 
@@ -162,6 +165,9 @@ class SegmentOut(BaseModel):
     # still reading, with fewer than two read or two with an InChIKey, and for a scaffold.
     agree: int | None = None
     agree_of: int | None = None
+    # The badge state (agreement.badge): "agree3", "agree2", "stereo" (the same connectivity,
+    # no two the same stereo) or "differ"; None with `agree` None. Agree = the full InChIKey.
+    agree_state: str | None = None
     # Pick mode (marcus.core.picks): a box the user has not picked; drawn on its page only, no
     # card, in no count, export or bulk action.
     candidate: bool = False

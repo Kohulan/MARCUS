@@ -24,6 +24,14 @@ read or write that fails is logged and ignored (the prediction does not depend o
 
 The fake engine never reads or writes the cache: its output is not a real result, and the
 fake stack's tests must measure the engine, not cache hits.
+
+Paper layout (owner decision 2026-11-26; marcus.core.paper_layout): a layout engine (MolScribe)
+returns its raw atoms and bonds with the prediction; after the timed `predict` (so `ms` stays
+the engine's time) they are fitted to the ink of the file the engine read and returned as
+`layout` (null without one). Only a layout engine's result has the key. In the cache row:
+NULL = never tried (a row from before, or a fit that raised), '' = tried, none. A hit whose
+layout was never tried counts as a miss ONCE: the engine reads again and the row gets the layout
+(ON CONFLICT DO UPDATE of `layout` only, where it is NULL).
 """
 
 import hashlib
@@ -44,7 +52,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from marcus.core.enums import Engine, StepKind
 from marcus.core.models import ImageJob, OcsrCache, Paper, Segment
 from marcus.core.storage import image_job_path, segment_crop_path
-from marcus.workers.ocsr.base import engine_version, get_engine
+from marcus.workers.ocsr.base import OcsrResult, engine_version, get_engine
+from marcus.workers.ocsr.layout import layout_molfile
 from marcus.workers.runtime import BadInput, register
 
 RDLogger.DisableLog("rdApp.*")
@@ -110,13 +119,33 @@ def _engine_input(image: Path, is_crop: bool, engine: Engine) -> bytes:
     return image.read_bytes()
 
 
+# Engines that read atom positions off the image (base.OcsrResult.graph).
+LAYOUT_ENGINES = frozenset({Engine.MOLSCRIBE})
+
+
+def _paper_layout(image: Path, result: OcsrResult) -> str | None:
+    """The paper layout of a layout engine's result on the file it read: the molfile, '' when
+    there is none (no graph, nothing to fit), None when the fit failed (not remembered)."""
+    graph = result.graph
+    if not graph:
+        return ""
+    try:
+        return layout_molfile(image, graph.get("atoms"), graph.get("bonds")) or ""
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception:  # noqa: BLE001 - the prediction stands without a layout
+        log.warning("paper layout failed", exc_info=True)
+        return None
+
+
 def _cache_get(session, owner_id: uuid.UUID, sha: str, engine: str, version: str):
-    """(smiles, molfile) from the owner's ocsr_cache rows, or None. Ends its read transaction."""
+    """(smiles, molfile, layout) from the owner's ocsr_cache rows, or None. Ends its read
+    transaction."""
     if session is None:
         return None
     try:
         return session.execute(
-            select(OcsrCache.smiles, OcsrCache.molfile).where(
+            select(OcsrCache.smiles, OcsrCache.molfile, OcsrCache.layout).where(
                 OcsrCache.owner_id == owner_id,
                 OcsrCache.image_sha256 == sha,
                 OcsrCache.engine == engine,
@@ -133,24 +162,34 @@ def _cache_get(session, owner_id: uuid.UUID, sha: str, engine: str, version: str
 
 
 def _cache_put(
-    session, owner_id: uuid.UUID, sha: str, engine: str, version: str, smiles: str, molfile
+    session,
+    owner_id: uuid.UUID,
+    sha: str,
+    engine: str,
+    version: str,
+    smiles: str,
+    molfile,
+    layout: str | None = None,
 ) -> None:
-    """Store one prediction in its own short transaction; an existing row is kept."""
+    """Store one prediction in its own short transaction; an existing row is kept, except that
+    a layout never tried (NULL) is filled in."""
     if session is None or not smiles:
         return
     try:
+        insert = pg_insert(OcsrCache).values(
+            owner_id=owner_id,
+            image_sha256=sha,
+            engine=engine,
+            engine_version=version,
+            smiles=smiles,
+            molfile=molfile,
+            layout=layout,
+        )
         session.execute(
-            pg_insert(OcsrCache)
-            .values(
-                owner_id=owner_id,
-                image_sha256=sha,
-                engine=engine,
-                engine_version=version,
-                smiles=smiles,
-                molfile=molfile,
-            )
-            .on_conflict_do_nothing(
-                index_elements=["owner_id", "image_sha256", "engine", "engine_version"]
+            insert.on_conflict_do_update(
+                index_elements=["owner_id", "image_sha256", "engine", "engine_version"],
+                set_={"layout": insert.excluded.layout},
+                where=OcsrCache.layout.is_(None),
             )
         )
         session.commit()
@@ -171,12 +210,14 @@ def ocsr(step, session) -> dict:
         raise BadInput("input image is missing")
     data = _engine_input(image, is_crop, name)
     use_cache = name is not Engine.FAKE and owner_id is not None
+    with_layout = name in LAYOUT_ENGINES
     if use_cache:
         sha = hashlib.sha256(data).hexdigest()  # the engine's input, not the stored file
         version = engine_version(name)
         hit = _cache_get(session, owner_id, sha, name.value, version)
-        if hit is not None:
-            return {
+        # a layout engine's row whose layout was never tried: read once more (then it has one)
+        if hit is not None and not (with_layout and hit.layout is None):
+            reply = {
                 "smiles": hit.smiles,
                 "molfile": hit.molfile,
                 "valid": is_valid_smiles(hit.smiles),
@@ -184,6 +225,9 @@ def ocsr(step, session) -> dict:
                 "cached": True,
                 "engine_version": version,
             }
+            if with_layout:
+                reply["layout"] = hit.layout or None
+            return reply
     engine = get_engine(name)
     tmp = None  # a crop's engine input is written to a temp file; an image job's is its file
     try:
@@ -195,14 +239,23 @@ def ocsr(step, session) -> dict:
         start = time.monotonic()
         result = engine.predict(Path(tmp) if tmp else image)
         ms = int((time.monotonic() - start) * 1000)
+        # after the clock: `ms` is the engine's time; on the file it read (still there)
+        layout = _paper_layout(Path(tmp) if tmp else image, result) if with_layout else None
     finally:
         if tmp:
             os.unlink(tmp)
     if use_cache:
         _cache_put(
-            session, owner_id, sha, name.value, engine.version, result.smiles, result.molfile
+            session,
+            owner_id,
+            sha,
+            name.value,
+            engine.version,
+            result.smiles,
+            result.molfile,
+            layout,
         )
-    return {
+    reply = {
         "smiles": result.smiles,
         "molfile": result.molfile,
         "valid": is_valid_smiles(result.smiles),
@@ -210,6 +263,9 @@ def ocsr(step, session) -> dict:
         "cached": False,
         "engine_version": engine.version,
     }
+    if with_layout:
+        reply["layout"] = layout or None
+    return reply
 
 
 register(StepKind.OCSR, ocsr)

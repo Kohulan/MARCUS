@@ -159,6 +159,18 @@ describe("api", () => {
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });
 
+  it("depict sends marks and common atoms by index, never an empty list; differences sends the SMILES", async () => {
+    reply = json(200, { format: "svg", data: "<svg/>" });
+    await api.depict("CCO", { marks: [2], common: [] });
+    await api.depict("CCO", { common: [0, 1] });
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({ smiles: "CCO", format: "svg", marks: [2] });
+    expect(JSON.parse(calls[1]?.init.body as string)).toEqual({ smiles: "CCO", format: "svg", common: [0, 1] });
+    reply = json(200, { marks: [[2], [2]], common: [[0, 1], [0, 1]], rough: false });
+    await api.differences(["CCN", "CCO"]);
+    expect(calls[2]?.url).toMatch(/\/tools\/differences$/);
+    expect(JSON.parse(calls[2]?.init.body as string)).toEqual({ smiles: ["CCN", "CCO"] });
+  });
+
   it("depict sends a highlight with its token, and neither without one", async () => {
     reply = json(200, { format: "svg", data: "<svg/>" });
     await api.depict("CCO", { highlight: "[#6]-[#6]", highlightToken: "tok" });

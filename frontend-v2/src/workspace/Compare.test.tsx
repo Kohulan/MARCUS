@@ -13,6 +13,7 @@ import { ApiError, api } from "../api/client";
 import { orientationTemplate } from "../api/engines";
 import { createQueryClient } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import { paperLayout } from "../test/paperLayout";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import Compare, { type CompareProps } from "./Compare";
 import Workspace from "./Workspace";
@@ -39,8 +40,20 @@ const SCRIBE = REAL.p2_6!.molscribe!.molfile;
 const OLD_NEXTR = REAL.p2_6!.molnextr!.molfile;
 const NEXTR = (fixture("molnextr_7a4e03f.json") as Record<string, Out>)["corallomycetellains_p3_3"]!.molfile;
 
-/** The highlighted /tools/depict calls (the common part). */
-const litCalls = () => vi.mocked(api.depict).mock.calls.filter((c) => c[1]?.highlight);
+/** The /tools/depict calls that mark atoms (differences, or the common part). */
+const litCalls = () =>
+  vi.mocked(api.depict).mock.calls.filter((c) => c[1]?.marks?.length || c[1]?.common?.length);
+/** A /tools/differences reply: per SMILES sent, its marks and its common atoms. */
+function differencesOf(by: Record<string, { marks: number[]; common: number[] }>, rough = false) {
+  return (smiles: string[]) =>
+    Promise.resolve({
+      marks: smiles.map((x) => by[x]?.marks ?? []),
+      common: smiles.map((x) => by[x]?.common ?? []),
+      rough,
+    });
+}
+const CCO_CCN = { CCO: { marks: [2], common: [0, 1] }, CCN: { marks: [2], common: [0, 1] } };
+const mode = (name: string) => screen.getByRole("button", { name });
 /** The template each /tools/depict call of `smiles` sent (undefined: the normal layout). */
 const templatesOf = (smiles: string) =>
   vi.mocked(api.depict).mock.calls.filter((c) => c[0] === smiles).map((c) => c[1]?.template);
@@ -82,6 +95,7 @@ beforeEach(() => {
     revokeObjectURL: vi.fn(),
   });
   vi.spyOn(api, "depict").mockResolvedValue({ format: "svg", data: "<svg/>" });
+  vi.spyOn(api, "differences").mockImplementation(differencesOf({}));
   vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
   vi.spyOn(api, "runImagePrediction").mockResolvedValue({ step_id: "st" });
 });
@@ -474,29 +488,21 @@ describe("Compare", () => {
     await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { template: SCRIBE }));
   });
 
-  it("the paper's orientation goes with the common part too", async () => {
+  it("the paper's orientation goes with the marks too", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
       identical: false,
       same_structure: false,
       agree: false,
     });
-    vi.spyOn(api, "mcs").mockResolvedValue({
-      mcs_smarts: "[#6]-[#6]",
-      atom_count: 2,
-      bond_count: 1,
-      original_molecules: [],
-      highlight_token: "tok-1",
-    });
-    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
+    vi.mocked(api.differences).mockImplementation(differencesOf(CCO_CCN));
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
         prediction({ engine: "molnextr", smiles: "CCN", molfile: NEXTR }),
       ],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
-    const on = { highlight: "[#6]-[#6]", highlightToken: "tok-1", template: NEXTR };
+    const on = { marks: [2], template: NEXTR };
     await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", on));
     expect(api.depict).toHaveBeenCalledWith("CCN", on);
   });
@@ -564,168 +570,136 @@ describe("Compare", () => {
     expect(cmp).toHaveBeenCalledTimes(3);
   });
 
-  it("Show common part draws each structure with the MCS highlighted", async () => {
+  it("Differences is on from the start: each answer drawn with its differing atoms marked", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
       identical: false,
       same_structure: false,
       agree: false,
     });
-    const molfile = vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
-    const mcs = vi.spyOn(api, "mcs").mockResolvedValue({
-      mcs_smarts: "[#6]-[#6]",
-      atom_count: 2,
-      bond_count: 1,
-      original_molecules: [],
-      highlight_token: "tok-1",
-    });
+    vi.mocked(api.differences).mockImplementation(differencesOf(CCO_CCN));
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
         prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
-    const toggle = screen.getByRole("button", { name: "Show common part" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(mode("Differences")).toHaveAttribute("aria-pressed", "true");
+    expect(mode("Common part")).toHaveAttribute("aria-pressed", "false");
+    expect(mode("Off")).toHaveAttribute("aria-pressed", "false");
     await waitFor(() => expect(litCalls()).toHaveLength(2));
-    expect(molfile.mock.calls.map((c) => c[0]).sort()).toEqual(["CCN", "CCO"]);
-    expect(mcs).toHaveBeenCalledWith(["M:CCN", "M:CCO"]);
-    // the server's token from the MCS reply goes with every highlighted drawing (F5)
-    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-1" };
-    expect(api.depict).toHaveBeenCalledWith("CCO", lit);
-    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
+    // one question for all answers, the distinct SMILES in a fixed order
+    expect(api.differences).toHaveBeenCalledTimes(1);
+    expect(api.differences).toHaveBeenCalledWith(["CCN", "CCO"]);
+    expect(api.depict).toHaveBeenCalledWith("CCO", { marks: [2] });
+    expect(api.depict).toHaveBeenCalledWith("CCN", { marks: [2] });
+    // no drawing is asked for twice: none before the differences are known
+    expect(api.depict).toHaveBeenCalledTimes(2);
     expect(await screen.findByRole("img", { name: "Structure, MolParser" })).toHaveAttribute(
       "src",
       "blob:http://localhost/d",
     );
   });
 
-  /** Two predictions, Show common part pressed; the MCS replies carry the tokens in turn. */
-  function commonPartWithTokens(tokens: string[]) {
+  it("Common part draws what the answers share; Off draws them plain", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
       identical: false,
       same_structure: false,
       agree: false,
     });
-    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
-    let n = 0;
-    const mcs = vi.spyOn(api, "mcs").mockImplementation(() =>
-      Promise.resolve({
-        mcs_smarts: "[#6]-[#6]",
-        atom_count: 2,
-        bond_count: 1,
-        original_molecules: [],
-        highlight_token: tokens[Math.min(n++, tokens.length - 1)]!,
-      }),
-    );
+    vi.mocked(api.differences).mockImplementation(differencesOf(CCO_CCN));
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
         prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
-    return mcs;
-  }
+    fireEvent.click(mode("Common part"));
+    expect(mode("Common part")).toHaveAttribute("aria-pressed", "true");
+    expect(mode("Differences")).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { common: [0, 1] }));
+    expect(api.depict).toHaveBeenCalledWith("CCN", { common: [0, 1] });
+    fireEvent.click(mode("Off"));
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
+    expect(api.depict).toHaveBeenCalledWith("CCN");
+    expect(api.differences).toHaveBeenCalledTimes(1);
+  });
 
-  const INVALID = new ApiError(422, "highlight not valid for this structure");
-
-  it("an expired highlight token asks the MCS once more and draws again with the new one", async () => {
-    vi.mocked(api.depict).mockImplementation((_smiles, opts) =>
-      opts?.highlightToken === "tok-old"
-        ? Promise.reject(INVALID)
-        : Promise.resolve({ format: "svg", data: "<svg/>" }),
-    );
-    const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
-    for (const name of ["Structure, DECIMER", "Structure, MolParser"]) {
-      await waitFor(() =>
-        expect(screen.getByRole("img", { name })).toHaveAttribute("src", "blob:http://localhost/d"),
-      );
+  it("one answer, or the same SMILES twice: nothing to mark, the switch is off and disabled", async () => {
+    const same = [prediction({ engine: "decimer", smiles: "CCO" }), prediction({ engine: "molparser", smiles: "CCO" })];
+    const { rerender, props } = renderCompare({ predictions: same });
+    for (const name of ["Differences", "Common part"]) {
+      expect(mode(name)).toBeDisabled();
+      expect(mode(name)).toHaveAttribute("aria-pressed", "false");
     }
-    // both drawings failed on the old token, yet the MCS is asked again only once
-    expect(mcs).toHaveBeenCalledTimes(2);
-    const lit = { highlight: "[#6]-[#6]", highlightToken: "tok-new" };
-    expect(api.depict).toHaveBeenCalledWith("CCO", lit);
-    expect(api.depict).toHaveBeenCalledWith("CCN", lit);
-    expect(litCalls()).toHaveLength(4);
-  });
-
-  it("a highlight still refused with the new token is not asked for again (no loop)", async () => {
-    vi.mocked(api.depict).mockRejectedValue(INVALID);
-    const mcs = commonPartWithTokens(["tok-old", "tok-new", "tok-3", "tok-4"]);
-    await waitFor(() => expect(litCalls()).toHaveLength(4));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(mcs).toHaveBeenCalledTimes(2);
-    expect(litCalls()).toHaveLength(4);
-    const tokens = litCalls().map((c) => c[1]?.highlightToken).sort();
-    expect(tokens).toEqual(["tok-new", "tok-new", "tok-old", "tok-old"]);
-  });
-
-  it("another 4xx on a highlighted drawing does not ask the MCS again", async () => {
-    vi.mocked(api.depict).mockRejectedValue(new ApiError(429, "slow down"));
-    const mcs = commonPartWithTokens(["tok-old", "tok-new"]);
-    await waitFor(() => expect(litCalls()).toHaveLength(2));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(mcs).toHaveBeenCalledTimes(1);
-  });
-
-  it("Show common part is not pressed while it is disabled (fewer than 2 valid)", async () => {
-    vi.spyOn(api, "compare").mockResolvedValue({
-      tanimoto: 0.5,
-      identical: false,
-      same_structure: false,
-      agree: false,
-    });
-    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
-    vi.spyOn(api, "mcs").mockResolvedValue({
-      mcs_smarts: "[#6]-[#6]",
-      atom_count: 2,
-      bond_count: 1,
-      original_molecules: [],
-      highlight_token: "tok-1",
-    });
-    const two = [
-      prediction({ engine: "decimer", smiles: "CCO" }),
-      prediction({ engine: "molparser", smiles: "CCN" }),
-    ];
-    const { rerender, props } = renderCompare({ predictions: two });
-    const toggle = screen.getByRole("button", { name: "Show common part" });
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(mode("Off")).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
+    expect(api.differences).not.toHaveBeenCalled();
+    // a second, different answer arrives: Differences comes on by itself
+    vi.spyOn(api, "compare").mockResolvedValue({ tanimoto: 0.5, identical: false, same_structure: false, agree: false });
     rerender(
       <QueryClientProvider client={client}>
         <ToastProvider>
-          <Compare {...props} predictions={[two[0]!]} />
+          <Compare {...props} predictions={[same[0]!, prediction({ engine: "molparser", smiles: "CCN" })]} />
         </ToastProvider>
       </QueryClientProvider>,
     );
-    const now = screen.getByRole("button", { name: "Show common part" });
-    expect(now).toBeDisabled();
-    expect(now).toHaveAttribute("aria-pressed", "false");
+    expect(mode("Differences")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("a common part that fails (not a 429) says so", async () => {
+  it("the same structure written two ways: No differences", async () => {
     vi.spyOn(api, "compare").mockResolvedValue({
       tanimoto: 0.5,
       identical: false,
       same_structure: false,
       agree: false,
     });
-    vi.spyOn(api, "smilesToMolfile").mockImplementation((s) => Promise.resolve(`M:${s}`));
-    vi.spyOn(api, "mcs").mockRejectedValue(new ApiError(500, "boom"));
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molparser", smiles: "OCC" }),
+      ],
+    });
+    expect(await screen.findByText("No differences")).toBeInTheDocument();
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
+  });
+
+  it("a search that ran out of time says the marks are rough", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.mocked(api.differences).mockImplementation(differencesOf(CCO_CCN, true));
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "CCO" }),
         prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
-    expect(screen.queryByText("Common part unavailable")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show common part" }));
-    expect(await screen.findByText("Common part unavailable", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText("Rough marks: the structures are large")).toBeInTheDocument();
+  });
+
+  it("differences that fail (not a 429) say so, and the drawings come plain", async () => {
+    vi.spyOn(api, "compare").mockResolvedValue({
+      tanimoto: 0.5,
+      identical: false,
+      same_structure: false,
+      agree: false,
+    });
+    vi.mocked(api.differences).mockRejectedValue(new ApiError(500, "boom"));
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "CCO" }),
+        prediction({ engine: "molparser", smiles: "CCN" }),
+      ],
+    });
+    expect(await screen.findByText("Differences unavailable", {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.queryByText(/boom/)).toBeNull();
+    await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
+    expect(litCalls()).toHaveLength(0);
   });
 
   it("an engine not read yet: □ Not read yet, a muted dash for its SMILES, the word in its blank", async () => {
@@ -915,14 +889,17 @@ describe("Compare in the workspace", () => {
     expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: "[R]c1ccccc1", molfile: null });
   });
 
-  it("Show common part counts DECIMER's R-group answer (owner, 2026-11-26)", () => {
+  it("the marks count DECIMER's R-group answer (owner, 2026-11-26)", async () => {
     renderCompare({
       predictions: [
         prediction({ engine: "decimer", smiles: "[R]c1ccccc1", valid: false, rgroups: ["R"], drawable: true }),
         prediction({ engine: "molparser", smiles: "*c1ccccc1", rgroups: ["R"] }),
       ],
     });
-    expect(screen.getByRole("button", { name: "Show common part" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Differences" })).toBeEnabled();
+    await waitFor(() =>
+      expect(api.differences).toHaveBeenCalledWith(["*c1ccccc1", "[R]c1ccccc1"]),
+    );
   });
 
   it("a prediction without a molfile clears the old curated molfile", async () => {
@@ -1028,5 +1005,88 @@ describe("Compare in the workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
     dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
     expect(within(dialog).getByText("Failed: it took too long")).toBeInTheDocument();
+  });
+});
+
+describe("Compare: the paper layout", () => {
+  const LAYOUT = paperLayout();
+  const answers = () => [
+    prediction({ id: "d1", engine: "decimer", smiles: "CCO" }),
+    prediction({ id: "m1", engine: "molparser", smiles: "CCN" }),
+    prediction({ id: "s1", engine: "molscribe", smiles: "C(C)(C)(C)(C)C", valid: false, molfile: OLD_NEXTR, layout: LAYOUT }),
+  ];
+  const paperButton = () => screen.getByRole("button", { name: "Show on paper" });
+
+  it("an invalid MolScribe with a layout: every answer is drawn on it, and Use coordinates switches it off", async () => {
+    renderCompare({ predictions: answers() });
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT]));
+    expect(templatesOf("CCN")).toEqual([LAYOUT]);
+    const coords = screen.getByRole("button", { name: "Use coordinates, MolScribe" });
+    expect(coords).toBeEnabled();
+    expect(coords).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(coords);
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT, undefined]));
+    expect(templatesOf("CCN")).toEqual([LAYOUT, undefined]);
+  });
+
+  it("a valid MolScribe with a layout draws itself on the layout too", async () => {
+    renderCompare({
+      predictions: [prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE, layout: LAYOUT })],
+    });
+    await waitFor(() => expect(templatesOf("CCC")).toEqual([LAYOUT]));
+  });
+
+  it("Show on paper: each answer over the crop, its marked atoms shown; off again: the drawings", async () => {
+    const overlay = vi.spyOn(api, "segmentOverlay").mockResolvedValue({
+      fit: 0.5,
+      bond: 40,
+      width: 400,
+      height: 300,
+      complete: true,
+      answers: [
+        { prediction_id: "d1", engine: "decimer", marks: [2], atoms: [[10, 10, "C", true], [50, 10, "C", true], [90, 10, "O", false]], bonds: [[0, 1, 1], [1, 2, 2]] },
+        { prediction_id: "m1", engine: "molparser", marks: [], atoms: null, bonds: null },
+      ],
+    });
+    renderCompare({ predictions: answers() });
+    expect(paperButton()).toBeEnabled();
+    expect(paperButton()).toHaveAttribute("aria-pressed", "false");
+    expect(overlay).not.toHaveBeenCalled();
+    fireEvent.click(paperButton());
+    const onPaper = await screen.findByRole("img", { name: "On paper, DECIMER" });
+    expect(overlay).toHaveBeenCalledTimes(1);
+    expect(overlay.mock.calls[0]![0]).toBe("s1");
+    expect(onPaper.querySelector("image")).toHaveAttribute("href", api.segmentImageUrl("s1"));
+    expect(onPaper.querySelectorAll(".cmp-paper__bond").length).toBe(3); // a single and a double
+    expect(onPaper.querySelectorAll(".cmp-paper__bond--loose").length).toBe(2); // to the atom not placed
+    expect(onPaper.querySelectorAll(".cmp-paper__mark").length).toBe(1);
+    // an answer that cannot follow the drawing keeps its normal drawing
+    expect(screen.queryByRole("img", { name: "On paper, MolParser" })).toBeNull();
+    expect(await within(cell("Drawing", "MolParser")).findByRole("img", { name: "Structure, MolParser" })).toBeInTheDocument();
+    fireEvent.click(paperButton());
+    expect(screen.queryByRole("img", { name: "On paper, DECIMER" })).toBeNull();
+  });
+
+  it("Show on paper is off with the reason: an uploaded image, no layout, a poor fit", () => {
+    const image = renderCompare({ target: { kind: "image", id: "img1" }, predictions: answers() });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("Papers only")).toBeInTheDocument();
+    image.unmount();
+    const none = renderCompare({ predictions: [prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE })] });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("No positions read")).toBeInTheDocument();
+    none.unmount();
+    renderCompare({
+      predictions: [prediction({ engine: "molscribe", smiles: "CCC", valid: false, layout: paperLayout(3, 40) })],
+    });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("Fit too poor")).toBeInTheDocument();
+  });
+
+  it("an overlay the server cannot give says so", async () => {
+    vi.spyOn(api, "segmentOverlay").mockRejectedValue(new ApiError(409, "poor fit"));
+    renderCompare({ predictions: answers() });
+    fireEvent.click(paperButton());
+    expect(await screen.findByText("Not shown on paper")).toBeInTheDocument();
   });
 });

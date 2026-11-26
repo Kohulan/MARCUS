@@ -222,9 +222,12 @@ class Prediction(Base):
     # R-group labels of the structure (marcus.core.rgroups; [] none, NULL not computed)
     rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
-    # InChIKey of a valid structure (marcus.core.agreement: the engines agree on its first
-    # block); NULL when invalid, an R-group scaffold, or made before 0019.
+    # InChIKey of a valid structure (marcus.core.agreement: the engines agree on the full
+    # key); NULL when invalid, an R-group scaffold, or made before 0019.
     inchikey: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The paper layout (marcus.core.paper_layout): MolScribe's atom positions in the image's
+    # pixels as a molfile, kept also when its answer is invalid. NULL without one.
+    layout: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Curation(Base):
@@ -289,6 +292,9 @@ class OcsrCache(Base):
     engine_version: Mapped[str] = mapped_column(Text, primary_key=True)
     smiles: Mapped[str] = mapped_column(Text)
     molfile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The paper layout of a layout engine's row: NULL never tried (a row from before 0024),
+    # '' tried and none, else the molfile (marcus.workers.ocsr.handler).
+    layout: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
 
 
@@ -445,4 +451,3 @@ class ScaffoldBuild(Base):
     )
     failures: Mapped[list] = mapped_column(JSONB)
     built_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
-

@@ -19,11 +19,39 @@ class P:
     name: str = ""
 
 
-def test_three_agree_on_the_first_block():
-    ps = [P("molscribe", ETHANOL_D), P("molnextr", ETHANOL), P("decimer", ETHANOL)]
+def test_three_agree_on_the_full_key():
+    ps = [P("molscribe", ETHANOL), P("molnextr", ETHANOL), P("decimer", ETHANOL)]
     assert agreement.agree_count(ps) == 3
+    assert agreement.badge(ps) == "agree3"
     assert [p.engine for p in agreement.majority(ps)] == ["decimer", "molnextr", "molscribe"]
     assert agreement.pick_prediction(ps, "decimer").engine == "decimer"
+
+
+def test_other_stereo_is_no_agreement():
+    """Owner decision 2026-11-26: agree = the same full InChIKey. Two with the same key and a
+    third with other stereo: "2 agree", the pick one of the two."""
+    ps = [P("molscribe", ETHANOL), P("molnextr", ETHANOL), P("decimer", ETHANOL_D)]
+    assert agreement.agree_count(ps) == 2 and agreement.badge(ps) == "agree2"
+    assert [p.engine for p in agreement.majority(ps)] == ["molnextr", "molscribe"]
+    assert agreement.pick_prediction(ps, "decimer").engine == "molnextr"
+
+
+def test_stereo_differs_when_only_the_connectivity_is_shared():
+    """No two share the full key but two share the first block: "Stereo differs"; nothing
+    agrees, and the pick falls back to the connectivity group as before."""
+    ps = [P("molscribe", ETHANOL_D), P("molnextr", ETHANOL), P("decimer", PROPANE)]
+    assert agreement.badge(ps) == "stereo"
+    assert agreement.agree_count(ps) == 0 and agreement.majority(ps) == []
+    assert agreement.pick_prediction(ps, "decimer").engine == "molnextr"
+    assert agreement.pick_prediction(ps, "molscribe").engine == "molscribe"
+
+
+def test_differ_and_no_badge():
+    ps = [P("molscribe", PROPANE), P("decimer", ETHANOL)]
+    assert agreement.badge(ps) == "differ"
+    # fewer than two with a key: nothing to compare
+    assert agreement.badge([P("decimer", ETHANOL)]) is None
+    assert agreement.badge([P("decimer", ETHANOL), P("molscribe", None, valid=False)]) is None
 
 
 def test_two_agree_and_their_structure_is_shown():

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { useParams } from "react-router-dom";
 import { api, depictBlob, errorText, isGone, isUuid } from "../api/client";
 import { depictQuery, useReplyUrl } from "../api/depictions";
-import { engineName, firstRunNote, isLegacyEngine, orientationTemplate } from "../api/engines";
+import { engineName, firstRunNote, isLegacyEngine, orientationTemplate, type Template } from "../api/engines";
 import { keys, useImageJob } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isImageActive } from "../api/status";
@@ -133,7 +133,7 @@ function ImageJobPage({
  */
 function useDrawing(
   smiles: string | null,
-  template: PredictionOut | null,
+  template: Template | null,
 ): {
   src: string | null;
   failed: boolean;

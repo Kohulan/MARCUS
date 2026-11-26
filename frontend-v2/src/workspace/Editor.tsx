@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "../api/client";
 import type { CurationChange } from "../api/curation";
-import { hasImageLayout, TEMPLATE_ENGINES } from "../api/engines";
+import { hasImageLayout, layoutInfo, TEMPLATE_ENGINES } from "../api/engines";
 import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
@@ -56,6 +56,8 @@ type EditorStart = {
  */
 export function hasImagePositions(initial: EditorStart): boolean {
   if (initial.engine != null && !TEMPLATE_ENGINES.includes(initial.engine)) return false;
+  // never a paper layout: that is a reading aid for the drawings, not a structure to edit
+  if (layoutInfo(initial.molfile) !== null) return false;
   // a SMILES too: "off" loads the SMILES alone, which must not open Ketcher empty
   return Boolean(initial.smiles?.trim()) && hasImageLayout(initial.molfile);
 }

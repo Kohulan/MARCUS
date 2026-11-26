@@ -255,6 +255,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           <li>{`${counts.all} ${counts.all === 1 ? "structure" : "structures"}`}</li>
           <li className="ws-counts__accepted">{`${counts.accepted} accepted`}</li>
           <li className="ws-counts__check">{`${counts["to-check"]} to check`}</li>
+          <li className="ws-counts__review">{`${counts["to-review"]} to review`}</li>
           <li className="ws-counts__rejected">{`${counts.rejected} rejected`}</li>
           {counts.failed > 0 && <li className="ws-counts__failed">{`${counts.failed} failed`}</li>}
         </ul>

@@ -3,7 +3,7 @@
 // paper or steps change, for up to hundreds of segments.
 import { isPaperBusy, isStepActive } from "../api/status";
 import { drawable } from "../api/depictionKey";
-import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import type { AgreeState, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { engineName } from "../api/engines";
 import { STATE_WORD, type CardState } from "../ui/StateBadge";
 import { newestFirst } from "./pageFailures";
@@ -18,7 +18,9 @@ export function ocsrSteps(segment: SegmentOut, steps: StepOut[]): StepOut[] {
 
 /**
  * The card state. A curation `accepted`/`rejected` wins. Else, with a valid prediction it is
- * `to-check`. With none: `reading` while an `ocsr` step of the segment is pending, queued or
+ * `to-review` when the engines agree on the structure (agreeState agree3 / agree2), and
+ * `to-check` when they differ, the stereo differs, or there is no badge (owner decision
+ * 2026-11-26). With none: `reading` while an `ocsr` step of the segment is pending, queued or
  * running; `failed` when its newest `ocsr` step failed; `not-read` when it has no `ocsr`
  * step (a paper uploaded with `ocsr=off`; on an `auto` paper still being worked on, the step
  * is about to come, so that is `reading`, unless the paper is busy only with its annotation);
@@ -32,7 +34,10 @@ export function cardState(segment: SegmentOut, steps: StepOut[], paper: PaperDet
 export function stateOf(segment: SegmentOut, ocsr: StepOut[], paper: PaperDetail): CardState {
   const status = segment.curation?.status;
   if (status === "accepted" || status === "rejected") return status;
-  if (segment.predictions.some((p) => p.valid)) return "to-check";
+  if (segment.predictions.some((p) => p.valid)) {
+    const agree = agreeState(segment);
+    return agree === "agree3" || agree === "agree2" ? "to-review" : "to-check";
+  }
   if (ocsr.some((s) => isStepActive(s.status))) return "reading";
   const newest = ocsr[0];
   if (newest === undefined) {
@@ -62,15 +67,32 @@ export function readSteps(steps: StepOut[]): StepOut[] {
   return steps.some((s) => s.background) ? steps.filter((s) => !s.background) : steps;
 }
 
+/** Still to decide: "To check" or "To review" (Accept and Reject are offered). */
+export const isOpen = (state: CardState): boolean => state === "to-check" || state === "to-review";
+
 /**
- * The agreement badge: "3 agree", "2 agree" or "Differ" when the three engines read; "2 of 2
- * agree" or "2 differ" when only two did; null while engines read, or without.
+ * The badge state: the server's `agree_state` (engines agree on the same structure, stereo
+ * included); from an older server, the count. Null while engines read, or without a badge.
  */
-export function agreeText(segment: SegmentOut): string | null {
+export function agreeState(segment: SegmentOut): AgreeState | null {
   const n = segment.agree;
   if (n === undefined || n === null) return null;
-  if (segment.agree_of === 2) return n >= 2 ? "2 of 2 agree" : "2 differ";
-  return n >= 2 ? `${n} agree` : "Differ";
+  if (segment.agree_state) return segment.agree_state;
+  return n >= 3 ? "agree3" : n === 2 ? "agree2" : "differ";
+}
+
+/**
+ * The agreement badge: "3 agree", "2 agree", "Stereo differs" or "Differ" when the three
+ * engines read; "2 of 2 agree", "Stereo differs" or "2 differ" when only two did; null while
+ * engines read, or without.
+ */
+export function agreeText(segment: SegmentOut): string | null {
+  const state = agreeState(segment);
+  if (state === null) return null;
+  if (state === "stereo") return "Stereo differs";
+  const two = segment.agree_of === 2;
+  if (state === "differ") return two ? "2 differ" : "Differ";
+  return two ? "2 of 2 agree" : state === "agree3" ? "3 agree" : "2 agree";
 }
 
 /** The structure a segment shows (card, focus mode, editor start, COCONUT list). */
@@ -174,11 +196,18 @@ export function hasDrawing(segment: SegmentOut): boolean {
 export { drawable };
 
 /** The state filters, and "rgroups": structures with R-groups, whatever their state. */
-export type GridFilter = "all" | "to-check" | "accepted" | "rejected" | "failed" | "rgroups";
+export type GridFilter =
+  | "all"
+  | "to-check"
+  | "to-review"
+  | "accepted"
+  | "rejected"
+  | "failed"
+  | "rgroups";
 
 export const FILTERS: { filter: GridFilter; label: string }[] = [
   { filter: "all", label: "All" },
-  ...(["to-check", "accepted", "rejected", "failed"] as const).map((filter) => ({
+  ...(["to-check", "to-review", "accepted", "rejected", "failed"] as const).map((filter) => ({
     filter,
     label: STATE_WORD[filter],
   })),
@@ -221,6 +250,7 @@ export function filterCounts(rows: readonly FilterRow[]): Record<GridFilter, num
   const c: Record<GridFilter, number> = {
     all: rows.length,
     "to-check": 0,
+    "to-review": 0,
     accepted: 0,
     rejected: 0,
     failed: 0,

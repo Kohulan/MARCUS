@@ -21,13 +21,14 @@ function plural(n: number, word: string): string {
 }
 
 /**
- * "15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page" (zeros
- * left out), in the workspace's order. A failed structure is never counted as to check.
+ * "15 structures · 9 accepted · 3 open · 2 rejected · 1 failed · 1 failed page" (zeros
+ * left out), in the workspace's order. "Open": not decided yet, To check and To review
+ * together (the workspace splits them). A failed structure is never counted as open.
  */
 function countsText(p: PaperSummary): string {
   const parts = [plural(p.structures, "structure")];
   if (p.accepted) parts.push(`${p.accepted} accepted`);
-  if (p.to_review) parts.push(`${p.to_review} to check`);
+  if (p.to_review) parts.push(`${p.to_review} open`);
   if (p.rejected) parts.push(`${p.rejected} rejected`);
   if (p.failed) parts.push(`${p.failed} failed`);
   if (p.failed_pages) parts.push(plural(p.failed_pages, "failed page"));

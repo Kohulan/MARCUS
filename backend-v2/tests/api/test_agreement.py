@@ -176,6 +176,35 @@ def test_badge_counts_the_engines_that_read():
     assert _badge([_p("decimer", ETHANOL)], {"decimer": False}) == (None, None)
 
 
+ETHANOL_D = "LFQSCWFLJHTTHZ-ZZZZZZZZSA-N"  # ethanol's connectivity, other stereo
+
+
+def test_badge_state_is_stereo_aware():
+    """Owner decision 2026-11-26: engines agree on the full InChIKey; the same connectivity with
+    other stereo is its own state, "stereo" (the card says "Stereo differs")."""
+    from marcus.api.read import agreement_out
+
+    done3 = {"decimer": False, "molparser": False, "molscribe": False}
+
+    def out(*keys):
+        ps = [_p(e, k) for e, k in zip(("molscribe", "molparser", "decimer"), keys, strict=False)]
+        o = agreement_out("decimer", ps, done3)
+        return o["agree_state"], o["agree"], o["agree_engines"]
+
+    assert out(ETHANOL, ETHANOL, ETHANOL) == ("agree3", 3, ["decimer", "molparser", "molscribe"])
+    assert out(ETHANOL, ETHANOL, ETHANOL_D) == ("agree2", 2, ["molparser", "molscribe"])
+    assert out(ETHANOL, ETHANOL_D, PROPANOL) == ("stereo", 0, [])
+    assert out(ETHANOL, PROPANOL) == ("differ", 0, [])
+    # no badge: no state
+    waiting = agreement_out("decimer", [_p("decimer", ETHANOL)], {**done3, "molscribe": True})
+    assert waiting["agree_state"] is None and waiting["agree"] is None
+    # stereo differs: the card shows the paper's engine's structure of those that share the
+    # connectivity
+    ps = [_p("molscribe", ETHANOL), _p("molparser", ETHANOL_D), _p("decimer", PROPANOL)]
+    picked = agreement_out("molscribe", ps, done3)["default_prediction_id"]
+    assert picked == ps[0].id
+
+
 def test_no_badge_without_two_inchikeys_or_for_a_scaffold():
     done3 = {"decimer": False, "molparser": False, "molscribe": False}
     # predictions from before 0019 have no InChIKey: they can never agree, so no false "Differ"

@@ -8,6 +8,7 @@ export type Engine = "decimer" | "decimer-hand" | "molparser" | "molscribe";
  * server refuses it for new requests (422). MolParser replaced MolNexTR.
  */
 export type LegacyEngine = "molnextr";
+export type AgreeState = "agree3" | "agree2" | "stereo" | "differ";
 export type CurationStatus = "unchecked" | "accepted" | "rejected";
 export type ErrorClass = "timeout" | "worker_lost" | "bad_input" | "engine_error";
 /**
@@ -121,6 +122,12 @@ export interface PredictionOut {
    * RDKit refuses but CDK draws (DECIMER's [R1]). Optional: absent from an older server.
    */
   drawable?: boolean;
+  /**
+   * The paper layout (backend marcus.core.paper_layout): MolScribe's atom positions in the
+   * image's pixels as a molfile, kept also when its answer is invalid. Only for drawing (the
+   * template of every answer of that image, and the overlay); never the editor's start.
+   */
+  layout?: string | null;
 }
 
 export interface SegmentOut {
@@ -156,6 +163,12 @@ export interface SegmentOut {
   agree?: number | null;
   /** Of how many engines that read: 3, or 2 when only two did. Null with `agree` null. */
   agree_of?: number | null;
+  /**
+   * The badge state (backend core/agreement.py badge): engines agree on the same structure,
+   * stereo included. "stereo": the same connectivity, but no two the same stereo. Null with
+   * `agree` null; absent from an older server.
+   */
+  agree_state?: AgreeState | null;
   /** The engines that agree ([] none), in DECIMER, MolParser (old papers: MolNexTR), MolScribe order. */
   agree_engines?: string[];
   /**
@@ -320,12 +333,43 @@ export type HistoryReply = { items: number };
 export type UploadImageReply = { image_job_id: string; status: string };
 export type DepictReply = { format: "svg"; data: string };
 
+/** One answer on the paper (GET /segments/{id}/overlay), in the crop's pixels (y down). */
+export type OverlayAnswer = {
+  prediction_id: string;
+  engine: string;
+  /** Atoms (SMILES order) where this answer differs from the others. */
+  marks: number[];
+  /** [x, y, element, placed from the drawing]; null: the answer cannot follow the drawing. */
+  atoms: [number, number, string, boolean][] | null;
+  /** [atom, atom, order]. */
+  bonds: [number, number, number][] | null;
+};
+
+export type OverlayReply = {
+  /** Mean distance of the layout's bonds from the ink, px. */
+  fit: number;
+  bond: number;
+  width: number;
+  height: number;
+  /** False: a search ran out of time (some marks or answers are missing). */
+  complete: boolean;
+  answers: OverlayAnswer[];
+};
+
 export type CompareReply = {
   tanimoto: number;
   identical: boolean;
   same_structure: boolean;
   agree: boolean;
 };
+
+/**
+ * /tools/differences: per SMILES sent, atom indices (in the written SMILES' order) for
+ * /tools/depict. `marks`: where the answer differs from another, and where a missing piece
+ * attaches; `common`: what all share. Stereo counts. `rough`: the search ran out of time, the
+ * marks may be too wide.
+ */
+export type DifferencesReply = { marks: number[][]; common: number[][]; rough: boolean };
 
 export type McsReply = {
   mcs_smarts: string;

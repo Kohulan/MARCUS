@@ -685,6 +685,18 @@
   color: var(--on-orange);
 }
 
+.badge--amber {
+  background: var(--amber);
+  color: var(--on-amber);
+}
+
+/* To review: calm, a grey outline on the card's own ground */
+.badge--outline {
+  padding: 0 5px;
+  border: 1px solid var(--control-border);
+  color: var(--text-2);
+}
+
 .badge--dashed {
   padding: 0 5px;
   border: 1px dashed var(--orange);

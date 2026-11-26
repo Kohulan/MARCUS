@@ -79,6 +79,7 @@ ALLOWED_ROUTES = {
     ("POST", "/api/v2/images/{job_id}/predictions"),
     ("GET", "/api/v2/segments/{segment_id}/image"),
     ("GET", "/api/v2/segments/{segment_id}/depiction"),
+    ("GET", "/api/v2/segments/{segment_id}/overlay"),  # the answers on the paper
     ("POST", "/api/v2/segments/{segment_id}/predictions"),
     ("POST", "/api/v2/segments/{segment_id}/read"),  # pick a structure
     ("POST", "/api/v2/segments/{segment_id}/build"),  # Markush Phase 3
@@ -89,6 +90,7 @@ ALLOWED_ROUTES = {
     ("POST", "/api/v2/tools/depict"),
     ("POST", "/api/v2/tools/smiles-to-molfile"),
     ("POST", "/api/v2/tools/mcs"),
+    ("POST", "/api/v2/tools/differences"),
     ("POST", "/api/v2/tools/compare"),
 }
 
