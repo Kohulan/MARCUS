@@ -894,6 +894,37 @@ describe("Compare in the workspace", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("Use this one takes DECIMER's R-group answer as CDK's molfile, the v1 way (owner, 2026-11-26)", async () => {
+    const decimer = prediction({ engine: "decimer", smiles: "[R]c1ccccc1", valid: false, rgroups: ["R"], drawable: true });
+    const molparser = prediction({ engine: "molparser", smiles: "*c1ccccc1", rgroups: ["R"] });
+    const cur: CurationOut = { status: "unchecked", note: null, smiles: null, molfile: null };
+    const put = vi
+      .spyOn(api, "putCuration")
+      .mockImplementation((_id, body) => Promise.resolve({ ...body }));
+    const toMolfile = vi.spyOn(api, "smilesToMolfile").mockResolvedValue("<cdk molfile>");
+    renderWorkspace(
+      paper([segment("s1", { curation: cur, predictions: [decimer, molparser] })]),
+      "?s=s1&focus=1",
+    );
+    await screen.findByRole("region", { name: /^Focus/ });
+    press("c");
+    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(toMolfile).toHaveBeenCalledWith("[R]c1ccccc1");
+    expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: null, molfile: "<cdk molfile>" });
+  });
+
+  it("Show common part counts DECIMER's R-group answer (owner, 2026-11-26)", () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "[R]c1ccccc1", valid: false, rgroups: ["R"], drawable: true }),
+        prediction({ engine: "molparser", smiles: "*c1ccccc1", rgroups: ["R"] }),
+      ],
+    });
+    expect(screen.getByRole("button", { name: "Show common part" })).toBeEnabled();
+  });
+
   it("a prediction without a molfile clears the old curated molfile", async () => {
     const molscribe = prediction({ engine: "molscribe", smiles: "CCC", molfile: null });
     const cur: CurationOut = { status: "unchecked", note: null, smiles: "CCO", molfile: "<m>" };
