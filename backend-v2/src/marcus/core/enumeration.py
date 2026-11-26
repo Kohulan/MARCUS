@@ -11,6 +11,8 @@ group is symmetric. Anything unsure fails the row with a short reason (shown to 
 ("OR1"), a placeholder on more than one bond (inside a ring), a missing or extra group, an
 unknown substituent. Never a guess: a wrong molecule is worse than none.
 
+A point labelled with a known group as drawn ("OMe") is that group in every row.
+
 Pure: no database. `build_rows` runs in the API's chem process (marcus.api.chempool).
 """
 
@@ -121,14 +123,22 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
         return NO_POINTS
     if any(lab == UNLABELLED for lab in raw.values()):
         return UNLABELLED_POINT
-    for lab in raw.values():
+    # a point labelled with a known group as drawn ("OMe": MolScribe keeps a drawn abbreviation
+    # as a labelled point) is that group in every row; any other text is no bare label ("OR1")
+    fixed: dict[str, Fragment] = {}
+    for lab in set(raw.values()):
         if as_label(lab) != lab:
-            return NOT_A_LABEL.format(lab)
+            frag = resolve(lab)
+            if isinstance(frag, str) or frag.attachments != 1:
+                return NOT_A_LABEL.format(lab)
+            fixed[lab] = frag
     for idx, lab in raw.items():
         atom = mol.GetAtomWithIdx(idx)
         if atom.GetDegree() != 1 or atom.GetBonds()[0].GetBondType() != Chem.BondType.SINGLE:
             return NOT_ONE_BOND.format(lab)
-    order = sorted(set(raw.values()), key=_label_order)
+    order = sorted({lab for lab in raw.values() if lab not in fixed}, key=_label_order)
+    if not order:
+        return NO_POINTS
     values = {str(k).strip(): str(v or "").strip() for k, v in groups.items()}
     # a label the row leaves out counts as empty: only a bridge may take it (else NO_VALUE below)
     for lab in order:
@@ -170,6 +180,9 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
             return NO_VALUE.format(lab)
     pieces = Chem.Mol()
     quiet = BlockLogs()  # "[H]*" warns that its H has a dummy neighbour: expected here
+    for lab, frag in fixed.items():
+        frags[lab] = frag
+        atoms_of[lab] = [i for i, x in raw.items() if x == lab]
     for lab, frag in frags.items():
         targets = (
             [[atoms_of[lab][0], atoms_of[partner[lab]][0]]]

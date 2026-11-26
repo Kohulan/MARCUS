@@ -108,7 +108,7 @@ def test_nh2_itself_still_resolves():
     assert same(resolve("NH2"), "*N")
 
 
-@pytest.mark.parametrize("text", ["Tig", "Ang", "β-D-Glc", "Glc-Ara", "[drawn]"])
+@pytest.mark.parametrize("text", ["Tig", "Ang", "Glc-Ara", "[drawn]"])
 def test_non_goals_are_unknown(text):
     assert resolve(text) == f'unknown substituent "{text}"'
 
@@ -127,4 +127,63 @@ def test_oco_is_not_mirrored_into_a_carboxylate():
 
 
 def test_the_version_names_the_rule_set():
-    assert RESOLVER_VERSION.startswith("marcus-substituents 2;")
+    assert RESOLVER_VERSION.startswith("marcus-substituents 3;")
+
+
+# --- sugars (owner decision 2026-11-26: D-pyranoses, L-rhamnose, anomer open unless printed) ----
+# Reference keys: PubChem (CID 5793 D-glucose, 64689 beta-D-glucose, 79025 alpha-D-glucose,
+# 439353 beta-D-galactopyranose, 439680 beta-D-mannopyranose, 125409 beta-D-xylopyranose,
+# 439710 alpha-L-rhamnose, 441478 beta-D-glucopyranuronic acid).
+D_GLUCOSE, BETA_GLC, ALPHA_GLC = (
+    "WQZGKKKJIJFFOK-GASJEMHNSA-N", "WQZGKKKJIJFFOK-VFUOTHLCSA-N", "WQZGKKKJIJFFOK-DVKNGEFBSA-N")  # fmt: skip
+REFERENCE = {"Gal": "WQZGKKKJIJFFOK-FPRJBGLDSA-N", "Man": "WQZGKKKJIJFFOK-RWOPYEJCSA-N",
+             "Xyl": "SRBFZHDQGSBBOR-KKQCNMDGSA-N", "GlcA": "AEMOLEFTQBMNLQ-QIUUJYRFSA-N"}  # fmt: skip
+
+
+def sugar_key(frag, cap: str) -> str:
+    """The InChIKey of a sugar fragment with its `*` replaced by `cap` (the free sugar)."""
+    assert isinstance(frag, Fragment) and frag.attachments == 1, frag
+    mol = Chem.MolFromSmiles(frag.smiles.replace("*", cap))
+    return Chem.MolToInchiKey(mol)
+
+
+def open_centres(frag, cap: str = "[H]") -> int:
+    mol = Chem.MolFromSmiles(frag.smiles.replace("*", cap))
+    return sum(1 for _, tag in Chem.FindMolChiralCenters(mol, includeUnassigned=True) if tag == "?")
+
+
+@pytest.mark.parametrize("text", ["OGlc", "GlcO", "O-Glc", "OGlcp", "O-D-Glc", "Glc-O"])
+def test_a_glucoside_oxygen_is_d_glucose_with_its_anomer_open(text):
+    frag = resolve(text)
+    assert sugar_key(frag, "[H]") == D_GLUCOSE  # * on the anomeric O: the free sugar
+    assert open_centres(frag) == 1
+
+
+def test_glc_alone_attaches_at_the_anomeric_carbon():
+    frag = resolve("Glc")
+    assert sugar_key(frag, "O") == D_GLUCOSE  # * on C1: an OH there gives the free sugar
+    assert open_centres(frag, "O") == 1
+
+
+@pytest.mark.parametrize("text,want", [("O-β-D-Glc", BETA_GLC), ("β-OGlc", BETA_GLC),
+                                       ("OβGlc", BETA_GLC), ("O-α-D-Glc", ALPHA_GLC), ("α-Glc-O", ALPHA_GLC)])  # fmt: skip
+def test_an_anomer_printed_in_the_cell_is_set(text, want):
+    assert sugar_key(resolve(text), "[H]") == want
+
+
+@pytest.mark.parametrize("name", sorted(REFERENCE))
+def test_the_other_d_sugars_with_beta_printed_match_pubchem(name):
+    assert sugar_key(resolve(f"O-β-D-{name}"), "[H]") == REFERENCE[name]
+    assert open_centres(resolve(f"O{name}")) == 1
+
+
+def test_rhamnose_is_l():
+    assert sugar_key(resolve("O-α-L-Rha"), "[H]") == "SHZGCJCMOBCMKK-HGVZOGFYSA-N"
+    assert open_centres(resolve("ORha")) == 1
+
+
+@pytest.mark.parametrize(
+    "text", ["O-L-Glc", "O-D-Rha", "OAra", "Ara", "OGlc2", "OGlcGlc", "Glcp-Glc"]
+)
+def test_a_sugar_against_its_natural_series_or_unclear_is_not_built(text):
+    assert isinstance(resolve(text), str)
