@@ -1,7 +1,8 @@
 // Pick mode, a page open (owner, 2026-11-26): the structures picked on that page stand next to
 // it, not below the page where nobody sees them; a scaffold's built structures sit under it in
 // one tinted box ("Built from [nn]").
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import type { CurationStatus } from "../api/types";
 import BuiltFamily from "./BuiltFamily";
 import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
@@ -13,13 +14,23 @@ export default function PickedColumn({
   ws,
   rows,
   page0,
+  onAccept,
 }: {
   ws: Workspace;
   rows: ReviewRow[];
   page0: number;
+  /** Accept on a card here (the Paper view's rule): the COCONUT form opens for it. */
+  onAccept?: (segmentId: string) => void;
 }) {
   const paper = ws.paper!;
   const { decide, run } = useCardActions(paper.id, ws.live.reconnect);
+  const onDecide = useCallback(
+    (segmentId: string, status: CurationStatus) => {
+      decide(segmentId, status);
+      if (status === "accepted") onAccept?.(segmentId);
+    },
+    [decide, onAccept],
+  );
   const byId = useMemo(() => new Map(ws.segments.map((s) => [s.id, s])), [ws.segments]);
   const mains = rows.filter((r) => !r.builtFrom && byId.get(r.segmentId)?.page === page0);
   // the built rows of each scaffold, found once (not once per card)
@@ -41,7 +52,7 @@ export default function PickedColumn({
       compact
       current={ws.selection === r.segmentId}
       onOpen={ws.setSelection}
-      onDecide={decide}
+      onDecide={onDecide}
       onRun={run}
       onCompare={ws.openCompare}
       onEdit={ws.openEditor}

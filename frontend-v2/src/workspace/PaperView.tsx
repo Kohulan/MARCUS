@@ -14,22 +14,18 @@ import { useMainFigure } from "../api/queries";
 import { reasonText } from "../api/reasons";
 import { isPaperBusy } from "../api/status";
 import type { CurationStatus, StepOut } from "../api/types";
-import CoconutSidePanel from "../coconut/CoconutSidePanel";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { useToast } from "../ui/Toasts";
-import { shownPrediction } from "./cardState";
-import { coconutStart } from "./coconutList";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
+import SideForm from "./SideForm";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import BuiltFamily from "./BuiltFamily";
 import { families } from "./built";
 import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
-import { useAnnotation } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
-import { useRgroupReading } from "./useRgroupRows";
 import type { ReviewRow } from "./useReviewRows";
 import { type Workspace, waitsForPicks } from "./useWorkspace";
 import "./paper.css";
@@ -340,41 +336,5 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
         />
       )}
     </div>
-  );
-}
-
-
-/** The side form of one structure; its scaffold row when it was built (Markush Phase 3). */
-function SideForm({
-  ws,
-  rows,
-  segmentId,
-  onClose,
-}: {
-  ws: Workspace;
-  rows: ReviewRow[];
-  segmentId: string;
-  onClose: () => void;
-}) {
-  const paper = ws.paper!;
-  const annotation = useAnnotation(paper.id).data;
-  const segment = ws.segments.find((s) => s.id === segmentId);
-  const row = rows.find((r) => r.segmentId === segmentId);
-  const built = row?.builtFrom ?? null;
-  const scaffold = built ? ws.segments.find((s) => s.id === built.segmentId) : undefined;
-  const reading = useRgroupReading(scaffold ? shownPrediction(scaffold, paper.engine)?.id : undefined);
-  if (!segment || !row) return null;
-  const rgroupRow =
-    reading.extraction?.rows?.find((r) => r.compound === segment.compound_id) ?? null;
-  return (
-    <CoconutSidePanel
-      paper={paper}
-      segment={segment}
-      n={row.n}
-      start={coconutStart(annotation)}
-      built={built}
-      row={rgroupRow}
-      onClose={onClose}
-    />
   );
 }

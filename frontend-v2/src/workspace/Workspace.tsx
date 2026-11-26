@@ -26,6 +26,7 @@ import { type CoconutStart, coconutStart } from "./coconutList";
 import ModePrompt, { BackToPick } from "./ModePrompt";
 import PickPanel from "./PagePicker";
 import PickedColumn from "./PickedColumn";
+import SideForm from "./SideForm";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
@@ -118,6 +119,14 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const rows = useReviewRows(paper, ws.segments, ws.steps);
   const counts = useMemo(() => filterCounts(rows), [rows]);
   const tags = useMemo(() => new Map(rows.map((r) => [r.segmentId, r.n])), [rows]);
+  // Pick mode (owner, 2026-11-26): the page open (its structures stand beside it, so the list
+  // below hides) and the structure whose COCONUT form is open there.
+  const [pickPage, setPickPage] = useState<number | null>(null);
+  const [pickForm, setPickForm] = useState<string | null>(null);
+  const pickPageOpen = paper.ocsr_mode === "pick" && pickPage !== null;
+  useEffect(() => {
+    if (pickPage === null) setPickForm(null); // back on the page tiles: the form goes
+  }, [pickPage]);
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -270,12 +279,30 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           candidates={ws.candidates}
           allSteps={ws.allSteps}
           reconnect={ws.live.reconnect}
-          side={(page0) => <PickedColumn ws={ws} rows={rows} page0={page0} />}
+          side={(page0) => (
+            <>
+              <PickedColumn ws={ws} rows={rows} page0={page0} onAccept={setPickForm} />
+              {pickForm !== null && (
+                <SideForm
+                  key={pickForm}
+                  ws={ws}
+                  rows={rows}
+                  segmentId={pickForm}
+                  onClose={() => {
+                    setPickForm(null);
+                    segmentCard(document, pickForm)?.focus(); // back on its card
+                  }}
+                />
+              )}
+            </>
+          )}
+          onOpenPage={setPickPage}
+          withForm={pickForm !== null}
           tags={tags}
         />
       )}
 
-      {ws.view === "paper" ? (
+      {pickPageOpen ? null : ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">
           <PaperView ws={ws} rows={rows} />
         </section>

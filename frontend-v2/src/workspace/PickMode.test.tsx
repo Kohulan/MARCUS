@@ -234,6 +234,33 @@ describe("mode pick", () => {
     expect(img.parentElement!.querySelector('[data-marker="s2"]')).toBeNull();
   });
 
+  it("while a page is open its structures show once, beside it: the list below hides (owner, 2026-11-26)", async () => {
+    const pred = { id: "p1", engine: "decimer", engine_version: "1", smiles: "c1ccccc1", molfile: null, valid: true, ms: 1, cached: false, created_at: "2026-11-18T10:00:00Z" };
+    renderAt(paper([segment("s1", { page: 1, candidate: false, predictions: [pred] })]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    expect(await screen.findByRole("region", { name: "Review view" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Page 2" }));
+    await screen.findByRole("region", { name: "Picked on page 2" });
+    expect(screen.queryByRole("region", { name: "Review view" })).toBeNull();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Pick another" }));
+    expect(await screen.findByRole("region", { name: "Review view" })).toBeInTheDocument();
+  });
+
+  it("Accept beside the page opens the COCONUT form for that structure (owner, 2026-11-26)", async () => {
+    const pred = { id: "p1", engine: "decimer", engine_version: "1", smiles: "c1ccccc1", molfile: null, valid: true, ms: 1, cached: false, created_at: "2026-11-18T10:00:00Z" };
+    renderAt(paper([segment("s1", { page: 1, candidate: false, compound_id: "12", predictions: [pred] })]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    vi.spyOn(api, "putCuration").mockImplementation(() => new Promise<never>(() => undefined));
+    fireEvent.click(await screen.findByRole("button", { name: "Page 2" }));
+    const side = await screen.findByRole("region", { name: "Picked on page 2" });
+    fireEvent.click(within(side).getByRole("button", { name: "Accept [01]" }));
+    const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
+    expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12");
+    fireEvent.click(within(form).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "COCONUT [01]" })).toBeNull();
+  });
+
   it("before a pick, the column next to the page says what to do", async () => {
     renderAt(paper([]));
     vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
