@@ -5,6 +5,12 @@ on:
     branches:
       - main
 
+# One run at a time: two merges in a row started two runs that both updated the release branch,
+# and the slower one failed ("Error updating ref"). Queued, the newest push still runs.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
