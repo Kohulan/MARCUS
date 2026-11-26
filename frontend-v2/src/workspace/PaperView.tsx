@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -23,6 +24,7 @@ import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
 import BuiltFamily from "./BuiltFamily";
 import { families } from "./built";
+import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
 import { useAnnotation } from "./useAnnotation";
@@ -241,17 +243,9 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     const segment = byId.get(r.segmentId)!;
     return (
         <StructureCard
+          {...rowCardProps(r, segment, paper)}
           key={r.segmentId}
           compact
-          segment={segment}
-          n={r.n}
-          state={r.state}
-          paperEngine={paper.engine}
-          reason={r.reason}
-          failedEngine={r.failedEngine}
-          readingNote={r.readingNote}
-          alsoOn={r.alsoOn}
-          builtFrom={r.builtFrom}
           current={selection === r.segmentId}
           linked={hovered === r.segmentId}
           onOpen={onSelect}
@@ -259,7 +253,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           onRun={onRun}
           onCompare={ws.openCompare}
           onEdit={ws.openEditor}
-          paperName={paper.display_name}
           onHover={onCardHover}
         />
     );
@@ -324,9 +317,12 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
               f.kind === "one" ? (
                 listCard(f.row)
               ) : (
-                <BuiltFamily key={`family-${f.rows[0]!.segmentId}`} n={f.from.n} count={f.rows.length}>
-                  {f.rows.map(listCard)}
-                </BuiltFamily>
+                <Fragment key={`family-${f.head.segmentId}`}>
+                  {listCard(f.head)}
+                  <BuiltFamily n={f.rows[0]!.builtFrom!.n} count={f.rows.length}>
+                    {f.rows.map(listCard)}
+                  </BuiltFamily>
+                </Fragment>
               ),
             )}
           </div>

@@ -38,17 +38,16 @@ describe("built", () => {
     expect(placeBuilt(list).map((s) => s.id)).toEqual(["x", "o", "y"]);
   });
 
-  it("families: the built rows after their scaffold form one family; the rest stay single", () => {
+  it("families: a scaffold and the built rows after it form one family; a built row without its scaffold (a filter) stays single", () => {
     const r = (segmentId: string, from: string | null = null) => ({
       segmentId,
       builtFrom: from ? { segmentId: from, n: 1 } : null,
     });
     const out = families([r("s1"), r("b1", "s1"), r("b2", "s1"), r("p"), r("o", "gone")]);
-    expect(out.map((f) => (f.kind === "one" ? f.row.segmentId : f.rows.map((x) => x.segmentId)))).toEqual([
-      "s1",
-      ["b1", "b2"],
-      "p",
-      ["o"],
-    ]);
+    expect(
+      out.map((f) =>
+        f.kind === "one" ? f.row.segmentId : [f.head.segmentId, f.rows.map((x) => x.segmentId)],
+      ),
+    ).toEqual([["s1", ["b1", "b2"]], "p", "o"]);
   });
 });

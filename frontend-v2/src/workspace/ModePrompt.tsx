@@ -9,6 +9,26 @@ import "./pick.css";
 
 type Mode = "auto" | "pick";
 
+// A dialog closed without a choice stays closed for that paper in this tab (a reload or a new
+// visit shows the two buttons on the page). Storage may be blocked: then it asks again.
+const CLOSED_KEY = "marcus-mode-asked:";
+
+function wasClosed(paperId: string): boolean {
+  try {
+    return sessionStorage.getItem(CLOSED_KEY + paperId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function keepClosed(paperId: string) {
+  try {
+    sessionStorage.setItem(CLOSED_KEY + paperId, "1");
+  } catch {
+    // storage blocked: the dialog asks again next time
+  }
+}
+
 /**
  * Mode `ask` (a web upload; owner decisions 2026-11-25 and 2026-11-26): the paper's pages and
  * text are read, nothing is segmented yet. A dialog asks at once (so the pick path is seen):
@@ -31,7 +51,7 @@ export default function ModePrompt({
   const client = useQueryClient();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [asking, setAsking] = useState(true);
+  const [asking, setAsking] = useState(() => !wasClosed(paperId));
   const choose = (mode: Mode) => {
     setBusy(true);
     api
@@ -51,7 +71,10 @@ export default function ModePrompt({
         pages={pages}
         busy={busy}
         onChoose={choose}
-        onClose={() => setAsking(false)}
+        onClose={() => {
+          keepClosed(paperId);
+          setAsking(false);
+        }}
       />
     );
   }

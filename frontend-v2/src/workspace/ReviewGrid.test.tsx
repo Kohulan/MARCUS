@@ -1004,4 +1004,18 @@ describe("built structures (Markush Phase 3)", () => {
     expect(within(family).getAllByRole("article").map((a) => a.getAttribute("data-segment-id"))).toEqual(["s2", "s3"]);
     expect(within(family).queryByRole("article", { name: /^\[01\]/ })).toBeNull();
   });
+
+  it("under a filter that hides the scaffold, its built cards show without the box (owner review)", async () => {
+    const scaffold = segment("s1", { idx: 0 });
+    const built = segment("s2", {
+      idx: 10001,
+      built_from: "s1",
+      curation: { status: "accepted", smiles: null, molfile: null, note: null },
+      predictions: [prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" })],
+    });
+    renderGrid(paper([scaffold, built]));
+    fireEvent.click(await screen.findByRole("button", { name: /^Accepted/ }));
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(1));
+    expect(screen.queryByRole("group", { name: "Built from [01]" })).toBeNull();
+  });
 });

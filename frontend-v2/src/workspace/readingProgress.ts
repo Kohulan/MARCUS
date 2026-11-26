@@ -114,6 +114,9 @@ function structuresHandled(steps: StepOut[]): { done: number; total: number } {
   const all = new Set<string>();
   for (const s of steps) {
     if (s.kind !== "ocsr" || s.segment_id === null) continue;
+    // a read stopped by "Pick a structure" (auto -> pick) is no structure: its box is a
+    // candidate again (backend api/read.py leaves it out too)
+    if (s.status === "cancelled") continue;
     all.add(s.segment_id);
     if (s.status === "done") read.add(s.segment_id);
     else if (isStepActive(s.status)) active.add(s.segment_id);

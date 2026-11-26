@@ -95,7 +95,7 @@ function renderAt(p: PaperDetail, steps: StepOut[] = RENDERED) {
   vi.spyOn(api, "getAnnotation").mockRejectedValue(new Error("not asked here"));
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false } });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter initialEntries={[`/app/papers/${ID}`]}>
@@ -157,11 +157,25 @@ describe("mode ask: the paper page asks", () => {
     await waitFor(() => expect(setMode).toHaveBeenCalledWith(ID, "pick"));
   });
 
+  it("a closed dialog stays closed when the paper opens again (owner review, 2026-11-26)", async () => {
+    sessionStorage.clear();
+    const first = renderAt(paper([], { ocsr_mode: "ask" }));
+    const dialog = await screen.findByRole("dialog", { name: "How should MARCUS read it?" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    first.unmount();
+    renderAt(paper([], { ocsr_mode: "ask" }));
+    expect(await screen.findByRole("region", { name: "What to read" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    sessionStorage.clear();
+  });
+
   it("is not shown on a paper that reads all pages", async () => {
     renderAt(paper([], { ocsr_mode: "auto" }));
     await screen.findByRole("heading", { name: "Alkaloids" });
     expect(screen.queryByRole("region", { name: "What to read" })).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
+    // a finished paper has nothing left to stop: no way back to picking (owner review)
+    expect(screen.queryByRole("button", { name: "Pick a structure" })).toBeNull();
   });
 });
 
@@ -179,10 +193,15 @@ describe("mode pick", () => {
     renderAt(paper([]));
     const pick = await screen.findByRole("group", { name: "Pick a page" });
     const [first, second] = within(pick).getAllByRole("button");
-    const box = (left: number, width: number) => () => ({ left, right: left + width, width, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
-    pick.getBoundingClientRect = box(0, 900);
-    first!.getBoundingClientRect = box(0, 180);
-    second!.getBoundingClientRect = box(360, 180);
+    const layout = (el: HTMLElement, left: number, width: number) => {
+      Object.defineProperty(el, "offsetLeft", { configurable: true, value: left });
+      Object.defineProperty(el, "offsetWidth", { configurable: true, value: width });
+    };
+    layout(pick, 0, 900);
+    layout(first!, 0, 180);
+    layout(second!, 360, 180);
+    // already grown (hovered): its box on screen is larger and shifted; the side must not flip
+    second!.getBoundingClientRect = () => ({ left: 168, right: 564, width: 396, top: 0, bottom: 0, height: 0, x: 168, y: 0, toJSON: () => ({}) }) as DOMRect;
     fireEvent.pointerEnter(first!);
     expect(first).toHaveAttribute("data-grow", "left");
     fireEvent.focus(second!);
@@ -238,8 +257,21 @@ describe("mode pick", () => {
     const read = vi.spyOn(api, "readSegment").mockResolvedValue({ step_ids: ["a", "b", "c"] });
     fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
     await loadPage(1);
-    fireEvent.click(await screen.findByRole("button", { name: "Read structure [02] on page 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Read box 2 on page 1" }));
     await waitFor(() => expect(read).toHaveBeenCalledWith("s2"));
+  });
+
+  it("a read box carries its card's number; a box not read yet a + (owner review, 2026-11-26)", async () => {
+    const pred = { id: "p9", engine: "decimer", engine_version: "1", smiles: "c1ccccc1", molfile: null, valid: true, ms: 1, cached: false, created_at: "2026-11-18T10:00:00Z" };
+    const early = segment("s7", { page: 2, candidate: false, predictions: [{ ...pred, id: "p7" }] });
+    renderAt(paper([early, segment("s1"), segment("s2", { candidate: false, predictions: [pred] })]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
+    await loadPage(1);
+    // s2 is the page's second box, but the paper's first structure ([01], as its card says)
+    const read = await screen.findByRole("button", { name: "Structure [01] on page 1" });
+    expect(read).toHaveTextContent("[01]");
+    expect(screen.getByRole("button", { name: "Read box 1 on page 1" })).toHaveTextContent("+");
   });
 
   it("says when a page has no structure", async () => {
@@ -262,7 +294,7 @@ describe("mode pick", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(1));
     await loadPage(1);
-    fireEvent.click(await screen.findByRole("button", { name: "Read structure [01] on page 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Read box 1 on page 1" }));
     await waitFor(() => expect(live.reconnect).toHaveBeenCalledTimes(2));
   });
 

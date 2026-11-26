@@ -8,8 +8,11 @@ import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { hasDrawing, inFilter, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
+import { faArrowDown } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../ui/Icon";
 import BuiltFamily from "./BuiltFamily";
 import { families } from "./built";
+import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
@@ -212,17 +215,9 @@ export default function ReviewGrid({
     const index = indexOf.get(r.segmentId)!;
     return (
       <StructureCard
+        {...rowCardProps(r, byId.get(r.segmentId)!, paper)}
         key={r.segmentId}
-        segment={byId.get(r.segmentId)!}
-        n={r.n}
         index={index}
-        state={r.state}
-        paperEngine={paper.engine}
-        reason={r.reason}
-        failedEngine={r.failedEngine}
-        readingNote={r.readingNote}
-        alsoOn={r.alsoOn}
-        builtFrom={r.builtFrom}
         selected={picked.has(r.segmentId)}
         current={selection === r.segmentId}
         onToggle={onToggle}
@@ -231,7 +226,6 @@ export default function ReviewGrid({
         onRun={onRun}
         onCompare={ws.openCompare}
         onEdit={ws.openEditor}
-        paperName={paper.display_name}
       />
     );
   };
@@ -260,9 +254,18 @@ export default function ReviewGrid({
             f.kind === "one" ? (
               card(f.row)
             ) : (
-              <BuiltFamily key={`family-${f.rows[0]!.segmentId}`} n={f.from.n} count={f.rows.length} wide>
-                {f.rows.map(card)}
-              </BuiltFamily>
+              // The scaffold and its built cards as one block: the scaffold's row is not left
+              // half empty, a note fills it and points down to the box.
+              <div key={`family-${f.head.segmentId}`} className="built-block">
+                {card(f.head)}
+                <p className="built-block__note" aria-hidden="true">
+                  <Icon icon={faArrowDown} className="built-block__icon" />
+                  {`${f.rows.length} built below`}
+                </p>
+                <BuiltFamily n={f.rows[0]!.builtFrom!.n} count={f.rows.length} wide>
+                  {f.rows.map(card)}
+                </BuiltFamily>
+              </div>
             ),
           )}
         </div>

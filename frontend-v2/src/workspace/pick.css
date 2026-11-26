@@ -21,6 +21,7 @@
 }
 
 .pick__grid {
+  position: relative; /* the tiles' offsetParent: grow() measures them against it */
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;

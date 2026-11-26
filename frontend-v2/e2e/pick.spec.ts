@@ -60,7 +60,7 @@ test.describe("pick a structure", { tag: "@mocked" }, () => {
     await expectNoA11yViolations(page);
     const n = picked.segments[0]!.page + 1;
     await pages.getByRole("button", { name: `Page ${n}` }).click();
-    await page.getByRole("button", { name: `Read structure [01] on page ${n}` }).click();
+    await page.getByRole("button", { name: `Read box 1 on page ${n}` }).click();
     await expect.poll(() => calls).toEqual([
       'mode {"mode":"pick"}',
       `segment ${n - 1}`,

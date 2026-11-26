@@ -11,10 +11,20 @@ import { pageSteps } from "./pageFailures";
 import "./pick.css";
 
 const NO_MARKERS: PageMarker[] = [];
+const NO_TAGS: ReadonlyMap<string, number> = new Map();
 const isActive = (s: StepOut) => s.status === "pending" || s.status === "queued" || s.status === "running";
 
-/** The page's boxes: picked structures and candidates, in idx order; a candidate reads on click. */
-function markersOf(page0: number, segments: SegmentOut[], candidates: SegmentOut[]): PageMarker[] {
+/**
+ * The page's boxes: picked structures and candidates, in idx order; a candidate reads on click.
+ * A picked structure carries its card's number (`tags`, the paper's [nn]), so the box and the
+ * card beside the page match; a candidate its place on the page.
+ */
+function markersOf(
+  page0: number,
+  segments: SegmentOut[],
+  candidates: SegmentOut[],
+  tags: ReadonlyMap<string, number>,
+): PageMarker[] {
   // A built structure has no box of its own: its scaffold's box is there (as in the Paper view).
   const onPage = [...segments, ...candidates]
     .filter((s) => s.page === page0 && !s.built_from)
@@ -23,7 +33,7 @@ function markersOf(page0: number, segments: SegmentOut[], candidates: SegmentOut
   return onPage.map((s, i) => ({
     segmentId: s.id,
     target: s.id,
-    n: i + 1,
+    n: s.candidate ? i + 1 : (tags.get(s.id) ?? i + 1),
     state: s.candidate ? "not-read" : "to-check",
     bbox: s.bbox,
     rgroups: [],
@@ -32,26 +42,29 @@ function markersOf(page0: number, segments: SegmentOut[], candidates: SegmentOut
 }
 
 /**
- * Mode `pick` (owner decision 2026-11-25): the pages to pick from, then one page with its boxes.
- * A page is segmented when it is opened; a box is read (three engines) when it is clicked, and
- * its card then appears with the others. "Read all pages" switches to reading everything.
- */
-/**
  * A page tile grows under the pointer or the keyboard (owner, 2026-11-26): from its middle,
- * or inward when it sits at the grid's left or right edge, so it stays on the screen.
+ * or inward when it sits at the grid's left or right edge, so it stays on the screen. Measured
+ * on the layout (offsetLeft, offsetWidth; the grid is the tiles' offsetParent), which the grow
+ * itself (a transform) does not change.
  */
 function grow(e: { currentTarget: HTMLElement }) {
   const tile = e.currentTarget;
-  const grid = tile.parentElement?.getBoundingClientRect();
-  const r = tile.getBoundingClientRect();
+  const grid = tile.parentElement;
   let side = "center";
-  if (grid && r.width > 0) {
-    if (r.left - grid.left < r.width) side = "left";
-    else if (grid.right - r.right < r.width) side = "right";
+  if (grid && tile.offsetWidth > 0) {
+    const left = tile.offsetLeft;
+    const right = grid.offsetWidth - (tile.offsetLeft + tile.offsetWidth);
+    if (left < tile.offsetWidth) side = "left";
+    else if (right < tile.offsetWidth) side = "right";
   }
   tile.dataset.grow = side;
 }
 
+/**
+ * Mode `pick` (owner decision 2026-11-25): the pages to pick from, then one page with its boxes.
+ * A page is segmented when it is opened; a box is read (three engines) when it is clicked, and
+ * its card then appears with the others. "Read all pages" switches to reading everything.
+ */
 export default function PickPanel({
   paper,
   segments,
@@ -59,6 +72,7 @@ export default function PickPanel({
   allSteps,
   reconnect,
   side,
+  tags = NO_TAGS,
 }: {
   paper: PaperDetail;
   segments: SegmentOut[];
@@ -68,6 +82,8 @@ export default function PickPanel({
   reconnect: () => void;
   /** What stands next to an open page: the structures picked on it (PickedColumn). */
   side?: (page0: number) => ReactNode;
+  /** Each structure's [nn] number (the review rows'). */
+  tags?: ReadonlyMap<string, number>;
 }) {
   const client = useQueryClient();
   const toast = useToast();
@@ -106,7 +122,7 @@ export default function PickPanel({
     }
   };
 
-  const markers = open === null ? NO_MARKERS : markersOf(open, segments, candidates);
+  const markers = open === null ? NO_MARKERS : markersOf(open, segments, candidates, tags);
   const finding = segmentSteps.some(isActive);
   const newest = segmentSteps[0]?.status;
   const failed = open !== null && markers.length === 0 && !finding && newest === "failed";

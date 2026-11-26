@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
+import { isPaperBusy } from "../api/status";
 import { usePaper, useSteps } from "../api/queries";
 import type { PaperDetail } from "../api/types";
 import { heldOnlyReason } from "../coconut/held";
@@ -117,6 +118,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const reasonId = useId();
   const rows = useReviewRows(paper, ws.segments, ws.steps);
   const counts = useMemo(() => filterCounts(rows), [rows]);
+  const tags = useMemo(() => new Map(rows.map((r) => [r.segmentId, r.n])), [rows]);
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -258,7 +260,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           reconnect={ws.live.reconnect}
         />
       )}
-      {paper.ocsr_mode === "auto" && paper.status !== "failed" && (
+      {/* Only while reading: a finished paper has nothing left to stop (owner review). */}
+      {paper.ocsr_mode === "auto" && isPaperBusy(paper.status) && (
         <BackToPick paperId={paper.id} reconnect={ws.live.reconnect} />
       )}
       {paper.ocsr_mode === "pick" && (
@@ -269,6 +272,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           allSteps={ws.allSteps}
           reconnect={ws.live.reconnect}
           side={(page0) => <PickedColumn ws={ws} rows={rows} page0={page0} />}
+          tags={tags}
         />
       )}
 

@@ -3,6 +3,7 @@
 // one tinted box ("Built from [nn]").
 import { useMemo } from "react";
 import BuiltFamily from "./BuiltFamily";
+import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
@@ -21,27 +22,29 @@ export default function PickedColumn({
   const { decide, run } = useCardActions(paper.id, ws.live.reconnect);
   const byId = useMemo(() => new Map(ws.segments.map((s) => [s.id, s])), [ws.segments]);
   const mains = rows.filter((r) => !r.builtFrom && byId.get(r.segmentId)?.page === page0);
+  // the built rows of each scaffold, found once (not once per card)
+  const builtOf = useMemo(() => {
+    const m = new Map<string, ReviewRow[]>();
+    for (const r of rows) {
+      if (!r.builtFrom) continue;
+      const list = m.get(r.builtFrom.segmentId);
+      if (list) list.push(r);
+      else m.set(r.builtFrom.segmentId, [r]);
+    }
+    return m;
+  }, [rows]);
 
   const card = (r: ReviewRow) => (
     <StructureCard
+      {...rowCardProps(r, byId.get(r.segmentId)!, paper)}
       key={r.segmentId}
       compact
-      segment={byId.get(r.segmentId)!}
-      n={r.n}
-      state={r.state}
-      paperEngine={paper.engine}
-      reason={r.reason}
-      failedEngine={r.failedEngine}
-      readingNote={r.readingNote}
-      alsoOn={r.alsoOn}
-      builtFrom={r.builtFrom}
       current={ws.selection === r.segmentId}
       onOpen={ws.setSelection}
       onDecide={decide}
       onRun={run}
       onCompare={ws.openCompare}
       onEdit={ws.openEditor}
-      paperName={paper.display_name}
     />
   );
 
@@ -51,7 +54,7 @@ export default function PickedColumn({
         <p className="pick-side__hint">Click a box to read its structure.</p>
       ) : (
         mains.map((r) => {
-          const built = rows.filter((b) => b.builtFrom?.segmentId === r.segmentId);
+          const built = builtOf.get(r.segmentId) ?? [];
           return (
             <div key={r.segmentId} className="pick-side__item">
               {card(r)}
