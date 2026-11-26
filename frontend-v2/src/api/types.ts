@@ -334,6 +334,14 @@ export type CompareReply = {
   agree: boolean;
 };
 
+/**
+ * /tools/differences: per SMILES sent, atom indices (in the written SMILES' order) for
+ * /tools/depict. `marks`: where the answer differs from another, and where a missing piece
+ * attaches; `common`: what all share. Stereo counts. `rough`: the search ran out of time, the
+ * marks may be too wide.
+ */
+export type DifferencesReply = { marks: number[][]; common: number[][]; rough: boolean };
+
 export type McsReply = {
   mcs_smarts: string;
   atom_count: number;

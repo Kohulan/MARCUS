@@ -25,12 +25,13 @@ import {
   engineRows,
   enginesToRun,
   tooManyText,
-  useCommonPart,
+  useDifferences,
   useEngineRuns,
   useSimilarity,
   type CompareStep,
   type CompareTarget,
   type EngineRow,
+  type MarkMode,
 } from "./useCompare";
 import { resultWord } from "./rgroups";
 import "./compare.css";
@@ -58,8 +59,8 @@ export type CompareProps = {
 /**
  * Compare engines: the image the engines read (the paper's crop, or the uploaded image), then
  * each engine's result side by side (drawing, SMILES, validity), the
- * pairwise Tanimoto similarity, "Show common part" (the MCS highlighted in every drawing),
- * and "Use this one". Opening it starts every engine not read and not running, at once; a
+ * pairwise Tanimoto similarity, what the drawings mark (Differences, from the start: the atoms
+ * where an answer differs from another, orange; Common part; Off), and "Use this one". Opening it starts every engine not read and not running, at once; a
  * failed engine has its own Retry.
  */
 export default function Compare({
@@ -103,14 +104,16 @@ export default function Compare({
   const batchRunning = batch.length > 0 && (sending || batchDone < batchRows.length);
   const showBatch = useHeldAfter(batchRunning, END_HOLD_MS) && batchRows.length > 0;
   const pairs = useSimilarity(rows);
-  // The common part of every structure drawn, DECIMER's R-group answer ([R1]) too: its molfile
-  // comes from CDK, as in v1 (owner, 2026-11-26).
+  // What the drawings mark, over every structure drawn, DECIMER's R-group answer ([R1]) too
+  // (owner, 2026-11-26). Differences from the start when two or more different answers are
+  // drawn (owner, 2026-11-26); with fewer there is nothing to mark.
   const drawn = rows.filter((r) => r.prediction !== null && drawable(r.prediction));
-  const canCommon = new Set(drawn.map((r) => r.prediction!.smiles)).size >= 2;
-  const [common, setCommon] = useState(false);
-  const part = useCommonPart(
-    drawn.map((r) => r.prediction!),
-    common,
+  const canMark = new Set(drawn.map((r) => r.prediction!.smiles)).size >= 2;
+  const [chosen, setChosen] = useState<MarkMode>("differences");
+  const mark: MarkMode = canMark ? chosen : "off";
+  const part = useDifferences(
+    drawn.map((r) => r.prediction!.smiles),
+    mark,
   );
 
   // "Use coordinates" of MolScribe and MolNexTR (old papers; never MolParser, which has no image
@@ -129,34 +132,26 @@ export default function Compare({
       : shared;
 
   // Every drawing from /tools/depict, each with its own template (the toggles decide), and with
-  // the common part when it is shown. DECIMER's R-group scaffold ([R1], invalid for RDKit) is
-  // drawn too (CDK reads it; owner, 2026-11-26), never highlighted (the highlight is RDKit's).
+  // its marks. A drawing waits for the marks, so it is asked for once.
   const depicts = useQueries({
-    queries: drawn.map((r) =>
-      depictQuery(
-        r.prediction!.smiles,
-        r.prediction!.valid ? part.highlight : null,
-        part.renew,
-        templateOf(r),
-      ),
-    ),
+    queries: drawn.map((r) => ({
+      ...depictQuery(r.prediction!.smiles, null, undefined, templateOf(r), part.of(r.prediction!.smiles)),
+      enabled: part.settled,
+    })),
   });
   const depictOf = (r: EngineRow) => {
     const i = drawn.indexOf(r);
     return i < 0 ? undefined : depicts[i];
   };
 
-  const toolErrors = [
-    ...pairs.map((p) => p.error),
-    ...part.errors,
-    ...depicts.map((q) => q.error),
-  ];
+  const toolErrors = [...pairs.map((p) => p.error), part.error, ...depicts.map((q) => q.error)];
   const message =
     tooManyText(runError) ??
     (runError !== null ? `Not started: ${errorText(runError)}` : null) ??
     toolErrors.map(tooManyText).find((t) => t !== null) ??
-    (common && part.errors.length > 0 ? "Common part unavailable" : null) ??
-    (part.none ? "No common part" : null);
+    (part.error ? (mark === "common" ? "Common part unavailable" : "Differences unavailable") : null) ??
+    (part.none ? (mark === "common" ? "No common part" : "No differences") : null) ??
+    (part.rough ? "Rough marks: the structures are large" : null);
 
   const title = (
     <h2 id={titleId} className="cmp__title">
@@ -296,16 +291,19 @@ export default function Compare({
           </div>
         )}
         <div className="cmp__side">
-          <div className="cmp__actions glassbed">
-            <GlassButton
-              tint="clear"
-              size="sm"
-              disabled={!canCommon}
-              pressed={common && canCommon}
-              onClick={() => setCommon((c) => !c)}
-            >
-              Show common part
-            </GlassButton>
+          <div className="cmp__actions glassbed" role="group" aria-label="Mark in the drawings">
+            {MARK_MODES.map(([value, label]) => (
+              <GlassButton
+                key={value}
+                tint="clear"
+                size="sm"
+                disabled={!canMark && value !== "off"}
+                pressed={mark === value}
+                onClick={() => setChosen(value)}
+              >
+                {label}
+              </GlassButton>
+            ))}
           </div>
           {showBatch && (
             <div className="cmp__run">
@@ -356,6 +354,13 @@ export default function Compare({
     </Modal>
   );
 }
+
+/** The marks switch, in order. */
+const MARK_MODES: readonly (readonly [MarkMode, string])[] = [
+  ["differences", "Differences"],
+  ["common", "Common part"],
+  ["off", "Off"],
+];
 
 /** A column's key: the DECIMER column keeps its own whichever model it shows (the toggle in
  * its head keeps focus). */

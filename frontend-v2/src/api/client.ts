@@ -11,6 +11,7 @@ import type {
   CurationIn,
   CurationOut,
   DepictReply,
+  DifferencesReply,
   DoclingDoc,
   Engine,
   ExportFormat,
@@ -358,14 +359,25 @@ export const api = {
    */
   depict(
     smiles: string,
-    opts: { highlight?: string; highlightToken?: string; template?: string } = {},
+    opts: {
+      highlight?: string;
+      highlightToken?: string;
+      template?: string;
+      /** Atoms drawn orange / light blue, by index (api.differences). */
+      marks?: number[];
+      common?: number[];
+    } = {},
   ): Promise<DepictReply> {
-    const body: Record<string, string> = { smiles, format: "svg" };
+    const body: Record<string, string | number[]> = { smiles, format: "svg" };
     if (opts.highlight) body.highlight = opts.highlight;
     if (opts.highlight && opts.highlightToken) body.highlight_token = opts.highlightToken;
     if (opts.template) body.template = opts.template;
+    if (opts.marks?.length) body.marks = opts.marks;
+    if (opts.common?.length) body.common = opts.common;
     return sendJson<DepictReply>("POST", "/tools/depict", body);
   },
+  differences: (smiles: string[]) =>
+    sendJson<DifferencesReply>("POST", "/tools/differences", { smiles }),
   compare: (smilesA: string, smilesB: string) =>
     sendJson<CompareReply>("POST", "/tools/compare", { smiles_a: smilesA, smiles_b: smilesB }),
   mcs: (molfiles: string[]) => sendJson<McsReply>("POST", "/tools/mcs", { molfiles }),
