@@ -209,3 +209,17 @@ def test_a_label_that_carries_more_than_a_label_still_fails():
     mol.GetAtomWithIdx(6).SetProp("molFileAlias", "R1")
     rows = build_rows(None, Chem.MolToMolBlock(mol), [{"compound": "7", "groups": {"R1": "OH"}}])
     assert "not a bare label" in (rows[0].get("reason") or rows[0].get("failure") or str(rows[0]))
+
+
+@pytest.mark.parametrize("element", ["Rf", "Rb", "Rh", "Ru", "Re", "Y"])
+def test_a_scaffold_with_an_element_a_misread_label_makes_is_not_built(element):
+    """MolScribe wrote "R1" as [Rf] (rutherfordium) on BJOC 18/23: the build copied the element
+    into all three compounds (live, 2026-11-26). An element a misread R label makes is refused
+    once, for the whole scaffold, and the reason names it."""
+    out = scaffold_of(f"[{element}]Cc1ccc([1*])cc1", None)
+    assert isinstance(out, str) and element in out
+
+
+def test_the_usual_elements_and_salts_still_build():
+    for smiles in ("FC(Cl)(Br)c1cc(I)c(S)c(P)c1[1*]", "[Na+].[O-]C(=O)c1ccc([1*])cc1"):
+        assert not isinstance(build_row(scaffold_of(smiles, None), {"R1": "OH"}), str), smiles

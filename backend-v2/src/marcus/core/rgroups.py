@@ -69,7 +69,7 @@ def _label_order(label: str) -> tuple:
     return (label == "*", head, int(num) if num else -1, rest)
 
 
-def _ordered(labels) -> list[str]:
+def ordered_labels(labels) -> list[str]:
     return sorted(set(labels), key=_label_order)
 
 
@@ -171,7 +171,7 @@ def _parsed_labels(smiles: str, molfile: str, has_smiles: bool = False) -> tuple
             mol = Chem.MolFromSmiles(smiles)
         raw = _mol_labels(mol) if mol is not None else _unparsed_smiles_labels(smiles)
         labels = _placeholders(raw)
-    return tuple(_ordered(labels))
+    return tuple(ordered_labels(labels))
 
 
 def rgroup_labels(smiles: str | None, molfile: str | None = None) -> list[str]:
