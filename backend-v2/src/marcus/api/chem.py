@@ -8,7 +8,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.rdBase import BlockLogs
 
-from marcus.core.rgroups import rgroup_labels
+from marcus.core.rgroups import rgroup_labels, rtoken_dummies, rtoken_scaffold
 
 
 def parse_smiles(smiles: str) -> Chem.Mol | None:
@@ -33,7 +33,9 @@ MAX_CURATION_ATOMS = 1000  # bounds the parse time of one curated molfile (~0.1 
 def curation_error(smiles: str | None, molfile: str | None) -> tuple[str, str] | None:
     """(field, message) for the first curated value RDKit refuses, else None. CPU-bound: run
     it in marcus.api.chempool."""
-    if smiles is not None and parse_smiles(smiles) is None:
+    # DECIMER's R tokens ([R1], [X]) are kept: CDK draws them and the build reads them with their
+    # labels (owner, 2026-11-26); any other SMILES RDKit refuses is refused
+    if smiles is not None and parse_smiles(smiles) is None and not rtoken_scaffold(smiles):
         return "smiles", "SMILES could not be parsed"
     if molfile is not None:
         with BlockLogs():
@@ -63,6 +65,8 @@ def mol_for_sdf(smiles: str | None, molfile: str | None) -> Chem.Mol | None:
             if mol is not None:
                 return mol
         mol = parse_smiles(smiles) if smiles else None
+        if mol is None and smiles and rtoken_scaffold(smiles):
+            mol = parse_smiles(rtoken_dummies(smiles))  # DECIMER's R tokens as * atoms
         if mol is not None:
             AllChem.Compute2DCoords(mol)
             # A SMILES gives absolute stereo; RDKit writes chiral flag 0 unless told.

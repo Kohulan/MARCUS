@@ -444,17 +444,15 @@ export function SegmentCompare({
   const own = useMemo(() => ocsrSteps(segment, steps), [segment, steps]);
   const pick = (p: PredictionOut) => {
     onClose();
-    // DECIMER's R-group answer ([R1], [X]) RDKit cannot read: saved as CDK's molfile of it,
-    // which RDKit reads with its R atoms (as v1 did; owner, 2026-11-26).
-    const structure = p.valid
-      ? Promise.resolve({ smiles: p.smiles, molfile: p.molfile ?? null })
-      : api.smilesToMolfile(p.smiles).then((molfile) => ({ smiles: null, molfile }));
-    structure
-      .then((s) => save(segment.id, { status: "accepted", structure: s }))
-      .then(
-        () => onSaved?.(),
-        (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
-      );
+    // DECIMER's R-group answer ([R1], [X]) is kept as it is: the server takes it (R tokens only),
+    // CDK draws it and Build structures reads its labels (owner, 2026-11-26).
+    save(segment.id, {
+      status: "accepted",
+      structure: { smiles: p.smiles, molfile: p.molfile ?? null },
+    }).then(
+      () => onSaved?.(),
+      (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
+    );
   };
   return (
     <Compare
