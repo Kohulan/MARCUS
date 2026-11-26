@@ -27,7 +27,10 @@ MAX_HIGHLIGHT_ATOMS = 128  # = marcus.workers.tools.MAX_HIGHLIGHT_ATOMS, which c
 # One SMARTS atom: a bracket atom, or an organic-subset / any-atom symbol outside brackets.
 _SMARTS_ATOM = re.compile(r"\[[^\]]*\]|Cl|Br|[BCNOPSFIbcnops*Aa]")
 
+MAX_MARKS = 250  # = marcus.workers.tools.MAX_MARKS, which checks the atoms again
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
+# an atom index: a SMILES of MAX_SMILES characters has fewer atoms than that
+Mark = Annotated[int, Field(strict=True, ge=0, lt=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
 
 
@@ -43,6 +46,16 @@ class DepictIn(BaseModel):
     # orientation where the worker can use it (marcus.workers.orient), else it is the normal one.
     # Bounded like an MCS molfile; the worker's alignment has its own time and atom caps.
     template: str | None = Field(None, max_length=MAX_MOLFILE_BYTES)
+    # Atoms of the SMILES (its atom order) drawn with an orange glow: where this answer differs
+    # from the others (marcus.workers.tools MAX_MARKS). No search: plain indices.
+    marks: list[Mark] = Field(default_factory=list, max_length=MAX_MARKS)
+
+    @field_validator("marks")
+    @classmethod
+    def _distinct_marks(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value):
+            raise ValueError("marks must be distinct")
+        return value
 
     @field_validator("highlight")
     @classmethod
@@ -105,6 +118,8 @@ async def depict(request: Request, body: DepictIn, _owner: Owner = Depends(curre
     }
     if body.template:
         kwargs["template"] = body.template
+    if body.marks:  # only then: a tools worker from before the marks still draws the rest
+        kwargs["marks"] = body.marks
     data = await call_tool("marcus.tools.depict", kwargs)
     return {"format": body.format, "data": data}
 

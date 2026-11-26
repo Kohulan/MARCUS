@@ -9,7 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from marcus.api.chem import check_curation
 from marcus.api.chempool import CHEM
 from marcus.api.decisions import record_decisions
-from marcus.api.depiction import draw_or_read, orientation_templates, shown_structure
+from marcus.api.depiction import (
+    PAPER_VIEW_TASK,
+    draw_or_read,
+    orientation_templates,
+    overlay_answers,
+    overlay_layout,
+    overlay_reply,
+    shown_structure,
+)
 from marcus.api.deps import (
     current_owner,
     get_owned_segment,
@@ -34,7 +42,8 @@ from marcus.api.schemas import (
     StepAccepted,
 )
 from marcus.api.security import tools_limit
-from marcus.core import storage
+from marcus.api.tooling import call_tool
+from marcus.core import paper_layout, storage
 from marcus.core.agreement import shown_prediction
 from marcus.core.built import IsBuilt, apply_build
 from marcus.core.db import get_db
@@ -111,6 +120,51 @@ async def segment_depiction(
     smiles, source = shown
     data = await draw_or_read(request, owner, smiles, source, template)
     return Response(data, media_type="image/svg+xml", headers=DEPICTION_HEADERS)
+
+
+@router.get("/segments/{segment_id}/overlay", dependencies=[Depends(tools_limit)])
+async def segment_overlay(
+    segment_id: uuid.UUID,
+    response: Response,
+    owner: Owner = Depends(current_owner),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """The segment's answers on the paper (Compare's "Show on paper"): each engine's newest
+    drawable prediction with its atoms and bonds in the crop's pixels, placed by MolScribe's
+    paper layout, and the atoms where it differs from the others (`marks`); computed by the
+    tools worker (marcus.workers.paper_view), one tool call. 409 `no layout` or `poor fit`
+    (marcus.api.depiction.overlay_layout), before any tool call."""
+    segment, _ = await get_owned_segment(db, owner, segment_id)
+    predictions = list(
+        (
+            await db.execute(
+                select(Prediction)
+                .where(Prediction.segment_id == segment.id)
+                .order_by(Prediction.created_at.desc(), Prediction.id)
+            )
+        ).scalars()
+    )
+    layout = overlay_layout(segment, predictions)
+    answers = overlay_answers(segment, predictions)
+    view = {"answers": [], **_layout_figures(layout)}
+    # End the read-only transaction (and free its connection) before the tool wait.
+    await db.commit()
+    if answers:
+        kwargs = {"smiles": [p.smiles for p in answers], "layout": layout}
+        view = await call_tool(PAPER_VIEW_TASK, kwargs)
+    response.headers["Cache-Control"] = "private, no-store"
+    return overlay_reply(view, answers)
+
+
+def _layout_figures(layout: str) -> dict:
+    info = paper_layout.info(layout)
+    return {
+        "fit": info.fit,
+        "bond": info.bond,
+        "width": info.width,
+        "height": info.height,
+        "complete": True,
+    }
 
 
 @router.post("/segments/{segment_id}/predictions", status_code=202, response_model=StepAccepted)
@@ -212,9 +266,7 @@ async def build_structures(
     outcomes = await CHEM.run(build_rows, smiles, molfile, extraction.rows)
     scaffold = ("molfile", molfile) if molfile else ("smiles", smiles or "")
     try:
-        summary = await db.run_sync(
-            lambda s: apply_build(s, segment.id, scaffold, outcomes, names)
-        )
+        summary = await db.run_sync(lambda s: apply_build(s, segment.id, scaffold, outcomes, names))
     except IsBuilt:
         await db.rollback()
         raise HTTPException(status_code=409, detail="built") from None
@@ -242,9 +294,13 @@ async def put_curation(
     segment, paper = await get_owned_segment(db, owner, segment_id, with_labels=True)
     # ?shown_prediction_id=: the prediction the card showed, frozen with a decision on it
     # (marcus.api.decisions); it must be this segment's own.
-    if shown_prediction_id is not None and await db.scalar(
-        select(Prediction.segment_id).where(Prediction.id == shown_prediction_id)
-    ) != segment.id:
+    if (
+        shown_prediction_id is not None
+        and await db.scalar(
+            select(Prediction.segment_id).where(Prediction.id == shown_prediction_id)
+        )
+        != segment.id
+    ):
         raise HTTPException(
             status_code=422,
             detail=[{"type": "value_error", "loc": ["query", "shown_prediction_id"],

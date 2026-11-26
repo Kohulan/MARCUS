@@ -6,8 +6,10 @@ lazily, on its first request, by `marcus.tools.depict` on q.tools (the same draw
 SMILES (drawing_key). Later requests of that owner, for any segment with that SMILES, read the
 file.
 
-The paper's orientation: a segment's valid MolScribe and MolNexTR predictions with a molfile are
-the template candidates, in that order (orientation_templates); the tools worker draws every
+The paper's orientation: MolScribe's paper layout (marcus.core.paper_layout: its atom positions
+in the image, kept also when its answer is invalid), then a segment's valid MolScribe and
+MolNexTR predictions with a molfile are the template candidates, in that order
+(orientation_templates); the tools worker draws every
 structure on the first whose positions come from the image (marcus.workers.orient
 first_template), so the drawing follows the image. Such a drawing is keyed by the SMILES and the
 candidates together. The template comes from the owner's own stored rows, like the
@@ -45,7 +47,7 @@ from marcus.api.tooling import (
     run_tool,
     tools_busy,
 )
-from marcus.core import storage
+from marcus.core import paper_layout, storage
 from marcus.core.agreement import shown_prediction
 from marcus.core.drawable import is_drawable
 from marcus.core.enums import Engine
@@ -63,13 +65,81 @@ Source = Literal["curated", "predicted"]
 TEMPLATE_ENGINES = (Engine.MOLSCRIBE.value, Engine.MOLNEXTR.value)
 
 
+# The engine whose predictions carry a paper layout (marcus.workers.ocsr.handler).
+LAYOUT_ENGINE = Engine.MOLSCRIBE.value
+MAX_OVERLAY_ANSWERS = 6  # = marcus.workers.paper_view.MAX_ANSWERS
+PAPER_VIEW_TASK = "marcus.tools.paper_view"
+
+
+def layout_of(segment: Segment, predictions: list[Prediction]) -> str | None:
+    """The segment's paper layout: that of its newest MolScribe prediction that has one, valid
+    or not (a re-read without one does not hide an older one). `predictions`: newest first."""
+    return next(
+        (
+            p.layout
+            for p in predictions
+            if p.segment_id == segment.id and p.engine == LAYOUT_ENGINE and p.layout
+        ),
+        None,
+    )
+
+
+def overlay_answers(segment: Segment, predictions: list[Prediction]) -> list[Prediction]:
+    """The answers drawn over the paper: each engine's newest drawable prediction (what Compare
+    shows in its column), at most MAX_OVERLAY_ANSWERS. `predictions`: newest first."""
+    newest: dict[str, Prediction] = {}
+    for p in predictions:
+        if p.segment_id == segment.id and p.engine not in newest and _drawable(p):
+            newest[p.engine] = p
+    return list(newest.values())[:MAX_OVERLAY_ANSWERS]
+
+
+def overlay_reply(view: dict, answers: list[Prediction]) -> dict:
+    """The overlay route's body from the tools task's result (marcus.workers.paper_view): the
+    layout's figures and, per answer the task could read, its prediction, marks and geometry
+    (`atoms` [[x, y, symbol, placed]] in the crop's pixels and `bonds` [[atom, atom, order]],
+    both null when the answer cannot follow the layout)."""
+    found = view.get("answers") if isinstance(view, dict) else None
+    if not isinstance(found, list) or len(found) != len(answers):
+        raise tools_busy()
+    return {
+        **{k: view.get(k) for k in ("fit", "bond", "width", "height", "complete")},
+        "answers": [
+            {
+                "prediction_id": str(p.id),
+                "engine": p.engine,
+                "marks": a.get("marks") or [],
+                "atoms": a.get("atoms"),
+                "bonds": a.get("bonds"),
+            }
+            for p, a in zip(answers, found, strict=True)
+            if isinstance(a, dict)
+        ],
+    }
+
+
+def overlay_layout(segment: Segment, predictions: list[Prediction]) -> str:
+    """The layout to draw the answers over; 409 `no layout` without one (MolScribe read no
+    positions, or the segment was read before the layout), 409 `poor fit` when it does not sit
+    on the ink (paper_layout.OVERLAY_MAX_FIT_SHARE): never an overlay that only looks exact."""
+    layout = layout_of(segment, predictions)
+    info = paper_layout.info(layout)
+    if info is None:
+        raise HTTPException(status_code=409, detail="no layout")
+    if not info.overlay_ok:
+        raise HTTPException(status_code=409, detail="poor fit")
+    return layout
+
+
 def orientation_templates(segment: Segment, predictions: list[Prediction]) -> list[str]:
-    """The template candidates of the segment, in the order they are preferred: the molfile of
+    """The template candidates of the segment, in the order they are preferred: MolScribe's
+    paper layout (layout_of: valid or not), then the molfile of
     its newest valid MolScribe prediction that has one, then MolNexTR's. The worker takes the
     first whose positions come from the image (marcus.workers.orient.first_template: an old
     fb7505b MolNexTR's never do), so a computed one never blocks the next.
     `predictions`: the segment's, newest first."""
-    found = []
+    layout = layout_of(segment, predictions)
+    found = [layout] if layout else []
     for engine in TEMPLATE_ENGINES:
         p = next(
             (

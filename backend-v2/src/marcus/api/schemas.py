@@ -120,6 +120,9 @@ class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     ms: int
     cached: bool
     created_at: datetime
+    # The paper layout (marcus.core.paper_layout): MolScribe's atom positions in the image's
+    # pixels, also of an invalid answer. Only for drawing; null without one.
+    layout: str | None = None
     # the server can draw it (marcus.core.drawable): valid, or an R-group scaffold
     drawable: bool = False
 
