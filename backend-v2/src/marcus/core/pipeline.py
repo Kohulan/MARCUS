@@ -99,6 +99,7 @@ _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 PAGE_KINDS = (StepKind.RENDER_PAGE.value, StepKind.SEGMENT_PAGE.value)
 MANUAL_PAGE_RETRIES = 2  # extra render_page steps one page may get through retry_page
 MAX_VERSION_CHARS = 200
+MAX_LAYOUT_CHARS = 200_000  # a paper layout molfile (= the API's MAX_MOLFILE_BYTES)
 RENDER_DPI = 300  # fixed page render (marcus.workers.pdfsafe_child); part of the cache key
 CROP_SOURCES_TRIED = 20  # live papers tried per crop on a cache hit
 
@@ -508,6 +509,11 @@ def _check_ocsr_result(result: dict) -> None:
     molfile = result.get("molfile")
     if molfile is not None and not _is_text(molfile):
         raise BadResult("ocsr: 'molfile' must be a string or null")
+    layout = result.get("layout")
+    if layout is not None and (not _is_text(layout) or len(layout) > MAX_LAYOUT_CHARS):
+        raise BadResult(
+            f"ocsr: 'layout' must be a string of at most {MAX_LAYOUT_CHARS} characters or null"
+        )
     if not isinstance(result.get("valid"), bool):
         raise BadResult("ocsr: 'valid' must be a bool")
     if not _is_int(result.get("ms")):
@@ -843,6 +849,8 @@ def _prediction(step: Step, result: dict) -> Prediction:
         cached=bool(result.get("cached", False)),
         rgroups=rgroup_labels(result["smiles"], result.get("molfile")),
         inchikey=agreement.inchikey_of(result["smiles"], result["valid"]),
+        # only drawings use it: never the R-group labels, the editor or the export
+        layout=result.get("layout") or None,
     )
 
 
