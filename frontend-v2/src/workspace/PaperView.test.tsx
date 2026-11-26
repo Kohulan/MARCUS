@@ -1305,6 +1305,22 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12");
   });
 
+  it("a closed form stays closed after Review and back (simplify review, 2026-11-26)", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const preds = ["decimer", "molparser", "molscribe"].map((engine) => prediction({ id: `p-${engine}`, engine }));
+    renderAt(paper([segment("s1", { page: 0, compound_id: "12", predictions: preds })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Compare [01]" }));
+    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
+    const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
+    fireEvent.click(within(form).getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Paper" }));
+    await screen.findByRole("region", { name: "Paper view" });
+    expect(screen.queryByRole("complementary", { name: /^COCONUT/ })).toBeNull();
+  });
+
   it("Reject opens nothing", async () => {
     vi.spyOn(api, "putCuration").mockImplementation(() => new Promise<never>(() => undefined));
     renderAt(paper([segment("s1", { page: 0 })]));
