@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { api, errorText } from "../api/client";
 import { refreshPaper } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
@@ -15,8 +15,9 @@ const isActive = (s: StepOut) => s.status === "pending" || s.status === "queued"
 
 /** The page's boxes: picked structures and candidates, in idx order; a candidate reads on click. */
 function markersOf(page0: number, segments: SegmentOut[], candidates: SegmentOut[]): PageMarker[] {
+  // A built structure has no box of its own: its scaffold's box is there (as in the Paper view).
   const onPage = [...segments, ...candidates]
-    .filter((s) => s.page === page0)
+    .filter((s) => s.page === page0 && !s.built_from)
     .sort((a, b) => a.idx - b.idx);
   if (onPage.length === 0) return NO_MARKERS;
   return onPage.map((s, i) => ({
@@ -57,6 +58,7 @@ export default function PickPanel({
   candidates,
   allSteps,
   reconnect,
+  side,
 }: {
   paper: PaperDetail;
   segments: SegmentOut[];
@@ -64,6 +66,8 @@ export default function PickPanel({
   allSteps: StepOut[];
   /** Reopens the live stream (a finished paper's has ended), so the new steps show live. */
   reconnect: () => void;
+  /** What stands next to an open page: the structures picked on it (PickedColumn). */
+  side?: (page0: number) => ReactNode;
 }) {
   const client = useQueryClient();
   const toast = useToast();
@@ -149,31 +153,34 @@ export default function PickPanel({
           ))}
         </div>
       ) : (
-        <div className="pick__page">
-          {none && <p className="pick__note">No structures found on this page</p>}
-          {failed && (
-            <div className="pick__note">
-              <p>Structures could not be found on this page.</p>
-              <GlassButton tint="clear" size="sm" onClick={() => openPage(open)}>
-                Try again
-              </GlassButton>
-            </div>
-          )}
-          {finding && <p className="pick__note">Finding structures…</p>}
-          <PageWithBoxes
-            paperId={paper.id}
-            page0={open}
-            pages={pages}
-            imageKind={images[open]?.kind ?? "waiting"}
-            imageReason={null}
-            markers={markers}
-            selected={null}
-            hovered={null}
-            onPick={onPick}
-            onHover={() => undefined}
-            isMain={false}
-            onMark={null}
-          />
+        <div className="pick__open">
+          <div className="pick__page">
+            {none && <p className="pick__note">No structures found on this page</p>}
+            {failed && (
+              <div className="pick__note">
+                <p>Structures could not be found on this page.</p>
+                <GlassButton tint="clear" size="sm" onClick={() => openPage(open)}>
+                  Try again
+                </GlassButton>
+              </div>
+            )}
+            {finding && <p className="pick__note">Finding structures…</p>}
+            <PageWithBoxes
+              paperId={paper.id}
+              page0={open}
+              pages={pages}
+              imageKind={images[open]?.kind ?? "waiting"}
+              imageReason={null}
+              markers={markers}
+              selected={null}
+              hovered={null}
+              onPick={onPick}
+              onHover={() => undefined}
+              isMain={false}
+              onMark={null}
+            />
+          </div>
+          {side?.(open)}
         </div>
       )}
     </section>

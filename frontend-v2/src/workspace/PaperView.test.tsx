@@ -1265,6 +1265,20 @@ describe("built structures (Markush Phase 3)", () => {
     expect(sheet.querySelector('[data-marker="s1"]')).not.toBeNull();
     expect(sheet.querySelector('[data-marker="s2"]')).toBeNull();
   });
+
+  it("in the list, the built cards sit in one box under their scaffold (owner, 2026-11-26)", async () => {
+    const scaffold = segment("s1", { page: 0 });
+    const built = segment("s2", {
+      page: 0,
+      idx: 10001,
+      built_from: "s1",
+      compound_id: "3a",
+      predictions: [prediction({ id: "pb", engine: "enumerated", smiles: "COc1ccccc1" })],
+    });
+    renderAt(paper([scaffold, built], { pages: 1 }));
+    const family = await screen.findByRole("group", { name: "Built from [01]" });
+    expect(within(family).getAllByRole("article").map((a) => a.getAttribute("data-segment-id"))).toEqual(["s2"]);
+  });
 });
 
 describe("COCONUT side form (owner decision 2026-11-25)", () => {

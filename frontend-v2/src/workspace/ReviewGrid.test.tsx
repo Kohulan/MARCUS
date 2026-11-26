@@ -990,4 +990,18 @@ describe("built structures (Markush Phase 3)", () => {
     expect(within(c).queryByRole("button", { name: /^Compare/ })).toBeNull();
     expect(within(c).getByRole("button", { name: /^Accept/ })).toBeInTheDocument();
   });
+
+  it("the built cards sit together under their scaffold, in one box (owner, 2026-11-26)", async () => {
+    const scaffold = segment("s1", { idx: 0 });
+    const built = (id: string, idx: number) =>
+      segment(id, {
+        idx,
+        built_from: "s1",
+        predictions: [prediction({ id: `p${id}`, engine: "enumerated", smiles: "COc1ccccc1" })],
+      });
+    renderGrid(paper([scaffold, built("s2", 10001), built("s3", 10002), segment("s4", { idx: 1 })]));
+    const family = await screen.findByRole("group", { name: "Built from [01]" });
+    expect(within(family).getAllByRole("article").map((a) => a.getAttribute("data-segment-id"))).toEqual(["s2", "s3"]);
+    expect(within(family).queryByRole("article", { name: /^\[01\]/ })).toBeNull();
+  });
 });

@@ -24,6 +24,7 @@ import FocusMode from "./FocusMode";
 import { type CoconutStart, coconutStart } from "./coconutList";
 import ModePrompt from "./ModePrompt";
 import PickPanel from "./PagePicker";
+import PickedColumn from "./PickedColumn";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
@@ -264,6 +265,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           candidates={ws.candidates}
           allSteps={ws.allSteps}
           reconnect={ws.live.reconnect}
+          side={(page0) => <PickedColumn ws={ws} rows={rows} page0={page0} />}
         />
       )}
 

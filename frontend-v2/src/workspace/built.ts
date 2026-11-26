@@ -39,3 +39,27 @@ export function placeBuilt(segments: SegmentOut[]): SegmentOut[] {
   }
   return out;
 }
+
+type Familiar = { segmentId: string; builtFrom: { segmentId: string; n: number } | null };
+
+/** One card on its own, or the built cards of one scaffold together. */
+export type Family<T extends Familiar> =
+  | { kind: "one"; row: T }
+  | { kind: "built"; from: { segmentId: string; n: number }; rows: T[] };
+
+/**
+ * The list cut into families (owner, 2026-11-26): the built rows that follow each other from
+ * the same scaffold (placeBuilt puts them right after it) form one family, shown in one box
+ * under the scaffold; every other row stays on its own. Order is kept.
+ */
+export function families<T extends Familiar>(rows: T[]): Family<T>[] {
+  const out: Family<T>[] = [];
+  for (const row of rows) {
+    const last = out.at(-1);
+    if (!row.builtFrom) out.push({ kind: "one", row });
+    else if (last?.kind === "built" && last.from.segmentId === row.builtFrom.segmentId) {
+      last.rows.push(row);
+    } else out.push({ kind: "built", from: row.builtFrom, rows: [row] });
+  }
+  return out;
+}

@@ -181,6 +181,40 @@ describe("mode pick", () => {
     expect(second).toHaveAttribute("data-grow", "center");
   });
 
+  it("a picked structure shows next to its page; its built ones in one box under it (owner, 2026-11-26)", async () => {
+    const pred = { id: "p1", engine: "decimer", engine_version: "1", smiles: "*c1ccccc1", molfile: null, valid: true, ms: 1, cached: false, created_at: "2026-11-18T10:00:00Z" };
+    const read = segment("s1", { page: 1, candidate: false, predictions: [{ ...pred, rgroups: ["R"] }] });
+    const built = segment("s2", {
+      page: 1,
+      idx: 10001,
+      candidate: false,
+      built_from: "s1",
+      compound_id: "1a",
+      predictions: [{ ...pred, id: "p2", engine: "enumerated", smiles: "Cc1ccccc1" }],
+    });
+    const other = segment("s3", { page: 2, candidate: false, predictions: [{ ...pred, id: "p3", smiles: "c1ccccc1" }] });
+    renderAt(paper([read, built, other]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 2" }));
+    const side = await screen.findByRole("region", { name: "Picked on page 2" });
+    const cards = within(side).getAllByRole("article");
+    expect(cards.map((c) => c.getAttribute("data-segment-id"))).toEqual(["s1", "s2"]);
+    const family = within(side).getByRole("group", { name: "Built from [01]" });
+    expect(within(family).getAllByRole("article").map((c) => c.getAttribute("data-segment-id"))).toEqual(["s2"]);
+    // a built structure has no box of its own: the scaffold's box is there
+    const img = await loadPage(2);
+    await waitFor(() => expect(img.parentElement!.querySelectorAll("[data-marker]")).toHaveLength(1));
+    expect(img.parentElement!.querySelector('[data-marker="s2"]')).toBeNull();
+  });
+
+  it("before a pick, the column next to the page says what to do", async () => {
+    renderAt(paper([]));
+    vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Page 1" }));
+    const side = await screen.findByRole("region", { name: "Picked on page 1" });
+    expect(within(side).getByText("Click a box to read its structure.")).toBeInTheDocument();
+  });
+
   it("opens a page: finds its boxes, then Pick another goes back", async () => {
     renderAt(paper([]));
     const seg = vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: "st-seg" });

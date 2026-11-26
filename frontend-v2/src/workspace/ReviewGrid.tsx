@@ -8,6 +8,8 @@ import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { hasDrawing, inFilter, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
+import BuiltFamily from "./BuiltFamily";
+import { families } from "./built";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
 import type { ReviewRow } from "./useReviewRows";
@@ -203,6 +205,37 @@ export default function ReviewGrid({
     clear();
   };
 
+  // Built cards sit in one box under their scaffold (families; owner, 2026-11-26). `index` is
+  // the card's place in `shown` (the range select reads it).
+  const indexOf = new Map(shown.map((r, i) => [r.segmentId, i]));
+  const card = (r: ReviewRow) => {
+    const index = indexOf.get(r.segmentId)!;
+    return (
+      <StructureCard
+        key={r.segmentId}
+        segment={byId.get(r.segmentId)!}
+        n={r.n}
+        index={index}
+        state={r.state}
+        paperEngine={paper.engine}
+        reason={r.reason}
+        failedEngine={r.failedEngine}
+        readingNote={r.readingNote}
+        alsoOn={r.alsoOn}
+        builtFrom={r.builtFrom}
+        selected={picked.has(r.segmentId)}
+        current={selection === r.segmentId}
+        onToggle={onToggle}
+        onOpen={onOpen}
+        onDecide={onDecide}
+        onRun={onRun}
+        onCompare={ws.openCompare}
+        onEdit={ws.openEditor}
+        paperName={paper.display_name}
+      />
+    );
+  };
+
   return (
     <>
       <GridFilters
@@ -223,30 +256,15 @@ export default function ReviewGrid({
         </p>
       ) : (
         <div className="rg-grid" ref={grid}>
-          {shown.map((r, index) => (
-            <StructureCard
-              key={r.segmentId}
-              segment={byId.get(r.segmentId)!}
-              n={r.n}
-              index={index}
-              state={r.state}
-              paperEngine={paper.engine}
-              reason={r.reason}
-              failedEngine={r.failedEngine}
-              readingNote={r.readingNote}
-              alsoOn={r.alsoOn}
-              builtFrom={r.builtFrom}
-              selected={picked.has(r.segmentId)}
-              current={selection === r.segmentId}
-              onToggle={onToggle}
-              onOpen={onOpen}
-              onDecide={onDecide}
-              onRun={onRun}
-              onCompare={ws.openCompare}
-              onEdit={ws.openEditor}
-              paperName={paper.display_name}
-            />
-          ))}
+          {families(shown).map((f) =>
+            f.kind === "one" ? (
+              card(f.row)
+            ) : (
+              <BuiltFamily key={`family-${f.rows[0]!.segmentId}`} n={f.from.n} count={f.rows.length} wide>
+                {f.rows.map(card)}
+              </BuiltFamily>
+            ),
+          )}
         </div>
       )}
       {chosen.length > 0 && (

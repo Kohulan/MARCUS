@@ -79,8 +79,53 @@
   color: var(--muted);
 }
 
+/* An open page, and next to it the structures picked on it (owner, 2026-11-26): a picked
+   structure appears where the eye is, not below the page. */
+.pick__open {
+  display: grid;
+  grid-template-columns: minmax(0, 720px) minmax(340px, 440px);
+  gap: 24px;
+  align-items: start;
+}
+
 .pick__page {
+  min-width: 0;
   max-width: 720px;
+}
+
+.pick-side {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 16px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+.pick-side__hint {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed var(--control-border);
+  background-color: var(--surface);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pick-side__item {
+  display: grid;
+}
+
+@media (max-width: 1100px) {
+  .pick__open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pick-side {
+    position: static;
+    max-height: none;
+  }
 }
 
 .pick__note {
