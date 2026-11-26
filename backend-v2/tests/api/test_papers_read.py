@@ -442,6 +442,18 @@ def test_check_curation_in_the_worker_process():
     assert check_curation("C1CC((", None) == (("smiles", "SMILES could not be parsed"), [])
 
 
+def test_decimer_rgroup_smiles_is_a_curation(app_free=None):
+    """DECIMER's R tokens ([R], [R1], [X]): RDKit refuses them, CDK draws them and the build reads
+    them with their labels; a curator may keep DECIMER's answer as it is (owner, 2026-11-26).
+    Any other unreadable SMILES is still refused."""
+    from marcus.api.chem import check_curation, mol_for_sdf
+
+    assert check_curation("[R]c1ccc([R1])cc1[X]", None) == (None, ["R", "R1", "X"])
+    assert check_curation("C1CC([R1]", None) == (("smiles", "SMILES could not be parsed"), [])
+    sdf = mol_for_sdf("[R]c1ccc([R1])cc1[X]", None)
+    assert sdf is not None and sum(a.GetAtomicNum() == 0 for a in sdf.GetAtoms()) == 3
+
+
 def test_curation_check_in_the_worker_process():
     from marcus.api.chem import curation_error
 

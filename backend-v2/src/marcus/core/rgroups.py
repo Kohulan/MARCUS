@@ -118,6 +118,17 @@ def _as_dummy(m: re.Match) -> str:
     return f"[{m.group(2) or m.group(5) or ''}*]"
 
 
+def rtoken_scaffold(smiles: str | None) -> bool:
+    """A SMILES RDKit refuses only for DECIMER's R tokens ([R], [R1], [X]...): an R-group
+    scaffold CDK draws and the build reads with its labels (marcus.core.enumeration)."""
+    return bool(smiles) and bool(_unparsed_smiles_labels(_smiles_core(smiles)))
+
+
+def rtoken_dummies(smiles: str) -> str:
+    """The SMILES with each R token as a dummy atom (R1 as [1*]), as RDKit reads it."""
+    return _R_TOKEN.sub(_as_dummy, _smiles_core(smiles))
+
+
 def _unparsed_smiles_labels(smiles: str) -> list[str]:
     """Labels of a SMILES RDKit refused, when its R tokens are the only reason; else []."""
     tokens = list(_R_TOKEN.finditer(smiles))

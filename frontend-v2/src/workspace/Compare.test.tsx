@@ -894,7 +894,7 @@ describe("Compare in the workspace", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("Use this one takes DECIMER's R-group answer as CDK's molfile, the v1 way (owner, 2026-11-26)", async () => {
+  it("Use this one keeps DECIMER's R-group answer as it is, so Build structures reads its labels (owner, 2026-11-26)", async () => {
     const decimer = prediction({ engine: "decimer", smiles: "[R]c1ccccc1", valid: false, rgroups: ["R"], drawable: true });
     const molparser = prediction({ engine: "molparser", smiles: "*c1ccccc1", rgroups: ["R"] });
     const cur: CurationOut = { status: "unchecked", note: null, smiles: null, molfile: null };
@@ -911,8 +911,8 @@ describe("Compare in the workspace", () => {
     const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
     fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
-    expect(toMolfile).toHaveBeenCalledWith("[R]c1ccccc1");
-    expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: null, molfile: "<cdk molfile>" });
+    expect(toMolfile).not.toHaveBeenCalled();
+    expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: "[R]c1ccccc1", molfile: null });
   });
 
   it("Show common part counts DECIMER's R-group answer (owner, 2026-11-26)", () => {
