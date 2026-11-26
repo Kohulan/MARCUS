@@ -242,6 +242,9 @@ def _step_counts(paper_ids: list[uuid.UUID]):
             Step.kind == StepKind.OCSR.value,
             Step.segment_id.is_not(None),
             ~is_background(),
+            # a read stopped by "Pick a structure" (auto -> pick) is no structure: its box is a
+            # candidate again
+            Step.status != StepStatus.CANCELLED.value,
         )
         .group_by(Step.paper_id, Step.segment_id)
         .subquery()
@@ -642,7 +645,9 @@ async def list_count_fix(db: AsyncSession, papers: list[Paper]) -> CountFix:
             for s in by_paper[p.id]
             if (
                 src := shown_source(
-                    p.engine, curations.get(s.id), predictions.get(s.id, []),
+                    p.engine,
+                    curations.get(s.id),
+                    predictions.get(s.id, []),
                     s.id not in inherited.get(p.id, {}),
                 )
             )  # fmt: skip
@@ -740,9 +745,7 @@ async def segments_out(
     the chem process busy; no repeat_of at all, every inherited status unchecked)."""
     shown, curations, predictions = await load_segments(db, paper.id, candidates=True)
     candidates = set(
-        await db.scalars(
-            select(Segment.id).where(Segment.paper_id == paper.id, candidate_clause())
-        )
+        await db.scalars(select(Segment.id).where(Segment.paper_id == paper.id, candidate_clause()))
     )
     # the structures; candidates (pick mode) are only drawn on their page
     segments = [seg for seg in shown if seg.id not in candidates]

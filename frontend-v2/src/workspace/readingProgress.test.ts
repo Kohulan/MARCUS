@@ -1,7 +1,7 @@
 // readingProgress: the stages and the overall figure of a paper being read.
 import { describe, expect, it } from "vitest";
 import type { StepOut } from "../api/types";
-import { progressOf, readingProgress } from "./readingProgress";
+import { progressOf, readCounts, readingProgress } from "./readingProgress";
 
 let seq = 0;
 function step(over: Partial<StepOut>): StepOut {
@@ -268,5 +268,10 @@ describe("readingProgress", () => {
     const steps = [checkDone(), ...pageRead(0), ...pageRead(1), ocsr("g1"), ocsr("g2", "running"), ocsr("g3", "queued")];
     expect(readingProgress(busy(4), steps)).toEqual(row);
     expect(progressOf({ status: "processing", pages: 4, ocsr_mode: "auto", ...counts, rereading: true })).toBeNull();
+  });
+
+  it("a read stopped by Pick a structure (cancelled) is no structure (owner, 2026-11-26)", () => {
+    const steps = [checkDone(), ...pageRead(0), ocsr("g1"), ocsr("g2", "cancelled"), ocsr("g3", "running")];
+    expect(readCounts(busy(1), steps)).toMatchObject({ structures_total: 2, structures_read: 1 });
   });
 });

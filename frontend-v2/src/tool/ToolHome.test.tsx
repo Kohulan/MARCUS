@@ -284,6 +284,13 @@ describe("A PDF handed over by the landing's drop zone", () => {
     expect(api.uploadImage).not.toHaveBeenCalled();
   });
 
+  it("the same PDF again opens the earlier paper and says so (owner, 2026-11-26)", async () => {
+    vi.mocked(api.uploadPaper).mockResolvedValue({ paper_id: "old-paper", status: "done", reused: true });
+    renderHome({ at: at(handOff(fileOf("alkaloids.pdf", "application/pdf"))) });
+    expect(await screen.findByText("paper page old-paper")).toBeInTheDocument();
+    expect(await screen.findByText("Opened your earlier read of this paper")).toBeInTheDocument();
+  });
+
   it("a reload or Back with the same token uploads nothing again", async () => {
     const token = handOff(fileOf("alkaloids.pdf", "application/pdf"));
     const first = renderHome({ at: at(token) });

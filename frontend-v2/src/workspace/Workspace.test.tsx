@@ -604,6 +604,16 @@ describe("view in the URL", () => {
     expect(screen.getByRole("region", { name: "Review view" })).toBeInTheDocument();
   });
 
+  it("the view switch is one porcelain pill whose knob sits under the view shown (owner, 2026-11-26)", async () => {
+    renderWorkspace();
+    await title();
+    const toggle = screen.getByRole("group", { name: "View" });
+    expect(toggle).toHaveAttribute("data-view", "review");
+    expect(toggle.querySelector(".ws-toggle__knob")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Paper" }));
+    expect(toggle).toHaveAttribute("data-view", "paper");
+  });
+
   it("?view=paper opens the paper view, and the toggle writes the URL", async () => {
     renderWorkspace({ search: "?view=paper&s=g7" });
     await title();

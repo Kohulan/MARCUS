@@ -118,6 +118,25 @@ describe("Landing", () => {
     expect(container.querySelector('a[href^="/#"]')).toBeNull();
   });
 
+  it("Browse your history sits above Try a sample paper when this browser has papers (owner, 2026-11-26)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ items: 2 })));
+    renderAt("/");
+    const history = await screen.findByRole("link", { name: /^Browse your history/ });
+    expect(history).toHaveAttribute("href", "/app");
+    const sample = screen.getByRole("link", { name: /^Try a sample paper/ });
+    expect(history.compareDocumentPosition(sample) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls[0]![0]).toBe("/api/v2/history");
+  });
+
+  it("no history: no Browse your history", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ items: 0 })));
+    renderAt("/");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole("link", { name: /^Browse your history/ })).toBeNull();
+  });
+
   it("Try a sample paper is the orange glass pill to /app?sample=1", () => {
     renderAt("/");
     const sample = screen.getByRole("link", { name: /^Try a sample paper/ });

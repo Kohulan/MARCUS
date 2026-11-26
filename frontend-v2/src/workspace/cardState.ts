@@ -2,6 +2,7 @@
 // draws for it, and the grid's filters. Pure functions: the grid computes them once per
 // paper or steps change, for up to hundreds of segments.
 import { isPaperBusy, isStepActive } from "../api/status";
+import { drawable } from "../api/depictionKey";
 import type { PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
 import { engineName } from "../api/engines";
 import { STATE_WORD, type CardState } from "../ui/StateBadge";
@@ -165,9 +166,12 @@ export function sentence(text: string): string {
 /** True when the server has something to draw (a curated structure or a valid prediction). */
 export function hasDrawing(segment: SegmentOut): boolean {
   return Boolean(
-    segment.curation?.smiles || segment.curation?.molfile || segment.predictions.some((p) => p.valid),
+    segment.curation?.smiles || segment.curation?.molfile || segment.predictions.some(drawable),
   );
 }
+
+/** A prediction the server can draw: one rule, beside the depiction cache key. */
+export { drawable };
 
 /** The state filters, and "rgroups": structures with R-groups, whatever their state. */
 export type GridFilter = "all" | "to-check" | "accepted" | "rejected" | "failed" | "rgroups";

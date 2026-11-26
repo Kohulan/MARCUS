@@ -46,7 +46,8 @@ from marcus.api.tooling import (
     tools_busy,
 )
 from marcus.core import storage
-from marcus.core.agreement import pick_prediction
+from marcus.core.agreement import shown_prediction
+from marcus.core.drawable import is_drawable
 from marcus.core.enums import Engine
 from marcus.core.models import Curation, Owner, Paper, Prediction, Segment
 
@@ -102,15 +103,16 @@ async def shown_structure(
 ) -> tuple[str, Source] | None:
     """The SMILES the UI shows for `segment` and where it comes from.
 
-    `predictions`: the segment's, newest first. With `engine`: the newest valid prediction of
+    `predictions`: the segment's, newest first. With `engine`: the newest drawable prediction of
     that engine. Without: the curated SMILES (or the one derived from a curated molfile), else
-    marcus.core.agreement.pick_prediction (the engines' majority, else the newest valid
-    prediction of the paper's engine, else of any engine). The curation status
-    is ignored: a rejected structure still has a drawing (unlike `export.choose`).
+    the prediction the card shows (marcus.core.agreement.shown_prediction: the engines'
+    majority, else the newest valid prediction of the paper's engine, else of any engine, else
+    the newest), when it is drawable (_drawable). The curation status is ignored: a rejected
+    structure still has a drawing (unlike `export.choose`).
     """
-    valid = [p for p in predictions if p.valid and p.segment_id == segment.id and p.smiles]
+    own = [p for p in predictions if p.segment_id == segment.id]
     if engine is not None:
-        pick = next((p for p in valid if p.engine == engine.value), None)
+        pick = next((p for p in own if p.engine == engine.value and _drawable(p)), None)
         return (pick.smiles, "predicted") if pick is not None else None
     if curation is not None and curation.smiles:
         return curation.smiles, "curated"
@@ -123,10 +125,14 @@ async def shown_structure(
                 raise tools_busy() from None
             raise
         return (smiles, "curated") if smiles else None  # never a prediction instead
-    own = [p for p in predictions if p.segment_id == segment.id]
     frozen = curation.shown_prediction_id if curation is not None and use_frozen else None
-    pick = pick_prediction(own, paper.engine, frozen)
-    return (pick.smiles, "predicted") if pick is not None and pick.smiles else None
+    pick = shown_prediction(own, paper.engine, frozen)
+    return (pick.smiles, "predicted") if pick is not None and _drawable(pick) else None
+
+
+def _drawable(p: Prediction) -> bool:
+    """CDK can draw it (marcus.core.drawable): other invalid SMILES are not tried."""
+    return is_drawable(p.smiles, p.valid, p.rgroups)
 
 
 _UNDRAWABLE = object()

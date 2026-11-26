@@ -2,7 +2,7 @@
 // `npm run serve:local` only: no API call is made (@mocked). Matomo is answered locally with
 // an empty 204, so no test ever reaches the real tracker. Never production.
 import { expect, test } from "@playwright/test";
-import { collectCspViolations, expectNoA11yViolations, routeMatomo } from "./helpers";
+import { collectCspViolations, expectNoA11yViolations, routeMatomo, routeNoHistory } from "./helpers";
 
 const INFO_PAGES = ["/", "/about", "/privacy", "/disclaimer"];
 const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled Structures";
@@ -10,6 +10,7 @@ const HEADLINE = "Molecular Annotation and Recognition for Curating Unravelled S
 test.describe("landing and info pages @mocked", () => {
   test.beforeEach(async ({ page }) => {
     await routeMatomo(page);
+    await routeNoHistory(page);
   });
 
   test("the pre-rendered / has the headline before any script runs", async ({ page }) => {
@@ -147,6 +148,7 @@ test.describe("landing and info pages @mocked", () => {
       const open = async (reducedMotion: "reduce" | "no-preference") => {
         const page = await browser.newPage({ viewport: { width, height }, reducedMotion });
         await routeMatomo(page);
+        await routeNoHistory(page);
         await page.goto("/", { waitUntil: "commit" });
         return page;
       };
@@ -238,7 +240,8 @@ test.describe("landing and info pages @mocked", () => {
   test("a file that is not a PDF is refused on the landing, with no request", async ({ page }) => {
     const api: string[] = [];
     page.on("request", (r) => {
-      if (r.url().includes("/api/")) api.push(r.url());
+      // the landing's own history check is no upload
+      if (r.url().includes("/api/") && !r.url().endsWith("/api/v2/history")) api.push(r.url());
     });
     await page.goto("/", { waitUntil: "networkidle" });
     await page.locator('.act input[type="file"]').setInputFiles({
@@ -364,6 +367,7 @@ test.describe("landing and info pages @mocked", () => {
 test.describe("landing upload", () => {
   test.beforeEach(async ({ page }) => {
     await routeMatomo(page);
+    await routeNoHistory(page);
   });
 
   test("a PDF chosen on the landing is uploaded by the tool and opens its paper", async ({

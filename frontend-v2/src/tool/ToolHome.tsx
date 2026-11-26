@@ -6,6 +6,7 @@ import { keys, useImages, usePapers } from "../api/queries";
 import type { Engine } from "../api/types";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
+import { useToast } from "../ui/Toasts";
 import DropZone from "./DropZone";
 import { takeHandOff, type FileKind } from "./files";
 import PapersList from "./PapersList";
@@ -65,6 +66,7 @@ function RetryIn({ at }: { at: number }) {
 export default function ToolHome() {
   usePageTitle("Papers · MARCUS");
   const navigate = useNavigate();
+  const toast = useToast();
   const location = useLocation();
   const [params] = useSearchParams();
   const client = useQueryClient();
@@ -100,6 +102,8 @@ export default function ToolHome() {
           const out = await api.uploadPaper(file, { engine, ocsr: "ask" });
           void client.invalidateQueries({ queryKey: keys.papers() });
           navigate(`/app/papers/${encodeURIComponent(out.paper_id)}`);
+          // the same file again: its earlier read opens, nothing is read twice
+          if (out.reused) toast("Opened your earlier read of this paper");
         } else {
           const out = await api.uploadImage(file, engine);
           void client.invalidateQueries({ queryKey: keys.images() });
@@ -110,7 +114,7 @@ export default function ToolHome() {
         setBusy(null);
       }
     },
-    [client, engine, listAnswered, navigate],
+    [client, engine, listAnswered, navigate, toast],
   );
 
   // Each upload takes one of the three active-paper slots: a listed sample is opened.

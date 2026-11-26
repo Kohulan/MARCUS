@@ -29,7 +29,7 @@ def make_client(app):
 
 async def test_upload_returns_202_and_one_check_pdf_step(app, async_db_session):
     async with make_client(app) as c:
-        r = await upload(c)
+        r = await upload(c, pdf_bytes())
     assert r.status_code == 202
     body = r.json()
     assert body["status"] == "checking"

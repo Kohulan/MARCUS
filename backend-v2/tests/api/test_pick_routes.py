@@ -158,3 +158,20 @@ async def test_other_owner_gets_404(app, async_db_session):
     ]
     assert mode.status_code == 404 and seg.status_code == 404
     assert seg_ids == []  # the other owner made no step
+
+
+async def test_back_to_pick_stopped_boxes_are_no_structures(app, async_db_session):
+    """auto -> pick (owner, 2026-11-26): the boxes whose reads were stopped count nowhere."""
+    alice, token = await new_owner(async_db_session)
+    pid = await asked_paper(async_db_session, alice)
+    async with make_client(app, token) as c:
+        assert (await c.put(f"/api/v2/papers/{pid}/mode", json={"mode": "auto"})).status_code == 200
+        await finish_segmenting(async_db_session, pid)
+        r = await c.put(f"/api/v2/papers/{pid}/mode", json={"mode": "pick"})
+        paper = await get(c, pid)
+        listed = (await c.get("/api/v2/papers")).json()
+    assert r.status_code == 200
+    assert [s["candidate"] for s in paper["segments"]] == [True, True, True]
+    assert paper["structures"] == 0 and paper["structures_total"] == 0
+    row = next(p for p in listed["papers"] if p["id"] == str(pid))
+    assert row["structures_total"] == 0 and row["structures_read"] == 0

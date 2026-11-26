@@ -1,0 +1,84 @@
+/*
+ * A scaffold's built structures (owner, 2026-11-26): one mint box right under the scaffold,
+ * set in a little, with "↱ Built from [nn] · N" in green, so the cards read as coming from the
+ * structure above. The cards stay white on it (accepted text sits on surface).
+ */
+.built-family {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 0 16px;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background-color: var(--selection);
+}
+
+.built-family__cap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.built-family__icon {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.built-family__cards {
+  display: grid;
+  gap: 8px;
+}
+
+/* In the review grid: a whole row under the scaffold's row, the cards on the grid's columns. */
+.built-family--wide {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 16px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.built-family--wide .built-family__cards {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0;
+}
+
+/* Review grid: the scaffold and its built cards as one block (owner review, 2026-11-26). The
+   cells beside the scaffold carry a note pointing down to the box, not an empty gap. */
+.built-block {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.built-block > .built-family {
+  grid-column: 1 / -1;
+}
+
+.built-block__note {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.built-block__icon {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}

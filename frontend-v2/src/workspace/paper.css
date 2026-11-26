@@ -20,14 +20,15 @@
   border-top: 1px solid var(--line);
 }
 
-/* COCONUT side form open (owner decision 2026-11-25): the three columns move left, the form
-   takes a fourth column; narrow screens get it as a drawer over the right side. */
+/* COCONUT side form open (owner decisions 2026-11-25 and 2026-11-26): from 1600 px the three
+   columns move left and the form takes a fourth column at full width; below that the columns
+   keep their widths and the form is a drawer over the right side (no squeezed columns). */
 .pv--side {
   grid-template-columns:
-    minmax(240px, 1fr) minmax(200px, 0.8fr) minmax(280px, 340px) minmax(340px, 400px);
+    minmax(320px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px) minmax(380px, 440px);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1599px) {
   .pv--side {
     grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(330px, 400px);
   }

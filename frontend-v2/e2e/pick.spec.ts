@@ -60,7 +60,7 @@ test.describe("pick a structure", { tag: "@mocked" }, () => {
     await expectNoA11yViolations(page);
     const n = picked.segments[0]!.page + 1;
     await pages.getByRole("button", { name: `Page ${n}` }).click();
-    await page.getByRole("button", { name: `Read structure [01] on page ${n}` }).click();
+    await page.getByRole("button", { name: `Read box 1 on page ${n}` }).click();
     await expect.poll(() => calls).toEqual([
       'mode {"mode":"pick"}',
       `segment ${n - 1}`,
@@ -68,5 +68,24 @@ test.describe("pick a structure", { tag: "@mocked" }, () => {
     ]);
     await page.getByRole("button", { name: "Pick another" }).click();
     await expect(pages).toBeVisible();
+  });
+
+  test("reading all pages, Pick a structure goes back to the pages", async ({ page }) => {
+    const reading = { ...structuredClone(paper), status: "processing" };
+    const picked = { ...structuredClone(paper), ocsr_mode: "pick" };
+    let current: unknown = reading;
+    const modes: string[] = [];
+    await page.route(`**/api/v2/papers/${PID}`, (route) => route.fulfill(json(current)));
+    await page.route(`**/api/v2/papers/${PID}/mode`, (route) => {
+      modes.push(route.request().postData() ?? "");
+      current = picked;
+      return route.fulfill(json({ ocsr_mode: "pick" }));
+    });
+    await page.goto(`/app/papers/${PID}`);
+    await page.getByRole("button", { name: "Pick a structure" }).click();
+    await expect(page.getByRole("group", { name: "Pick a page" })).toBeVisible();
+    expect(modes).toEqual(['{"mode":"pick"}']);
+    await expect(page.getByRole("article").first()).toBeVisible(); // the read structures stay
+    await expectNoA11yViolations(page);
   });
 });

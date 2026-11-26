@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -21,6 +22,9 @@ import { coconutStart } from "./coconutList";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
+import BuiltFamily from "./BuiltFamily";
+import { families } from "./built";
+import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import TextColumn from "./TextColumn";
 import { useAnnotation } from "./useAnnotation";
@@ -233,6 +237,26 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
   const selectedPage = pageOf(selection);
   const hoveredPage = pageOf(hovered);
 
+  // Built cards sit in one box under their scaffold (families; owner, 2026-11-26).
+  const listCard = (r: ReviewRow) => {
+    const segment = byId.get(r.segmentId)!;
+    return (
+        <StructureCard
+          {...rowCardProps(r, segment, paper)}
+          key={r.segmentId}
+          compact
+          current={selection === r.segmentId}
+          linked={hovered === r.segmentId}
+          onOpen={onSelect}
+          onDecide={onDecide}
+          onRun={onRun}
+          onCompare={ws.openCompare}
+          onEdit={ws.openEditor}
+          onHover={onCardHover}
+        />
+    );
+  };
+
   return (
     <div className={side !== null ? "pv pv--side" : "pv"} ref={view}>
       <section className="pv-col pv-col--pages" aria-labelledby={pagesHead} ref={pagesCol}>
@@ -288,33 +312,18 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           )
         ) : (
           <div className="pv-list">
-            {rows.map((r) => {
-              const segment = byId.get(r.segmentId)!;
-              return (
-                <StructureCard
-                  key={r.segmentId}
-                  compact
-                  segment={segment}
-                  n={r.n}
-                  state={r.state}
-                  paperEngine={paper.engine}
-                  reason={r.reason}
-                  failedEngine={r.failedEngine}
-                  readingNote={r.readingNote}
-                  alsoOn={r.alsoOn}
-                  builtFrom={r.builtFrom}
-                  current={selection === r.segmentId}
-                  linked={hovered === r.segmentId}
-                  onOpen={onSelect}
-                  onDecide={onDecide}
-                  onRun={onRun}
-                  onCompare={ws.openCompare}
-                  onEdit={ws.openEditor}
-                  paperName={paper.display_name}
-                  onHover={onCardHover}
-                />
-              );
-            })}
+            {families(rows).map((f) =>
+              f.kind === "one" ? (
+                listCard(f.row)
+              ) : (
+                <Fragment key={`family-${f.head.segmentId}`}>
+                  {listCard(f.head)}
+                  <BuiltFamily n={f.rows[0]!.builtFrom!.n} count={f.rows.length}>
+                    {f.rows.map(listCard)}
+                  </BuiltFamily>
+                </Fragment>
+              ),
+            )}
           </div>
         )}
       </section>

@@ -1,7 +1,13 @@
+import {
+  faFileLines,
+  faTableCellsLarge,
+  type IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { isGone, isUuid } from "../api/client";
+import { isPaperBusy } from "../api/status";
 import { usePaper, useSteps } from "../api/queries";
 import type { PaperDetail } from "../api/types";
 import { heldOnlyReason } from "../coconut/held";
@@ -9,6 +15,7 @@ import SubmitForm from "../coconut/SubmitForm";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
+import Icon from "../ui/Icon";
 import GonePage, { OpenFailed } from "../ui/GonePage";
 import { focusLost } from "../ui/focus";
 import { paperName, structureTag } from "../ui/tag";
@@ -16,8 +23,9 @@ import { SegmentCompare } from "./Compare";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
 import { type CoconutStart, coconutStart } from "./coconutList";
-import ModePrompt from "./ModePrompt";
+import ModePrompt, { BackToPick } from "./ModePrompt";
 import PickPanel from "./PagePicker";
+import PickedColumn from "./PickedColumn";
 import PaperView from "./PaperView";
 import ReviewGrid from "./ReviewGrid";
 import { SegmentEditor } from "./SegmentEditor";
@@ -93,9 +101,9 @@ function PaperWorkspace({ id }: { id: string }) {
   );
 }
 
-const VIEWS: { view: WorkspaceView; label: string }[] = [
-  { view: "review", label: "Review" },
-  { view: "paper", label: "Paper" },
+const VIEWS: { view: WorkspaceView; label: string; icon: IconDefinition }[] = [
+  { view: "review", label: "Review", icon: faTableCellsLarge },
+  { view: "paper", label: "Paper", icon: faFileLines },
 ];
 
 function Frame({ id }: { id: string }) {
@@ -109,6 +117,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   const reasonId = useId();
   const rows = useReviewRows(paper, ws.segments, ws.steps);
   const counts = useMemo(() => filterCounts(rows), [rows]);
+  const tags = useMemo(() => new Map(rows.map((r) => [r.segmentId, r.n])), [rows]);
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -209,8 +218,10 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       </header>
 
       <div className="ws-tools">
-        <div className="ws-toggle" role="group" aria-label="View">
-          {VIEWS.map(({ view, label }) => (
+        {/* One porcelain pill; the green knob slides under the view shown (owner, 2026-11-26). */}
+        <div className="ws-toggle" role="group" aria-label="View" data-view={ws.view}>
+          <span className="ws-toggle__knob" aria-hidden="true" />
+          {VIEWS.map(({ view, label, icon }) => (
             <button
               key={view}
               type="button"
@@ -218,6 +229,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
               aria-pressed={ws.view === view}
               onClick={() => ws.setView(view)}
             >
+              <Icon icon={icon} className="ws-toggle__icon" />
               {label}
             </button>
           ))}
@@ -240,7 +252,16 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       <StatusBar paper={paper} steps={ws.steps} live={ws.live} />
 
       {paper.ocsr_mode === "ask" && paper.status !== "failed" && (
-        <ModePrompt paperId={paper.id} reconnect={ws.live.reconnect} />
+        <ModePrompt
+          paperId={paper.id}
+          name={paper.display_name}
+          pages={paper.pages}
+          reconnect={ws.live.reconnect}
+        />
+      )}
+      {/* Only while reading: a finished paper has nothing left to stop (owner review). */}
+      {paper.ocsr_mode === "auto" && isPaperBusy(paper.status) && (
+        <BackToPick paperId={paper.id} reconnect={ws.live.reconnect} />
       )}
       {paper.ocsr_mode === "pick" && (
         <PickPanel
@@ -249,6 +270,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           candidates={ws.candidates}
           allSteps={ws.allSteps}
           reconnect={ws.live.reconnect}
+          side={(page0) => <PickedColumn ws={ws} rows={rows} page0={page0} />}
+          tags={tags}
         />
       )}
 
