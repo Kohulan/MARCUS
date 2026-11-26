@@ -137,6 +137,15 @@ describe("Landing", () => {
     expect(screen.queryByRole("link", { name: /^Browse your history/ })).toBeNull();
   });
 
+  it("the MARCUS logo is the favicon (owner, 2026-11-26)", () => {
+    const html = readFileSync(resolve(__dirname, "../../index.html"), "utf8");
+    expect(html).toContain('<link rel="icon" href="/favicon.ico" sizes="any" />');
+    expect(html).toContain('<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
+    const files = readdirSync(resolve(__dirname, "../../public"));
+    expect(files).toEqual(expect.arrayContaining(["favicon.ico", "favicon-32.png", "apple-touch-icon.png"]));
+  });
+
   it("Try a sample paper is the orange glass pill to /app?sample=1", () => {
     renderAt("/");
     const sample = screen.getByRole("link", { name: /^Try a sample paper/ });
