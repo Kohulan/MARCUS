@@ -43,7 +43,7 @@ from rdkit.rdBase import BlockLogs
 
 from marcus.core import paper_layout
 from marcus.workers import orient
-from marcus.workers.tools import ToolInputError
+from marcus.workers.tool_errors import ToolInputError
 
 MAX_ANSWERS = 6  # the engines of one image (Compare shows up to four)
 VIEW_BUDGET_S = 3

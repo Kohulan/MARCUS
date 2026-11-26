@@ -87,7 +87,8 @@ def test_symbols_are_read_as_smiles_atoms_else_a_dummy(symbol, number, charge):
 def test_the_case_is_fitted_to_the_ink_and_written_in_crop_pixels():
     molfile = layout.layout_molfile(CROP, RAW["atoms"], RAW["bonds"])
     info = paper_layout.info(molfile)
-    assert (info.width, info.height) == Image.open(CROP).size == (585, 689)
+    size = Image.open(CROP).size
+    assert (info.width, info.height) == size == (585, 689)
     assert info.fit < 1.0  # mean px from the ink (the prototype: 0.53)
     assert 30 < info.bond < 90
     assert info.overlay_ok

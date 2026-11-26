@@ -22,6 +22,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import worker_process_init
 
 from marcus.core.celery_app import celery_app
+from marcus.workers.tool_errors import ToolInputError  # noqa: F401 (re-exported)
 
 ET.register_namespace("", "http://www.w3.org/2000/svg")
 ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
@@ -48,10 +49,6 @@ MAX_HIGHLIGHT_ATOMS = 128
 MARK_COLOUR = (250, 54, 0)
 COMMON_COLOUR = (173, 216, 230)
 MAX_MARKS = 250  # = marcus.workers.orient.MAX_ATOMS
-
-
-class ToolInputError(ValueError):
-    """The caller's input cannot be parsed or is unusable (HTTP 422)."""
 
 
 # --- JVM -----------------------------------------------------------------------------------

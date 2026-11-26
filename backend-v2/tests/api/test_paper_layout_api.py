@@ -12,7 +12,7 @@ from marcus.api import tooling as tools_route
 from marcus.core import paper_layout
 from marcus.core.models import Prediction
 from tests.api.conftest import make_client, new_owner, seed_paper
-from tests.api.test_depiction import NEXTR_MOLFILE, SCRIBE_MOLFILE, draws, svg_for  # noqa: F401
+from tests.api.test_depiction import NEXTR_MOLFILE, SCRIBE_MOLFILE, draws  # noqa: F401
 
 LAYOUT = paper_layout.header(0.5, 40.0, 300, 200) + "\n  layout molfile"
 POOR = paper_layout.header(1.7, 40.0, 300, 200) + "\n  layout molfile"  # 4.25 % of a bond

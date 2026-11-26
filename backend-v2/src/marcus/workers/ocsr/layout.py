@@ -24,6 +24,7 @@ cv2, scipy and numpy come with MolScribe's own stack (docker/Dockerfile.torch) a
 with the first fit; RDKit with the first molfile.
 """
 
+import math
 from pathlib import Path
 from typing import NamedTuple
 
@@ -111,7 +112,7 @@ def graph(atoms, bonds) -> tuple[list[str], list[tuple[float, float]], list[tupl
 
 
 def _finite(value: float) -> bool:
-    return value == value and abs(value) != float("inf")
+    return math.isfinite(value)
 
 
 def fit_to_ink(grey, points, edges) -> Fit | None:
