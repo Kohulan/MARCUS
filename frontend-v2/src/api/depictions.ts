@@ -245,8 +245,9 @@ export type RenewHighlight = (stale: string) => Promise<Highlight | null>;
 
 /**
  * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing), then the
- * template prediction's id when the drawing follows the paper's orientation (`template`:
- * orientationTemplate, its molfile is sent). The token is not in the key: a new token for the
+ * template's id when the drawing follows the paper's orientation (`template`:
+ * orientationTemplate, its molfile, a paper layout first, is sent), then the marks when there
+ * are some (`marks`: atoms of the SMILES drawn with an orange glow). The token is not in the key: a new token for the
  * same SMARTS draws the same picture. A highlighted drawing refused with a 422 (the token
  * expired, or the key rotated) asks `renew` for a new token once and draws once more with it;
  * a second refusal is the answer (no loop).
@@ -256,15 +257,20 @@ export function depictQuery(
   highlight: Highlight | null,
   renew?: RenewHighlight,
   template?: Pick<PredictionOut, "id" | "molfile"> | null,
+  marks?: readonly number[] | null,
 ) {
-  const oriented = template?.molfile ? { template: template.molfile } : {};
+  const marked = marks && marks.length > 0 ? { marks } : null;
+  const oriented = { ...(template?.molfile ? { template: template.molfile } : {}), ...marked };
   const draw = (h: Highlight) =>
     api.depict(smiles, { highlight: h.smarts, highlightToken: h.token, ...oriented });
   const key = ["depict", smiles, highlight?.smarts ?? null] as const;
+  const withTemplate = template?.molfile ? [...key, template.id] : key;
   return {
-    queryKey: template?.molfile ? [...key, template.id] : key,
+    queryKey: marked ? [...withTemplate, { marks: marked.marks }] : withTemplate,
     queryFn: async (): Promise<DepictReply> => {
-      if (highlight === null) return template?.molfile ? api.depict(smiles, oriented) : api.depict(smiles);
+      if (highlight === null) {
+        return template?.molfile || marked ? api.depict(smiles, oriented) : api.depict(smiles);
+      }
       try {
         return await draw(highlight);
       } catch (err) {

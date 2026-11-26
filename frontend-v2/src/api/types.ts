@@ -121,6 +121,12 @@ export interface PredictionOut {
    * RDKit refuses but CDK draws (DECIMER's [R1]). Optional: absent from an older server.
    */
   drawable?: boolean;
+  /**
+   * The paper layout (backend marcus.core.paper_layout): MolScribe's atom positions in the
+   * image's pixels as a molfile, kept also when its answer is invalid. Only for drawing (the
+   * template of every answer of that image, and the overlay); never the editor's start.
+   */
+  layout?: string | null;
 }
 
 export interface SegmentOut {
@@ -319,6 +325,29 @@ export type UploadPaperReply = { paper_id: string; status: string; reused?: bool
 export type HistoryReply = { items: number };
 export type UploadImageReply = { image_job_id: string; status: string };
 export type DepictReply = { format: "svg"; data: string };
+
+/** One answer on the paper (GET /segments/{id}/overlay), in the crop's pixels (y down). */
+export type OverlayAnswer = {
+  prediction_id: string;
+  engine: string;
+  /** Atoms (SMILES order) where this answer differs from the others. */
+  marks: number[];
+  /** [x, y, element, placed from the drawing]; null: the answer cannot follow the drawing. */
+  atoms: [number, number, string, boolean][] | null;
+  /** [atom, atom, order]. */
+  bonds: [number, number, number][] | null;
+};
+
+export type OverlayReply = {
+  /** Mean distance of the layout's bonds from the ink, px. */
+  fit: number;
+  bond: number;
+  width: number;
+  height: number;
+  /** False: a search ran out of time (some marks or answers are missing). */
+  complete: boolean;
+  answers: OverlayAnswer[];
+};
 
 export type CompareReply = {
   tanimoto: number;

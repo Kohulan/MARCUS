@@ -97,3 +97,14 @@ function fnv(s: string): string {
   }
   return h.toString(16).padStart(8, "0");
 }
+
+describe("depictionKey and the paper layout", () => {
+  it("changes when an invalid MolScribe reading brings a layout (the cards draw again)", () => {
+    const scribe = { ...pred("m", false), engine: "molscribe" };
+    const layout = "MARCUS layout fit=0.50 bond=40.0 size=9x9";
+    const before = seg({ predictions: [pred("a", true), scribe] });
+    const after = seg({ predictions: [pred("a", true), { ...scribe, layout }] });
+    expect(depictionKey(before)).toBe(depictionKey(seg({ predictions: [pred("a", true)] })));
+    expect(depictionKey(after)).not.toBe(depictionKey(before));
+  });
+});

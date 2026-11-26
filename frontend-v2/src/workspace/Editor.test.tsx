@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { createQueryClient, keys, useSaveCuration } from "../api/queries";
 import type { CurationOut, PaperDetail } from "../api/types";
+import { paperLayout } from "../test/paperLayout";
+import { editorStart } from "./SegmentEditor";
 import Editor, {
   editorChange,
   editorLoad,
@@ -480,6 +482,31 @@ describe("hasImagePositions / editorLoad", () => {
     expect(editorLoad(computed, true)).toEqual(computed);
     expect(editorLoad(computed, false)).toEqual(computed);
     expect(editorLoad(bare, false)).toEqual(bare);
+  });
+});
+
+describe("the editor never starts from the paper layout", () => {
+  it("an invalid MolScribe answer with a layout opens as its own molfile: no Use coordinates", () => {
+    // The layout is a reading aid for the drawings (binding review finding): the editor's
+    // start is the prediction's own SMILES and molfile, here a computed layout.
+    const p = {
+      id: "p1",
+      engine: "molscribe",
+      engine_version: "1",
+      smiles: "CC",
+      molfile: COMPUTED_MOL,
+      valid: false,
+      ms: 1,
+      cached: false,
+      created_at: "2026-11-26T00:00:00Z",
+      layout: paperLayout(),
+    };
+    const segment = { id: "s1", page: 0, idx: 0, bbox: [0, 0, 1, 1], curation: null, predictions: [p] };
+    const start = editorStart(segment as never, "molscribe");
+    expect(JSON.stringify(start)).not.toContain("MARCUS layout");
+    expect(hasImagePositions(start)).toBe(false);
+    // even handed a layout as a molfile, the editor does not take it for image positions
+    expect(hasImagePositions({ smiles: "CC", molfile: paperLayout(), engine: "molscribe" })).toBe(false);
   });
 });
 

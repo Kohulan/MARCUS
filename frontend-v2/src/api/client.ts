@@ -11,6 +11,7 @@ import type {
   CurationIn,
   CurationOut,
   DepictReply,
+  OverlayReply,
   DoclingDoc,
   Engine,
   ExportFormat,
@@ -344,6 +345,8 @@ export const api = {
   runPrediction: (segmentId: string, engine: Engine) =>
     sendJson<StepAccepted>("POST", `/segments/${enc(segmentId)}/predictions`, { engine }),
   segmentImageUrl: (id: string) => `${BASE}/segments/${enc(id)}/image`,
+  /** The segment's answers on the paper; 409 without a layout that fits (one tools call). */
+  segmentOverlay: (id: string, opts?: ReadOpts) => get<OverlayReply>(`/segments/${enc(id)}/overlay`, opts),
   /** `key` is depictionKey(segment): it only busts the browser cache. */
   depictionUrl(segmentId: string, key: string, engine?: Engine): string {
     const q = new URLSearchParams({ v: key });
@@ -355,12 +358,14 @@ export const api = {
   /**
    * A highlight is drawn only with the token its MCS reply carried (`highlight_token`).
    * `template`: an OCSR molfile with the image's atom positions (the paper's orientation).
+   * `marks`: atoms of the SMILES (its atom order) drawn with an orange glow.
    */
   depict(
     smiles: string,
-    opts: { highlight?: string; highlightToken?: string; template?: string } = {},
+    opts: { highlight?: string; highlightToken?: string; template?: string; marks?: readonly number[] } = {},
   ): Promise<DepictReply> {
-    const body: Record<string, string> = { smiles, format: "svg" };
+    const body: Record<string, string | readonly number[]> = { smiles, format: "svg" };
+    if (opts.marks && opts.marks.length > 0) body.marks = opts.marks;
     if (opts.highlight) body.highlight = opts.highlight;
     if (opts.highlight && opts.highlightToken) body.highlight_token = opts.highlightToken;
     if (opts.template) body.template = opts.template;
