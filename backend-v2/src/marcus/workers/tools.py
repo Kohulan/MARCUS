@@ -47,7 +47,7 @@ MAX_HIGHLIGHT_ATOMS = 128
 # they share (the highlight's light blue). marcus.workers.differences gives both lists.
 MARK_COLOUR = (250, 54, 0)
 COMMON_COLOUR = (173, 216, 230)
-MAX_MARKS = 512
+MAX_MARKS = 250  # = marcus.workers.orient.MAX_ATOMS
 
 
 class ToolInputError(ValueError):
@@ -384,6 +384,8 @@ def _checked_indices(indices: list[int] | None, count: int) -> list[int]:
         raise ToolInputError(f"more than {MAX_MARKS} marked atoms")
     if any(type(i) is not int or not 0 <= i < count for i in indices):
         raise ToolInputError("a marked atom is not in the drawn molecule")
+    if len(set(indices)) != len(indices):
+        raise ToolInputError("marked atoms must be distinct")
     return indices
 
 

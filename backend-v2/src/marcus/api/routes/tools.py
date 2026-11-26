@@ -9,7 +9,14 @@ import re
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from redis.exceptions import RedisError
 
 from marcus.api import highlight
@@ -25,20 +32,27 @@ MAX_MOLFILES = 20
 MAX_MOLFILE_BYTES = 200_000
 MAX_MCS_TOTAL = 1_000_000
 MAX_HIGHLIGHT_ATOMS = 128  # = marcus.workers.tools.MAX_HIGHLIGHT_ATOMS, which checks it again
-MAX_MARKS = 512  # = marcus.workers.tools.MAX_MARKS
-MAX_ATOM_INDEX = 9999
+MAX_MARKS = 250  # = marcus.workers.tools.MAX_MARKS (= orient.MAX_ATOMS), which checks again
+MAX_ATOM_INDEX = MAX_MARKS - 1
 MAX_ANSWERS = 6  # = marcus.workers.differences.MAX_ANSWERS
 # One SMARTS atom: a bracket atom, or an organic-subset / any-atom symbol outside brackets.
 _SMARTS_ATOM = re.compile(r"\[[^\]]*\]|Cl|Br|[BCNOPSFIbcnops*Aa]")
 
-MAX_MARKS = 250  # = marcus.workers.tools.MAX_MARKS, which checks the atoms again
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
-# an atom index: a SMILES of MAX_SMILES characters has fewer atoms than that
-Mark = Annotated[int, Field(strict=True, ge=0, lt=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
+
+
 # Atoms by their index in the written SMILES (the worker refuses one outside the molecule).
+def _distinct(value: list[int]) -> list[int]:
+    if len(set(value)) != len(value):
+        raise ValueError("atom indices must be distinct")
+    return value
+
+
 AtomIndices = Annotated[
-    list[Annotated[int, Field(strict=True, ge=0, le=MAX_ATOM_INDEX)]], Field(max_length=MAX_MARKS)
+    list[Annotated[int, Field(strict=True, ge=0, le=MAX_ATOM_INDEX)]],
+    Field(max_length=MAX_MARKS),
+    AfterValidator(_distinct),
 ]
 
 
