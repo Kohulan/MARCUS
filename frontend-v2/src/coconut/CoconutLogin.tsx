@@ -7,9 +7,11 @@ import "./coconut.css";
 
 type CoconutLoginProps = {
   onLoggedIn: (token: string) => void;
+  /** Email takes focus (the batch dialog, where the login comes first); not at a form's end. */
+  autoFocus?: boolean;
 };
 
-export default function CoconutLogin({ onLoggedIn }: CoconutLoginProps) {
+export default function CoconutLogin({ onLoggedIn, autoFocus = true }: CoconutLoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export default function CoconutLogin({ onLoggedIn }: CoconutLoginProps) {
           className="coconut-input"
           type="email"
           autoComplete="username"
-          autoFocus
+          autoFocus={autoFocus}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required

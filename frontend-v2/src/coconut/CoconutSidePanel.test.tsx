@@ -61,6 +61,13 @@ describe("COCONUT side form", () => {
     expect(screen.queryByRole("button", { name: "Send to COCONUT" })).toBeNull();
   });
 
+  it("opens at its top: the heading has focus, not the login at its end (live check 2026-11-26)", () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue(null);
+    show();
+    expect(screen.getByRole("heading", { name: "COCONUT [02]" })).toHaveFocus();
+    expect(screen.getByLabelText("Email")).not.toHaveFocus();
+  });
+
   it("sends one report with what the form shows", async () => {
     vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
     const send = vi

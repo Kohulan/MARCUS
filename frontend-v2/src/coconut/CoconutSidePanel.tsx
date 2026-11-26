@@ -187,7 +187,8 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
               Download JSON
             </GlassButton>
           </div>
-          {token === null && <CoconutLogin onLoggedIn={setToken} />}
+          {/* at the form's end: the form opens at its top, the heading focused */}
+          {token === null && <CoconutLogin onLoggedIn={setToken} autoFocus={false} />}
         </div>
       )}
     </aside>
