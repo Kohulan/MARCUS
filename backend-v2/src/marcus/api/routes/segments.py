@@ -44,9 +44,10 @@ from marcus.api.schemas import (
 from marcus.api.security import tools_limit
 from marcus.api.tooling import call_tool
 from marcus.core import paper_layout, storage
-from marcus.core.agreement import shown_prediction
+from marcus.core.agreement import newest_by_engine, shown_prediction
 from marcus.core.built import IsBuilt, apply_build
 from marcus.core.db import get_db
+from marcus.core.drawable import is_drawable
 from marcus.core.enumeration import build_rows
 from marcus.core.enums import Engine
 from marcus.core.models import (
@@ -233,7 +234,11 @@ async def build_structures(
     """Markush Phase 3, "Build structures": each R-group row of the scaffold the card shows
     becomes its own card (marcus.core.built); the rows that cannot be built are listed with the
     reason. The scaffold is the curated structure when there is one, else the shown prediction;
-    the rows are the shown prediction's. 409 {"detail": "built" | "no_rgroups" | "no_rows"}."""
+    the rows are the shown prediction's. Not curated, and another engine's newest reading of the
+    drawing builds more rows (the shown one missed or misread a label: MolScribe read R1 as
+    [Rf] and R5 as "Rs" on BJOC 18/23, DECIMER read both), Build uses that reading's scaffold and
+    names its engine (`scaffold_engine`; owner, 2026-11-26).
+    409 {"detail": "built" | "no_rgroups" | "no_rows"}."""
     segment, paper = await get_owned_segment(db, owner, segment_id)
     if await db.get(BuiltSegment, segment.id) is not None:
         raise HTTPException(status_code=409, detail="built")
@@ -264,6 +269,19 @@ async def build_structures(
     found = await figure_labels(paper.id)
     names = found[1] if found is not None else {}
     outcomes = await CHEM.run(build_rows, smiles, molfile, extraction.rows)
+    used: str | None = None
+    if not curated and any("smiles" not in o for o in outcomes):
+        others = [
+            p for p in newest_by_engine(predictions).values()
+            if p.id != shown.id and is_drawable(p.smiles, p.valid, p.rgroups)
+            and drawn_labels(p.rgroups or [])
+        ]  # fmt: skip
+        best = sum("smiles" in o for o in outcomes)
+        for other in others:
+            tried = await CHEM.run(build_rows, other.smiles, other.molfile, extraction.rows)
+            if (n := sum("smiles" in o for o in tried)) > best:
+                best, outcomes, used = n, tried, other.engine
+                smiles, molfile = other.smiles, other.molfile
     scaffold = ("molfile", molfile) if molfile else ("smiles", smiles or "")
     try:
         summary = await db.run_sync(lambda s: apply_build(s, segment.id, scaffold, outcomes, names))
@@ -279,6 +297,7 @@ async def build_structures(
         kept=summary.kept,
         removed=summary.removed,
         failures=[BuildFailure(**f) for f in summary.failures],
+        scaffold_engine=used,
     )
 
 

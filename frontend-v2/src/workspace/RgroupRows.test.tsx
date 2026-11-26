@@ -391,6 +391,17 @@ describe("Build structures (Markush Phase 3)", () => {
     void getPaper;
   });
 
+  it("a build on another engine's reading says which (owner, 2026-11-26)", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    vi.spyOn(api, "buildStructures").mockResolvedValue({
+      built: 3, kept: 0, removed: 0, failures: [], scaffold_engine: "decimer",
+    });
+    vi.spyOn(api, "getPaper").mockResolvedValue({} as never);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: BUILD }));
+    expect(await screen.findByText("Built on DECIMER's reading")).toBeInTheDocument();
+  });
+
   it("a failed build says why", async () => {
     vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
     vi.spyOn(api, "buildStructures").mockRejectedValue(new ApiError(503, "busy, try again"));

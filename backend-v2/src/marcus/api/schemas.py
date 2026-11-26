@@ -254,6 +254,8 @@ class BuildOut(BaseModel):
     kept: int
     removed: int
     failures: list[BuildFailure]
+    # the engine whose reading gave the scaffold, when it is not the shown one (it built more)
+    scaffold_engine: str | None = None
 
 
 class StepAccepted(BaseModel):
