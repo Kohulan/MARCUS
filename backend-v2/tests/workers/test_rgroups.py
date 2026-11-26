@@ -252,6 +252,12 @@ def test_rows_of_another_series_are_dropped_by_the_label_under_the_drawing(stub)
     assert [r["compound"] for r in out["rows"]] == ["3a"]
     elsewhere = read_scaffold(get_reader(), pid, 2, ["R1", "R2"], (2000, 300, 2300, 530))
     assert [r["compound"] for r in elsewhere["rows"]] == ["3a", "20a"]  # no label under it
+    # the label is in the lower half of another drawing of the page: it is that one's
+    other = (150, 350, 320, 600)
+    out = read_scaffold(get_reader(), pid, 2, ["R1", "R2"], drawing, [drawing, other])
+    assert [r["compound"] for r in out["rows"]] == ["3a", "20a"]
+    out = read_scaffold(get_reader(), pid, 2, ["R1", "R2"], other, [drawing, other])
+    assert [r["compound"] for r in out["rows"]] == ["3a"]
 
 
 def test_a_label_the_page_text_never_names_is_not_asked_for(stub):

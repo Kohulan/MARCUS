@@ -79,12 +79,15 @@ def read_scaffold(
     page: int,
     labels: list[str],
     bbox: Sequence[int] | None = None,
+    drawings: Sequence[Sequence[int]] | None = None,
 ) -> dict:
     """Ask `reader` for the rows of a scaffold with `labels` on `page` (0-based). Only the drawn
     labels the page text names are asked for (rgroup_extraction.labels_to_ask: no `*`, no OCSR
     extra label); the result's `labels` are those. The reader reads the whole page: with the
     drawing's box (`bbox`, page pixels), the rows of another series are dropped when a series
-    label is printed under the drawing (marcus.core.rgroup_series; owner, 2026-11-26)."""
+    label is printed under the drawing or to its right; a label belongs to the nearest of the
+    page's `drawings` (the boxes of all its segments) only (marcus.core.rgroup_series; owner,
+    2026-11-26)."""
     doc = _document(paper_id)
     context = page_context(doc, page + 1) if doc is not None else ""
     labels = labels_to_ask(labels, context)
@@ -101,7 +104,7 @@ def read_scaffold(
             raise BadResult(str(exc)) from None
         rows = salvage_rows(raw, labels)
     if doc is not None and bbox is not None:
-        own = drawing_compounds(bbox, series_boxes(doc).get(page, []))
+        own = drawing_compounds(bbox, series_boxes(doc).get(page, []), drawings)
         kept = keep_series(rows, own)
         if len(kept) != len(rows):
             log.info("paper %s page %d: %d of %d rows are another series's (own: %s)",
@@ -127,11 +130,20 @@ def extract_rgroups(step, session) -> dict:
         .join(Segment, Segment.id == step.segment_id)
         .where(RgroupExtraction.step_id == step.id)
     ).one_or_none()
+    drawings = []
+    if found is not None:  # the page's drawings: a series label belongs to the nearest one
+        drawings = session.scalars(
+            select(Segment.bbox).where(
+                Segment.paper_id == step.paper_id, Segment.page == found.page
+            )
+        ).all()
     session.rollback()  # end the read before the long work
     if found is None:
         raise BadInput("the structure is gone")
     reader = get_reader()
-    return read_scaffold(reader, step.paper_id, found.page, list(found.rgroups), found.bbox)
+    return read_scaffold(
+        reader, step.paper_id, found.page, list(found.rgroups), found.bbox, drawings
+    )
 
 
 register(StepKind.RGROUPS, extract_rgroups)
