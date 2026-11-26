@@ -31,7 +31,6 @@ import { RgroupPaper, useRgroupList } from "./useRgroupRows";
 import { useWorkspace, type Workspace as WorkspaceState, type WorkspaceView } from "./useWorkspace";
 import "./workspace.css";
 
-/** The COCONUT form's starting organisms, and the note they carry when they are the model's. */
 /**
  * How many structures COCONUT already has for the paper's DOI (null: unknown or no DOI).
  * An answer is kept for the tab (each open of the paper, each Back to it, reads it); no

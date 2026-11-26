@@ -17,7 +17,7 @@ import CoconutSidePanel from "../coconut/CoconutSidePanel";
 import { usePrefersReducedMotion } from "../ui/motion";
 import { useToast } from "../ui/Toasts";
 import { shownPrediction } from "./cardState";
-import { type CoconutStart, coconutStart } from "./coconutList";
+import { coconutStart } from "./coconutList";
 import { scrollWithin } from "./scrollWithin";
 import { pageSteps } from "./pageFailures";
 import PageWithBoxes, { type PageImage, type PageMarker } from "./PageWithBoxes";
@@ -114,7 +114,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
     },
     [decide],
   );
-  const annotation = useAnnotation(paper.id).data;
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
   const listHead = useId();
@@ -325,7 +324,6 @@ export default function PaperView({ ws, rows }: { ws: Workspace; rows: ReviewRow
           ws={ws}
           rows={rows}
           segmentId={side}
-          start={coconutStart(annotation)}
           onClose={() => {
             setSide(null);
             showCard(side, true); // focus back on its card
@@ -342,16 +340,15 @@ function SideForm({
   ws,
   rows,
   segmentId,
-  start,
   onClose,
 }: {
   ws: Workspace;
   rows: ReviewRow[];
   segmentId: string;
-  start: CoconutStart;
   onClose: () => void;
 }) {
   const paper = ws.paper!;
+  const annotation = useAnnotation(paper.id).data;
   const segment = ws.segments.find((s) => s.id === segmentId);
   const row = rows.find((r) => r.segmentId === segmentId);
   const built = row?.builtFrom ?? null;
@@ -365,7 +362,7 @@ function SideForm({
       paper={paper}
       segment={segment}
       n={row.n}
-      start={start}
+      start={coconutStart(annotation)}
       built={built}
       row={rgroupRow}
       onClose={onClose}

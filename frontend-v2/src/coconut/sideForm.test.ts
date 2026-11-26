@@ -1,7 +1,7 @@
 // The COCONUT side form's starting values and its MARCUS JSON (owner decision 2026-11-25).
 import { describe, expect, it } from "vitest";
 import type { PaperDetail, PredictionOut, SegmentOut } from "../api/types";
-import { jsonFileName, marcusJson, sideStart, structuralComment } from "./sideForm";
+import { jsonFileName, marcusJson, sideStart, sideStructure, structuralComment } from "./sideForm";
 
 const pred = (over: Partial<PredictionOut> = {}): PredictionOut => ({
   id: "p1",
@@ -45,13 +45,13 @@ const ROW = { compound: "20a", groups: { R1: "OMe", R2: "H" } };
 
 describe("sideStart", () => {
   it("names the structure from the text, else by its compound ID, else nothing", () => {
-    expect(sideStart(seg({ compound_id: "1i", compound_name: "maximaisoflavone J" }), 2, PAPER, START, null, null).fields.name).toBe("maximaisoflavone J");
-    expect(sideStart(seg({ compound_id: "20a" }), 2, PAPER, START, null, null).fields.name).toBe("Compound 20a");
-    expect(sideStart(seg(), 2, PAPER, START, null, null).fields.name).toBe("");
+    expect(sideStart(seg({ compound_id: "1i", compound_name: "maximaisoflavone J" }), PAPER, START, null, null).fields.name).toBe("maximaisoflavone J");
+    expect(sideStart(seg({ compound_id: "20a" }), PAPER, START, null, null).fields.name).toBe("Compound 20a");
+    expect(sideStart(seg(), PAPER, START, null, null).fields.name).toBe("");
   });
 
   it("starts the paper fields as the batch form does", () => {
-    const { paper } = sideStart(seg(), 2, PAPER, START, null, null);
+    const { paper } = sideStart(seg(), PAPER, START, null, null);
     expect(paper).toEqual({
       title: "MARCUS_Submission Fang 2026",
       doi: "10.1021/acs.jnatprod.6c00411",
@@ -62,14 +62,14 @@ describe("sideStart", () => {
   });
 
   it("a built structure says where it comes from", () => {
-    const out = sideStart(seg({ compound_id: "20a", built_from: "s1" }), 2, PAPER, START, BUILT, ROW);
-    expect(out.fields.structuralComments).toBe("Built from [01]: R1 = OMe, R2 = H (row 20a)");
-    expect(out.structure).toEqual({ segmentId: "s2", n: 2, smiles: "COc1ccccc1" });
+    const s = seg({ compound_id: "20a", built_from: "s1" });
+    expect(sideStart(s, PAPER, START, BUILT, ROW).fields.structuralComments).toBe("Built from [01]: R1 = OMe, R2 = H (row 20a)");
+    expect(sideStructure(s, 2, PAPER.engine).structure).toEqual({ segmentId: "s2", n: 2, smiles: "COc1ccccc1" });
   });
 
   it("a scaffold gets no structure to send, and the reason", () => {
     const scaffold = seg({ predictions: [pred({ smiles: "*c1ccccc1", rgroups: ["R1"] })] });
-    const out = sideStart(scaffold, 1, PAPER, START, null, null);
+    const out = sideStructure(scaffold, 1, PAPER.engine);
     expect(out.structure).toBeNull();
     expect(out.heldReason).toBe("[01] has R-groups (R1): build the compounds or edit the structure first");
   });
@@ -84,8 +84,9 @@ describe("structuralComment", () => {
 describe("marcusJson", () => {
   it("holds exactly what the form shows", () => {
     const s = seg({ compound_id: "20a", built_from: "s1" });
-    const start = sideStart(s, 2, PAPER, START, BUILT, ROW);
-    expect(marcusJson(PAPER, s, 2, start.structure!, start.paper, start.fields, BUILT, ROW)).toEqual({
+    const start = sideStart(s, PAPER, START, BUILT, ROW);
+    const { structure } = sideStructure(s, 2, PAPER.engine);
+    expect(marcusJson(PAPER, s, structure!, start.paper, start.fields, BUILT, ROW)).toEqual({
       format: "marcus-coconut-1",
       paper: { id: PAPER.id, doi: PAPER.doi, title: PAPER.title, display_name: "jnp.pdf" },
       structure: {

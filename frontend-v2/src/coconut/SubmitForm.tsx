@@ -12,16 +12,14 @@ import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
 import { structureTag } from "../ui/tag";
 import {
-  AUTH_ERROR,
   buildReport,
   clearToken,
   getToken,
-  markSent,
-  markUnknown,
-  organismsFor,
+  loginEnded,
+  missingFields,
+  recordResults,
   sentIds,
   submitReports,
-  UNKNOWN_ERROR,
   unknownIds,
 } from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
@@ -63,7 +61,7 @@ type Phase =
   | { kind: "sending"; done: number; total: number }
   | { kind: "results"; results: SubmitResult[]; structures: SubmitStructure[] };
 
-const EMPTY_ORGANISM: OrganismDraft = { name: "", parts: "", location: "", ecosystems: "" };
+export const EMPTY_ORGANISM: OrganismDraft = { name: "", parts: "", location: "", ecosystems: "" };
 const NO_HELD: HeldStructure[] = [];
 
 function startFields(
@@ -150,12 +148,10 @@ export default function SubmitForm({
   const held = (id: string) => sent.has(id) || unknown.has(id);
   const toSend = structures.filter((s) => !held(s.segmentId) || again.has(s.segmentId));
   const unnamed = toSend.filter((s) => !rowOf(s.segmentId).name.trim()).length;
-  const noOrganism = toSend.some((s) => organismsFor(fields, rowOf(s.segmentId)).length === 0);
-  const missing = [
-    !fields.title.trim() && "title",
-    !fields.evidence.trim() && "evidence",
-    noOrganism && "organism",
-  ].filter(Boolean);
+  const missing = missingFields(
+    fields,
+    toSend.map((s) => rowOf(s.segmentId)),
+  );
   const problem =
     missing.length > 0
       ? `Fill in ${missing.join(", ")}`
@@ -220,18 +216,12 @@ export default function SubmitForm({
       const said = chunkNews(before, done, total);
       before = done;
       if (said) setNews(said);
-      const ok = chunk.filter((r) => r.ok).map((r) => r.segmentId);
-      const lost = chunk.filter((r) => !r.ok && r.error === UNKNOWN_ERROR).map((r) => r.segmentId);
-      markSent(paper.id, ok);
-      markUnknown(paper.id, lost);
+      const { ok, lost } = recordResults(paper.id, chunk);
       setSent((s) => new Set([...s, ...ok]));
       setUnknown((u) => new Set([...u].filter((id) => !ok.includes(id)).concat(lost)));
       setPhase({ kind: "sending", done, total });
     });
-    if (results.some((r) => !r.ok && r.error === AUTH_ERROR)) {
-      clearToken();
-      setToken(null);
-    }
+    if (loginEnded(results)) setToken(null);
     setAgain(new Set());
     busy.current = false;
     setPhase({ kind: "results", results, structures: list });
