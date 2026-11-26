@@ -89,6 +89,7 @@ ALLOWED_ROUTES = {
     ("POST", "/api/v2/tools/depict"),
     ("POST", "/api/v2/tools/smiles-to-molfile"),
     ("POST", "/api/v2/tools/mcs"),
+    ("POST", "/api/v2/tools/differences"),
     ("POST", "/api/v2/tools/compare"),
 }
 
