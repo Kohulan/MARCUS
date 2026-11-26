@@ -240,6 +240,8 @@ export interface BuildOut {
   kept: number;
   removed: number;
   failures: BuildFailure[];
+  /** The engine whose reading gave the scaffold, when not the shown one (it built more rows). */
+  scaffold_engine?: string | null;
 }
 
 export interface ModeOut {

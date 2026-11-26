@@ -17,6 +17,7 @@ import {
   UNLABELLED,
 } from "./rgroups";
 import { BUILD, COULD_NOT_BUILD, failureText } from "./built";
+import { ENGINES } from "../api/engines";
 import { RgroupPaper, useRgroupReading } from "./useRgroupRows";
 import "./rgroupRows.css";
 
@@ -52,6 +53,8 @@ export default function RgroupRows({
   const paperId = useContext(RgroupPaper);
   const [starting, setStarting] = useState(false);
   const [building, setBuilding] = useState(false);
+  // the engine whose reading Build used, when not the shown one (the server picked it)
+  const [builtOn, setBuiltOn] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // about to start by itself: as good as queued
   const status = extraction?.status ?? (pending ? "queued" : "none");
@@ -79,7 +82,8 @@ export default function RgroupRows({
     setProblem(null);
     setBuilding(true);
     try {
-      await api.buildStructures(segmentId);
+      const out = await api.buildStructures(segmentId);
+      setBuiltOn(out.scaffold_engine ?? null);
       if (paperId !== null) refreshPaper(client, paperId);
     } catch (err) {
       setProblem(`Not built: ${errorText(err)}`);
@@ -138,6 +142,9 @@ export default function RgroupRows({
       )}
       {rows !== null && extraction?.truncated && (
         <p className="rg__note">Cut short: later rows are missing.</p>
+      )}
+      {builtOn !== null && (
+        <p className="rg__note">{`Built on ${ENGINES.find((e) => e.value === builtOn)?.label ?? builtOn}'s reading`}</p>
       )}
       {failures !== null && failures.length > 0 && (
         <div className="rg__failures">

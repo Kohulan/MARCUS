@@ -47,6 +47,7 @@ async def test_build_route_builds_the_rows_of_the_shown_scaffold(app, async_db_s
     assert r.json() == {
         "built": 2, "kept": 0, "removed": 0,
         "failures": [{"compound": "3c", "reason": 'unknown substituent "Tig"'}],
+        "scaffold_engine": None,
     }  # fmt: skip
     assert await built_keys(async_db_session, seg) == {key("COc1ccc(O)cc1"), key("Oc1ccccc1")}
 
@@ -99,3 +100,49 @@ async def test_build_on_a_built_segment_is_409(app, async_db_session):
         )
         r = await c.post(f"/api/v2/segments/{built}/build")
     assert r.status_code == 409 and r.json() == {"detail": "built"}
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_build_takes_another_engines_scaffold_when_the_shown_one_misses_a_label(
+    app, async_db_session
+):
+    """The shown reading (DECIMER here) has only R1, the rows fill R1 and R2, and MolScribe read
+    both: Build uses MolScribe's scaffold and says so (owner, 2026-11-26: BJOC 18/23, where
+    MolScribe misread R1 and R5 and DECIMER read them)."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, scaffold, _, seg = await seed_scaffold(db, alice)
+    db.add(Prediction(segment_id=seg, engine="molscribe", engine_version="250f683",
+                      smiles="[1*]c1ccc([2*])cc1", valid=True, ms=1, rgroups=["R1", "R2"]))  # fmt: skip
+    await db.commit()
+    rows = [{"compound": "4a", "groups": {"R1": "OMe", "R2": "OH"}},
+            {"compound": "4b", "groups": {"R1": "H", "R2": "Cl"}}]  # fmt: skip
+    async with make_client(app, token) as c:
+        assert (await c.post(f"/api/v2/predictions/{scaffold}/rgroups")).status_code == 202
+        await run_rgroups(db, paper_id, model_result(rows, labels=("R1", "R2")))
+        r = await c.post(f"/api/v2/segments/{seg}/build")
+    assert r.status_code == 200, r.text
+    assert r.json()["built"] == 2 and r.json()["scaffold_engine"] == "molscribe", r.json()
+    assert await built_keys(db, seg) == {key("COc1ccc(O)cc1"), key("Clc1ccccc1")}
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_a_curated_scaffold_is_never_swapped(app, async_db_session):
+    """The curator chose the structure: Build stays on it even when another reading would build
+    more rows."""
+    db = async_db_session
+    alice, token = await new_owner(db)
+    paper_id, scaffold, _, seg = await seed_scaffold(db, alice)
+    db.add(Prediction(segment_id=seg, engine="molscribe", engine_version="250f683",
+                      smiles="[1*]c1ccc([2*])cc1", valid=True, ms=1, rgroups=["R1", "R2"]))  # fmt: skip
+    await db.commit()
+    rows = [{"compound": "4a", "groups": {"R1": "OMe", "R2": "OH"}}]
+    async with make_client(app, token) as c:
+        assert (await c.post(f"/api/v2/predictions/{scaffold}/rgroups")).status_code == 202
+        await run_rgroups(db, paper_id, model_result(rows, labels=("R1", "R2")))
+        put = await c.put(f"/api/v2/segments/{seg}/curation",
+                          json={"status": "unchecked", "smiles": "[1*]c1ccc(N)cc1"})  # fmt: skip
+        assert put.status_code == 200, put.text
+        r = await c.post(f"/api/v2/segments/{seg}/build")
+    assert r.status_code == 200, r.text
+    assert r.json()["built"] == 0 and r.json()["scaffold_engine"] is None, r.json()
