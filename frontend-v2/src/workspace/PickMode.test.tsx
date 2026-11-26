@@ -167,6 +167,20 @@ describe("mode pick", () => {
     expect(screen.getByRole("button", { name: "Read all pages" })).toBeInTheDocument();
   });
 
+  it("a page grows under the pointer, inward at the grid's edges (owner, 2026-11-26)", async () => {
+    renderAt(paper([]));
+    const pick = await screen.findByRole("group", { name: "Pick a page" });
+    const [first, second] = within(pick).getAllByRole("button");
+    const box = (left: number, width: number) => () => ({ left, right: left + width, width, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+    pick.getBoundingClientRect = box(0, 900);
+    first!.getBoundingClientRect = box(0, 180);
+    second!.getBoundingClientRect = box(360, 180);
+    fireEvent.pointerEnter(first!);
+    expect(first).toHaveAttribute("data-grow", "left");
+    fireEvent.focus(second!);
+    expect(second).toHaveAttribute("data-grow", "center");
+  });
+
   it("opens a page: finds its boxes, then Pick another goes back", async () => {
     renderAt(paper([]));
     const seg = vi.spyOn(api, "segmentPage").mockResolvedValue({ step_id: "st-seg" });

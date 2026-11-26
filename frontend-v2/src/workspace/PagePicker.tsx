@@ -35,6 +35,22 @@ function markersOf(page0: number, segments: SegmentOut[], candidates: SegmentOut
  * A page is segmented when it is opened; a box is read (three engines) when it is clicked, and
  * its card then appears with the others. "Read all pages" switches to reading everything.
  */
+/**
+ * A page tile grows under the pointer or the keyboard (owner, 2026-11-26): from its middle,
+ * or inward when it sits at the grid's left or right edge, so it stays on the screen.
+ */
+function grow(e: { currentTarget: HTMLElement }) {
+  const tile = e.currentTarget;
+  const grid = tile.parentElement?.getBoundingClientRect();
+  const r = tile.getBoundingClientRect();
+  let side = "center";
+  if (grid && r.width > 0) {
+    if (r.left - grid.left < r.width) side = "left";
+    else if (grid.right - r.right < r.width) side = "right";
+  }
+  tile.dataset.grow = side;
+}
+
 export default function PickPanel({
   paper,
   segments,
@@ -116,6 +132,8 @@ export default function PickPanel({
               type="button"
               className="pick__tile"
               aria-label={`Page ${page0 + 1}`}
+              onPointerEnter={grow}
+              onFocus={grow}
               disabled={image.kind !== "ready"}
               onClick={() => openPage(page0)}
             >

@@ -15,8 +15,8 @@
 
 .pick__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
 }
 
 .pick__tile {
@@ -27,6 +27,31 @@
   background-color: var(--surface);
   cursor: pointer;
   overflow: hidden;
+}
+
+/* A page grows under the pointer or the keyboard, one at a time, above its neighbours
+   (owner, 2026-11-26); at the grid's edges it grows inward (data-grow, set in PagePicker). */
+.pick__tile:not(:disabled):is(:hover, :focus-visible) {
+  z-index: 2;
+  border-color: var(--control-border);
+  box-shadow: var(--lift-dialog);
+  transform: scale(2.2);
+}
+
+.pick__tile[data-grow="left"] {
+  transform-origin: left center;
+}
+
+.pick__tile[data-grow="right"] {
+  transform-origin: right center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pick__tile {
+    transition:
+      transform 300ms var(--ease) 60ms,
+      box-shadow 300ms var(--ease) 60ms;
+  }
 }
 
 .pick__tile:disabled {
