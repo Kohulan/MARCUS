@@ -403,6 +403,14 @@
   min-height: 112px; /* the figure's height: the stamp sits at the row's foot */
 }
 
+/* The stamp takes its own place at the foot of the text column, right-aligned, so it never
+   covers the meta line, the agreement or the note (live check 2026-11-26). */
+.card--compact .card__stamp {
+  position: static;
+  align-self: flex-end;
+  margin-top: auto;
+}
+
 /* Selected and keyboard rings sit inside the To check edge (inset 0-2 px), not over it,
    and inside the list column, which would clip a ring drawn outside the card. */
 .card--compact[aria-current="true"],
