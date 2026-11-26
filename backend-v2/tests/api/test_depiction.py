@@ -624,6 +624,14 @@ async def test_a_curated_structure_follows_the_template_too(app, async_db_sessio
     assert draws.seen[0][1]["template"] == [NEXTR_MOLFILE]
 
 
+def test_a_drawing_with_a_plain_h_has_a_new_name():
+    """A plain explicit H is no longer drawn as an atom (2026-11-26): a drawing stored before,
+    with the H, is not served again. Other drawings keep their name."""
+    assert depiction.drawing_key("[H]C(C)O", None) != sha("[H]C(C)O")
+    assert depiction.drawing_key("[H]C(C)O", "t") != depiction.drawing_key("[H]C(C)O", None)
+    assert depiction.drawing_key("C[C@H](N)O", None) == sha("C[C@H](N)O")
+
+
 def test_drawing_key_is_the_smiles_hash_without_a_template():
     assert depiction.drawing_key("CCO", None) == sha("CCO")
     assert depiction.drawing_key("CCO", []) == sha("CCO")

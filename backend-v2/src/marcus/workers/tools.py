@@ -42,6 +42,12 @@ AGREEMENT_THRESHOLD = 0.99  # v1: similarity above this counts as agreement
 MAX_HIGHLIGHT_MAPPINGS = 1000
 MAX_HIGHLIGHT_MATCHES = 32
 MAX_HIGHLIGHT_ATOMS = 128
+# Atoms drawn with a glow by their index in the written SMILES (no search): `marks`, where the
+# engines' answers differ (the brand orange, frontend tokens.css --orange), and `common`, what
+# they share (the highlight's light blue). marcus.workers.differences gives both lists.
+MARK_COLOUR = (250, 54, 0)
+COMMON_COLOUR = (173, 216, 230)
+MAX_MARKS = 512
 
 
 class ToolInputError(ValueError):
@@ -88,22 +94,69 @@ def _sdg(molecule):
     return gen.getMolecule()
 
 
-def _layout(molecule, smiles: str, template: str | list[str]):
+def _drop_plain_h(molecule) -> tuple[list[int], dict[int, int]]:
+    """Takes the plain explicit H atoms out of `molecule` (display only, owner decision
+    2026-11-26: MolScribe writes H atoms the other engines leave implicit; the stored SMILES
+    stays as it is). Each becomes an implicit H of its atom, drawn in that atom's label. An H
+    that carries stereo stays an atom: one on a stereocentre (its wedge says the configuration)
+    or on a double bond with E/Z; so does an isotope, a charged or bridging H, and H2.
+
+    Returns (the written indices of the atoms left, in their order now; dropped H's written
+    index -> its atom's written index)."""
+    jpype = _jvm()
+    IAtom = jpype.JClass(f"{CDK}.interfaces.IAtom")
+    IBond = jpype.JClass(f"{CDK}.interfaces.IBond")
+    count = molecule.getAtomCount()
+    stereo: set[int] = set()
+    for element in molecule.stereoElements():
+        for obj in [element.getFocus(), *element.getCarriers()]:
+            if isinstance(obj, IBond):
+                stereo.update((molecule.indexOf(obj.getBegin()), molecule.indexOf(obj.getEnd())))
+            elif isinstance(obj, IAtom):
+                stereo.add(molecule.indexOf(obj))
+    moved: dict[int, int] = {}
+    for i in range(count):
+        atom = molecule.getAtom(i)
+        if atom.getAtomicNumber() != 1 or atom.getMassNumber() is not None or i in stereo:
+            continue
+        if (atom.getFormalCharge() or 0) != 0 or molecule.getConnectedBondsCount(atom) != 1:
+            continue
+        bond = molecule.getConnectedBondsList(atom).get(0)
+        base = molecule.indexOf(bond.getOther(atom))
+        if molecule.getAtom(base).getAtomicNumber() == 1 or base in stereo:
+            continue
+        moved[i] = base
+    for i in sorted(moved, reverse=True):
+        base = molecule.getAtom(moved[i])
+        hydrogens = int(base.getImplicitHydrogenCount() or 0) + 1
+        base.setImplicitHydrogenCount(jpype.JClass("java.lang.Integer").valueOf(hydrogens))
+        molecule.removeAtom(molecule.getAtom(i))
+    return [i for i in range(count) if i not in moved], moved
+
+
+def _layout(molecule, smiles: str, template: str | list[str], kept: list[int] | None = None):
     """2D positions for `molecule` (CDK's reading of `smiles`): the paper's orientation from an
     OCSR template molfile (marcus.workers.orient, RDKit, same atom order as CDK) when it can
     be had, else CDK's own layout. `template`: one molfile, or candidates in the order they are
     preferred (the first with the image's positions is used, orient.first_template). Wedges are
-    set from the stereo on the given positions."""
+    set from the stereo on the given positions. `kept`: the written indices of the molecule's
+    atoms when some written atoms were taken out (_drop_plain_h); None: all are there."""
     from marcus.workers import orient  # RDKit, as the highlight match: only where it runs
 
     candidates = [template] if isinstance(template, str) else list(template or [])
     chosen = orient.first_template(candidates)
     coords = orient.oriented_coords(smiles, chosen) if chosen else None
-    if coords is None or len(coords) != molecule.getAtomCount():
+    if kept is None:
+        kept = list(range(molecule.getAtomCount()))
+        written = len(kept)
+    else:
+        written = len(coords) if coords is not None and max(kept, default=-1) < len(coords) else -1
+    if coords is None or len(coords) != written or len(kept) != molecule.getAtomCount():
         return _sdg(molecule)
     jpype = _jvm()
     point = jpype.JClass("javax.vecmath.Point2d")
-    for i, (x, y) in enumerate(coords):
+    for i, source in enumerate(kept):
+        x, y = coords[source]
         molecule.getAtom(i).setPoint2d(point(float(x), float(y)))
     # the ring flags CDK's layout sets on its way: the CIP step's ring test reads them
     jpype.JClass(f"{CDK}.graph.Cycles").markRingAtomsAndBonds(molecule)
@@ -195,16 +248,26 @@ def depict(
     height: int,
     highlight: str = "",
     template: str | list[str] = "",
+    marks: list[int] | None = None,
+    common: list[int] | None = None,
 ) -> str:
     """CDK StandardGenerator depiction (v1 defaults: kekulize, CIP, CDK2D colours, white
     background, fill-to-fit). SVG as text; PNG as base64. `highlight` is an optional SMARTS.
     `template`: an OCSR molfile with the image's atom positions, or candidates in order; the
-    drawing then follows the paper's orientation where it can (_layout)."""
+    drawing then follows the paper's orientation where it can (_layout). `marks` / `common`:
+    atoms by their index in the written SMILES, drawn with an orange / a light blue outer glow
+    (MARK_COLOUR, COMMON_COLOUR). A plain explicit H is not drawn as an atom (_drop_plain_h)."""
     jpype = _jvm()
     J = jpype.JClass
     mol = _smiles_to_cdk(smiles)
+    written = mol.getAtomCount()
+    glows = [(_checked_indices(common, written), COMMON_COLOUR)]
+    glows.append((_checked_indices(marks, written), MARK_COLOUR))
     try:
-        mol = _cip_annotate(_layout(mol, smiles, template))
+        kept, moved = _drop_plain_h(mol)
+        place = {source: i for i, source in enumerate(kept)}
+        place.update({h: place[base] for h, base in moved.items()})
+        mol = _cip_annotate(_layout(mol, smiles, template, kept if moved else None))
         try:
             J(f"{CDK}.aromaticity.Kekulization").kekulize(mol)
         except jpype.JException:  # v1 logged and carried on; soft limits still propagate
@@ -220,10 +283,18 @@ def depict(
             .withBackgroundColor(J("java.awt.Color").WHITE)
         )
         if highlight.strip():
-            matches = _highlight_matches(smiles, highlight)
+            matches = [
+                ([place[i] for i in atoms], [(place[i], place[j]) for i, j in bonds])
+                for atoms, bonds in _highlight_matches(smiles, highlight)
+            ]
             gen = gen.withHighlight(
-                _highlight_objects(mol, matches), J("java.awt.Color")(173, 216, 230)
+                _highlight_objects(mol, matches), J("java.awt.Color")(*COMMON_COLOUR)
             ).withOuterGlowHighlight()
+        for indices, colour in glows:
+            if indices:
+                objects = _index_objects(mol, sorted({place[i] for i in indices}))
+                gen = gen.withHighlight(objects, J("java.awt.Color")(*colour))
+                gen = gen.withOuterGlowHighlight()
 
         depiction = gen.depict(mol)
         if fmt == "svg":
@@ -303,6 +374,41 @@ def _highlight_objects(mol, matches):
             if bond is not None:
                 chosen.add(bond)
     return chosen
+
+
+def _checked_indices(indices: list[int] | None, count: int) -> list[int]:
+    """`marks` / `common` as given, or ToolInputError: at most MAX_MARKS whole numbers, each an
+    atom of the written SMILES (`count` atoms)."""
+    indices = list(indices or [])
+    if len(indices) > MAX_MARKS:
+        raise ToolInputError(f"more than {MAX_MARKS} marked atoms")
+    if any(type(i) is not int or not 0 <= i < count for i in indices):
+        raise ToolInputError("a marked atom is not in the drawn molecule")
+    return indices
+
+
+def _index_objects(mol, indices: list[int]):
+    """The CDK atoms at `indices` (of `mol` as it is drawn) and the bonds between two of them."""
+    jpype = _jvm()
+    chosen = jpype.JClass("java.util.LinkedHashSet")()
+    wanted = set(indices)
+    for i in indices:
+        chosen.add(mol.getAtom(i))
+    for bond in mol.bonds():
+        if mol.indexOf(bond.getBegin()) in wanted and mol.indexOf(bond.getEnd()) in wanted:
+            chosen.add(bond)
+    return chosen
+
+
+def differences(smiles: list[str]) -> dict[str, Any]:
+    """Where the answers differ and what they share, per answer as atom indices in the written
+    SMILES' order (marcus.workers.differences; the lists `depict` takes as marks / common)."""
+    from marcus.workers import differences as module
+
+    try:
+        return module.differences(smiles)
+    except module.DifferencesError as exc:
+        raise ToolInputError(str(exc)) from exc
 
 
 def smiles_to_molfile(smiles: str) -> str:
@@ -423,8 +529,10 @@ def depict_task(
     height: int = 512,
     highlight: str = "",
     template: str | list[str] = "",
+    marks: list[int] | None = None,
+    common: list[int] | None = None,
 ) -> dict:
-    return _envelope(depict, smiles, fmt, width, height, highlight, template)
+    return _envelope(depict, smiles, fmt, width, height, highlight, template, marks, common)
 
 
 @celery_app.task(name="marcus.tools.smiles_to_molfile", **_LIMITS)
@@ -435,6 +543,11 @@ def smiles_to_molfile_task(smiles: str) -> dict:
 @celery_app.task(name="marcus.tools.mcs", **_LIMITS)
 def mcs_task(molfiles: list[str]) -> dict:
     return _envelope(mcs, molfiles)
+
+
+@celery_app.task(name="marcus.tools.differences", **_LIMITS)
+def differences_task(smiles: list[str]) -> dict:
+    return _envelope(differences, smiles)
 
 
 @celery_app.task(name="marcus.tools.compare", **_LIMITS)

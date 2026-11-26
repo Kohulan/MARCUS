@@ -403,3 +403,42 @@ def test_highlight_atom_cap_matches_the_worker():
     from marcus.workers import tools as worker
 
     assert route.MAX_HIGHLIGHT_ATOMS == worker.MAX_HIGHLIGHT_ATOMS
+
+
+# --- marks, the common part, differences (owner decision 2026-11-26) -------------------------
+
+
+async def test_depict_passes_marks_and_common_by_index(app, calls):
+    """Atom indices need no token (no search): they go to the task as they are; a plain
+    drawing sends neither."""
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "CCO", "marks": [2], "common": [0, 1]})
+        plain = await c.post(f"{BASE}/depict", json={"smiles": "CCO"})
+    assert r.status_code == plain.status_code == 200
+    assert calls[0][1]["marks"] == [2] and calls[0][1]["common"] == [0, 1]
+    assert "marks" not in calls[1][1] and "common" not in calls[1][1]
+
+
+@pytest.mark.parametrize("field", ["marks", "common"])
+@pytest.mark.parametrize("value", [[-1], [1.5], ["1"], list(range(513)), [100_000]])
+async def test_depict_marks_are_bounded_422(app, calls, field, value):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/depict", json={"smiles": "CCO", field: value})
+    assert r.status_code == 422
+    assert calls == []
+
+
+async def test_differences_dispatches_to_task(app, calls):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/differences", json={"smiles": ["CCO", "CCOC"]})
+    assert r.status_code == 200
+    name, kwargs, _ = calls[0]
+    assert name == "marcus.tools.differences" and kwargs == {"smiles": ["CCO", "CCOC"]}
+
+
+@pytest.mark.parametrize("smiles", [["CCO"], ["C"] * 7, ["CCO", ""], ["CCO", "C" * 2001]])
+async def test_differences_caps_422(app, calls, smiles):
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/differences", json={"smiles": smiles})
+    assert r.status_code == 422
+    assert calls == []

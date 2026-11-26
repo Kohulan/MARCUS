@@ -1,4 +1,5 @@
-"""`POST /tools/{depict,smiles-to-molfile,mcs,compare}`: short synchronous jobs on q.tools.
+"""`POST /tools/{depict,smiles-to-molfile,mcs,differences,compare}`: short synchronous jobs on
+q.tools.
 
 The calls go through marcus.api.tooling (wait limit, error mapping, task expiry and the tools'
 own thread budget; see its docstring).
@@ -24,11 +25,18 @@ MAX_MOLFILES = 20
 MAX_MOLFILE_BYTES = 200_000
 MAX_MCS_TOTAL = 1_000_000
 MAX_HIGHLIGHT_ATOMS = 128  # = marcus.workers.tools.MAX_HIGHLIGHT_ATOMS, which checks it again
+MAX_MARKS = 512  # = marcus.workers.tools.MAX_MARKS
+MAX_ATOM_INDEX = 9999
+MAX_ANSWERS = 6  # = marcus.workers.differences.MAX_ANSWERS
 # One SMARTS atom: a bracket atom, or an organic-subset / any-atom symbol outside brackets.
 _SMARTS_ATOM = re.compile(r"\[[^\]]*\]|Cl|Br|[BCNOPSFIbcnops*Aa]")
 
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
+# Atoms by their index in the written SMILES (the worker refuses one outside the molecule).
+AtomIndices = Annotated[
+    list[Annotated[int, Field(strict=True, ge=0, le=MAX_ATOM_INDEX)]], Field(max_length=MAX_MARKS)
+]
 
 
 class DepictIn(BaseModel):
@@ -43,6 +51,11 @@ class DepictIn(BaseModel):
     # orientation where the worker can use it (marcus.workers.orient), else it is the normal one.
     # Bounded like an MCS molfile; the worker's alignment has its own time and atom caps.
     template: str | None = Field(None, max_length=MAX_MOLFILE_BYTES)
+    # Atoms drawn with a glow, by index (no search, so no token): `marks` orange (where the
+    # engines' answers differ), `common` light blue (what they share). /tools/differences gives
+    # both lists.
+    marks: AtomIndices = []
+    common: AtomIndices = []
 
     @field_validator("highlight")
     @classmethod
@@ -67,6 +80,10 @@ class McsIn(BaseModel):
         if sum(len(m) for m in self.molfiles) > MAX_MCS_TOTAL:
             raise ValueError("molfiles too large in total")
         return self
+
+
+class DifferencesIn(BaseModel):
+    smiles: list[Smiles] = Field(min_length=2, max_length=MAX_ANSWERS)
 
 
 class CompareIn(BaseModel):
@@ -105,6 +122,10 @@ async def depict(request: Request, body: DepictIn, _owner: Owner = Depends(curre
     }
     if body.template:
         kwargs["template"] = body.template
+    if body.marks:
+        kwargs["marks"] = body.marks
+    if body.common:
+        kwargs["common"] = body.common
     data = await call_tool("marcus.tools.depict", kwargs)
     return {"format": body.format, "data": data}
 
@@ -126,6 +147,15 @@ async def mcs(request: Request, body: McsIn, _owner: Owner = Depends(current_own
         keys = await CHEM.run(highlight.binding_keys_of_molfiles, body.molfiles)
         token = highlight.sign(await _signing_key(request), smarts, keys)
     return {**result, "highlight_token": token}
+
+
+@router.post("/differences")
+async def differences(body: DifferencesIn, _owner: Owner = Depends(current_owner)):
+    """Per SMILES, in the order sent: `marks` (the atoms where it differs from another, and
+    where a missing piece attaches) and `common` (the atoms all share), as atom indices for
+    /tools/depict; stereo counts (marcus.workers.differences). `rough`: the search ran out of
+    time, the marks may be too wide."""
+    return await call_tool("marcus.tools.differences", {"smiles": body.smiles})
 
 
 @router.post("/compare")

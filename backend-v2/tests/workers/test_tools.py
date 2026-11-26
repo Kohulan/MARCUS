@@ -519,3 +519,129 @@ def test_depict_takes_the_first_candidate_with_the_images_positions():
         kwargs={"smiles": smiles, "template": [computed, good]}, throw=True
     ).get()
     assert out["ok"]
+
+
+# --- marks, the common part and plain H atoms (owner decision 2026-11-26) -------------------
+
+ORANGE = "#FA3600"  # the brand orange (frontend tokens.css --orange): a mark's glow
+
+
+def _spy_index_objects(monkeypatch) -> list[list[str]]:
+    """Records the element symbols of the atoms each marks / common list lands on."""
+    from marcus.workers import tools
+
+    seen: list[list[str]] = []
+    real = tools._index_objects
+
+    def spy(mol, indices):
+        objs = real(mol, indices)
+        seen.append(sorted(str(o.getSymbol()) for o in objs if hasattr(o, "getSymbol")))
+        return objs
+
+    monkeypatch.setattr(tools, "_index_objects", spy)
+    return seen
+
+
+@needs_cdk
+def test_depict_marks_atoms_orange_by_index(monkeypatch):
+    """`marks`: atom indices in the written SMILES' order, drawn with an orange outer glow."""
+    from marcus.workers import tools
+
+    plain = tools.depict("CCOC", "svg", 200, 200)
+    marked = tools.depict("CCOC", "svg", 200, 200, marks=[2, 3])
+    assert ORANGE not in plain.upper() and ORANGE in marked.upper()
+    seen = _spy_index_objects(monkeypatch)
+    tools.depict("CCOC", "svg", 200, 200, marks=[2, 3])
+    assert seen == [["C", "O"]]
+
+
+@needs_cdk
+def test_depict_draws_the_common_part_by_index_in_another_colour():
+    from marcus.workers import tools
+
+    both = tools.depict("CCOC", "svg", 200, 200, marks=[3], common=[0, 1, 2]).upper()
+    assert ORANGE in both and "#ADD8E6" in both
+    assert "#ADD8E6" not in tools.depict("CCOC", "svg", 200, 200, marks=[3]).upper()
+
+
+@needs_cdk
+def test_depict_refuses_a_mark_outside_the_molecule():
+    from marcus.workers.tools import ToolInputError, depict
+
+    with pytest.raises(ToolInputError):
+        depict("CCO", "svg", 200, 200, marks=[3])
+    with pytest.raises(ToolInputError):
+        depict("CCO", "svg", 200, 200, common=[-1])
+
+
+def _drawn(monkeypatch, smiles: str) -> list[str]:
+    """The element symbols of the atoms depict draws for `smiles`, in order."""
+    from marcus.workers import tools
+
+    seen = []
+    real = tools._cip_annotate
+
+    def spy(mol):
+        seen.append([str(a.getSymbol()) for a in mol.atoms()])
+        return real(mol)
+
+    monkeypatch.setattr(tools, "_cip_annotate", spy)
+    tools.depict(smiles, "svg", 200, 200)
+    monkeypatch.setattr(tools, "_cip_annotate", real)
+    return seen[0]
+
+
+@needs_cdk
+def test_a_plain_explicit_h_is_not_drawn_as_an_atom(monkeypatch):
+    """Display only: an explicit H that carries no stereo (MolScribe writes some) is drawn as
+    part of its atom's label, as the other engines' answers show it."""
+    assert _drawn(monkeypatch, "[H]C([H])([H])O") == ["C", "O"]
+    assert _drawn(monkeypatch, "CC(O[H])C") == ["C", "C", "O", "C"]
+
+
+@needs_cdk
+def test_an_h_that_carries_stereo_or_is_special_stays_an_atom(monkeypatch):
+    # on a stereocentre: its wedge says the configuration
+    assert _drawn(monkeypatch, "[H][C@](C)(N)C(=O)O").count("H") == 1
+    # on a double bond with E/Z
+    assert _drawn(monkeypatch, "[H]/C(C)=C(/[H])C").count("H") == 2
+    # an isotope, H2
+    assert _drawn(monkeypatch, "[2H]C(C)C").count("H") == 1
+    assert _drawn(monkeypatch, "[H][H]") == ["H", "H"]
+
+
+@needs_cdk
+def test_marks_keep_their_atoms_when_an_h_before_them_is_not_drawn(monkeypatch):
+    """Indices are the written atoms': an H left out before a marked atom must not shift it,
+    and a mark on such an H goes to the atom it sits on."""
+    from marcus.workers import tools
+
+    seen = _spy_index_objects(monkeypatch)
+    tools.depict("[H]C([H])([H])OCl", "svg", 200, 200, marks=[5])
+    tools.depict("[H]C([H])([H])OCl", "svg", 200, 200, marks=[0])
+    assert seen == [["Cl"], ["C"]]
+
+
+@needs_cdk
+def test_template_positions_still_fit_when_an_h_is_not_drawn():
+    from marcus.workers import tools
+    from marcus.workers.orient import oriented_coords
+
+    smiles = "[H]OC(=O)/C=C/c1ccc(O)c(OC)c1"
+    template = _ocsr_template("COc1cc(/C=C/C(=O)O)ccc1O", 70)
+    assert oriented_coords(smiles, template) is not None
+    svg = tools.depict(smiles, "svg", 300, 300, "", template)
+    assert svg != tools.depict(smiles, "svg", 300, 300)  # the template's orientation is used
+
+
+def test_differences_task_is_registered_and_enveloped():
+    from marcus.core.celery_app import celery_app
+    from marcus.workers import tools  # noqa: F401
+
+    task = celery_app.tasks["marcus.tools.differences"]
+    assert task.soft_time_limit == 5 and task.time_limit == 10
+    ok = task.apply(kwargs={"smiles": ["CCO", "CCOC"]}).get()
+    result = {"marks": [[2], [3]], "common": [[0, 1, 2]] * 2, "rough": False}
+    assert ok == {"ok": True, "result": result}
+    bad = task.apply(kwargs={"smiles": ["CCO", "C1CC("]}).get()
+    assert bad["ok"] is False and bad["error"]

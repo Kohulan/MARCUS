@@ -90,6 +90,10 @@ def drawing_key(smiles: str, templates: str | list[str] | None) -> str:
     if isinstance(templates, str):
         templates = [templates]
     text = smiles + "".join(f"\0template\0{t}" for t in templates or [])
+    if "[H]" in smiles:
+        # drawn without its plain H atoms since 2026-11-26 (workers.tools._drop_plain_h): a
+        # drawing stored before, with them, is not served again
+        text += "\0plain-h\0"
     return hashlib.sha256(text.encode()).hexdigest()
 
 
