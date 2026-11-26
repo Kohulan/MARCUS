@@ -174,7 +174,10 @@ switch that did not take fails the unit. It is not installed by anything here. O
 ### The local MARCUS model (one model, one server, two jobs)
 
 One fine-tuned model, `nuextract3-marcus-multi-v1` (a NuExtract3 LoRA, Q8_0 GGUF plus its f16
-vision projector), does both model jobs: paper annotation and R-group rows. The GPU override runs
+vision projector, Apache-2.0), does both model jobs: paper annotation and R-group rows. Get it from
+Zenodo ([doi.org/10.5281/zenodo.24562147](https://doi.org/10.5281/zenodo.24562147)) with
+`scripts/get-marcus-model.sh ./models`: it checks the SHA-256 sums and prints the two `.env`
+lines. The GPU override runs
 it in one llama.cpp `llama-server` (`docker/Dockerfile.llama`, built at the GGUF's converter
 commit 7fce543 for the V100) on its own internal network `llm`, shared only with `worker-llm`
 (annotation, q.llm) and `worker-rgroup` (R-group rows, q.rgroup), both files mounted read-only.

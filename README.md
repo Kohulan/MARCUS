@@ -81,26 +81,104 @@ a synthetic article made for MARCUS (no copyrighted content).</sub>
 - **Your COCONUT login stays yours.** It goes to COCONUT through the MARCUS relay; the
   server never stores it.
 
-## Run it yourself
+## Run MARCUS locally with Docker
 
-You need Docker Engine with Docker Compose. For the real engines, you also need an NVIDIA GPU
-with about 20 GB of memory (production uses a V100) and the NVIDIA Container Toolkit.
+There are two ways:
+
+- **Try it (no GPU):** the whole app with fake engines. It starts in minutes and shows how
+  MARCUS works, but the structures and annotations it returns are made up.
+- **Full MARCUS (GPU):** the real engines and the MARCUS model, as on
+  [marcus.decimer.ai](https://marcus.decimer.ai).
+
+### 1. What you need
+
+| | Try it | Full MARCUS |
+| :--- | :--- | :--- |
+| [Docker Engine](https://docs.docker.com/engine/install/) 24+ with Docker Compose v2 | yes | yes |
+| Disk space | about 10 GB | about 60 GB (36 GB of images, 5 GB of model files, build space) |
+| NVIDIA GPU | no | yes, about 20 GB of memory (the public server uses a V100 32 GB) |
+| [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) | no | yes |
+
+Check Docker with `docker compose version`. For the GPU, `docker run --rm --gpus all ubuntu nvidia-smi`
+must list your GPU.
+
+### 2. Get the code and make the settings file
 
 ```bash
 git clone https://github.com/Kohulan/MARCUS.git
 cd MARCUS/backend-v2
-cp .env.example .env    # set POSTGRES_PASSWORD and REDIS_PASSWORD
+cp .env.example .env
+```
 
-# CPU stack with fake engines (fast, no GPU)
+Open `.env` and set the two passwords (any long random text, for example the output of
+`openssl rand -hex 24`):
+
+```
+POSTGRES_PASSWORD=...
+REDIS_PASSWORD=...
+```
+
+### 3a. Try it (no GPU)
+
+```bash
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.fake.yml up -d --build
+```
 
-# or the real engines on a GPU host (the MARCUS model files in .env:
-# MARCUS_LLM_GGUF=/path/to/model.gguf, MARCUS_LLM_MMPROJ=/path/to/mmproj.gguf)
+### 3b. Full MARCUS (GPU)
+
+Download the MARCUS model (5.2 GB, [Zenodo, DOI 10.5281/zenodo.24562147](https://doi.org/10.5281/zenodo.24562147)).
+The script checks the files and prints two lines:
+
+```bash
+scripts/get-marcus-model.sh ./models
+```
+
+Put the two printed lines (`MARCUS_LLM_GGUF=...` and `MARCUS_LLM_MMPROJ=...`) in `.env`, then start:
+
+```bash
 docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
-Then open http://localhost:18090/. [`backend-v2/README.md`](backend-v2/README.md) covers the GPU
-stack, the MARCUS model, the COCONUT relay, monitoring and API keys.
+The first build takes a while (it downloads the engines' weights). The engines' model versions
+are pinned in [`backend-v2/docker/MODEL_PINS.md`](backend-v2/docker/MODEL_PINS.md).
+
+### 4. Open it
+
+Open **http://localhost:18090/** and drop a PDF, or press *Try a sample paper*. To check that it runs:
+
+```bash
+curl http://localhost:18090/api/v2/health      # {"status":"ok"}
+docker compose -p marcus-v2 ps                 # every service "Up", most "(healthy)"
+```
+
+### 5. Stop, update, remove
+
+Use the same `-f` files as when you started (`docker-compose.fake.yml` or `docker-compose.gpu.yml`):
+
+```bash
+docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml stop       # stop
+git pull && docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml up -d --build   # update
+docker compose -p marcus-v2 -f docker-compose.yml -f docker-compose.gpu.yml down -v    # remove, with all papers
+```
+
+### If something goes wrong
+
+- **A service keeps restarting:** `docker compose -p marcus-v2 logs --tail 50 <service>` shows why.
+- **The page does not open:** MARCUS listens on 127.0.0.1 only; open it on the same machine, or put
+  your own reverse proxy in front of port 18090.
+- **No GPU in the containers:** install the NVIDIA Container Toolkit and restart Docker.
+- **The model server does not start:** check the two model paths in `.env` (they must be full paths
+  to the downloaded files).
+
+[`backend-v2/README.md`](backend-v2/README.md) covers the details: the GPU stack, the MARCUS model,
+the COCONUT relay, monitoring and API keys.
+
+### The MARCUS model
+
+The model that annotates papers and reads R-group tables, `nuextract3-marcus-multi-v1` (a LoRA
+fine-tune of [NuExtract3](https://huggingface.co/numind/NuExtract3), Apache-2.0), is on Zenodo:
+[doi.org/10.5281/zenodo.24562147](https://doi.org/10.5281/zenodo.24562147). Its model card lists
+the training data, the scores and how to run it with llama.cpp on its own.
 
 ## Architecture
 
