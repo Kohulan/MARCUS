@@ -192,43 +192,101 @@
 
 /* A segmented control: two square-cornered cells with the control edge; the pressed one is
    filled green (state by fill and by aria-pressed, read out by screen readers). */
+/*
+ * Review | Paper (owner, 2026-11-26): one porcelain pill, as the footer's bubbles, with a
+ * green knob under the view shown. The knob slides on the one curve; it jumps under reduced
+ * motion. Each half is a button (aria-pressed), so the switch reads as two choices.
+ */
 .ws-toggle {
-  display: inline-flex;
-  border: 1px solid var(--control-border);
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: 999px;
+  background-color: var(--surface);
+  box-shadow: var(--porcelain);
+  isolation: isolate;
+}
+
+.ws-toggle__knob {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  z-index: -1;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background-color: var(--green);
+  box-shadow: var(--water-drop);
+}
+
+.ws-toggle[data-view="paper"] .ws-toggle__knob {
+  transform: translateX(100%);
 }
 
 .ws-toggle__button {
-  min-width: 84px;
-  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 112px;
+  padding: 9px 18px;
   border: 0;
-  background-color: var(--surface);
+  border-radius: 999px;
+  background: none;
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 12px;
+  line-height: 16px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--text-2);
   cursor: pointer;
-  transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.ws-toggle__button + .ws-toggle__button {
-  border-left: 1px solid var(--control-border);
+.ws-toggle__icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
-.ws-toggle__button:hover {
+.ws-toggle__button:not([aria-pressed="true"]):hover {
+  color: var(--ink);
   background-color: var(--sunken);
 }
 
 .ws-toggle__button[aria-pressed="true"] {
-  background-color: var(--green);
   color: var(--on-green);
   cursor: default;
 }
 
 .ws-toggle__button:focus-visible {
-  position: relative;
-  z-index: 1;
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-toggle__knob {
+    transition: transform 500ms var(--ease);
+  }
+
+  .ws-toggle__button {
+    transition:
+      color 300ms var(--ease),
+      background-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* Forced colours drop the knob's fill: the view shown keeps a Highlight ring. */
+@media (forced-colors: active) {
+  .ws-toggle {
+    border: 1px solid ButtonBorder;
+  }
+
+  .ws-toggle__button[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 .ws-counts {

@@ -1,3 +1,8 @@
+import {
+  faFileLines,
+  faTableCellsLarge,
+  type IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -9,6 +14,7 @@ import SubmitForm from "../coconut/SubmitForm";
 import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../lookup/coconutDoi";
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
+import Icon from "../ui/Icon";
 import GonePage, { OpenFailed } from "../ui/GonePage";
 import { focusLost } from "../ui/focus";
 import { paperName, structureTag } from "../ui/tag";
@@ -94,9 +100,9 @@ function PaperWorkspace({ id }: { id: string }) {
   );
 }
 
-const VIEWS: { view: WorkspaceView; label: string }[] = [
-  { view: "review", label: "Review" },
-  { view: "paper", label: "Paper" },
+const VIEWS: { view: WorkspaceView; label: string; icon: IconDefinition }[] = [
+  { view: "review", label: "Review", icon: faTableCellsLarge },
+  { view: "paper", label: "Paper", icon: faFileLines },
 ];
 
 function Frame({ id }: { id: string }) {
@@ -210,8 +216,10 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
       </header>
 
       <div className="ws-tools">
-        <div className="ws-toggle" role="group" aria-label="View">
-          {VIEWS.map(({ view, label }) => (
+        {/* One porcelain pill; the green knob slides under the view shown (owner, 2026-11-26). */}
+        <div className="ws-toggle" role="group" aria-label="View" data-view={ws.view}>
+          <span className="ws-toggle__knob" aria-hidden="true" />
+          {VIEWS.map(({ view, label, icon }) => (
             <button
               key={view}
               type="button"
@@ -219,6 +227,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
               aria-pressed={ws.view === view}
               onClick={() => ws.setView(view)}
             >
+              <Icon icon={icon} className="ws-toggle__icon" />
               {label}
             </button>
           ))}
