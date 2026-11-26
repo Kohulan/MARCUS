@@ -220,6 +220,40 @@ def test_request_is_the_trained_one(stub):
     assert isinstance(out["ms"], int) and out["ms"] >= 0
 
 
+def test_rows_of_another_series_are_dropped_by_the_label_under_the_drawing(stub):
+    """Fix the reader (owner, 2026-11-26): the reader reads the whole page, so it can give a
+    drawing the rows of another scaffold on the page. The series label printed under the
+    drawing ("3a-c") keeps its own rows; without a label nothing changes."""
+    stub.content = _answer(("3a", {"R1": "OMe", "R2": "H"}), ("20a", {"R1": "H", "R2": "OMe"}))
+    label = {
+        "label": "text",
+        "text": "3a-c",
+        "prov": [
+            {
+                "page_no": 3,
+                "bbox": {
+                    "l": 40,
+                    "t": 792 - 130,
+                    "r": 70,
+                    "b": 792 - 140,
+                    "coord_origin": "BOTTOMLEFT",
+                },
+            }
+        ],
+    }
+    doc = {
+        **DOC,
+        "pages": {"3": {"size": {"width": 612.0, "height": 792.0}}},
+        "texts": [*DOC["texts"], label],
+    }
+    drawing = (100, 300, 400, 530)  # page pixels: the label (167-292 x, 542 top) is under it
+    pid = _paper(page=2, doc=doc)
+    out = read_scaffold(get_reader(), pid, 2, ["R1", "R2"], drawing)
+    assert [r["compound"] for r in out["rows"]] == ["3a"]
+    elsewhere = read_scaffold(get_reader(), pid, 2, ["R1", "R2"], (2000, 300, 2300, 530))
+    assert [r["compound"] for r in elsewhere["rows"]] == ["3a", "20a"]  # no label under it
+
+
 def test_a_label_the_page_text_never_names_is_not_asked_for(stub):
     """OCSR's extra label (DECIMER's Z beside R1, R2) is no column: the model is asked for the
     labels the page text names, and the result says which those were."""

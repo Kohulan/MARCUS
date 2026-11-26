@@ -18,6 +18,7 @@ limit cut keeps the rows that were complete (`truncated`).
 import logging
 import time
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 
@@ -26,6 +27,7 @@ from marcus.core.models import Prediction, RgroupExtraction, Segment
 from marcus.core.page_text import UNUSABLE_TEXT, page_context, read_paper_document
 from marcus.core.pipeline import BadResult
 from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
+from marcus.core.rgroup_series import drawing_compounds, keep_series, series_boxes
 from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
@@ -49,17 +51,17 @@ def get_reader():
     )
 
 
-def _context(paper_id: uuid.UUID, page: int) -> str:
-    """The page text for a scaffold on `page` (0-based, as the API counts; Docling counts from
-    1). "" when the paper's text is missing, too large or not a Docling document."""
+def _document(paper_id: uuid.UUID) -> dict | None:
+    """The paper's Docling document; None when its text is missing, too large or not a Docling
+    document (the R-groups are then read from the page image only)."""
     try:
-        return page_context(read_paper_document(paper_id), page + 1)
+        return read_paper_document(paper_id)
     except FileNotFoundError:
         log.info("paper %s: no text; R-groups read from the page image only", paper_id)
     except UNUSABLE_TEXT as exc:
         log.warning("paper %s: text not usable (%s); R-groups read from the page image only",
                     paper_id, type(exc).__name__)  # fmt: skip
-    return ""
+    return None
 
 
 def _image(paper_id: uuid.UUID, page: int) -> str:
@@ -71,11 +73,20 @@ def _image(paper_id: uuid.UUID, page: int) -> str:
         raise BadInput("the page image could not be read") from None
 
 
-def read_scaffold(reader, paper_id: uuid.UUID, page: int, labels: list[str]) -> dict:
+def read_scaffold(
+    reader,
+    paper_id: uuid.UUID,
+    page: int,
+    labels: list[str],
+    bbox: Sequence[int] | None = None,
+) -> dict:
     """Ask `reader` for the rows of a scaffold with `labels` on `page` (0-based). Only the drawn
     labels the page text names are asked for (rgroup_extraction.labels_to_ask: no `*`, no OCSR
-    extra label); the result's `labels` are those."""
-    context = _context(paper_id, page)
+    extra label); the result's `labels` are those. The reader reads the whole page: with the
+    drawing's box (`bbox`, page pixels), the rows of another series are dropped when a series
+    label is printed under the drawing (marcus.core.rgroup_series; owner, 2026-11-26)."""
+    doc = _document(paper_id)
+    context = page_context(doc, page + 1) if doc is not None else ""
     labels = labels_to_ask(labels, context)
     if not labels:
         raise BadInput("the structure has no labelled R-groups")
@@ -89,6 +100,13 @@ def read_scaffold(reader, paper_id: uuid.UUID, page: int, labels: list[str]) -> 
         if not cut:
             raise BadResult(str(exc)) from None
         rows = salvage_rows(raw, labels)
+    if doc is not None and bbox is not None:
+        own = drawing_compounds(bbox, series_boxes(doc).get(page, []))
+        kept = keep_series(rows, own)
+        if len(kept) != len(rows):
+            log.info("paper %s page %d: %d of %d rows are another series's (own: %s)",
+                     paper_id, page, len(rows) - len(kept), len(rows), sorted(own))  # fmt: skip
+        rows = kept
     return {
         "model": reader.model,
         "model_version": reader.version,
@@ -103,7 +121,7 @@ def extract_rgroups(step, session) -> dict:
     if step.paper_id is None or step.segment_id is None:
         raise BadInput("rgroups step has no structure")
     found = session.execute(
-        select(Prediction.rgroups, Segment.page)
+        select(Prediction.rgroups, Segment.page, Segment.bbox)
         .select_from(RgroupExtraction)
         .join(Prediction, Prediction.id == RgroupExtraction.prediction_id)
         .join(Segment, Segment.id == step.segment_id)
@@ -113,7 +131,7 @@ def extract_rgroups(step, session) -> dict:
     if found is None:
         raise BadInput("the structure is gone")
     reader = get_reader()
-    return read_scaffold(reader, step.paper_id, found.page, list(found.rgroups))
+    return read_scaffold(reader, step.paper_id, found.page, list(found.rgroups), found.bbox)
 
 
 register(StepKind.RGROUPS, extract_rgroups)

@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import TypeVar
 
 SCALE = 300 / 72  # PDF points to pixels of the 300 DPI page render (pipeline.RENDER_DPI)
 BELOW_PX = 100  # how far below the crop an ID may sit
@@ -51,6 +52,7 @@ _STOP = {
     "from", "was", "were", "is", "Figure", "Table",
 }  # fmt: skip
 
+T = TypeVar("T")
 Box = tuple[str, tuple[int, int, int, int]]  # (compound ID, (x0, y0, x1, y1) page pixels)
 
 
@@ -62,15 +64,19 @@ def id_of(text: str) -> str | None:
     return None if value in ("0", "00") else value
 
 
-def id_boxes(doc: dict) -> dict[int, list[Box]]:
-    """Per page (0-based, as Segment.page), the ID-like text boxes of a Docling document in page
-    pixels."""
+def text_boxes(
+    doc: dict, classify: Callable[[str], T | None]
+) -> dict[int, list[tuple[T, tuple[int, int, int, int]]]]:
+    """Per page (0-based, as Segment.page), the text boxes of a Docling document that `classify`
+    gives a value for, with that value, in page pixels. The one place Docling's boxes (points,
+    origin bottom left) become page pixels: compound IDs here, series labels in
+    marcus.core.rgroup_series."""
     heights = {int(k): v["size"]["height"] for k, v in (doc.get("pages") or {}).items()}
-    out: dict[int, list[Box]] = defaultdict(list)
+    out: dict[int, list[tuple[T, tuple[int, int, int, int]]]] = defaultdict(list)
     for item in doc.get("texts") or []:
         if not isinstance(item, dict):
             continue
-        value = id_of(str(item.get("text") or ""))
+        value = classify(str(item.get("text") or ""))
         if value is None:
             continue
         for prov in item.get("prov") or []:
@@ -85,6 +91,12 @@ def id_boxes(doc: dict) -> dict[int, list[Box]]:
             box = tuple(round(v * SCALE) for v in (x0, y0, x1, y1))
             out[page - 1].append((value, box))
     return dict(out)
+
+
+def id_boxes(doc: dict) -> dict[int, list[Box]]:
+    """Per page (0-based, as Segment.page), the ID-like text boxes of a Docling document in page
+    pixels."""
+    return text_boxes(doc, id_of)
 
 
 def _nearest(bbox: Sequence[int], boxes: list[Box], inside: float) -> str | None:

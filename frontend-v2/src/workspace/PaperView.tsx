@@ -104,27 +104,25 @@ function useViewTop(view: RefObject<HTMLDivElement | null>) {
 export default function PaperView({
   ws,
   rows,
-  formRequest = null,
+  side,
+  onSide,
 }: {
   ws: Workspace;
   rows: ReviewRow[];
-  /** Open the COCONUT side form for this structure (accepted in Compare; owner, 2026-11-26). */
-  formRequest?: { id: string } | null;
+  /** The structure whose COCONUT side form is open (Accept here or Use this one in Compare
+   *  opens it; owner decisions 2026-11-25 and 2026-11-26); the workspace holds it. */
+  side: string | null;
+  onSide: (segmentId: string | null) => void;
 }) {
   const paper = ws.paper!;
   const { segments, steps, selection, setSelection } = ws;
   const { decide, run: onRun } = useCardActions(paper.id, ws.live.reconnect);
-  // COCONUT side form (owner decision 2026-11-25): Accept here opens it for that structure.
-  const [side, setSide] = useState<string | null>(null);
-  useEffect(() => {
-    if (formRequest) setSide(formRequest.id);
-  }, [formRequest]);
   const onDecide = useCallback(
     (segmentId: string, status: CurationStatus) => {
       decide(segmentId, status);
-      if (status === "accepted") setSide(segmentId);
+      if (status === "accepted") onSide(segmentId);
     },
-    [decide],
+    [decide, onSide],
   );
   const reduce = usePrefersReducedMotion();
   const pagesHead = useId();
@@ -342,7 +340,7 @@ export default function PaperView({
           rows={rows}
           segmentId={side}
           onClose={() => {
-            setSide(null);
+            onSide(null);
             showCard(side, true); // focus back on its card
           }}
         />

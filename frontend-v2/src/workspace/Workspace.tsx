@@ -123,12 +123,16 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   // below hides) and the structure whose COCONUT form is open there.
   const [pickPage, setPickPage] = useState<number | null>(null);
   const [pickForm, setPickForm] = useState<string | null>(null);
-  // The Paper view's form for a structure accepted in Compare (a new object each time).
-  const [paperForm, setPaperForm] = useState<{ id: string } | null>(null);
+  // The Paper view's COCONUT form (Accept there, or Use this one in Compare); it closes when
+  // the view changes, so a form closed before never comes back.
+  const [paperForm, setPaperForm] = useState<string | null>(null);
   const pickPageOpen = paper.ocsr_mode === "pick" && pickPage !== null;
   useEffect(() => {
     if (pickPage === null) setPickForm(null); // back on the page tiles: the form goes
   }, [pickPage]);
+  useEffect(() => {
+    if (ws.view !== "paper") setPaperForm(null); // another view: the Paper view's form goes
+  }, [ws.view]);
   const review = useRef<HTMLDivElement>(null);
   // Esc in focus mode: the grid comes back with this segment's card selected and focused.
   const [returnTo, setReturnTo] = useState<string | null>(null);
@@ -306,7 +310,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
 
       {pickPageOpen ? null : ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">
-          <PaperView ws={ws} rows={rows} formRequest={paperForm} />
+          <PaperView ws={ws} rows={rows} side={paperForm} onSide={setPaperForm} />
         </section>
       ) : (
         <section className="ws-view ws-view--review" aria-label="Review view">
@@ -333,7 +337,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         rows={rows}
         onAccepted={(id) => {
           if (pickPageOpen) setPickForm(id);
-          else if (ws.view === "paper") setPaperForm({ id });
+          else if (ws.view === "paper") setPaperForm(id);
         }}
       />
 
