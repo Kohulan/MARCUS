@@ -16,9 +16,8 @@ from marcus.core.pipeline import (
     read_segment,
     segment_page_on_request,
 )
-from tests.core.test_caches import (  # noqa: F401 - _seg_version: autouse fixture
+from tests.core.test_caches import (
     OCSR,
-    _seg_version,
     done_first_paper,
     drive,
     finish,
@@ -27,6 +26,8 @@ from tests.core.test_caches import (  # noqa: F401 - _seg_version: autouse fixtu
     steps,
 )
 from tests.factories import make_owner, make_paper
+
+pytestmark = pytest.mark.usefixtures("seg_version")  # the cache tests' segmenter version
 
 
 def asked(s, pages=2, owner=None) -> Paper:

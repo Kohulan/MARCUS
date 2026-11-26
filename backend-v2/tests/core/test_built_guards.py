@@ -15,15 +15,15 @@ from marcus.core.pipeline import (
     request_rgroups,
 )
 from tests.core.test_built import make_built
-from tests.core.test_caches import (  # noqa: F401 - _seg_version: autouse fixture
-    _seg_version,
-    drive,
+from tests.core.test_caches import (
     finish,
     segment_result,
     steps,
 )
 from tests.core.test_pick_mode import picked, segment
 from tests.factories import make_paper
+
+pytestmark = pytest.mark.usefixtures("seg_version")  # the cache tests' segmenter version
 
 ROWS = {"3a": "Cc1ccccc1", "3b": "CCc1ccccc1"}
 

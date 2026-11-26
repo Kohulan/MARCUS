@@ -57,6 +57,7 @@ from marcus.core.enums import (
     StepKind,
     StepStatus,
 )
+from marcus.core.locks import lock_row as _lock
 from marcus.core.models import (
     Annotation,
     BackgroundStep,
@@ -328,16 +329,6 @@ def run_engine(engine: str) -> str:
 
 def _ocsr_seq(page: int, idx: int) -> int:
     return page * 1000 + idx
-
-
-def _lock(session: Session, model, row_id: uuid.UUID):
-    """SELECT ... FOR UPDATE of one row (fresh attributes), or None."""
-    return session.execute(
-        select(model)
-        .where(model.id == row_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
 
 
 def lock_parent(
