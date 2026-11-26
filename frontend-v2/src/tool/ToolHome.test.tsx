@@ -395,7 +395,7 @@ describe("Papers list", () => {
     const r = within(row);
     expect(r.getByText("alkaloids.pdf")).toBeInTheDocument();
     expect(
-      r.getByText("15 structures · 9 accepted · 3 to check · 2 rejected · 1 failed · 1 failed page"),
+      r.getByText("15 structures · 9 accepted · 3 open · 2 rejected · 1 failed · 1 failed page"),
     ).toBeInTheDocument();
     expect(r.getByText("Done")).toBeInTheDocument();
     expect(r.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/app/papers/p1");
@@ -423,7 +423,7 @@ describe("Papers list", () => {
       ],
     });
     const row = (await screen.findByText("alkaloids.pdf")).closest("li")!;
-    expect(within(row).getByText("1 structure · 1 to check")).toBeInTheDocument();
+    expect(within(row).getByText("1 structure · 1 open")).toBeInTheDocument();
     expect(within(row).getByText("Reading…")).toBeInTheDocument();
   });
 

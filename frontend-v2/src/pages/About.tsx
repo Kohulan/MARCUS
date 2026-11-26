@@ -176,7 +176,10 @@ function Preview() {
             <span className="count__dot count__dot--accepted" aria-hidden="true" />9 Accepted
           </span>
           <span className="count">
-            <span className="count__dot count__dot--check" aria-hidden="true" />4 To check
+            <span className="count__dot count__dot--check" aria-hidden="true" />1 To check
+          </span>
+          <span className="count">
+            <span className="count__dot count__dot--review" aria-hidden="true" />3 To review
           </span>
           <span className="count">
             <span aria-hidden="true">✕ </span>2 Rejected

@@ -113,6 +113,7 @@ describe("the R-groups filter", () => {
     expect(filterCounts(rows)).toEqual({
       all: 4,
       "to-check": 1,
+      "to-review": 0,
       accepted: 2,
       rejected: 0,
       failed: 1,

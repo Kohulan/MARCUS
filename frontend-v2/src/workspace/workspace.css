@@ -304,9 +304,11 @@
   color: var(--ink);
 }
 
-/* Each count carries its state's shape: round green, square orange, a charcoal cross. */
+/* Each count carries its state's shape: round green, an amber square (to check), an empty
+   grey square (to review), a charcoal cross. */
 .ws-counts__accepted::before,
 .ws-counts__check::before,
+.ws-counts__review::before,
 .ws-counts__rejected::before,
 .ws-counts__failed::before {
   display: inline-block;
@@ -326,7 +328,15 @@
   content: "";
   width: 8px;
   height: 8px;
-  background-color: var(--orange);
+  background-color: var(--amber);
+}
+
+.ws-counts__review::before {
+  content: "";
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--control-border);
 }
 
 .ws-counts__rejected::before {

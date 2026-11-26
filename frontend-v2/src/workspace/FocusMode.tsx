@@ -30,6 +30,7 @@ import {
   scaffoldPrediction,
   sentence,
   shownStructure,
+  isOpen,
   STATE_WORD,
   type CardState,
 } from "./cardState";
@@ -140,7 +141,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     if (to) go(to.segmentId);
   };
 
-  /** The next structure still to check after `from` (wrapping round), skipping decided ones. */
+  /** The next structure still to decide (To check or To review) after `from` (wrapping round), skipping decided ones. */
   const advance = (from: string) => {
     timer.current = null;
     const list = rowsRef.current;
@@ -148,7 +149,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     for (let k = 1; k < list.length; k++) {
       const r = list[(at + k + list.length) % list.length]!;
       if (r.segmentId === from) continue;
-      if (r.state === "to-check") {
+      if (isOpen(r.state)) {
         go(r.segmentId);
         return;
       }
@@ -224,7 +225,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
     help: () => setHelp(true),
   });
 
-  const left = rows.filter((r) => r.state === "to-check").length;
+  const left = rows.filter((r) => isOpen(r.state)).length;
 
   // Once per segment change, not per keystroke in the note (a curated molfile can be long).
   const depictionUrl = useMemo(
@@ -261,7 +262,7 @@ export default function FocusMode({ ws, rows, segment, onClose }: FocusModeProps
         </p>
         <StateBadge state={state} />
         <p className="fm-bar__left" role="status">
-          {left === 0 ? "None left to check" : `${left} to check`}
+          {left === 0 ? "None left to decide" : `${left} to decide`}
         </p>
         {/* The region's name changes with each step, but focus stays on it: say where. */}
         <p className="visually-hidden" role="status">

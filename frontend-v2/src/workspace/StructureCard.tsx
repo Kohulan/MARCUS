@@ -19,10 +19,13 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { structureTag } from "../ui/tag";
 import { useDisclosure } from "../ui/useDisclosure";
+import { measuredText } from "./trust";
 import {
+  agreeState,
   agreeText,
   CARD_OPEN_HINT,
   hasDrawing,
+  isOpen,
   metaText,
   scaffoldPrediction,
   sentence,
@@ -292,7 +295,7 @@ function StructureCard({
             <span>{meta}</span>
             {agree !== null && (
               <span
-                className={segment.agree === 0 ? "card__differ" : "card__agree"}
+                className={(segment.agree ?? 0) >= 2 ? "card__agree" : "card__differ"}
                 title={agreeTitle(segment)}
               >
                 {agree}
@@ -383,11 +386,20 @@ export function sameIdText(id: string, pages: number[]): string {
   return `Same ID as compound ${id}, ${pages.length > 1 ? "pages" : "page"} ${where}. Check.`;
 }
 
-/** The badge's tooltip: which engines agree ("DECIMER, MolParser and MolScribe agree"). */
-function agreeTitle(segment: SegmentOut): string {
+/**
+ * The badge's tooltip: which engines agree ("DECIMER, MolParser and MolScribe agree"), then
+ * how often that badge was right when measured (trust.ts measuredText).
+ */
+export function agreeTitle(segment: SegmentOut): string {
+  const state = agreeState(segment);
   const names = (segment.agree_engines ?? []).map(engineName);
-  if (names.length < 2) return "The engines give different structures";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} agree`;
+  const what =
+    state === "stereo"
+      ? "The engines give the same atoms and bonds, with different stereo"
+      : names.length < 2
+        ? "The engines give different structures"
+        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} agree`;
+  return state === null ? what : `${what}. ${measuredText(state)}`;
 }
 
 /** The flag of a crop that is not a clean drawing (SegmentOut.check_drawing). */
@@ -416,7 +428,7 @@ function CardActions({
 }) {
   const own = asEngine(paperEngine) ?? "decimer";
   const compare = onCompare && (() => onCompare(segmentId));
-  if (state === "to-check") {
+  if (isOpen(state)) {
     // No key hints: A and R act in focus mode only. The name starts with the visible word
     // (WCAG 2.5.3 label in name).
     return (

@@ -6,7 +6,7 @@ import { BulkPartialError, useBulkCuration } from "../api/queries";
 import type { CurationStatus, Engine } from "../api/types";
 import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
-import { hasDrawing, inFilter, segmentCard, type GridFilter } from "./cardState";
+import { hasDrawing, inFilter, isOpen, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
 import { faArrowTurnUp } from "@fortawesome/free-solid-svg-icons";
 import Icon from "../ui/Icon";
@@ -138,8 +138,8 @@ export default function ReviewGrid({
   latestOpen.current = openFocus;
   const onOpen = useCallback((segmentId: string) => latestOpen.current(segmentId), []);
 
-  // "Review one by one" opens focus mode on the first structure still to check, else the first.
-  const firstOpen = rows.find((r) => r.state === "to-check") ?? rows[0];
+  // "Review one by one" opens focus mode on the first structure still to decide, else the first.
+  const firstOpen = rows.find((r) => isOpen(r.state)) ?? rows[0];
 
   /** Focus a card of the grid by id (null: the first card, else the filter strip). */
   const focusCard = useCallback((segmentId: string | null) => {

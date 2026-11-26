@@ -41,11 +41,15 @@
   --accepted: #2D7A46;
   --orange: #FA3600;
   --orange-ink: #B82800;
+  /* "To check" (the engines differ): a fill and an edge, never text; text on it is on-amber
+     (9.0:1). Not the brand orange, which asks for an action (owner, 2026-11-26). */
+  --amber: #F0B429;
   --charcoal: #1C211D;
 
   /* Text set on a filled ground */
   --on-green: #FFFFFF;
   --on-orange: #141414;
+  --on-amber: #1C211D;
   --on-charcoal: #F4F3EA;
 
   /* Browser surfaces */

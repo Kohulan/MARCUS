@@ -354,7 +354,11 @@ button.fm-marker:focus-visible {
 /* The page's other structures: their state's shape (spec §7 table) at 1 px, under the
    open one's 2 px. */
 .fm-marker--to-check:not(.fm-marker--current) {
-  outline-color: var(--orange);
+  outline-color: var(--amber);
+}
+
+.fm-marker--to-review:not(.fm-marker--current) {
+  outline-color: var(--control-border);
 }
 
 .fm-marker--reading:not(.fm-marker--current) {

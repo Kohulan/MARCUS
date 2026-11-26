@@ -28,6 +28,8 @@ const EXPECTED_TOKENS: Record<string, string> = {
   "--orange": "#FA3600",
   "--orange-ink": "#B82800",
   "--on-orange": "#141414",
+  "--amber": "#F0B429",
+  "--on-amber": "#1C211D",
   "--charcoal": "#1C211D",
   "--control-border": "#7E8279",
   "--hatch": "#E6E5DC",
@@ -161,6 +163,7 @@ describe("tokens.css", () => {
 
   it.each([
     ["--on-orange", "--orange"],
+    ["--on-amber", "--amber"],
     ["--on-green", "--green"],
     ["--on-charcoal", "--charcoal"],
   ] as const)("text %s on %s is at least 4.5:1", (fg, bg) => {

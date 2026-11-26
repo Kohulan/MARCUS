@@ -19,6 +19,7 @@ import type {
 } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import { cardState } from "./cardState";
+import { measuredText } from "./trust";
 import Workspace from "./Workspace";
 
 // The live stream is mocked: the test fires its onEvent (a hint to refetch) by hand.
@@ -234,7 +235,7 @@ describe("cards and their states", () => {
     // The majority's structure is shown (the server's pick), naming its two engines.
     expect(within(card("[02]")).getByText("2 agree")).toHaveAttribute(
       "title",
-      "MolParser and MolScribe agree",
+      `MolParser and MolScribe agree. ${measuredText("agree2")}`,
     );
     expect(within(card("[02]")).getByText("MolParser + MolScribe · Valid")).toBeInTheDocument();
     expect(within(card("[02]")).getByText("CCO")).toBeInTheDocument();
@@ -300,6 +301,28 @@ describe("cards and their states", () => {
     expect(filter("To check")).toHaveTextContent("1");
   });
 
+  it("engines agree: To review; stereo differs: To check, each with its filter", async () => {
+    const three = [prediction({ engine: "molscribe" }), prediction({ engine: "molparser" }), prediction()];
+    renderGrid(
+      paper([
+        segment("s1", { predictions: three, agree: 3, agree_of: 3, agree_state: "agree3" }),
+        segment("s2", { predictions: three, agree: 0, agree_of: 3, agree_state: "stereo" }),
+      ]),
+    );
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(card("[01]")).getByText("To review")).toBeInTheDocument();
+    expect(within(card("[01]")).getByRole("button", { name: /^Accept/ })).toBeEnabled();
+    expect(within(card("[02]")).getByText("To check")).toBeInTheDocument();
+    const badge = within(card("[02]")).getByText("Stereo differs");
+    expect(badge).toHaveClass("card__differ");
+    expect(badge.title).toContain("different stereo");
+    expect(badge.title).toContain(measuredText("stereo"));
+    fireEvent.click(screen.getByRole("button", { name: /^To review/ }));
+    expect(cards()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /^To check/ }));
+    expect(within(cards()[0]!).getByText("Stereo differs")).toBeInTheDocument();
+  });
+
   it("an old paper's badge still names MolNexTR", async () => {
     const molnextr = prediction({ engine: "molnextr", smiles: "CCO" });
     renderGrid(
@@ -315,7 +338,7 @@ describe("cards and their states", () => {
     await waitFor(() => expect(cards()).toHaveLength(1));
     expect(within(card("[01]")).getByText("3 agree")).toHaveAttribute(
       "title",
-      "DECIMER, MolNexTR and MolScribe agree",
+      `DECIMER, MolNexTR and MolScribe agree. ${measuredText("agree3")}`,
     );
   });
 

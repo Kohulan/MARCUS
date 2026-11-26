@@ -44,10 +44,11 @@ afterEach(() => {
 });
 
 describe("StateBadge: the exact word and its shape", () => {
-  it("To check is an orange badge", () => {
+  it("To check is an amber badge (not the brand orange: owner, 2026-11-26)", () => {
     const { container } = render(<StateBadge state="to-check" />);
     expect(container.textContent).toBe("To check");
-    expect(container.querySelector(".badge--orange")).not.toBeNull();
+    expect(container.querySelector(".badge--amber")).not.toBeNull();
+    expect(container.querySelector(".badge--orange")).toBeNull();
   });
 
   it("Failed is a charcoal tag", () => {

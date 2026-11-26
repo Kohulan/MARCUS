@@ -362,7 +362,12 @@
 }
 
 .count__dot--check {
-  background-color: var(--orange);
+  background-color: var(--amber);
+}
+
+.count__dot--review {
+  box-sizing: border-box;
+  border: 1px solid var(--control-border);
 }
 
 .preview__send {
@@ -440,7 +445,7 @@
 }
 
 .pcard--check {
-  outline: 2px solid var(--orange);
+  outline: 2px solid var(--amber);
   outline-offset: -2px;
 }
 
@@ -452,7 +457,7 @@
 }
 
 .info__section .pcard__note--check {
-  color: var(--orange-ink);
+  color: var(--text-2);
 }
 
 .info__section .pcard__actions {

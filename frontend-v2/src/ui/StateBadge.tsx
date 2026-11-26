@@ -1,13 +1,25 @@
 import "./ui.css";
 
-/** A structure's state (spec §7 state table). The API's `unchecked` (and no curation) is "to-check". */
-export type CardState = "accepted" | "rejected" | "to-check" | "reading" | "failed" | "not-read";
+/**
+ * A structure's state (spec §7 state table). The API's `unchecked` (and no curation) is
+ * "to-review" when the engines agree on the structure, else "to-check" (owner decision
+ * 2026-11-26).
+ */
+export type CardState =
+  | "accepted"
+  | "rejected"
+  | "to-check"
+  | "to-review"
+  | "reading"
+  | "failed"
+  | "not-read";
 
 /** The state's word (exact, spec §7 state table). */
 export const STATE_WORD: Record<CardState, string> = {
   accepted: "Accepted",
   rejected: "Rejected",
   "to-check": "To check",
+  "to-review": "To review",
   reading: "Reading…",
   failed: "Failed",
   "not-read": "Not read yet",
@@ -21,7 +33,11 @@ export default function StateBadge({ state }: { state: CardState }) {
       // Green text sits on paper or surface only, never on sunken (4.4:1 there).
       return <span className="state state--accepted">{word}</span>;
     case "to-check":
-      return <span className="state badge badge--orange">{word}</span>;
+      // Amber fill: the engines differ (not red, not the brand orange: owner, 2026-11-26).
+      return <span className="state badge badge--amber">{word}</span>;
+    case "to-review":
+      // A calm grey outline: the engines agree, a person still decides.
+      return <span className="state badge badge--outline">{word}</span>;
     case "rejected":
       return (
         <span className="state state--rejected">

@@ -8,6 +8,7 @@ export type Engine = "decimer" | "decimer-hand" | "molparser" | "molscribe";
  * server refuses it for new requests (422). MolParser replaced MolNexTR.
  */
 export type LegacyEngine = "molnextr";
+export type AgreeState = "agree3" | "agree2" | "stereo" | "differ";
 export type CurationStatus = "unchecked" | "accepted" | "rejected";
 export type ErrorClass = "timeout" | "worker_lost" | "bad_input" | "engine_error";
 /**
@@ -156,6 +157,12 @@ export interface SegmentOut {
   agree?: number | null;
   /** Of how many engines that read: 3, or 2 when only two did. Null with `agree` null. */
   agree_of?: number | null;
+  /**
+   * The badge state (backend core/agreement.py badge): engines agree on the same structure,
+   * stereo included. "stereo": the same connectivity, but no two the same stereo. Null with
+   * `agree` null; absent from an older server.
+   */
+  agree_state?: AgreeState | null;
   /** The engines that agree ([] none), in DECIMER, MolParser (old papers: MolNexTR), MolScribe order. */
   agree_engines?: string[];
   /**
