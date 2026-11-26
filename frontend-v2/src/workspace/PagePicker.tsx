@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { api, errorText } from "../api/client";
 import { refreshPaper } from "../api/queries";
 import type { PaperDetail, SegmentOut, StepOut } from "../api/types";
@@ -73,6 +73,8 @@ export default function PickPanel({
   reconnect,
   side,
   tags = NO_TAGS,
+  onOpenPage,
+  withForm = false,
 }: {
   paper: PaperDetail;
   segments: SegmentOut[];
@@ -84,10 +86,15 @@ export default function PickPanel({
   side?: (page0: number) => ReactNode;
   /** Each structure's [nn] number (the review rows'). */
   tags?: ReadonlyMap<string, number>;
+  /** The page opened (0-based), or null back on the page tiles. */
+  onOpenPage?: (page0: number | null) => void;
+  /** The COCONUT form stands beside the picked column: three columns. */
+  withForm?: boolean;
 }) {
   const client = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState<number | null>(null);
+  useEffect(() => onOpenPage?.(open), [open, onOpenPage]);
   // Pages whose boxes came at once (segmentation cache), none of them: nothing more will come.
   const [cachedEmpty, setCachedEmpty] = useState<ReadonlySet<number>>(new Set());
   const pages = paper.pages ?? 0;
@@ -169,7 +176,7 @@ export default function PickPanel({
           ))}
         </div>
       ) : (
-        <div className="pick__open">
+        <div className={withForm ? "pick__open pick__open--form" : "pick__open"}>
           <div className="pick__page">
             {none && <p className="pick__note">No structures found on this page</p>}
             {failed && (

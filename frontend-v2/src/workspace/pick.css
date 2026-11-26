@@ -125,6 +125,34 @@
   display: grid;
 }
 
+/* Accept beside the page opens the COCONUT form (owner, 2026-11-26): a third column from
+   1600 px, a drawer over the right side below (as in the Paper view). */
+.pick__open--form {
+  grid-template-columns: minmax(0, 720px) minmax(320px, 420px) minmax(380px, 440px);
+}
+
+.pick__open--form .coconut-side {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+}
+
+@media (max-width: 1599px) {
+  .pick__open--form {
+    grid-template-columns: minmax(0, 720px) minmax(340px, 440px);
+  }
+
+  .pick__open--form .coconut-side {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 30;
+    width: min(400px, 100vw);
+    max-height: none;
+    box-shadow: var(--lift-dialog);
+  }
+}
+
 @media (max-width: 1100px) {
   .pick__open {
     grid-template-columns: minmax(0, 1fr);
