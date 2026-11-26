@@ -73,6 +73,7 @@ from marcus.core.models import (
     Step,
 )
 from marcus.core.queues import queue_for
+from marcus.core.rgroups import ordered_labels
 from marcus.core.settings import fake_enabled, get_settings
 
 log = logging.getLogger(__name__)
@@ -890,10 +891,29 @@ def _ordered_subset(part: list[str], whole: list[str]) -> bool:
     return all(label in rest for label in part)
 
 
+def drawing_labels(
+    session: Session, segment_id, own: list[str] | None
+) -> tuple[list[str], list[str]]:
+    """(the chosen prediction's labels, the labels only other engines read), each in label order;
+    of each engine its newest reading. One engine may misread a label (MolScribe read R5 as
+    "Rs", BJOC 18/23): the worker also asks for another engine's label, but only one the page
+    text names (marcus.workers.rgroups.handler.read_scaffold), so an invented one stays out."""
+    newest: dict[str, list[str]] = {}
+    for engine, labels in session.execute(
+        select(Prediction.engine, Prediction.rgroups)
+        .where(Prediction.segment_id == segment_id)
+        .order_by(Prediction.created_at.desc())
+    ):
+        newest.setdefault(engine, list(labels or []))
+    mine = ordered_labels(own or [])
+    others = ordered_labels(lab for labels in newest.values() for lab in labels if lab not in mine)
+    return mine, others
+
+
 def _after_rgroups(session: Session, paper: Paper, step: Step, result: dict) -> list[Step]:
     """Store the rows and their labels on the step's request row (a re-run replaces them). The
-    worker asks for the prediction's labels that the page text names: a result for labels the
-    prediction does not have, or in another order, is refused."""
+    worker asks for the labels of the drawing's readings (drawing_labels) that the page text
+    names: a result for labels no reading has, or in another order, is refused."""
     step.model_version = result["model_version"]
     found = session.execute(
         select(RgroupExtraction, Prediction.rgroups)
@@ -904,7 +924,8 @@ def _after_rgroups(session: Session, paper: Paper, step: Step, result: dict) -> 
     if found is None:
         return []  # the prediction is gone: nothing to store
     row, asked = found
-    if not _ordered_subset(result["labels"], list(asked or [])):
+    mine, others = drawing_labels(session, step.segment_id, asked)
+    if not _ordered_subset(result["labels"], ordered_labels([*mine, *others])):
         raise BadResult("rgroups: the result is for other labels than were asked for")
     now = _now()
     row.labels = result["labels"]

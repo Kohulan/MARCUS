@@ -59,8 +59,7 @@ def done_paper(s):
     (seg_step,) = finish(s, steps(s, paper, "render_page")[0], {})
     # the paper's own engine (the other two read in the background, phase B item 3)
     first, second = [
-        st
-        for st in finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
+        st for st in finish(s, seg_step, {"segments": SEGS, "seg_version": SEG_V})
         if st.engine == paper.engine
     ]
     finish(s, first, SCAFFOLD)
@@ -401,3 +400,30 @@ def test_the_reader_is_asked_for_every_engines_labels(db_session, monkeypatch,
     Image.new("RGB", (100, 140), "white").save(page_image_path(paper.id, 0))
     out = extract_rgroups(s.get(Step, step.id), s)
     assert out["labels"] == ["R1", "R2", "R3"]
+    finish(s, s.get(Step, step.id), out)  # the result for another engine's label is stored
+    assert row_of(s, scaffold).labels == ["R1", "R2", "R3"]
+
+
+def test_another_engines_label_the_text_never_names_is_not_asked(db_session, monkeypatch,
+                                                                 clear_settings_cache):  # fmt: skip
+    """An engine may also invent a label (DECIMER's Z beside R1, R2 on stylissa page 6): another
+    engine's label is asked only when the page text names it."""
+    from marcus.workers.rgroups.handler import extract_rgroups
+
+    monkeypatch.setenv("MARCUS_RGROUP_READER", "fake")
+    monkeypatch.setenv("MARCUS_ENABLE_FAKE_ENGINES", "1")
+    clear_settings_cache()
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    s.add(Prediction(segment_id=scaffold.segment_id, engine="decimer", engine_version="2.8.0",
+                     smiles="[R1]c1cc([R2])cc([R3])c1", valid=False, ms=1,
+                     rgroups=["R1", "R2", "R3"]))  # fmt: skip
+    step = request_rgroups(s, scaffold.id)
+    s.commit()
+    doc = {"texts": [{"label": "caption", "text": "3a: R1 = OMe, R2 = H", "prov": [{"page_no": 1}]}]}
+    text_path(paper.id).parent.mkdir(parents=True, exist_ok=True)
+    text_path(paper.id).write_text(json.dumps(doc))
+    page_image_path(paper.id, 0).parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 140), "white").save(page_image_path(paper.id, 0))
+    out = extract_rgroups(s.get(Step, step.id), s)
+    assert out["labels"] == ["R1", "R2"]

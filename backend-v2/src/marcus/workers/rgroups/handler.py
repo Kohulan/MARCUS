@@ -25,10 +25,11 @@ from sqlalchemy import select
 from marcus.core.enums import StepKind
 from marcus.core.models import Prediction, RgroupExtraction, Segment
 from marcus.core.page_text import UNUSABLE_TEXT, page_context, read_paper_document
-from marcus.core.pipeline import BadResult
+from marcus.core.pipeline import BadResult, drawing_labels
 from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
+from marcus.core.rgroup_labels import WEAK, canonical, drawn_labels, text_labels
 from marcus.core.rgroup_series import drawing_compounds, keep_series, series_boxes
-from marcus.core.rgroups import _label_order
+from marcus.core.rgroups import ordered_labels
 from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
@@ -81,6 +82,7 @@ def read_scaffold(
     labels: list[str],
     bbox: Sequence[int] | None = None,
     drawings: Sequence[Sequence[int]] | None = None,
+    extra: Sequence[str] = (),
 ) -> dict:
     """Ask `reader` for the rows of a scaffold with `labels` on `page` (0-based). Only the drawn
     labels the page text names are asked for (rgroup_extraction.labels_to_ask: no `*`, no OCSR
@@ -88,10 +90,17 @@ def read_scaffold(
     drawing's box (`bbox`, page pixels), the rows of another series are dropped when a series
     label is printed under the drawing or to its right; a label belongs to the nearest of the
     page's `drawings` (the boxes of all its segments) only (marcus.core.rgroup_series; owner,
-    2026-11-26)."""
+    2026-11-26). `extra`: labels only another engine read; one is asked only when the page text
+    names it (not a weak one-letter label), so a misread label of the chosen reading ("Rs" for
+    R5) is made up for and an invented one (DECIMER's Z) stays out."""
     doc = _document(paper_id)
     context = page_context(doc, page + 1) if doc is not None else ""
-    labels = labels_to_ask(labels, context)
+    named = set(text_labels(context))
+    labels = ordered_labels(
+        [*labels_to_ask(labels, context),
+         *(lab for lab in drawn_labels(list(extra))
+           if canonical(lab) in named and canonical(lab) not in WEAK)]
+    )  # fmt: skip
     if not labels:
         raise BadInput("the structure has no labelled R-groups")
     image = _image(paper_id, page)
@@ -133,17 +142,11 @@ def extract_rgroups(step, session) -> dict:
     ).one_or_none()
     drawings = []
     labels: list[str] = []
+    extra: list[str] = []
     if found is not None:
-        # every engine's labels of this drawing: one engine may misread one (MolScribe read R5
-        # as "Rs", BJOC 18/23); the page text still decides which are asked (labels_to_ask)
-        readings = session.scalars(
-            select(Prediction.rgroups).where(Prediction.segment_id == step.segment_id)
-        ).all()
-        labels = sorted(
-            {lab for found_labels in [found.rgroups, *readings] for lab in (found_labels or [])},
-            key=_label_order,
-        )
-    if found is not None:  # the page's drawings: a series label belongs to the nearest one
+        # the chosen reading's labels, and those only other engines read (asked when named)
+        labels, extra = drawing_labels(session, step.segment_id, found.rgroups)
+        # the page's drawings: a series label belongs to the nearest one
         drawings = session.scalars(
             select(Segment.bbox).where(
                 Segment.paper_id == step.paper_id, Segment.page == found.page
@@ -153,7 +156,7 @@ def extract_rgroups(step, session) -> dict:
     if found is None:
         raise BadInput("the structure is gone")
     reader = get_reader()
-    return read_scaffold(reader, step.paper_id, found.page, labels, found.bbox, drawings)
+    return read_scaffold(reader, step.paper_id, found.page, labels, found.bbox, drawings, extra)
 
 
 register(StepKind.RGROUPS, extract_rgroups)

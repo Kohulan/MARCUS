@@ -38,10 +38,11 @@ BRIDGE = '"{}" joins two groups that are not side by side'
 NOT_READ = "the scaffold could not be read"
 NOT_VALID = "the result is not a valid structure"
 NO_POINTS = "the scaffold has no R-group points"
-ODD_ELEMENT = 'the scaffold has "{}": a misread label? Edit the structure first'
-# The elements a natural product's scaffold may hold. Another one is a label an engine misread
-# as an element ("R1" -> [Rf] rutherfordium, MolScribe on BJOC 18/23): never copied into a build.
-ELEMENTS = frozenset({"H", "B", "C", "N", "O", "F", "Si", "P", "S", "Cl", "As", "Se", "Br", "I"})
+MISREAD_LABEL = 'the scaffold has "{}": a misread label? Edit the structure first'
+# Element symbols an R-group label becomes when an engine misreads it ("R1" -> [Rf] rutherfordium,
+# MolScribe on BJOC 18/23; "Y" -> yttrium): never copied into a build. Metals and counter-ions a
+# real structure has (Na, Mg, Fe, Co...) are not in it.
+MISREAD_ELEMENTS = frozenset({"Ra", "Rb", "Re", "Rf", "Rg", "Rh", "Rn", "Ru", "Y"})
 
 _TOKEN_MAP = 900  # atom map numbers of DECIMER's R tokens while the scaffold is read
 
@@ -100,6 +101,10 @@ def scaffold_of(smiles: str | None, molfile: str | None) -> Scaffold | str:
     mol, tokens = _read(smiles, molfile)
     if mol is None:
         return NOT_READ
+    if odd := next(
+        (a.GetSymbol() for a in mol.GetAtoms() if a.GetSymbol() in MISREAD_ELEMENTS), None
+    ):
+        return MISREAD_LABEL.format(odd)
     mol = Chem.RWMol(mol)
     for a in mol.GetAtoms():
         if a.GetAtomicNum() != 0:
@@ -127,10 +132,6 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
         return NO_POINTS
     if any(lab == UNLABELLED for lab in raw.values()):
         return UNLABELLED_POINT
-    odd = next((a.GetSymbol() for a in mol.GetAtoms()
-                if a.GetAtomicNum() and a.GetSymbol() not in ELEMENTS), None)  # fmt: skip
-    if odd is not None:
-        return ODD_ELEMENT.format(odd)
     # a point labelled with a known group as drawn ("OMe": MolScribe keeps a drawn abbreviation
     # as a labelled point) is that group in every row; any other text is no bare label ("OR1")
     fixed: dict[str, Fragment] = {}
