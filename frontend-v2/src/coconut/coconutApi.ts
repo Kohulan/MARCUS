@@ -428,6 +428,37 @@ export function unknownIds(paperId: string): Set<string> {
   return readIds(UNKNOWN_KEY + paperId);
 }
 
+/**
+ * Records what a send got: accepted ids as sent, unanswered ones (UNKNOWN_ERROR) as unknown.
+ * Returns both lists.
+ */
+export function recordResults(
+  paperId: string,
+  results: SubmitResult[],
+): { ok: string[]; lost: string[] } {
+  const ok = results.filter((r) => r.ok).map((r) => r.segmentId);
+  const lost = results.filter((r) => !r.ok && r.error === UNKNOWN_ERROR).map((r) => r.segmentId);
+  markSent(paperId, ok);
+  markUnknown(paperId, lost);
+  return { ok, lost };
+}
+
+/** True when COCONUT said the login has ended; the stored token is then cleared. */
+export function loginEnded(results: SubmitResult[]): boolean {
+  const ended = results.some((r) => !r.ok && r.error === AUTH_ERROR);
+  if (ended) clearToken();
+  return ended;
+}
+
+/** The paper fields still empty ("title", "evidence", "organism") for these structures. */
+export function missingFields(paper: PaperFields, structures: StructureFields[]): string[] {
+  return [
+    !paper.title.trim() && "title",
+    !paper.evidence.trim() && "evidence",
+    structures.some((s) => organismsFor(paper, s).length === 0) && "organism",
+  ].filter((x): x is string => typeof x === "string");
+}
+
 /** Records accepted ids; an accepted id is no longer unknown. */
 export function markSent(paperId: string, ids: string[]) {
   if (ids.length === 0) return;

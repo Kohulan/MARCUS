@@ -8,21 +8,21 @@ import type { PaperDetail, RgroupRow, SegmentOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { structureTag } from "../ui/tag";
 import type { CoconutStart } from "../workspace/coconutList";
+import { saveBlob } from "../ui/saveBlob";
 import {
-  AUTH_ERROR,
   buildReport,
-  clearToken,
   getToken,
-  markSent,
-  markUnknown,
+  loginEnded,
+  missingFields,
+  NOT_SENT_ERROR,
+  recordResults,
   sentIds,
   submitReports,
-  UNKNOWN_ERROR,
   unknownIds,
 } from "./coconutApi";
 import CoconutLogin from "./CoconutLogin";
-import { type BuiltFrom, jsonFileName, marcusJson, sideStart } from "./sideForm";
-import { Field, OrganismFields } from "./SubmitForm";
+import { type BuiltFrom, jsonFileName, marcusJson, sideStart, sideStructure } from "./sideForm";
+import { EMPTY_ORGANISM, Field, OrganismFields } from "./SubmitForm";
 import type { OrganismDraft, PaperFields, StructureFields } from "./types";
 import "./coconut.css";
 
@@ -38,13 +38,12 @@ type Props = {
   onClose: () => void;
 };
 
-const EMPTY: OrganismDraft = { name: "", parts: "", location: "", ecosystems: "" };
-
 export default function CoconutSidePanel({ paper, segment, n, start, built, row, onClose }: Props) {
   const id = useId();
-  const first = useRef(sideStart(segment, n, paper, start, built, row)); // the typed fields start here
-  const [paperFields, setPaper] = useState<PaperFields>(first.current.paper);
-  const [fields, setFields] = useState<StructureFields>(first.current.fields);
+  // the typed fields start from what MARCUS knows when the form opens
+  const [first] = useState(() => sideStart(segment, paper, start, built, row));
+  const [paperFields, setPaper] = useState<PaperFields>(first.paper);
+  const [fields, setFields] = useState<StructureFields>(first.fields);
   const [token, setToken] = useState<string | null>(() => getToken());
   const [busy, setBusy] = useState(false);
   const busyNow = useRef(false);
@@ -55,20 +54,18 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
   const heading = useRef<HTMLHeadingElement>(null);
   // what can be sent is the structure the card shows NOW (an edit or a new read counts); the
   // typed fields keep what the curator wrote
-  const { structure, heldReason } = sideStart(segment, n, paper, start, built, row);
+  const { structure, heldReason } = sideStructure(segment, n, paper.engine);
   const tag = structureTag(n);
-  const organism = paperFields.organisms[0] ?? EMPTY;
+  const organism = paperFields.organisms[0] ?? EMPTY_ORGANISM;
   // only the organism the form shows is sent
   const shownPaper: PaperFields = {
     ...paperFields,
     organisms: organism.name.trim() ? [organism] : [],
   };
   const missing = [
-    !fields.name.trim() && "name",
-    !paperFields.title.trim() && "title",
-    !paperFields.evidence.trim() && "evidence",
-    !organism.name.trim() && "organism",
-  ].filter(Boolean);
+    ...(fields.name.trim() ? [] : ["name"]),
+    ...missingFields(shownPaper, [fields]),
+  ];
   const fill = missing.length > 0 ? `Fill in ${missing.join(", ")}` : null;
   const suggested = start.note !== undefined && organism.name === start.organisms[0]?.name;
 
@@ -83,43 +80,25 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
     busyNow.current = true;
     setBusy(true);
     setProblem(null);
-    try {
-      const report = buildReport(shownPaper, structure, fields);
-      const [result] = await submitReports(token, [{ segmentId: segment.id, report }]);
-      if (result?.ok) {
-        markSent(paper.id, [segment.id]);
-        setSent(true);
-      } else {
-        const error = result && !result.ok ? result.error : "Not sent";
-        if (error === UNKNOWN_ERROR) {
-          markUnknown(paper.id, [segment.id]); // it may be in COCONUT: ask before sending again
-          setSent(true);
-        }
-        if (error === AUTH_ERROR) {
-          clearToken();
-          setToken(null); // the login comes back at the end of the form
-        }
-        setProblem(error);
-      }
-    } catch (err) {
-      setProblem(err instanceof Error ? err.message : "Not sent");
-    } finally {
-      busyNow.current = false;
-      setBusy(false);
-    }
+    const report = buildReport(shownPaper, structure, fields);
+    const results = await submitReports(token, [{ segmentId: segment.id, report }]); // never rejects
+    // sent, or no answer (it may be in COCONUT): either way the next send asks first
+    const { ok, lost } = recordResults(paper.id, results);
+    if (ok.length + lost.length > 0) setSent(true);
+    if (loginEnded(results)) setToken(null); // the login comes back at the end of the form
+    const result = results[0];
+    if (!result?.ok) setProblem(result?.error ?? NOT_SENT_ERROR);
+    busyNow.current = false;
+    setBusy(false);
   }
 
   function download() {
     if (!structure) return;
-    const doc = marcusJson(paper, segment, n, structure, shownPaper, fields, built, row);
-    const url = URL.createObjectURL(
+    const doc = marcusJson(paper, segment, structure, shownPaper, fields, built, row);
+    saveBlob(
       new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }),
+      jsonFileName(paper.id, segment.compound_id, n),
     );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = jsonFileName(paper.id, segment.compound_id, n);
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   const input = (key: keyof PaperFields, label: string, multiline = false) => {

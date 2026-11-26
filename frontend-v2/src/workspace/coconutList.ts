@@ -21,6 +21,20 @@ export type CoconutList = { send: SubmitStructure[]; held: HeldStructure[] };
  * sent (owner decision), but listed in `held` so the form says which and why. The curator may
  * still accept it in MARCUS.
  */
+/**
+ * The shown structure of `s`, and the R-group labels that hold it back (empty: it can be sent).
+ * Held for any placeholder atom: the server's word (whatever labels the page shows), or a
+ * dummy atom without labels (a curation not yet answered by the server).
+ */
+export function heldLabels(
+  s: SegmentOut,
+  paperEngine: string,
+): { smiles: string | null; labels: string[] } {
+  const { smiles, rgroups, placeholder } = shownStructure(s, paperEngine);
+  const isHeld = placeholder || (smiles !== null && hasDummyAtom(smiles));
+  return { smiles, labels: rgroups.length > 0 || !isHeld ? rgroups : [UNLABELLED] };
+}
+
 export function coconutStructures(segments: SegmentOut[], paperEngine: string): CoconutList {
   const send: SubmitStructure[] = [];
   const held: HeldStructure[] = [];
@@ -30,11 +44,7 @@ export function coconutStructures(segments: SegmentOut[], paperEngine: string): 
   listedSegments(segments).forEach((main, i) => {
     const s = chosenMember(main, groups.get(main.id) ?? []);
     if (s.curation?.status !== "accepted" || !hasDrawing(s)) return;
-    const { smiles, rgroups, placeholder } = shownStructure(s, paperEngine);
-    // Held for any placeholder atom: the server's word (whatever labels the page shows), or a
-    // dummy atom without labels (a curation not yet answered by the server).
-    const isHeld = placeholder || (smiles !== null && hasDummyAtom(smiles));
-    const labels = rgroups.length > 0 || !isHeld ? rgroups : [UNLABELLED];
+    const { smiles, labels } = heldLabels(s, paperEngine);
     if (labels.length > 0) held.push({ segmentId: main.id, n: i + 1, rgroups: labels });
     else if (smiles) send.push({ segmentId: main.id, n: i + 1, smiles });
   });
@@ -55,6 +65,7 @@ export function submissionTitle(meta: {
     .join(" ");
 }
 
+/** The COCONUT form's starting organisms, and the note they carry when they are the model's. */
 export type CoconutStart = { organisms: OrganismDraft[]; note: string | undefined };
 
 /**

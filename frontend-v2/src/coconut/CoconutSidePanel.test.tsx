@@ -36,17 +36,7 @@ function panel(segment: SegmentOut, onClose = vi.fn()) {
 }
 
 function show(onClose = vi.fn()) {
-  render(
-    <CoconutSidePanel
-      paper={PAPER}
-      segment={SEG}
-      n={2}
-      start={START}
-      built={{ segmentId: "s1", n: 1 }}
-      row={{ compound: "20a", groups: { R1: "OMe" } }}
-      onClose={onClose}
-    />,
-  );
+  render(panel(SEG, onClose));
   return onClose;
 }
 
@@ -164,22 +154,21 @@ describe("final review (fable, 2026-11-25)", () => {
     vi.spyOn(coconutApi, "submitReports").mockResolvedValue([
       { segmentId: "s2", ok: false, error: coconutApi.UNKNOWN_ERROR },
     ]);
-    const mark = vi.spyOn(coconutApi, "markUnknown");
     render(panel(SEG));
     fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
-    await waitFor(() => expect(mark).toHaveBeenCalledWith(PAPER.id, ["s2"]));
+    await waitFor(() => expect(coconutApi.unknownIds(PAPER.id).has("s2")).toBe(true));
   });
 
   it("an expired login brings the login back", async () => {
-    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    sessionStorage.setItem(coconutApi.TOKEN_KEY, "tok");
     vi.spyOn(coconutApi, "submitReports").mockResolvedValue([
       { segmentId: "s2", ok: false, error: coconutApi.AUTH_ERROR },
     ]);
-    const clear = vi.spyOn(coconutApi, "clearToken").mockImplementation(() => undefined);
     render(panel(SEG));
     fireEvent.click(screen.getByRole("button", { name: "Send to COCONUT" }));
     expect(await screen.findByRole("heading", { name: "Log in to COCONUT" })).toBeInTheDocument();
-    expect(clear).toHaveBeenCalled();
+    expect(sessionStorage.getItem(coconutApi.TOKEN_KEY)).toBeNull();
+    expect(coconutApi.getToken()).toBeNull();
   });
 
   it("Send waits for a name, a title, the evidence and an organism", () => {
