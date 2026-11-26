@@ -191,3 +191,21 @@ def test_a_bridge_needs_its_bond_dashes(value):
 def test_r_equals_h_on_a_stereocentre_leaves_no_stale_tag():
     (out,) = build_rows("[1*][C@@H]1CCCC[C@H]1C", None, [{"compound": "a", "groups": {"R1": "H"}}])
     assert "[C@H2]" not in out["smiles"] and "@H2" not in out["smiles"]
+
+
+def test_a_known_group_drawn_in_the_scaffold_is_built_as_drawn():
+    """A scaffold atom labelled "OMe" (MolScribe keeps a drawn abbreviation as a labelled point,
+    BJOC 18/23 compounds 7-9) is the drawn methoxy group in every row, not an R label."""
+    mol = Chem.MolFromSmiles("*c1ccc([1*])cc1")
+    mol.GetAtomWithIdx(0).SetProp("molFileAlias", "OMe")
+    mol.GetAtomWithIdx(6).SetProp("molFileAlias", "R1")
+    rows = build_rows(None, Chem.MolToMolBlock(mol), [{"compound": "7", "groups": {"R1": "OH"}}])
+    assert rows[0].get("smiles") and key(rows[0]["smiles"]) == key("COc1ccc(O)cc1"), rows
+
+
+def test_a_label_that_carries_more_than_a_label_still_fails():
+    mol = Chem.MolFromSmiles("*c1ccc([1*])cc1")
+    mol.GetAtomWithIdx(0).SetProp("molFileAlias", "OR2")
+    mol.GetAtomWithIdx(6).SetProp("molFileAlias", "R1")
+    rows = build_rows(None, Chem.MolToMolBlock(mol), [{"compound": "7", "groups": {"R1": "OH"}}])
+    assert "not a bare label" in (rows[0].get("reason") or rows[0].get("failure") or str(rows[0]))

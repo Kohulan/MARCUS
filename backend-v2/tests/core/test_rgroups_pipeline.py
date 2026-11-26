@@ -318,6 +318,35 @@ def test_the_handler_reads_its_request_from_the_database(db_session, monkeypatch
     assert s.get(Paper, paper.id).status == "done"
 
 
+def test_the_handler_gives_a_label_to_the_nearest_drawing_of_the_page(db_session, monkeypatch,
+                                                                     clear_settings_cache):  # fmt: skip
+    """The series label "9a-b" is under the scaffold (segment 0) but inside the plain structure
+    next to it (segment 1, lower half): it is the plain structure's, and the scaffold keeps its
+    rows (marcus.core.rgroup_series). The handler reads the page's drawings from the database."""
+    from marcus.workers.rgroups.handler import extract_rgroups
+
+    monkeypatch.setenv("MARCUS_RGROUP_READER", "fake")
+    monkeypatch.setenv("MARCUS_ENABLE_FAKE_ENGINES", "1")
+    clear_settings_cache()
+    s = db_session
+    paper, scaffold, _ = done_paper(s)
+    step = request_rgroups(s, scaffold.id)
+    s.commit()
+    box = {"l": 0.48, "t": 9.6, "r": 1.92, "b": 12.0, "coord_origin": "TOPLEFT"}  # px 2,40,8,50
+    doc = {
+        "texts": [
+            {"label": "caption", "text": "3a: R1 = OMe, R2 = H", "prov": [{"page_no": 1}]},
+            {"label": "text", "text": "9a-b", "prov": [{"page_no": 1, "bbox": box}]},
+        ]
+    }
+    text_path(paper.id).parent.mkdir(parents=True, exist_ok=True)
+    text_path(paper.id).write_text(json.dumps(doc))
+    page_image_path(paper.id, 0).parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 140), "white").save(page_image_path(paper.id, 0))
+    out = extract_rgroups(s.get(Step, step.id), s)
+    assert out["rows"] == [{"compound": "3a", "groups": {"R1": "OMe", "R2": "H"}}]
+
+
 def test_a_rerun_asks_for_the_predictions_labels_again(db_session, monkeypatch,
                                                        clear_settings_cache):  # fmt: skip
     """The stored labels are those of the shown rows (R1 here); a re-run asks for the

@@ -13,7 +13,12 @@ answers wins:
    with exactly its full valence; a text with no parse, or two different ones, is not guessed;
 4. BChemLookup (Beilstein-Institut/BChemLookup, CC0, vendored in data/bchemlookup at
    BCHEMLOOKUP_COMMIT): only entries with one or two `*` and no second component;
-5. else a reason, `unknown substituent "<text>"`: never a guess (sugars, "Tig", "[drawn]"...).
+5. a sugar (owner decision 2026-11-26): Glc, Gal, Man, Xyl, GlcA as D-pyranoses and Rha as
+   L-rhamnopyranose, every ring centre set; alpha/beta at the anomeric carbon only when the
+   cell prints it ("O-β-D-Glc"), else left open for the curator. "OGlc" / "GlcO" attach at the
+   anomeric oxygen, "Glc" at the anomeric carbon. A series against the sugar's own (L-Glc,
+   D-Rha), a sugar whose ring size is unclear (Ara) or a chain (GlcGlc) is not built;
+6. else a reason, `unknown substituent "<text>"`: never a guess ("Tig", "[drawn]"...).
 
 A text written leftward ("AcO", "HO", "MeO") is tried as its rightward form ("OAc") too, but
 never "CO" (carbonyl vs methoxy is not a mirror). Measured on the 1,479 values of the Phase 2 test
@@ -32,7 +37,7 @@ from rdkit import Chem
 from rdkit.rdBase import BlockLogs
 
 BCHEMLOOKUP_COMMIT = "800d41508798df556ec26401c5db4b6a64dbba8a"
-RESOLVER_VERSION = f"marcus-substituents 2; BChemLookup {BCHEMLOOKUP_COMMIT}"
+RESOLVER_VERSION = f"marcus-substituents 3; BChemLookup {BCHEMLOOKUP_COMMIT}"
 DATA = Path(__file__).parent / "data" / "bchemlookup" / "abbreviations.smi"
 
 _DASHES = dict.fromkeys(map(ord, "−–—‐‒‑"), "-")
@@ -243,6 +248,64 @@ def bchemlookup() -> dict[str, str]:
     return {k: v.pop() for k, v in found.items() if len(v) == 1}
 
 
+# --- 5. sugars ---------------------------------------------------------------------------------
+
+# name -> (free pyranose SMILES from PubChem, its series, its anomer as written there). PubChem
+# CIDs: 64689 beta-D-glucose, 439353 beta-D-galactopyranose, 439680 beta-D-mannopyranose,
+# 125409 beta-D-xylopyranose, 439710 alpha-L-rhamnose, 441478 beta-D-glucopyranuronic acid.
+SUGARS = {
+    "Glc": ("C([C@@H]1[C@H]([C@@H]([C@H]([C@@H](O1)O)O)O)O)O", "D", "β"),
+    "Gal": ("C([C@@H]1[C@@H]([C@@H]([C@H]([C@@H](O1)O)O)O)O)O", "D", "β"),
+    "Man": ("C([C@@H]1[C@H]([C@@H]([C@@H]([C@@H](O1)O)O)O)O)O", "D", "β"),
+    "Xyl": ("C1[C@H]([C@@H]([C@H]([C@@H](O1)O)O)O)O", "D", "β"),
+    "Rha": ("C[C@H]1[C@@H]([C@H]([C@H]([C@@H](O1)O)O)O)O", "L", "α"),
+    "GlcA": ("[C@@H]1([C@@H]([C@H](O[C@H]([C@@H]1O)O)C(=O)O)O)O", "D", "β"),
+}
+# [O-][α|β-][D|L-]Name[p][-O]: the cell's text after normalise (no spaces, one kind of dash).
+_SUGAR = re.compile(
+    r"(?:(?P<pre>[αβ])-?)?(?P<o1>O-?)?(?:(?P<anomer>[αβ])-?)?(?:(?P<series>[DL])-?)?"
+    r"(?P<name>GlcA|Glc|Gal|Man|Xyl|Rha)p?(?P<o2>-?O)?"
+)
+
+
+def _anomeric(mol: Chem.Mol) -> tuple[int, int]:
+    """(anomeric carbon, its exocyclic oxygen) of a free pyranose: the ring carbon next to the
+    ring oxygen that carries an OH."""
+    ring_o = next(a for a in mol.GetAtoms() if a.GetSymbol() == "O" and a.IsInRing())
+    for c in ring_o.GetNeighbors():
+        for o in c.GetNeighbors():
+            if o.GetSymbol() == "O" and not o.IsInRing() and o.GetTotalNumHs() == 1:
+                return c.GetIdx(), o.GetIdx()
+    raise ValueError("no anomeric OH")
+
+
+def _sugar(text: str) -> Fragment | None:
+    """The fragment of a sugar text (section 5 of the module doc), or None."""
+    m = _SUGAR.fullmatch(text)
+    if m is None or (m["o1"] and m["o2"]) or (m["pre"] and m["anomer"]):
+        return None
+    anomer = m["pre"] or m["anomer"]
+    smiles, series, written = SUGARS[m["name"]]
+    if m["series"] and m["series"] != series:
+        return None  # L-glucose, D-rhamnose: not the sugar the table holds
+    mol = Chem.RWMol(Chem.MolFromSmiles(smiles))
+    c, o = _anomeric(mol)
+    carbon = mol.GetAtomWithIdx(c)
+    if anomer is None:
+        carbon.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
+    elif anomer != written:
+        carbon.InvertChirality()
+    if m["o1"] or m["o2"]:  # attached at the anomeric oxygen (a glycoside)
+        star = mol.AddAtom(Chem.Atom(0))
+        mol.AddBond(o, star, Chem.BondType.SINGLE)
+        mol.GetAtomWithIdx(o).SetNoImplicit(False)
+    else:  # the glycosyl itself: the anomeric oxygen's place is the attachment
+        mol.ReplaceAtom(o, Chem.Atom(0))
+    out = mol.GetMol()
+    Chem.SanitizeMol(out)
+    return _fragment(Chem.MolToSmiles(out))
+
+
 # --- resolve ----------------------------------------------------------------------------------
 
 
@@ -264,7 +327,7 @@ def _one(text: str) -> Fragment | None:
         return _fragment(condensed)
     if text in bchemlookup():
         return _fragment(bchemlookup()[text])
-    return None
+    return _sugar(text)
 
 
 def resolve(text: str) -> Fragment | str:
