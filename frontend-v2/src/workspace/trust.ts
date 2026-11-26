@@ -13,9 +13,9 @@ import type { AgreeState } from "../api/types";
  */
 export const MEASURED: Record<AgreeState, { n: number; right: number }> = {
   agree3: { n: 30, right: 30 },
-  agree2: { n: 18, right: 18 },
-  stereo: { n: 18, right: 0 },
-  differ: { n: 25, right: 0 },
+  agree2: { n: 18, right: 17 },
+  stereo: { n: 18, right: 5 },
+  differ: { n: 25, right: 3 },
 };
 
 const LEAD: Record<AgreeState, string> = {

@@ -144,6 +144,13 @@ def test_three_answers_mark_what_differs_from_any_other():
     assert out["common"] == [[0, 1, 2], [0, 1, 2], [0, 1, 2]]
 
 
+def test_decimers_r_tokens_are_compared_as_placeholder_atoms():
+    """DECIMER's R-group answer ([R1]; RDKit refuses it) counts (owner, 2026-11-26): an R token
+    is a placeholder atom, the same as another engine's `*` whatever its number."""
+    assert marks("[R1]c1ccccc1", "*c1ccccc1") == [[], []]
+    assert marks("[R1]c1ccccc1", "*c1ccccc1C") == [[6], [7]]
+
+
 def test_an_isotope_h_is_an_atom_and_is_marked():
     """[3H] (an engine's misreading) changes the InChIKey: the atom is marked, and where it sits."""
     out = differences(["CC[3H]", "CC"])

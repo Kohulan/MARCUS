@@ -12,7 +12,8 @@ written atom counts, an explicit [H] too: CDK's atom order, marcus.workers.tools
 Two answers are compared through their largest common part (MCS: same elements, any bond
 order, ring atoms on ring atoms), then atom by atom. Outside the common part an atom differs.
 Inside it an atom differs when its charge or isotope differs, when a bond to another common atom
-has another order or is missing in the other answer, or by stereo: a stereocentre with another
+has another order or is missing in the other answer, or by stereo (an R-group placeholder is
+the same atom whatever its number, DECIMER's [R1] included): a stereocentre with another
 configuration, or with a configuration only one answer gives; the two atoms of a double bond
 with another E/Z, or with an E/Z only one answer gives. An explicit H is no difference (it is
 left out before comparing), and never an atom of either list.
@@ -31,6 +32,8 @@ import time
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 from rdkit.rdBase import BlockLogs
+
+from marcus.core.rgroups import rtoken_dummies, rtoken_scaffold
 
 MAX_ANSWERS = 6
 MAX_ATOMS = 250  # heavy atoms of one answer (as marcus.workers.orient)
@@ -56,6 +59,9 @@ class _Answer:
         params.removeHs = False
         with BlockLogs():
             written = Chem.MolFromSmiles(smiles, params) if smiles else None
+            if written is None and smiles and rtoken_scaffold(smiles):
+                # DECIMER's R tokens ([R1]): placeholder atoms, one per token, in place
+                written = Chem.MolFromSmiles(rtoken_dummies(smiles), params)
         if written is None:
             raise DifferencesError("cannot read a SMILES")
         for atom in written.GetAtoms():
@@ -163,7 +169,7 @@ def _pair(a: _Answer, b: _Answer, to_b: dict[int, int]):
         specified = x.GetChiralTag() in _SPECIFIED, y.GetChiralTag() in _SPECIFIED
         if (
             x.GetFormalCharge() != y.GetFormalCharge()
-            or x.GetIsotope() != y.GetIsotope()
+            or (x.GetIsotope() != y.GetIsotope() and x.GetAtomicNum() != 0)  # not R numbers
             or specified[0] != specified[1]
             or (all(specified) and not _same_centre(a, i, b, j, to_b))
         ):
