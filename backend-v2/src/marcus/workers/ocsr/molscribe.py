@@ -3,7 +3,10 @@
 Called exactly as v1 (`backend/app/modules/ocsr_wrapper.py` init_molscribe and
 get_molscribe_prediction with data_type "both", which v1's generate_both route uses):
 `MolScribe(checkpoint, device=...)` once, then `model.predict_image_file(str(path))`, returning
-its "smiles" and "molfile".
+its "smiles" and "molfile". Since 2026-11-26 with `return_atoms_bonds=True`: the same prediction
+(the flag only adds "atoms" and "bonds" to the output), whose raw atoms and bonds with positions
+are kept for the paper layout (OcsrResult.graph, marcus.workers.ocsr.layout), also when the
+structure does not sanitize.
 
 Device: setting `molscribe_device` (env MARCUS_MOLSCRIBE_DEVICE), "cpu" by default because v1
 forces `torch.device("cpu")`; "cuda" is for the GPU stage once it shows no loss against v1.
@@ -75,9 +78,13 @@ class MolscribeEngine:
     def predict(self, image: Path) -> OcsrResult:
         if self._model is None:
             raise RuntimeError("MolscribeEngine.predict() called before load()")
-        prediction = self._model.predict_image_file(str(image))
+        prediction = self._model.predict_image_file(str(image), return_atoms_bonds=True)
+        atoms, bonds = prediction.get("atoms"), prediction.get("bonds")
+        graph = {"atoms": atoms, "bonds": bonds} if atoms and bonds else None
         # v1 returns "" when the graph could not be turned into a molfile: no molfile.
-        return OcsrResult(prediction.get("smiles", ""), prediction.get("molfile", "") or None)
+        return OcsrResult(
+            prediction.get("smiles", ""), prediction.get("molfile", "") or None, graph
+        )
 
 
 def register(name: Engine) -> None:

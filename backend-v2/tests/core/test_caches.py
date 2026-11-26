@@ -591,6 +591,7 @@ def test_ocsr_cache_rows_hold_only_the_owner_id_and_the_result(db_session, engin
     cols = {c.name for c in OcsrCache.__table__.columns}
     assert cols == {
         "owner_id", "image_sha256", "engine", "engine_version", "smiles", "molfile", "created_at",
+        "layout",  # 0024: the paper layout, part of the engine's output
     }  # fmt: skip
 
 
