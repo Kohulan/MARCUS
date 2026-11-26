@@ -10,7 +10,8 @@ again on the image:
   such pairs), bonds follow, a bond read twice is kept once; wedges are single bonds.
 - `fit_to_ink`: four numbers (x0, y0, w, h) place the box on the image. The cost is the mean
   distance from points along each bond to the nearest dark pixel (grey below DARK, OpenCV's
-  distance transform); Nelder-Mead from three starts (75 / 85 / 95 % of the ink's box). The box
+  distance transform); Nelder-Mead from seven starts (70 to 100 % of the ink's box: with
+  the design's three, 3 of 17 real crops stopped in a worse local minimum). The box
   is kept at or above MIN_BOX_SHARE of the ink's box on each axis: a box collapsed onto one
   stroke would score ~0.
 - `layout_molfile`: the molfile, each atom at its fitted pixel (y = -pixel y), with the fit in
@@ -30,7 +31,7 @@ from marcus.core import paper_layout
 
 DARK = 160  # grey below this is ink
 MIN_BOX_SHARE = 0.5
-STARTS = (0.75, 0.85, 0.95)  # the box's share of the ink's box at the three starts
+STARTS = (0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0)  # the box's share of the ink's box at each start
 ALONG = 8  # points per bond, between 15 % and 85 % of its length (off the atom labels)
 MAX_ATOMS = 250  # = marcus.workers.orient.MAX_ATOMS: a larger template is never used
 SAME_POSITION = 1e-6  # of the 0..1 box

@@ -15,8 +15,10 @@ The molfile's title line says what it is and how well it fits:
 `fit` is the mean distance from points along each bond to the nearest dark pixel. The overlay
 is offered only when it is at most OVERLAY_MAX_FIT_SHARE of the median bond length
 (`overlay_ok`); a layout that fits worse still gives the drawings their shape. Measured
-2026-11-26 on 17 real crops against the same graphs mirrored: see the tests
-(tests/workers/test_paper_layout.py) and the branch report.
+2026-11-26 on 17 real crops (bond 14 to 85 px): MolScribe's graph fits at 0.0 to 3.5 % of a
+bond; the same graph mirrored (left-right, top-bottom) at 10.4 to 45.6 %, except two drawings
+that are their own mirror image (0.0 and 1.1 %: the same picture). The case and its mirror are
+pinned in tests/workers/test_paper_layout.py.
 
 Nothing here imports RDKit: the API, the tools worker and the OCSR worker all read the header.
 """
