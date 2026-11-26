@@ -28,6 +28,7 @@ from marcus.api.routes import health as health_route
 from marcus.core.db import get_db
 from marcus.core.events import paper_channel
 from marcus.core.settings import Settings, get_settings
+from tests.api._upload_helpers import fresh_pdf
 from tests.api.conftest import new_owner, seed_paper
 from tests.api.test_events import SSE, parse_snapshot
 from tests.conftest import TEST_REDIS_URL
@@ -51,6 +52,7 @@ ALLOWED_ROUTES = {
     ("GET", "/api/v2/ready"),
     ("POST", "/api/v2/papers"),
     ("GET", "/api/v2/papers"),
+    ("GET", "/api/v2/history"),  # the landing's "Browse your history" (owner, 2026-11-26)
     ("GET", "/api/v2/papers/{paper_id}"),
     ("DELETE", "/api/v2/papers/{paper_id}"),
     ("GET", "/api/v2/papers/{paper_id}/segments"),
@@ -715,11 +717,14 @@ async def test_unknown_peers_share_one_new_owner_bucket(app):
 
 async def test_unknown_peers_share_one_active_paper_bucket(app, monkeypatch):
     env(monkeypatch, ip_max_active_papers="2", browser_max_active_papers="5")
-    pdf = b"%PDF-1.4\n" + b"0" * 100
     async with client(app, ("a-name", 1)) as c1, client(app, ("b-name", 1)) as c2:
-        assert (await c1.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
-        assert (await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
-        r = await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        assert (
+            await c1.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
+        ).status_code == 202
+        assert (
+            await c2.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
+        ).status_code == 202
+        r = await c2.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
     assert r.status_code == 429 and "address" in r.json()["detail"]
 
 
@@ -769,23 +774,24 @@ async def test_ipv6_new_owner_limit_is_per_64(app):
 
 async def test_ipv6_active_paper_limit_is_per_64(app, monkeypatch):
     env(monkeypatch, ip_max_active_papers="2", browser_max_active_papers="5")
-    pdf = b"%PDF-1.4\n" + b"0" * 100
     async with (
         client(app, ("2001:db8:9:9::1", 1)) as c1,
         client(app, ("2001:db8:9:9::2", 1)) as c2,
         client(app, ("2001:db8:9:a::1", 1)) as other,
     ):
-        assert (await c1.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
-        assert (await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})).status_code == 202
-        r = await c2.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        assert (
+            await c1.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
+        ).status_code == 202
+        assert (
+            await c2.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
+        ).status_code == 202
+        r = await c2.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
         assert r.status_code == 429 and "address" in r.json()["detail"]
-        r = await other.post("/api/v2/papers", files={"file": ("p.pdf", pdf)})
+        r = await other.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
         assert r.status_code == 202
 
 
 # --- per-address active cap counts the work's own address (review I-1) ------------------------
-
-PDF = b"%PDF-1.4\n" + b"0" * 100
 
 
 async def _purge_owner_ips(db) -> None:
@@ -815,10 +821,10 @@ async def test_owner_with_purged_ip_still_counts_toward_its_address(
     async with client(app, ("198.51.100.20", 1)) as old, client(app, ("198.51.100.20", 2)) as new:
         for _ in range(2):
             assert (
-                await old.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+                await old.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
             ).status_code == 202
         await _purge_owner_ips(async_db_session)  # the owner is over 30 days old
-        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
         assert r.status_code == 429 and "address" in r.json()["detail"]
         assert {p.started_ip for p in await _papers(async_db_session)} == {"198.51.100.20"}
 
@@ -841,7 +847,7 @@ async def test_owner_with_purged_ip_still_counts_toward_its_address(
         await async_db_session.commit()
         done = [p for p in await _papers(async_db_session) if p.status != "checking"]
         assert [(p.status, p.started_ip) for p in done] == [("failed", None)]
-        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        r = await new.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
         assert r.status_code == 202
 
 
@@ -852,11 +858,11 @@ async def test_owners_with_purged_ips_do_not_fill_the_unknown_bucket(
     async with client(app, ("203.0.113.5", 1)) as known:
         for _ in range(2):
             assert (
-                await known.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+                await known.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
             ).status_code == 202
     await _purge_owner_ips(async_db_session)
     async with client(app, ("a-name", 1)) as unknown:  # an unparseable peer: the unknown bucket
-        r = await unknown.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        r = await unknown.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
     assert r.status_code == 202
 
 
@@ -877,7 +883,7 @@ async def test_image_job_counts_toward_its_address_and_keeps_no_ip_once_settled(
         r = await a.post("/api/v2/images", files={"file": ("i.png", buf.getvalue())})
         assert r.status_code == 202
         await _purge_owner_ips(async_db_session)
-        r = await b.post("/api/v2/papers", files={"file": ("p.pdf", PDF)})
+        r = await b.post("/api/v2/papers", files={"file": ("p.pdf", fresh_pdf())})
         assert r.status_code == 429
     (job,) = (await async_db_session.execute(select(ImageJob))).scalars()
     assert job.started_ip == "198.51.100.30"

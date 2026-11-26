@@ -222,6 +222,28 @@ def owner_cookie_header(token: str) -> str:
     return response.headers["set-cookie"]
 
 
+async def _browser_owner(db: AsyncSession, cookie: str | None) -> Owner | None:
+    """The browser owner a cookie names (not revoked), or None. One rule for current_owner and
+    known_browser_owner."""
+    if not cookie:
+        return None
+    return (
+        await db.execute(
+            select(Owner).where(
+                Owner.token_hash == hash_token(cookie),
+                Owner.kind == OwnerKind.BROWSER.value,
+                Owner.revoked_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def known_browser_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner | None:
+    """The browser owner the cookie names, or None: never a new owner, no cookie set and no
+    activity recorded (the landing page's history check, owner request 2026-11-26)."""
+    return await _browser_owner(db, request.cookies.get(COOKIE_NAME))
+
+
 async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner:
     """The caller's owner: API key, else browser cookie, else a new browser owner (limits per
     client address and hour: ip_max_new_owners_per_hour used owners, ip_max_new_sessions_per_hour
@@ -252,15 +274,7 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
 
     cookie = request.cookies.get(COOKIE_NAME)
     if cookie:
-        owner = (
-            await db.execute(
-                select(Owner).where(
-                    Owner.token_hash == hash_token(cookie),
-                    Owner.kind == OwnerKind.BROWSER.value,
-                    Owner.revoked_at.is_(None),
-                )
-            )
-        ).scalar_one_or_none()
+        owner = await _browser_owner(db, cookie)
         if owner is not None:
             if _first_return(owner):
                 await _check_first_use(db, owner)  # its first return makes it a used owner

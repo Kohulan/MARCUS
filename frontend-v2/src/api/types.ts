@@ -116,6 +116,11 @@ export interface PredictionOut {
   rgroups?: string[];
   /** The structure has R-group placeholder atoms, whatever labels are shown (COCONUT holds it). */
   placeholder?: boolean;
+  /**
+   * The server can draw it (backend marcus.core.drawable): valid, or an R-group scaffold
+   * RDKit refuses but CDK draws (DECIMER's [R1]). Optional: absent from an older server.
+   */
+  drawable?: boolean;
 }
 
 export interface SegmentOut {
@@ -308,7 +313,10 @@ export interface ImageJobOut {
   steps: ImageStepOut[];
 }
 
-export type UploadPaperReply = { paper_id: string; status: string };
+/** `reused`: the same file was uploaded before by this browser; its earlier paper opens (owner, 2026-11-26). */
+export type UploadPaperReply = { paper_id: string; status: string; reused?: boolean };
+/** GET /history: this browser's papers and images (0 without a browser owner). */
+export type HistoryReply = { items: number };
 export type UploadImageReply = { image_job_id: string; status: string };
 export type DepictReply = { format: "svg"; data: string };
 

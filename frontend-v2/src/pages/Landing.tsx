@@ -7,6 +7,7 @@ import Icon from "../ui/Icon";
 import { mediaMatches } from "../ui/motion";
 import { flyInitials } from "./flight";
 import { pageMeta, usePageTitle } from "./meta";
+import HistoryLink from "./HistoryLink";
 import RingDrop from "./RingDrop";
 import "./landing.css";
 
@@ -144,6 +145,7 @@ export default function Landing() {
             +
           </span>
           <RingDrop />
+          <HistoryLink />
           <p className="act__sample">
             <GlassLink tint="orange" to="/app?sample=1">
               Try a sample paper

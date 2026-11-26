@@ -65,6 +65,13 @@ export async function routeMatomo(page: Page): Promise<void> {
   );
 }
 
+/** The landing's history check (GET /api/v2/history): a browser with no history. */
+export async function routeNoHistory(page: Page): Promise<void> {
+  await page.route("**/api/v2/history", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: '{"items":0}' }),
+  );
+}
+
 const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
   ".png": "image/png",

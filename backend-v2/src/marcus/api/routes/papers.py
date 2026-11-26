@@ -29,6 +29,7 @@ from marcus.api.deps import (
     client_ip,
     current_owner,
     get_owned_paper,
+    known_browser_owner,
     not_found,
     require_engine_enabled,
     visible,
@@ -63,14 +64,23 @@ from marcus.api.schemas import (
     SegmentList,
     StepAccepted,
     StepList,
+    UploadPaperOut,
 )
 from marcus.api.security import upload_limit
 from marcus.api.uploads import read_limited, sanitize_display_name, sniff_pdf
 from marcus.core import storage
 from marcus.core.db import get_db
-from marcus.core.enums import Engine, PaperStatus
+from marcus.core.enums import Engine, OwnerKind, PaperStatus
 from marcus.core.main_figure import stale_members
-from marcus.core.models import Curation, MainFigure, Owner, Paper, Prediction, Segment
+from marcus.core.models import (
+    Curation,
+    ImageJob,
+    MainFigure,
+    Owner,
+    Paper,
+    Prediction,
+    Segment,
+)
 from marcus.core.picks import candidate_clause
 from marcus.core.pipeline import (
     ModeNotAllowed,
@@ -88,7 +98,13 @@ from marcus.core.settings import get_settings
 router = APIRouter()
 
 
-@router.post("/papers", status_code=202, dependencies=[Depends(upload_limit)])
+@router.post(
+    "/papers",
+    status_code=202,
+    response_model=UploadPaperOut,
+    response_model_exclude_defaults=True,  # `reused` only when it is
+    dependencies=[Depends(upload_limit)],
+)
 async def upload_paper(
     request: Request,
     file: UploadFile = File(...),
@@ -97,10 +113,9 @@ async def upload_paper(
     ocsr: Literal["auto", "off", "ask"] = Form("auto"),
     owner: Owner = Depends(current_owner),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> UploadPaperOut:
     settings = get_settings()
     require_engine_enabled(engine)
-    await enforce_active_limits(db, owner, client_ip(request))
 
     data = await read_limited(file, settings.max_upload_bytes)
     sniff_pdf(data)
@@ -108,13 +123,48 @@ async def upload_paper(
 
     # hash and file write in a thread: up to max_upload_bytes must not block the event loop
     sha = await run_in_threadpool(lambda: hashlib.sha256(data).hexdigest())
+    # The same file again from the same owner (owner request 2026-11-26): its earlier paper,
+    # while it is there and did not fail, opens instead of a new read. Only the owner's own:
+    # nobody else's results. No new work, so no active-work limit either.
+    if owner.kind == OwnerKind.BROWSER.value:  # API-key scripts read every upload
+        earlier = (
+            await db.execute(
+                select(Paper)
+                .where(
+                    Paper.owner_id == owner.id,
+                    Paper.pdf_sha256 == sha,
+                    Paper.status != PaperStatus.FAILED.value,
+                    *visible(Paper),
+                )
+                .order_by(Paper.created_at.desc(), Paper.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if earlier is not None:
+            return UploadPaperOut(paper_id=earlier.id, status=earlier.status, reused=True)
+    await enforce_active_limits(db, owner, client_ip(request))
     ip = work_ip(request)
     paper = await db.run_sync(
         lambda s: new_paper(s, owner, sha, len(data), name, engine, ocsr, started_ip=ip)
     )
     await run_in_threadpool(store_pdf, paper.id, data)  # before the commit, as start_paper
     await db.commit()
-    return {"paper_id": str(paper.id), "status": PaperStatus.CHECKING.value}
+    return UploadPaperOut(paper_id=paper.id, status=PaperStatus.CHECKING.value)
+
+
+@router.get("/history")
+async def history(
+    owner: Owner | None = Depends(known_browser_owner), db: AsyncSession = Depends(get_db)
+) -> dict[str, int]:
+    """How many papers and images this browser has (the landing page's "Browse your history",
+    owner request 2026-11-26). Never makes an owner or sets a cookie: 0 without one."""
+    if owner is None:
+        return {"items": 0}
+    counts = [
+        select(func.count()).where(m.owner_id == owner.id, *visible(m)).scalar_subquery()
+        for m in (Paper, ImageJob)
+    ]
+    return {"items": (await db.execute(select(counts[0] + counts[1]))).scalar_one()}
 
 
 @router.get("/papers", response_model=PaperList)
@@ -378,9 +428,7 @@ async def segment_page_route(
         raise not_found()
     try:
         ip = work_ip(request)
-        step = await db.run_sync(
-            lambda s: segment_page_on_request(s, paper.id, n, started_ip=ip)
-        )
+        step = await db.run_sync(lambda s: segment_page_on_request(s, paper.id, n, started_ip=ip))
     except (ModeNotAllowed, RetryNotAllowed) as exc:
         await db.rollback()
         raise HTTPException(status_code=409, detail=exc.reason) from None
