@@ -5,6 +5,7 @@ import type { CurationOut, DoclingDoc, PredictionOut, SegmentOut } from "../api/
 import { guardSend, hasDummyAtom, heldOnlyReason, heldReason } from "../coconut/held";
 import {
   filterCounts,
+  hasDrawing,
   inFilter,
   metaText,
   shownFilter,
@@ -38,6 +39,17 @@ function segment(curation: Partial<CurationOut> | null, predictions = [predictio
     predictions,
   } as SegmentOut;
 }
+
+describe("a DECIMER scaffold has a drawing (owner, 2026-11-26)", () => {
+  it("[R1] tokens: RDKit refuses them, CDK draws them; other invalid SMILES have none", () => {
+    const scaffold = segment(null, [
+      prediction({ smiles: "[R1]c1ccccc1[R2]", valid: false, rgroups: ["R1", "R2"], drawable: true }),
+    ]);
+    const garbage = segment(null, [prediction({ smiles: "C1CC", valid: false, rgroups: [], drawable: false })]);
+    expect(hasDrawing(scaffold)).toBe(true);
+    expect(hasDrawing(garbage)).toBe(false);
+  });
+});
 
 describe("the meta line", () => {
   it("names a DECIMER scaffold instead of a bare Invalid", () => {

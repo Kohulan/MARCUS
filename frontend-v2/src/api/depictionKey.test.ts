@@ -64,6 +64,13 @@ describe("depictionKey", () => {
     expect(depictionKey(seg({ predictions: [pred("c", false), ...preds] }))).toBe(base);
   });
 
+  it("changes with a new DECIMER R-group scaffold ([R1]: invalid, but drawn; owner review 2026-11-26)", () => {
+    const base = depictionKey(seg());
+    const preds = seg().predictions;
+    const scaffold = { ...pred("c", false, "[R1]c1ccccc1"), rgroups: ["R1"], drawable: true };
+    expect(depictionKey(seg({ predictions: [scaffold, ...preds] }))).not.toBe(base);
+  });
+
   it("changes when a prediction becomes invalid", () => {
     const base = depictionKey(seg());
     expect(depictionKey(seg({ predictions: [pred("a", false), pred("b", false)] }))).not.toBe(

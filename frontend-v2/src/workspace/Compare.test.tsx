@@ -130,6 +130,19 @@ describe("Compare", () => {
     expect(heads).toEqual(["Paper", "DECIMER", "MolParser", "MolScribe"]);
   });
 
+  it("draws DECIMER's R-group scaffold ([R1]); no highlight on it (owner, 2026-11-26)", async () => {
+    renderCompare({
+      predictions: [
+        prediction({ engine: "decimer", smiles: "[R1]c1ccccc1", valid: false, rgroups: ["R1"], drawable: true }),
+        prediction({ engine: "molscribe", smiles: "*c1ccccc1", rgroups: ["R1"] }),
+      ],
+    });
+    await waitFor(() =>
+      expect(vi.mocked(api.depict).mock.calls.map((c) => c[0])).toContain("[R1]c1ccccc1"),
+    );
+    expect(litCalls().map((c) => c[0])).not.toContain("[R1]c1ccccc1");
+  });
+
   it("shows the paper's crop the engines read beside the drawings", () => {
     renderCompare({ predictions: [prediction({ engine: "decimer" })] });
     const crop = screen.getByRole("img", { name: "Crop from the paper" });

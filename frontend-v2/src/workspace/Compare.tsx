@@ -20,7 +20,7 @@ import SpecimenLabel from "../ui/SpecimenLabel";
 import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
-import { ocsrSteps } from "./cardState";
+import { drawable, ocsrSteps } from "./cardState";
 import {
   engineRows,
   enginesToRun,
@@ -124,11 +124,17 @@ export default function Compare({
       : shared;
 
   // Every drawing from /tools/depict, each with its own template (the toggles decide), and with
-  // the common part when it is shown.
-  const drawn = rows.filter((r) => r.prediction?.valid === true);
+  // the common part when it is shown. DECIMER's R-group scaffold ([R1], invalid for RDKit) is
+  // drawn too (CDK reads it; owner, 2026-11-26), never highlighted (the highlight is RDKit's).
+  const drawn = rows.filter((r) => r.prediction !== null && drawable(r.prediction));
   const depicts = useQueries({
     queries: drawn.map((r) =>
-      depictQuery(r.prediction!.smiles, part.highlight, part.renew, templateOf(r)),
+      depictQuery(
+        r.prediction!.smiles,
+        r.prediction!.valid ? part.highlight : null,
+        part.renew,
+        templateOf(r),
+      ),
     ),
   });
   const depictOf = (r: EngineRow) => {
@@ -392,7 +398,7 @@ function Drawing({
         )}
       </div>
     );
-  if (!p.valid || !depict) return <Structure src={null} failed alt="" />;
+  if (!drawable(p) || !depict) return <Structure src={null} failed alt="" />;
   return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
 }
 

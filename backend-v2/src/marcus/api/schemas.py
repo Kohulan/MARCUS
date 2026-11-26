@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from marcus.core import annotation as ann
+from marcus.core.drawable import is_drawable
 from marcus.core.enums import Engine
 from marcus.core.molfile import absolute_stereo
 
@@ -100,6 +101,15 @@ class CurationOut(_RGroups, _Orm):
     note: str | None
 
 
+class UploadPaperOut(BaseModel):
+    """POST /papers: the new paper, or (`reused`) this browser's earlier paper of the same file
+    (owner request 2026-11-26)."""
+
+    paper_id: uuid.UUID
+    status: str
+    reused: bool = False
+
+
 class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     id: uuid.UUID
     engine: str
@@ -110,6 +120,13 @@ class PredictionOut(_EngineMolfile, _RGroups, _Orm):
     ms: int
     cached: bool
     created_at: datetime
+    # the server can draw it (marcus.core.drawable): valid, or an R-group scaffold
+    drawable: bool = False
+
+    @model_validator(mode="after")
+    def _drawable(self):
+        self.drawable = is_drawable(self.smiles, self.valid, self.rgroups)
+        return self
 
 
 class BuildFailure(BaseModel):

@@ -70,7 +70,13 @@ async def _curate(db, seg, *, status="unchecked", smiles=None, molfile=None) -> 
 
 
 async def _predict(
-    db, seg, engine: str, smiles: str, valid: bool = True, molfile: str | None = None
+    db,
+    seg,
+    engine: str,
+    smiles: str,
+    valid: bool = True,
+    molfile: str | None = None,
+    rgroups: list[str] | None = None,
 ) -> None:
     db.add(
         Prediction(
@@ -81,6 +87,7 @@ async def _predict(
             molfile=molfile,
             valid=valid,
             ms=1,
+            rgroups=rgroups,
         )
     )
     await db.commit()
@@ -244,6 +251,38 @@ async def test_depiction_no_valid_prediction_404(app, async_db_session, draws):
     assert a.status_code == b.status_code == 404
     assert a.json() == b.json() == {"detail": "not found"}
     assert draws.seen == []
+
+
+async def test_depiction_decimer_rgroup_scaffold_is_drawn(app, async_db_session, draws):
+    """DECIMER writes R-groups as [R1], [X]...: RDKit cannot read them (invalid), CDK draws
+    them as labelled atoms (owner, 2026-11-26). A scaffold is drawn; other invalid ones not."""
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db, ocsr=False)
+    scaffold, garbage = seeded.segment_ids
+    await _predict(db, scaffold, "decimer", "[R1]c1ccc([X])cc1", valid=False, rgroups=["R1", "X"])
+    await _predict(db, garbage, "decimer", "C1CC", valid=False, rgroups=[])
+    async with make_client(app, token) as c:
+        shown = await c.get(url(scaffold))
+        by_engine = await c.get(url(scaffold, "?engine=decimer"))
+        bad = await c.get(url(garbage))
+    assert shown.status_code == by_engine.status_code == 200
+    assert shown.content == svg_for("[R1]c1ccc([X])cc1").encode()
+    assert bad.status_code == 404
+    assert [k["smiles"] for _, k, _ in draws.seen] == ["[R1]c1ccc([X])cc1"]
+
+
+async def test_paper_says_which_predictions_are_drawable(app, async_db_session, draws):
+    """The one rule (owner review, 2026-11-26): the API sends `drawable` with each prediction,
+    and the UI reads it (no copy of the rule in the browser)."""
+    db = async_db_session
+    _, token, seeded = await _owner_paper(db, ocsr=False)
+    scaffold, garbage = seeded.segment_ids
+    await _predict(db, scaffold, "decimer", "[R1]c1ccccc1", valid=False, rgroups=["R1"])
+    await _predict(db, garbage, "decimer", "C1CC", valid=False, rgroups=[])
+    async with make_client(app, token) as c:
+        paper = (await c.get(f"/api/v2/papers/{seeded.paper_id}")).json()
+    flags = {s["id"]: [p["drawable"] for p in s["predictions"]] for s in paper["segments"]}
+    assert flags[str(scaffold)] == [True] and flags[str(garbage)] == [False]
 
 
 async def test_depiction_other_owner_404(app, async_db_session, draws):
