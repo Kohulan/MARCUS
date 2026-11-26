@@ -86,7 +86,8 @@ ACTIVE = (StepStatus.PENDING.value, StepStatus.QUEUED.value, StepStatus.RUNNING.
 # ocsr_mode values in which a rendered page waits for the user (no segment_page step).
 WAITING_MODES = ("ask", "pick")
 # choose_mode's allowed (from, to) mode changes.
-MODE_CHANGES = {("ask", "auto"), ("ask", "pick"), ("pick", "auto")}
+# "Pick a structure" after "Read all pages" (owner, 2026-11-26): auto -> pick stops the waiting work.
+MODE_CHANGES = {("ask", "auto"), ("ask", "pick"), ("pick", "auto"), ("auto", "pick")}
 
 MAX_SEGMENTS_PER_PAGE = 1000  # ocsr seq = page * 1000 + idx, so idx must stay below 1000
 _INT32_MAX = 2**31 - 1
@@ -1252,10 +1253,15 @@ def _rendered_pages(session: Session, paper: Paper) -> set[int]:
 
 
 def _unread_segments(session: Session, paper: Paper, page: int | None = None) -> list[Segment]:
-    """The paper's segments (of one page) that have no OCSR step: pick-mode candidates."""
+    """The paper's segments (of one page) that have no OCSR step (a cancelled one aside: work
+    stopped by a switch back to pick): pick-mode candidates."""
     has_step = (
         select(Step.id)
-        .where(Step.segment_id == Segment.id, Step.kind == StepKind.OCSR.value)
+        .where(
+            Step.segment_id == Segment.id,
+            Step.kind == StepKind.OCSR.value,
+            Step.status != StepStatus.CANCELLED.value,
+        )
         .exists()
     )
     q = select(Segment).where(Segment.paper_id == paper.id, ~has_step, ~built_clause())
@@ -1270,13 +1276,15 @@ def choose_mode(
     mode: Literal["auto", "pick"],
     started_ip: str | None = None,
 ) -> list[Step]:
-    """The user's answer on the paper page (ask -> auto | pick), or "Read all pages" in pick
-    mode (pick -> auto). Caller commits.
+    """The user's answer on the paper page (ask -> auto | pick), "Read all pages" in pick mode
+    (pick -> auto), or "Pick a structure" while all pages are read (auto -> pick). Caller
+    commits.
 
     To `auto`: every rendered page with no segment_page step and no segments gets its cached
     segments (then read like any page) or a segment_page step; every segment with no OCSR step
     (a pick-mode candidate) gets the three engines' steps. Pages rendered later follow the normal
-    path. A done paper with new work goes back to processing. To `pick`: nothing runs yet.
+    path. A done paper with new work goes back to processing. To `pick`: nothing runs yet; from
+    `auto`, the work not started yet stops (_stop_waiting) and the read structures stay.
     Returns the new steps. Raises ValueError for a missing or deleted paper and ModeNotAllowed
     for any other change."""
     paper = _lock(session, Paper, paper_id)
@@ -1284,15 +1292,22 @@ def choose_mode(
         raise ValueError("paper not found")
     if (paper.ocsr_mode, mode) not in MODE_CHANGES:
         raise ModeNotAllowed()
+    was = paper.ocsr_mode
     paper.ocsr_mode = mode
     session.flush()
     if mode == "pick":
+        if was == "auto":
+            _stop_waiting(session, paper)
+            _finish_check(session, paper)
+            session.flush()
         return []
     new = _read_steps(session, paper, _unread_segments(session, paper))
     handled = set(
         session.execute(
             select(Step.page).where(
-                Step.paper_id == paper.id, Step.kind == StepKind.SEGMENT_PAGE.value
+                Step.paper_id == paper.id,
+                Step.kind == StepKind.SEGMENT_PAGE.value,
+                Step.status != StepStatus.CANCELLED.value,  # stopped by a switch to pick
             )
         ).scalars()
     ) | set(session.execute(select(Segment.page).where(Segment.paper_id == paper.id)).scalars())
@@ -1308,6 +1323,37 @@ def choose_mode(
         _reopen(paper, started_ip)
     session.flush()
     return new
+
+
+def _stop_waiting(session: Session, paper: Paper) -> None:
+    """auto -> pick: cancel the paper's segment_page steps not started yet, and the OCSR steps
+    of each segment none of whose engines has started (a segment being read finishes). The
+    stopped boxes are candidates again; a stopped page is segmented when the user opens it.
+    Running steps finish. A worker drops a cancelled step's message (claim) and late result.
+    Under the paper lock (choose_mode); the dispatcher picks steps with SKIP LOCKED."""
+    waiting = (StepStatus.PENDING.value, StepStatus.QUEUED.value)
+    started = (
+        select(Step.id)
+        .where(
+            Step.segment_id == Segment.id,
+            Step.kind == StepKind.OCSR.value,
+            Step.status.notin_((*waiting, StepStatus.CANCELLED.value)),
+        )
+        .exists()
+    )
+    unstarted = select(Segment.id).where(Segment.paper_id == paper.id, ~started)
+    session.execute(
+        update(Step)
+        .where(
+            Step.paper_id == paper.id,
+            Step.status.in_(waiting),
+            (Step.kind == StepKind.SEGMENT_PAGE.value)
+            | ((Step.kind == StepKind.OCSR.value) & Step.segment_id.in_(unstarted)),
+        )
+        .values(status=StepStatus.CANCELLED.value, finished_at=_now())
+        .execution_options(synchronize_session="fetch")
+    )
+    session.flush()
 
 
 def segment_page_on_request(
@@ -1342,6 +1388,7 @@ def segment_page_on_request(
                 Step.paper_id == paper.id,
                 Step.page == page,
                 Step.kind == StepKind.SEGMENT_PAGE.value,
+                Step.status != StepStatus.CANCELLED.value,  # stopped by a switch to pick
             )
             .order_by(Step.created_at.desc(), Step.id.desc())
         ).scalars()
@@ -1383,7 +1430,11 @@ def read_segment(
         raise ModeNotAllowed()
     existing = list(
         session.execute(
-            select(Step).where(Step.segment_id == segment.id, Step.kind == StepKind.OCSR.value)
+            select(Step).where(
+                Step.segment_id == segment.id,
+                Step.kind == StepKind.OCSR.value,
+                Step.status != StepStatus.CANCELLED.value,  # stopped by a switch to pick
+            )
         ).scalars()
     )
     if existing:

@@ -149,10 +149,18 @@ describe("mode ask: the paper page asks", () => {
     expect(within(bar).getByRole("button", { name: "Pick a structure" })).toBeInTheDocument();
   });
 
+  it("a paper reading all pages can go back to Pick a structure (owner, 2026-11-26)", async () => {
+    renderAt(paper([], { ocsr_mode: "auto", status: "processing" }));
+    const setMode = vi.spyOn(api, "setMode").mockResolvedValue({ ocsr_mode: "pick" });
+    const back = await screen.findByRole("button", { name: "Pick a structure" });
+    fireEvent.click(back);
+    await waitFor(() => expect(setMode).toHaveBeenCalledWith(ID, "pick"));
+  });
+
   it("is not shown on a paper that reads all pages", async () => {
     renderAt(paper([], { ocsr_mode: "auto" }));
     await screen.findByRole("heading", { name: "Alkaloids" });
-    expect(screen.queryByRole("button", { name: "Pick a structure" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "What to read" })).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

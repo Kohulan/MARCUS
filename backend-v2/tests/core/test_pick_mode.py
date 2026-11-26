@@ -6,7 +6,8 @@ import pytest
 from sqlalchemy import select
 
 from marcus.core.enums import Engine
-from marcus.core.models import BackgroundStep, Paper, Step
+from marcus.core.models import BackgroundStep, Paper, Segment, Step
+from marcus.core.picks import candidate_clause
 from marcus.core.pipeline import (
     MANUAL_PAGE_RETRIES,
     ModeNotAllowed,
@@ -16,6 +17,7 @@ from marcus.core.pipeline import (
     segment_page_on_request,
 )
 from tests.core.test_caches import (  # noqa: F401 - _seg_version: autouse fixture
+    OCSR,
     _seg_version,
     done_first_paper,
     drive,
@@ -181,9 +183,7 @@ def test_segment_page_uses_the_cache(db_session):
     assert steps(s, paper, "segment_page") == []
 
 
-@pytest.mark.parametrize(
-    "start, mode", [("auto", "pick"), ("off", "pick"), ("ask", "ask"), ("pick", "pick")]
-)
+@pytest.mark.parametrize("start, mode", [("off", "pick"), ("ask", "ask"), ("pick", "pick")])
 def test_wrong_transitions_raise(db_session, start, mode):
     s = db_session
     paper = picked(s) if start == "pick" else make_paper(s, ocsr_mode=start)
@@ -206,3 +206,68 @@ def test_old_auto_papers_unchanged(db_session):
     paper = make_paper(s)
     ran = drive(s, paper)
     assert ran.count("segment_page") == 2 and ran.count("ocsr") == 12
+
+
+# --- Back to pick after "Read all pages" (owner, 2026-11-26) -----------------------------------
+
+
+def reading(s, pages=2) -> Paper:
+    """An auto paper mid-read: page 0 segmented (its OCSR steps waiting), page 1 waiting."""
+    paper = asked(s, pages)
+    choose_mode(s, paper.id, "auto")
+    first = [st for st in steps(s, paper, "segment_page") if st.page == 0][0]
+    finish(s, first, segment_result(paper, 0))
+    s.refresh(paper)
+    return paper
+
+
+def candidates(s, paper) -> set:
+    return set(
+        s.execute(
+            select(Segment.id).where(Segment.paper_id == paper.id, candidate_clause())
+        ).scalars()
+    )
+
+
+def test_auto_to_pick_stops_waiting_work_and_keeps_what_was_read(db_session):
+    s = db_session
+    paper = reading(s)
+    a, b = segments_of(s, paper)
+    finish(s, ocsr_steps(s, a.id)[0], OCSR)  # a: one engine done, two waiting
+    waiting_page = [st for st in steps(s, paper, "segment_page") if st.page == 1][0]
+
+    choose_mode(s, paper.id, "pick")
+    s.refresh(paper)
+
+    assert paper.ocsr_mode == "pick"
+    s.refresh(waiting_page)
+    assert waiting_page.status == "cancelled"
+    assert {st.status for st in ocsr_steps(s, b.id)} == {"cancelled"}
+    assert "cancelled" not in {st.status for st in ocsr_steps(s, a.id)}  # started: it finishes
+    assert candidates(s, paper) == {b.id}
+    new = read_segment(s, b.id)
+    assert len(new) == 3 and {st.status for st in new} == {"pending"}
+    again = segment_page_on_request(s, paper.id, 1)
+    assert again is not None and again.id != waiting_page.id
+
+
+def test_auto_to_pick_with_nothing_started_closes_the_paper(db_session):
+    s = db_session
+    paper = reading(s)
+    choose_mode(s, paper.id, "pick")
+    s.refresh(paper)
+    assert paper.status == "done"
+    assert candidates(s, paper) == {seg.id for seg in segments_of(s, paper)}
+
+
+def test_auto_pick_auto_round_trip_reads_everything(db_session):
+    s = db_session
+    paper = reading(s)
+    choose_mode(s, paper.id, "pick")
+    new = choose_mode(s, paper.id, "auto")
+    assert ("segment_page", 1) in {(st.kind, st.page) for st in new}
+    assert sum(st.kind == "ocsr" for st in new) == 6  # both page-0 boxes, three engines each
+    drive(s, paper)
+    s.refresh(paper)
+    assert paper.status == "done"
+    assert candidates(s, paper) == set()

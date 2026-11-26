@@ -22,7 +22,7 @@ import { SegmentCompare } from "./Compare";
 import ExportMenu from "./ExportMenu";
 import FocusMode from "./FocusMode";
 import { type CoconutStart, coconutStart } from "./coconutList";
-import ModePrompt from "./ModePrompt";
+import ModePrompt, { BackToPick } from "./ModePrompt";
 import PickPanel from "./PagePicker";
 import PickedColumn from "./PickedColumn";
 import PaperView from "./PaperView";
@@ -257,6 +257,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
           pages={paper.pages}
           reconnect={ws.live.reconnect}
         />
+      )}
+      {paper.ocsr_mode === "auto" && paper.status !== "failed" && (
+        <BackToPick paperId={paper.id} reconnect={ws.live.reconnect} />
       )}
       {paper.ocsr_mode === "pick" && (
         <PickPanel

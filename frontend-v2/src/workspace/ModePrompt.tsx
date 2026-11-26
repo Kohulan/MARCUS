@@ -207,3 +207,32 @@ function PickDrawing() {
     </svg>
   );
 }
+
+/**
+ * A paper reading all pages can go back to picking (owner, 2026-11-26): the work not started
+ * yet stops on the server (choose_mode auto -> pick); the structures read stay. "Read all
+ * pages" on the pick page goes forward again.
+ */
+export function BackToPick({ paperId, reconnect }: { paperId: string; reconnect: () => void }) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const back = () => {
+    setBusy(true);
+    api
+      .setMode(paperId, "pick")
+      .then(() => {
+        reconnect();
+        refreshPaper(client, paperId);
+      })
+      .catch((err: unknown) => toast(`Not switched: ${errorText(err)}`, "error"))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="pick-back">
+      <GlassButton tint="clear" size="sm" disabled={busy} onClick={back}>
+        Pick a structure
+      </GlassButton>
+    </div>
+  );
+}
