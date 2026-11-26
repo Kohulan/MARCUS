@@ -80,6 +80,8 @@ def text_boxes(
         if value is None:
             continue
         for prov in item.get("prov") or []:
+            if not prov.get("bbox"):
+                continue  # a text without a box cannot be placed
             b, page = prov["bbox"], prov["page_no"]
             if b.get("coord_origin", "BOTTOMLEFT") == "BOTTOMLEFT":
                 if page not in heights:
