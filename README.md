@@ -1,24 +1,38 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
-  <img src="docs/assets/readme/hero-light.svg" width="100%" alt="MARCUS: Molecular Annotation and Recognition for Curating Unravelled Structures. A page's structure drawing, boxed in orange, becomes a SMILES string and is accepted.">
-</picture>
+<p align="center">
+  <img src="docs/assets/logo_full.png" width="520" alt="MARCUS">
+</p>
 
 <p align="center">
-  <a href="https://marcus.decimer.ai"><b>Open MARCUS</b></a>
-  &nbsp;·&nbsp;
+  <a href="https://doi.org/10.1039/d5dd00313j"><img alt="Paper DOI 10.1039/d5dd00313j" src="https://img.shields.io/badge/paper-10.1039%2Fd5dd00313j-1E4D33?style=flat-square&labelColor=1C211D"></a>
+  <a href="https://doi.org/10.5281/zenodo.24562147"><img alt="Model DOI 10.5281/zenodo.24562147" src="https://img.shields.io/badge/model-10.5281%2Fzenodo.24562147-1E4D33?style=flat-square&labelColor=1C211D"></a>
+  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-1E4D33?style=flat-square&labelColor=1C211D"></a>
+  <img alt="Version 2.0.0" src="https://img.shields.io/badge/version-2.0.0-1E4D33?style=flat-square&labelColor=1C211D">
+  <br>
+  <a href="https://github.com/Kohulan/MARCUS/actions/workflows/backend-v2.yml"><img alt="backend tests" src="https://github.com/Kohulan/MARCUS/actions/workflows/backend-v2.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/Kohulan/MARCUS/actions/workflows/frontend-v2.yml"><img alt="frontend tests" src="https://github.com/Kohulan/MARCUS/actions/workflows/frontend-v2.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/Kohulan/MARCUS/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/Kohulan/MARCUS/actions/workflows/codeql.yml/badge.svg?branch=main"></a>
+</p>
+
+<h3 align="center">
+  <a href="https://marcus.decimer.ai">▶ Use MARCUS online: marcus.decimer.ai</a>
+</h3>
+
+<p align="center">
+  No login, free, open source.
+  <br>
   <a href="https://doi.org/10.1039/d5dd00313j">Read the paper</a>
   &nbsp;·&nbsp;
-  <a href="#run-it-yourself">Run it yourself</a>
+  <a href="#run-marcus-locally-with-docker">Run it locally</a>
+  &nbsp;·&nbsp;
+  <a href="#the-marcus-model">The MARCUS model</a>
   &nbsp;·&nbsp;
   <a href="#cite">Cite</a>
 </p>
 
-<p align="center">
-  <a href="https://doi.org/10.1039/d5dd00313j"><img alt="DOI 10.1039/d5dd00313j" src="https://img.shields.io/badge/DOI-10.1039%2Fd5dd00313j-1E4D33?style=flat-square&labelColor=1C211D"></a>
-  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-1E4D33?style=flat-square&labelColor=1C211D"></a>
-  <a href="https://marcus.decimer.ai"><img alt="Live at marcus.decimer.ai" src="https://img.shields.io/badge/live-marcus.decimer.ai-FA3600?style=flat-square&labelColor=1C211D"></a>
-  <img alt="Version 2.0" src="https://img.shields.io/badge/version-2.0-1E4D33?style=flat-square&labelColor=1C211D">
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
+  <img src="docs/assets/readme/hero-light.svg" width="100%" alt="MARCUS: Molecular Annotation and Recognition for Curating Unravelled Structures. A page's structure drawing, boxed in orange, becomes a SMILES string and is accepted.">
+</picture>
 
 <br>
 
