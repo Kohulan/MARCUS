@@ -12,6 +12,7 @@ from marcus.core.enumeration import (
     NO_POINTS,
     NOT_A_LABEL,
     NOT_ONE_BOND,
+    NOT_READ,
     TWICE,
     UNLABELLED_POINT,
     build_row,
@@ -209,3 +210,21 @@ def test_a_label_that_carries_more_than_a_label_still_fails():
     mol.GetAtomWithIdx(6).SetProp("molFileAlias", "R1")
     rows = build_rows(None, Chem.MolToMolBlock(mol), [{"compound": "7", "groups": {"R1": "OH"}}])
     assert "not a bare label" in (rows[0].get("reason") or rows[0].get("failure") or str(rows[0]))
+
+
+@pytest.mark.parametrize("element", ["Rf", "Rb", "Rh", "Ru", "Re", "Rn", "Ra", "Y"])
+def test_a_scaffold_with_an_element_a_misread_label_makes_is_not_built(element):
+    """MolScribe wrote "R1" as [Rf] (rutherfordium) on BJOC 18/23: the build copied the element
+    into all three compounds (live, 2026-11-26). An element no natural product has is a misread
+    label: the row is not built, and the reason names it."""
+    scaffold = scaffold_of(f"[{element}]Cc1ccc([1*])cc1", None)
+    if isinstance(scaffold, str):  # RDKit cannot read it at all (a bonded noble gas)
+        assert scaffold == NOT_READ
+        return
+    out = build_row(scaffold, {"R1": "OH"})
+    assert isinstance(out, str) and element in out
+
+
+def test_the_usual_elements_still_build():
+    scaffold = scaffold_of("FC(Cl)(Br)c1cc(I)c(S)c(P)c1[1*]", None)
+    assert not isinstance(build_row(scaffold, {"R1": "OH"}), str)

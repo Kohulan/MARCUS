@@ -38,6 +38,10 @@ BRIDGE = '"{}" joins two groups that are not side by side'
 NOT_READ = "the scaffold could not be read"
 NOT_VALID = "the result is not a valid structure"
 NO_POINTS = "the scaffold has no R-group points"
+ODD_ELEMENT = 'the scaffold has "{}": a misread label? Edit the structure first'
+# The elements a natural product's scaffold may hold. Another one is a label an engine misread
+# as an element ("R1" -> [Rf] rutherfordium, MolScribe on BJOC 18/23): never copied into a build.
+ELEMENTS = frozenset({"H", "B", "C", "N", "O", "F", "Si", "P", "S", "Cl", "As", "Se", "Br", "I"})
 
 _TOKEN_MAP = 900  # atom map numbers of DECIMER's R tokens while the scaffold is read
 
@@ -123,6 +127,10 @@ def build_row(scaffold: Scaffold, groups: dict[str, str]) -> tuple[str, str] | s
         return NO_POINTS
     if any(lab == UNLABELLED for lab in raw.values()):
         return UNLABELLED_POINT
+    odd = next((a.GetSymbol() for a in mol.GetAtoms()
+                if a.GetAtomicNum() and a.GetSymbol() not in ELEMENTS), None)  # fmt: skip
+    if odd is not None:
+        return ODD_ELEMENT.format(odd)
     # a point labelled with a known group as drawn ("OMe": MolScribe keeps a drawn abbreviation
     # as a labelled point) is that group in every row; any other text is no bare label ("OR1")
     fixed: dict[str, Fragment] = {}

@@ -28,6 +28,7 @@ from marcus.core.page_text import UNUSABLE_TEXT, page_context, read_paper_docume
 from marcus.core.pipeline import BadResult
 from marcus.core.rgroup_extraction import BadRows, labels_to_ask, parse_rows, salvage_rows
 from marcus.core.rgroup_series import drawing_compounds, keep_series, series_boxes
+from marcus.core.rgroups import _label_order
 from marcus.core.settings import fake_enabled, get_settings
 from marcus.core.storage import page_image_path
 from marcus.workers.rgroups.fake import FakeRgroupReader
@@ -131,6 +132,17 @@ def extract_rgroups(step, session) -> dict:
         .where(RgroupExtraction.step_id == step.id)
     ).one_or_none()
     drawings = []
+    labels: list[str] = []
+    if found is not None:
+        # every engine's labels of this drawing: one engine may misread one (MolScribe read R5
+        # as "Rs", BJOC 18/23); the page text still decides which are asked (labels_to_ask)
+        readings = session.scalars(
+            select(Prediction.rgroups).where(Prediction.segment_id == step.segment_id)
+        ).all()
+        labels = sorted(
+            {lab for found_labels in [found.rgroups, *readings] for lab in (found_labels or [])},
+            key=_label_order,
+        )
     if found is not None:  # the page's drawings: a series label belongs to the nearest one
         drawings = session.scalars(
             select(Segment.bbox).where(
@@ -141,9 +153,7 @@ def extract_rgroups(step, session) -> dict:
     if found is None:
         raise BadInput("the structure is gone")
     reader = get_reader()
-    return read_scaffold(
-        reader, step.paper_id, found.page, list(found.rgroups), found.bbox, drawings
-    )
+    return read_scaffold(reader, step.paper_id, found.page, labels, found.bbox, drawings)
 
 
 register(StepKind.RGROUPS, extract_rgroups)
