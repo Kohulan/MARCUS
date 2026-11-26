@@ -384,7 +384,7 @@ def test_the_reader_is_asked_for_every_engines_labels(db_session, monkeypatch,
     clear_settings_cache()
     s = db_session
     paper, scaffold, _ = done_paper(s)
-    s.add(Prediction(segment_id=scaffold.segment_id, engine="decimer", engine_version="2.8.0",
+    s.add(Prediction(segment_id=scaffold.segment_id, engine="molparser", engine_version="f8f1e21",
                      smiles="[R1]c1cc([R2])cc([R3])c1", valid=False, ms=1,
                      rgroups=["R1", "R2", "R3"]))  # fmt: skip
     step = request_rgroups(s, scaffold.id)
@@ -415,7 +415,7 @@ def test_another_engines_label_the_text_never_names_is_not_asked(db_session, mon
     clear_settings_cache()
     s = db_session
     paper, scaffold, _ = done_paper(s)
-    s.add(Prediction(segment_id=scaffold.segment_id, engine="decimer", engine_version="2.8.0",
+    s.add(Prediction(segment_id=scaffold.segment_id, engine="molparser", engine_version="f8f1e21",
                      smiles="[R1]c1cc([R2])cc([R3])c1", valid=False, ms=1,
                      rgroups=["R1", "R2", "R3"]))  # fmt: skip
     step = request_rgroups(s, scaffold.id)
