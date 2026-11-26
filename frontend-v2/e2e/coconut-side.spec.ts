@@ -61,6 +61,9 @@ test.describe("COCONUT side form", { tag: "@mocked" }, () => {
     const form = page.getByRole("complementary", { name: "COCONUT [01]" });
     await expect(form).toBeVisible();
     await expect(page.getByRole("article", { name: "[01] · Page 1, Accepted" })).toBeVisible();
+    // opens at its top: the heading has focus, not the login's Email at its end (live 2026-11-26)
+    await expect(form.getByRole("heading", { name: "COCONUT [01]" })).toBeFocused();
+    expect(await form.evaluate((el) => el.scrollTop)).toBe(0);
     await expect(
       form.getByRole("heading", { name: "Log in to COCONUT" }),
     ).toBeVisible();

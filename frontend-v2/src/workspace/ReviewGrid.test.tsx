@@ -991,7 +991,7 @@ describe("built structures (Markush Phase 3)", () => {
     expect(within(c).getByRole("button", { name: /^Accept/ })).toBeInTheDocument();
   });
 
-  it("the built cards sit together under their scaffold, in one box (owner, 2026-11-26)", async () => {
+  it("built cards follow their scaffold in the grid's flow, each on a mint cell (owner, 2026-11-26)", async () => {
     const scaffold = segment("s1", { idx: 0 });
     const built = (id: string, idx: number) =>
       segment(id, {
@@ -1000,9 +1000,14 @@ describe("built structures (Markush Phase 3)", () => {
         predictions: [prediction({ id: `p${id}`, engine: "enumerated", smiles: "COc1ccccc1" })],
       });
     renderGrid(paper([scaffold, built("s2", 10001), built("s3", 10002), segment("s4", { idx: 1 })]));
-    const family = await screen.findByRole("group", { name: "Built from [01]" });
-    expect(within(family).getAllByRole("article").map((a) => a.getAttribute("data-segment-id"))).toEqual(["s2", "s3"]);
-    expect(within(family).queryByRole("article", { name: /^\[01\]/ })).toBeNull();
+    await screen.findByText("Compound 3a", undefined).catch(() => undefined);
+    const cards = await screen.findAllByRole("article");
+    expect(cards.map((a) => a.getAttribute("data-segment-id"))).toEqual(["s1", "s2", "s3", "s4"]);
+    const cell = (a: HTMLElement) => a.closest(".built-cell");
+    expect(cards.map((a) => cell(a) !== null)).toEqual([false, true, true, false]);
+    // no full-width block: every card is one cell of the grid
+    expect(document.querySelector(".built-block, .built-family--wide")).toBeNull();
+    expect(cell(cards[1]!)).toHaveTextContent("Built from [01]");
   });
 
   it("under a filter that hides the scaffold, its built cards show without the box (owner review)", async () => {

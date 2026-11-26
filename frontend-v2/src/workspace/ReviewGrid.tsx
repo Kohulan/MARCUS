@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "../api/client";
 import { isPaperBusy } from "../api/status";
 import { asEngine, engineName } from "../api/engines";
@@ -8,10 +8,9 @@ import { useToast } from "../ui/Toasts";
 import BulkBar from "./BulkBar";
 import { hasDrawing, inFilter, segmentCard, type GridFilter } from "./cardState";
 import GridFilters from "./GridFilters";
-import { faArrowDown } from "@fortawesome/free-solid-svg-icons";
+import { faArrowTurnUp } from "@fortawesome/free-solid-svg-icons";
 import Icon from "../ui/Icon";
-import BuiltFamily from "./BuiltFamily";
-import { families } from "./built";
+import { builtFromText, families } from "./built";
 import { rowCardProps } from "./cardProps";
 import StructureCard from "./StructureCard";
 import { useCardActions } from "./useCardActions";
@@ -254,18 +253,20 @@ export default function ReviewGrid({
             f.kind === "one" ? (
               card(f.row)
             ) : (
-              // The scaffold and its built cards as one block: the scaffold's row is not left
-              // half empty, a note fills it and points down to the box.
-              <div key={`family-${f.head.segmentId}`} className="built-block">
+              // Built cards stay in the grid's flow right after their scaffold (no gaps on a
+              // wide screen), each on a mint cell that names its scaffold (owner, 2026-11-26).
+              <Fragment key={`family-${f.head.segmentId}`}>
                 {card(f.head)}
-                <p className="built-block__note" aria-hidden="true">
-                  <Icon icon={faArrowDown} className="built-block__icon" />
-                  {`${f.rows.length} built below`}
-                </p>
-                <BuiltFamily n={f.rows[0]!.builtFrom!.n} count={f.rows.length} wide>
-                  {f.rows.map(card)}
-                </BuiltFamily>
-              </div>
+                {f.rows.map((r) => (
+                  <div key={r.segmentId} className="built-cell">
+                    <p className="built-cell__cap" aria-hidden="true">
+                      <Icon icon={faArrowTurnUp} className="built-cell__icon" />
+                      {builtFromText(r.builtFrom!.n)}
+                    </p>
+                    {card(r)}
+                  </div>
+                ))}
+              </Fragment>
             ),
           )}
         </div>
