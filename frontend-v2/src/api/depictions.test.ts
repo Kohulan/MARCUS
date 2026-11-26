@@ -1,9 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "./client";
+import { ApiError, api } from "./client";
 import {
   createDepictionLoader,
   createDrawingCache,
+  depictQuery,
   forgetDrawings,
   useDepiction,
 } from "./depictions";
@@ -258,5 +259,21 @@ describe("useDepiction", () => {
     const hook = renderHook(() => useDepiction(null));
     expect(hook.result.current).toMatchObject({ src: null, failed: false });
     expect(pending).toHaveLength(0);
+  });
+});
+
+describe("depictQuery marks", () => {
+  it("sends the marks with the layout template and keys the drawing by both; none: the plain key", async () => {
+    const depict = vi.spyOn(api, "depict").mockResolvedValue({ format: "svg", data: "<svg/>" });
+    const marked = depictQuery("CCO", null, undefined, null, { marks: [2, 0] });
+    await marked.queryFn();
+    expect(depict).toHaveBeenCalledWith("CCO", { marks: [2, 0] });
+    expect(marked.queryKey).toEqual(["depict", "CCO", null, "glow", "2,0", ""]);
+    expect(depictQuery("CCO", null, undefined, null, { marks: [] }).queryKey).toEqual(["depict", "CCO", null]);
+    const both = depictQuery("CCO", null, undefined, { id: "p:layout", molfile: "L" }, { marks: [1] });
+    await both.queryFn();
+    expect(depict).toHaveBeenLastCalledWith("CCO", { marks: [1], template: "L" });
+    expect(both.queryKey).toEqual(["depict", "CCO", null, "p:layout", "glow", "1", ""]);
+    depict.mockRestore();
   });
 });

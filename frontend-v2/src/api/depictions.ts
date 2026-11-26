@@ -248,8 +248,9 @@ export type Glow = { marks?: number[]; common?: number[] };
 
 /**
  * A /tools/depict drawing: key ["depict", smiles, smarts] (null: a plain drawing), then the
- * template prediction's id when the drawing follows the paper's orientation (`template`:
- * orientationTemplate, its molfile is sent). The token is not in the key: a new token for the
+ * template's id when the drawing follows the paper's orientation (`template`:
+ * orientationTemplate, its molfile, a paper layout first, is sent), then the marks when there
+ * are some (`marks`: atoms of the SMILES drawn with an orange glow). The token is not in the key: a new token for the
  * same SMARTS draws the same picture. A highlighted drawing refused with a 422 (the token
  * expired, or the key rotated) asks `renew` for a new token once and draws once more with it;
  * a second refusal is the answer (no loop). `glow`: atoms marked by index (Compare's

@@ -12,7 +12,7 @@ import Editor, { editorChange, type EditorStructure } from "./Editor";
  * What the editor opens with: the structure the card shows (the curated one, else the shown
  * prediction: a curator who presses E on a prediction wants to fix that one), else empty.
  */
-function editorStart(
+export function editorStart(
   segment: SegmentOut,
   paperEngine: string,
 ): { smiles: string | null; molfile: string | null; engine: string | null } {

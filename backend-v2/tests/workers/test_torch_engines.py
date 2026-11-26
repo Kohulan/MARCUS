@@ -17,6 +17,9 @@ from marcus.workers import gpu, ocsr
 from marcus.workers.ocsr import base, molscribe, torch_common
 from marcus.workers.ocsr.base import OcsrResult
 
+ATOMS = [{"atom_symbol": "C", "x": 0.0, "y": 0.0}, {"atom_symbol": "O", "x": 1.0, "y": 1.0}]
+BONDS = [{"bond_type": "single", "endpoint_atoms": [0, 1]}]
+
 
 @pytest.fixture(autouse=True)
 def _registry(monkeypatch):
@@ -58,10 +61,14 @@ def stubs(monkeypatch, tmp_path):
             calls.append(("ms_init", path, device))
             self.device = device
 
-        def predict_image_file(self, path):
+        def predict_image_file(self, path, return_atoms_bonds=False):
             calls.append(("ms_predict", path))
             smi, mol, _ = interface.convert_graph_to_smiles(["g"], ["s"], ["e"], images=["i"])
-            return {"smiles": smi[0], "molfile": "" if "empty" in path else mol[0]}
+            out = {"smiles": smi[0], "molfile": "" if "empty" in path else mol[0]}
+            if return_atoms_bonds:
+                out["atoms"] = [] if "empty" in path else ATOMS
+                out["bonds"] = [] if "empty" in path else BONDS
+            return out
 
     interface.MolScribe = MolScribe
     pkg_ms = types.ModuleType("molscribe")
@@ -159,7 +166,8 @@ def test_molscribe_load_and_predict_like_v1(stubs, monkeypatch):
 
     stubs.calls.clear()
     result = engine.predict("/data/crop.png")
-    assert result == OcsrResult("smiles-g", "molblock-g")
+    # with the raw atoms and bonds (return_atoms_bonds=True), for the paper layout
+    assert result == OcsrResult("smiles-g", "molblock-g", {"atoms": ATOMS, "bonds": BONDS})
     # in-process conversion with the library's per-structure function, image passed through
     assert stubs.calls == [("ms_predict", "/data/crop.png"), ("convert", "g", True)]
 
@@ -179,7 +187,7 @@ def test_molscribe_empty_molfile_is_none(stubs):
     stubs.bake("molscribe", "swin_base_char_aux_1m.pth")
     engine = molscribe.MolscribeEngine()
     engine.load()
-    assert engine.predict("/data/empty.png") == OcsrResult("smiles-g", None)
+    assert engine.predict("/data/empty.png") == OcsrResult("smiles-g", None, None)
 
 
 def test_molscribe_missing_checkpoint_fails_before_the_library_loads(stubs):

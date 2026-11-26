@@ -50,6 +50,9 @@ const FEW_BONDS = 4;
  * molfile that cannot be read. The tools worker applies the same rule (orient.image_layout).
  */
 export function imageLayout(molfile: string): boolean {
+  // a paper layout says itself that its positions are the image's (a printed ring has bonds of
+  // one length too): never put to the computed-layout test (backend orient._template)
+  if (layoutInfo(molfile) !== null) return true;
   const lines = molfile.split(/\r?\n/);
   const counts = lines[3];
   if (counts === undefined || !/V2000/.test(counts)) return false;
@@ -79,6 +82,49 @@ export function imageLayout(molfile: string): boolean {
   return same < COMPUTED_SHARE * lengths.length;
 }
 
+/** The title line of a paper layout molfile (backend marcus.core.paper_layout). */
+const LAYOUT_HEADER = /^MARCUS layout fit=(\d+(?:\.\d+)?) bond=(\d+(?:\.\d+)?) size=(\d{1,6})x(\d{1,6})\s*$/;
+/** The overlay is offered when the fit is at most this share of the median bond length. */
+const OVERLAY_MAX_FIT_SHARE = 0.04;
+
+export type LayoutInfo = {
+  /** Mean distance of the bonds from the ink, px. */
+  fit: number;
+  /** Median bond length, px. */
+  bond: number;
+  width: number;
+  height: number;
+  /** The fit is good enough to draw the answers over the image. */
+  overlay: boolean;
+};
+
+/** What a paper layout's title line says; null for any other molfile. */
+export function layoutInfo(molfile: string | null | undefined): LayoutInfo | null {
+  if (!molfile || !molfile.startsWith("MARCUS layout")) return null;
+  const m = LAYOUT_HEADER.exec(molfile.split("\n", 1)[0]!);
+  if (!m) return null;
+  const [fit, bond, width, height] = [m[1], m[2], m[3], m[4]].map(Number) as [number, number, number, number];
+  if (!(bond > 0) || width < 1 || height < 1) return null;
+  return { fit, bond, width, height, overlay: fit <= OVERLAY_MAX_FIT_SHARE * bond };
+}
+
+/** The engine whose predictions carry a paper layout. */
+const LAYOUT_ENGINE = "molscribe";
+
+/**
+ * The prediction whose paper layout the image's drawings follow: the newest MolScribe prediction
+ * that has one, valid or not (backend api/depiction.py layout_of). `predictions`: newest first.
+ */
+export function layoutPrediction(predictions: readonly PredictionOut[]): PredictionOut | null {
+  return predictions.find((p) => p.engine === LAYOUT_ENGINE && layoutInfo(p.layout) !== null) ?? null;
+}
+
+/** What a drawing is oriented by: the molfile sent, and an id for the query key. */
+export type Template = Pick<PredictionOut, "id" | "molfile">;
+
+/** The layout of `p` as a template (its own key: not the prediction's molfile). */
+export const layoutTemplate = (p: PredictionOut): Template => ({ id: `${p.id}:layout`, molfile: p.layout! });
+
 /** A molfile that holds the image's positions (none: false). */
 export const hasImageLayout = (molfile: string | null | undefined): boolean =>
   !!molfile && imageLayout(molfile);
@@ -88,17 +134,20 @@ export const usableTemplate = (p: PredictionOut | null | undefined): boolean =>
   p != null && p.valid && hasImageLayout(p.molfile);
 
 /**
- * The prediction whose molfile draws an image's structures in the paper's orientation: the
- * newest valid MolScribe prediction whose molfile holds the image's positions, else MolNexTR's
- * (old papers); null without one. `use` leaves an engine out (Compare's "Use coordinates" off).
+ * What draws an image's structures in the paper's orientation: MolScribe's paper layout (valid
+ * or not), else the newest valid MolScribe prediction whose molfile holds the image's
+ * positions, else MolNexTR's (old papers); null without one. `use` leaves an engine out
+ * (Compare's "Use coordinates" off: MolScribe's switches its layout off too).
  * The server picks a segment's template in the same order (backend api/depiction.py
- * orientation_template).
+ * orientation_templates).
  * `predictions`: newest first.
  */
 export function orientationTemplate(
   predictions: readonly PredictionOut[],
   use: Readonly<Record<string, boolean>> = {},
-): PredictionOut | null {
+): Template | null {
+  const layout = use[LAYOUT_ENGINE] === false ? null : layoutPrediction(predictions);
+  if (layout) return layoutTemplate(layout);
   for (const engine of TEMPLATE_ENGINES) {
     if (use[engine] === false) continue;
     const p = predictions.find((x) => x.engine === engine && x.valid && Boolean(x.molfile));

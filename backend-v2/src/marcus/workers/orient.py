@@ -21,6 +21,15 @@ MolScribe lays its molecule out itself when its structure does not sanitize (its
 _verify_chirality gives up before the positions are set): both are RDKit's computed layout,
 nearly every bond one length. Positions read off a printed drawing never are.
 
+The paper layout (marcus.core.paper_layout; owner decision 2026-11-26) is the one template
+that is used valid or not: MolScribe's raw atoms and bonds at their pixels in the image, written
+by its worker with a title line that says so. It is read sanitized first (MolScribe's own valid
+reading then maps whole, _same_graph) and, when it does not sanitize, as it is, with rings
+perceived: only its graph and positions matter. It is never put to the computed-layout test (a
+printed benzene has bonds of one length too). `oriented` returns, with the positions, which
+atoms were placed from the template and the scale back to the template's own units (a paper
+layout: pixels), for the overlay on the paper.
+
 Everything here is a fallback to the normal layout: any input it cannot use, a common part
 under MIN_COMMON_ATOMS atoms or under MIN_COMMON_SHARE of the structure's heavy atoms, a
 structure or template over MAX_ATOMS atoms, or a double bond the template would draw against
@@ -28,11 +37,14 @@ the structure's own E/Z (the template carries no stereo), gives None.
 """
 
 import math
+from typing import NamedTuple
 
 from rdkit import Chem
 from rdkit.Chem import rdDepictor, rdFMCS
 from rdkit.Geometry import Point2D
 from rdkit.rdBase import BlockLogs
+
+from marcus.core import paper_layout
 
 MIN_COMMON_ATOMS = 3
 MIN_COMMON_SHARE = 0.5
@@ -82,23 +94,52 @@ def first_template(molfiles) -> str | None:
     return next((m for m in molfiles if m and image_layout(m)), None)
 
 
-def _template(molfile: str):
-    """(molecule, its positions corrected and scaled to BOND_LENGTH) of a molfile with 2D
-    positions, or None."""
+class Template(NamedTuple):
+    mol: Chem.Mol
+    pos: list[tuple[float, float]]  # scaled to BOND_LENGTH
+    scale: float  # pos = the molfile's own positions * scale
+
+
+class Oriented(NamedTuple):
+    coords: list[tuple[float, float]]  # every atom of the SMILES, in its order, y up
+    placed: frozenset[int]  # the atoms that sit at the template's positions
+    scale: float  # coords / scale = the template's own units (a paper layout: pixels)
+
+
+def _read(molfile: str, layout: bool):
+    """The molfile's molecule: sanitized; a paper layout that does not sanitize, as it is."""
     with BlockLogs():
         mol = Chem.MolFromMolBlock(molfile, sanitize=True)
+        if mol is None and layout:
+            mol = Chem.MolFromMolBlock(molfile, sanitize=False)
+            if mol is not None:
+                try:
+                    mol.UpdatePropertyCache(strict=False)
+                    Chem.FastFindRings(mol)  # the MCS matches rings with rings
+                except (ValueError, RuntimeError):
+                    return None
+    return mol
+
+
+def _template(molfile: str) -> Template | None:
+    """The molecule of a molfile with 2D positions and its positions scaled to BOND_LENGTH, or
+    None."""
+    layout = paper_layout.is_layout(molfile)
+    mol = _read(molfile, layout)
     if mol is None or mol.GetNumConformers() == 0 or not 0 < mol.GetNumAtoms() <= MAX_ATOMS:
         return None
     conf = mol.GetConformer()
     pos = [(conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y) for i in range(mol.GetNumAtoms())]
     vectors = _bond_vectors(mol)
-    if _computed([math.hypot(dx, dy) for dx, dy in vectors]):
+    # A paper layout says itself that its positions are the image's (a printed ring has bonds
+    # of one length too); any other molfile with bonds of one length is a computed layout.
+    if not layout and _computed([math.hypot(dx, dy) for dx, dy in vectors]):
         return None  # a computed layout says nothing about the image
     lengths = sorted(math.hypot(dx, dy) for dx, dy in vectors)
     if not lengths or lengths[len(lengths) // 2] <= 1e-9:
         return None  # no bond, or no positions (a molfile with every atom at 0,0)
     scale = BOND_LENGTH / lengths[len(lengths) // 2]
-    return mol, [(x * scale, y * scale) for x, y in pos]
+    return Template(mol, [(x * scale, y * scale) for x, y in pos], scale)
 
 
 def _structure(smiles: str):
@@ -127,7 +168,7 @@ def _same_graph(mol, tpl) -> tuple[tuple, tuple] | None:
     return (on_mol, tuple(range(tpl.GetNumAtoms()))) if on_mol else None
 
 
-def _common_part(mol, tpl) -> tuple[tuple, tuple]:
+def _common_part(mol, tpl, timeout: int = MCS_TIMEOUT_S) -> tuple[tuple, tuple]:
     """(atoms of mol, atoms of tpl) of their MCS; empty when it is too small to place by."""
     heavy = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() != 1)
     with BlockLogs():
@@ -137,7 +178,7 @@ def _common_part(mol, tpl) -> tuple[tuple, tuple]:
             bondCompare=rdFMCS.BondCompare.CompareAny,  # a misread bond order keeps its place
             ringMatchesRingOnly=True,
             completeRingsOnly=True,
-            timeout=MCS_TIMEOUT_S,
+            timeout=timeout,
         )
     if result.numAtoms < max(MIN_COMMON_ATOMS, MIN_COMMON_SHARE * heavy):
         return (), ()
@@ -150,14 +191,21 @@ def _common_part(mol, tpl) -> tuple[tuple, tuple]:
 def oriented_coords(smiles: str, template_molfile: str) -> list[tuple[float, float]] | None:
     """2D positions (y up) for every atom of `smiles`, in its atom order, with the common part
     placed as in the template; None to fall back to the normal layout."""
+    found = oriented(smiles, template_molfile)
+    return found.coords if found is not None else None
+
+
+def oriented(smiles: str, template_molfile: str, timeout: int = MCS_TIMEOUT_S) -> Oriented | None:
+    """`oriented_coords` with the atoms placed from the template and the scale back to the
+    template's own units. `timeout`: seconds for the MCS search (whole seconds, RDKit's)."""
     if not smiles or not template_molfile:
         return None
     mol = _structure(smiles)
     found = _template(template_molfile)
     if mol is None or found is None:
         return None
-    tpl, pos = found
-    on_mol, on_tpl = _same_graph(mol, tpl) or _common_part(mol, tpl)
+    tpl, pos, scale = found
+    on_mol, on_tpl = _same_graph(mol, tpl) or _common_part(mol, tpl, timeout)
     if not on_mol or len(on_mol) != len(on_tpl):
         return None
     coord_map = {m: Point2D(*pos[t]) for m, t in zip(on_mol, on_tpl, strict=True)}
@@ -172,7 +220,9 @@ def oriented_coords(smiles: str, template_molfile: str) -> list[tuple[float, flo
     ]
     # The template carries no stereo (the MCS ignores it): a double bond it drew the other way
     # round would show Z where the structure says E. Its own E/Z wins: the normal layout then.
-    return coords if _double_bonds_as_written(mol, coords) else None
+    if not _double_bonds_as_written(mol, coords):
+        return None
+    return Oriented(coords, frozenset(on_mol), scale)
 
 
 _CIS = (Chem.BondStereo.STEREOZ, Chem.BondStereo.STEREOCIS)

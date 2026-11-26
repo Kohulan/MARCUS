@@ -13,6 +13,7 @@ import { ApiError, api } from "../api/client";
 import { orientationTemplate } from "../api/engines";
 import { createQueryClient } from "../api/queries";
 import type { CurationOut, PaperDetail, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import { paperLayout } from "../test/paperLayout";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
 import Compare, { type CompareProps } from "./Compare";
 import Workspace from "./Workspace";
@@ -1004,5 +1005,88 @@ describe("Compare in the workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compare" }));
     dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
     expect(within(dialog).getByText("Failed: it took too long")).toBeInTheDocument();
+  });
+});
+
+describe("Compare: the paper layout", () => {
+  const LAYOUT = paperLayout();
+  const answers = () => [
+    prediction({ id: "d1", engine: "decimer", smiles: "CCO" }),
+    prediction({ id: "m1", engine: "molparser", smiles: "CCN" }),
+    prediction({ id: "s1", engine: "molscribe", smiles: "C(C)(C)(C)(C)C", valid: false, molfile: OLD_NEXTR, layout: LAYOUT }),
+  ];
+  const paperButton = () => screen.getByRole("button", { name: "Show on paper" });
+
+  it("an invalid MolScribe with a layout: every answer is drawn on it, and Use coordinates switches it off", async () => {
+    renderCompare({ predictions: answers() });
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT]));
+    expect(templatesOf("CCN")).toEqual([LAYOUT]);
+    const coords = screen.getByRole("button", { name: "Use coordinates, MolScribe" });
+    expect(coords).toBeEnabled();
+    expect(coords).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(coords);
+    await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT, undefined]));
+    expect(templatesOf("CCN")).toEqual([LAYOUT, undefined]);
+  });
+
+  it("a valid MolScribe with a layout draws itself on the layout too", async () => {
+    renderCompare({
+      predictions: [prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE, layout: LAYOUT })],
+    });
+    await waitFor(() => expect(templatesOf("CCC")).toEqual([LAYOUT]));
+  });
+
+  it("Show on paper: each answer over the crop, its marked atoms shown; off again: the drawings", async () => {
+    const overlay = vi.spyOn(api, "segmentOverlay").mockResolvedValue({
+      fit: 0.5,
+      bond: 40,
+      width: 400,
+      height: 300,
+      complete: true,
+      answers: [
+        { prediction_id: "d1", engine: "decimer", marks: [2], atoms: [[10, 10, "C", true], [50, 10, "C", true], [90, 10, "O", false]], bonds: [[0, 1, 1], [1, 2, 2]] },
+        { prediction_id: "m1", engine: "molparser", marks: [], atoms: null, bonds: null },
+      ],
+    });
+    renderCompare({ predictions: answers() });
+    expect(paperButton()).toBeEnabled();
+    expect(paperButton()).toHaveAttribute("aria-pressed", "false");
+    expect(overlay).not.toHaveBeenCalled();
+    fireEvent.click(paperButton());
+    const onPaper = await screen.findByRole("img", { name: "On paper, DECIMER" });
+    expect(overlay).toHaveBeenCalledTimes(1);
+    expect(overlay.mock.calls[0]![0]).toBe("s1");
+    expect(onPaper.querySelector("image")).toHaveAttribute("href", api.segmentImageUrl("s1"));
+    expect(onPaper.querySelectorAll(".cmp-paper__bond").length).toBe(3); // a single and a double
+    expect(onPaper.querySelectorAll(".cmp-paper__bond--loose").length).toBe(2); // to the atom not placed
+    expect(onPaper.querySelectorAll(".cmp-paper__mark").length).toBe(1);
+    // an answer that cannot follow the drawing keeps its normal drawing
+    expect(screen.queryByRole("img", { name: "On paper, MolParser" })).toBeNull();
+    expect(await within(cell("Drawing", "MolParser")).findByRole("img", { name: "Structure, MolParser" })).toBeInTheDocument();
+    fireEvent.click(paperButton());
+    expect(screen.queryByRole("img", { name: "On paper, DECIMER" })).toBeNull();
+  });
+
+  it("Show on paper is off with the reason: an uploaded image, no layout, a poor fit", () => {
+    const image = renderCompare({ target: { kind: "image", id: "img1" }, predictions: answers() });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("Papers only")).toBeInTheDocument();
+    image.unmount();
+    const none = renderCompare({ predictions: [prediction({ engine: "molscribe", smiles: "CCC", molfile: SCRIBE })] });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("No positions read")).toBeInTheDocument();
+    none.unmount();
+    renderCompare({
+      predictions: [prediction({ engine: "molscribe", smiles: "CCC", valid: false, layout: paperLayout(3, 40) })],
+    });
+    expect(paperButton()).toBeDisabled();
+    expect(screen.getByText("Fit too poor")).toBeInTheDocument();
+  });
+
+  it("an overlay the server cannot give says so", async () => {
+    vi.spyOn(api, "segmentOverlay").mockRejectedValue(new ApiError(409, "poor fit"));
+    renderCompare({ predictions: answers() });
+    fireEvent.click(paperButton());
+    expect(await screen.findByText("Not shown on paper")).toBeInTheDocument();
   });
 });

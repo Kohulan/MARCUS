@@ -1,16 +1,28 @@
-import { useQueries, type UseQueryResult } from "@tanstack/react-query";
+import { useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText } from "../api/client";
 import { depictQuery, useReplyUrl } from "../api/depictions";
 import {
   asEngine,
   firstRunNote,
+  layoutInfo,
+  layoutPrediction,
+  layoutTemplate,
   orientationTemplate,
   TEMPLATE_ENGINES,
   usableTemplate,
+  type Template,
 } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
-import type { DepictReply, Engine, PredictionOut, SegmentOut, StepOut } from "../api/types";
+import type {
+  DepictReply,
+  Engine,
+  OverlayAnswer,
+  OverlayReply,
+  PredictionOut,
+  SegmentOut,
+  StepOut,
+} from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import { Modal } from "../ui/modal";
 import ProgressBar, { useHeldAfter } from "../ui/ProgressBar";
@@ -121,15 +133,49 @@ export default function Compare({
   // engine's drawing uses its own positions from the image, and it can be the template of the
   // others (MolScribe first). Off, or a molfile without the image's positions: the normal layout,
   // and no template.
+  // MolScribe's paper layout (its positions on the image, kept also when its answer is
+  // invalid) comes first: every answer is drawn on it, MolScribe's own too, and its "Use
+  // coordinates" switches it off with the rest.
   const [coords, setCoords] = useState<Readonly<Record<string, boolean>>>({});
   const coordsOn = (engine: string) => coords[engine] !== false;
   const shared = orientationTemplate(predictions, coords);
-  const templateOf = (r: EngineRow): PredictionOut | null =>
-    TEMPLATE_ENGINES.includes(r.engine)
-      ? coordsOn(r.engine) && usableTemplate(r.prediction)
-        ? r.prediction
-        : null
-      : shared;
+  const layoutOf = layoutPrediction(predictions);
+  /** The engine's own positions from the image: its layout, else its molfile's. */
+  const ownTemplate = (r: EngineRow): Template | null => {
+    if (layoutOf && r.engine === layoutOf.engine) return layoutTemplate(layoutOf);
+    const p = r.prediction;
+    return p && usableTemplate(p) ? p : null;
+  };
+  const templateOf = (r: EngineRow): Template | null =>
+    TEMPLATE_ENGINES.includes(r.engine) ? (coordsOn(r.engine) ? ownTemplate(r) : null) : shared;
+
+  // "Show on paper" (a paper's structure only): each answer over the crop at the drawing's own
+  // positions. Offered when the layout sits on the ink (its fit within 4 % of a bond length);
+  // else off, with the reason. An uploaded image has no overlay.
+  const fit = layoutInfo(layoutOf?.layout);
+  const paperWhy =
+    target.kind !== "segment"
+      ? "Papers only"
+      : fit === null
+        ? "No positions read"
+        : !fit.overlay
+          ? "Fit too poor"
+          : null;
+  const [paper, setPaper] = useState(false);
+  const onPaper = paper && paperWhy === null;
+  const drawnIds = drawn.map((r) => r.prediction!.id).join(",");
+  const overlay = useQuery({
+    queryKey: ["overlay", target.id, layoutOf?.id ?? null, drawnIds],
+    queryFn: ({ signal }): Promise<OverlayReply> => api.segmentOverlay(target.id, { signal }),
+    enabled: onPaper,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const overlayOf = (r: EngineRow): OverlayAnswer | null => {
+    if (!onPaper || !overlay.data || !r.prediction) return null;
+    const found = overlay.data.answers.find((a) => a.prediction_id === r.prediction!.id);
+    return found?.atoms && found.bonds ? found : null;
+  };
 
   // Every drawing from /tools/depict, each with its own template (the toggles decide), and with
   // its marks. A drawing waits for the marks, so it is asked for once.
@@ -149,6 +195,7 @@ export default function Compare({
     tooManyText(runError) ??
     (runError !== null ? `Not started: ${errorText(runError)}` : null) ??
     toolErrors.map(tooManyText).find((t) => t !== null) ??
+    (onPaper && overlay.isError ? "Not shown on paper" : null) ??
     (part.error ? (mark === "common" ? "Common part unavailable" : "Differences unavailable") : null) ??
     (part.none ? (mark === "common" ? "No common part" : "No differences") : null) ??
     (part.rough ? "Rough marks: the structures are large" : null);
@@ -184,14 +231,14 @@ export default function Compare({
                       </GlassButton>
                     </span>
                   )}
-                  {TEMPLATE_ENGINES.includes(r.engine) && r.prediction?.molfile && (
+                  {TEMPLATE_ENGINES.includes(r.engine) && (r.prediction?.molfile || ownTemplate(r)) && (
                     <span className="cmp-table__toggle">
                       <GlassButton
                         tint="clear"
                         size="sm"
                         label={`Use coordinates, ${r.label}`}
-                        disabled={!usableTemplate(r.prediction)}
-                        pressed={usableTemplate(r.prediction) && coordsOn(r.engine)}
+                        disabled={!ownTemplate(r)}
+                        pressed={ownTemplate(r) !== null && coordsOn(r.engine)}
                         onClick={() => setCoords((c) => ({ ...c, [r.engine]: !coordsOn(r.engine) }))}
                       >
                         Use coordinates
@@ -214,7 +261,16 @@ export default function Compare({
               </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
-                  <Drawing row={r} depict={depictOf(r)} />
+                  {overlayOf(r) ? (
+                    <OnPaper
+                      answer={overlayOf(r)!}
+                      view={overlay.data!}
+                      src={api.segmentImageUrl(target.id)}
+                      label={r.label}
+                    />
+                  ) : (
+                    <Drawing row={r} depict={depictOf(r)} />
+                  )}
                 </td>
               ))}
             </tr>
@@ -304,6 +360,16 @@ export default function Compare({
                 {label}
               </GlassButton>
             ))}
+            <GlassButton
+              tint="clear"
+              size="sm"
+              disabled={paperWhy !== null}
+              pressed={onPaper}
+              onClick={() => setPaper((p) => !p)}
+            >
+              Show on paper
+            </GlassButton>
+            {paperWhy !== null && <span className="cmp__why">{paperWhy}</span>}
           </div>
           {showBatch && (
             <div className="cmp__run">
@@ -409,6 +475,85 @@ function Drawing({
     );
   if (!drawable(p) || !depict) return <Structure src={null} failed alt="" />;
   return <ReplyDrawing query={depict} alt={`Structure, ${row.label}`} />;
+}
+
+/**
+ * One answer over the paper's crop, at the drawing's own positions (the crop's pixels): its
+ * bonds in green, dashed to an atom the drawing did not place, and an orange ring on each atom
+ * where the answer differs from the others. A missing or extra part shows against the ink.
+ */
+function OnPaper({
+  answer,
+  view,
+  src,
+  label,
+}: {
+  answer: OverlayAnswer;
+  view: OverlayReply;
+  src: string;
+  label: string;
+}) {
+  const atoms = answer.atoms ?? [];
+  const stroke = Math.max(view.bond * 0.07, 1.5);
+  const lines: { key: string; x1: number; y1: number; x2: number; y2: number; loose: boolean }[] = [];
+  for (const [a, b, order] of answer.bonds ?? []) {
+    const p = atoms[a];
+    const q = atoms[b];
+    if (!p || !q) continue;
+    const loose = !p[3] || !q[3];
+    const length = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    // a double or triple bond: parallel lines, one stroke apart
+    const count = order >= 3 ? 3 : order === 2 ? 2 : 1;
+    const nx = (-(q[1] - p[1]) / length) * stroke * 1.4;
+    const ny = ((q[0] - p[0]) / length) * stroke * 1.4;
+    for (let k = 0; k < count; k++) {
+      const shift = k - (count - 1) / 2;
+      lines.push({
+        key: `${a}-${b}-${k}`,
+        x1: p[0] + nx * shift,
+        y1: p[1] + ny * shift,
+        x2: q[0] + nx * shift,
+        y2: q[1] + ny * shift,
+        loose,
+      });
+    }
+  }
+  return (
+    <div className="structure cmp-paper">
+      <svg
+        role="img"
+        aria-label={`On paper, ${label}`}
+        viewBox={`0 0 ${view.width} ${view.height}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <image href={src} width={view.width} height={view.height} className="cmp-paper__crop" />
+        {lines.map((l) => (
+          <line
+            key={l.key}
+            className={`cmp-paper__bond${l.loose ? " cmp-paper__bond--loose" : ""}`}
+            x1={l.x1}
+            y1={l.y1}
+            x2={l.x2}
+            y2={l.y2}
+            strokeWidth={stroke}
+            strokeDasharray={l.loose ? `${stroke * 2} ${stroke * 2}` : undefined}
+          />
+        ))}
+        {answer.marks.map((i) =>
+          atoms[i] ? (
+            <circle
+              key={i}
+              className="cmp-paper__mark"
+              cx={atoms[i][0]}
+              cy={atoms[i][1]}
+              r={view.bond * 0.28}
+              strokeWidth={stroke}
+            />
+          ) : null,
+        )}
+      </svg>
+    </div>
+  );
 }
 
 function ReplyDrawing({ query, alt }: { query: UseQueryResult<DepictReply>; alt: string }) {

@@ -10,14 +10,19 @@ export const drawable = (p: PredictionOut): boolean => p.drawable ?? p.valid;
 /**
  * Cache key of a segment's depiction URL (`?v=`): FNV-1a 32-bit (hex) of the inputs of the
  * server's choice of structure (F0-4): the curated SMILES and molfile and the ids of the
- * drawable predictions in API order. Status, note and bbox do not change the drawing.
+ * drawable predictions in API order; and of its template: the ids of the predictions with a
+ * paper layout (MolScribe's, valid or not: an invalid reading still turns every drawing of the
+ * segment). Status, note and bbox do not change the drawing. A segment without a layout keeps
+ * the key it had.
  */
 export function depictionKey(segment: SegmentOut): string {
   const validPredictionIds = segment.predictions.filter(drawable).map((p) => p.id);
+  const layoutIds = segment.predictions.filter((p) => p.layout).map((p) => p.id);
   const input = JSON.stringify([
     segment.curation?.smiles ?? null,
     segment.curation?.molfile ?? null,
     validPredictionIds,
+    ...(layoutIds.length > 0 ? [layoutIds] : []),
   ]);
   return fnv1a32(input);
 }

@@ -31,7 +31,10 @@ MAX_ANSWERS = 6  # = marcus.workers.differences.MAX_ANSWERS
 # One SMARTS atom: a bracket atom, or an organic-subset / any-atom symbol outside brackets.
 _SMARTS_ATOM = re.compile(r"\[[^\]]*\]|Cl|Br|[BCNOPSFIbcnops*Aa]")
 
+MAX_MARKS = 250  # = marcus.workers.tools.MAX_MARKS, which checks the atoms again
 Smiles = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SMILES)]
+# an atom index: a SMILES of MAX_SMILES characters has fewer atoms than that
+Mark = Annotated[int, Field(strict=True, ge=0, lt=MAX_SMILES)]
 Molfile = Annotated[str, StringConstraints(min_length=1, max_length=MAX_MOLFILE_BYTES)]
 # Atoms by their index in the written SMILES (the worker refuses one outside the molecule).
 AtomIndices = Annotated[

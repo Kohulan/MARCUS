@@ -553,3 +553,12 @@ def differences_task(smiles: list[str]) -> dict:
 @celery_app.task(name="marcus.tools.compare", **_LIMITS)
 def compare_task(smiles_a: str, smiles_b: str) -> dict:
     return _envelope(compare, smiles_a, smiles_b)
+
+
+@celery_app.task(name="marcus.tools.paper_view", **_LIMITS)
+def paper_view_task(smiles: list[str], layout: str) -> dict:
+    """An image's answers on its paper layout: overlay geometry and marks
+    (marcus.workers.paper_view; RDKit only, its searches share one budget under the limit)."""
+    from marcus.workers.paper_view import paper_view  # RDKit: only where it runs
+
+    return _envelope(paper_view, smiles, layout)
