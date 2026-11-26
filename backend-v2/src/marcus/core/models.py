@@ -222,8 +222,8 @@ class Prediction(Base):
     # R-group labels of the structure (marcus.core.rgroups; [] none, NULL not computed)
     rgroups: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
-    # InChIKey of a valid structure (marcus.core.agreement: the engines agree on its first
-    # block); NULL when invalid, an R-group scaffold, or made before 0019.
+    # InChIKey of a valid structure (marcus.core.agreement: the engines agree on the full
+    # key); NULL when invalid, an R-group scaffold, or made before 0019.
     inchikey: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -445,4 +445,3 @@ class ScaffoldBuild(Base):
     )
     failures: Mapped[list] = mapped_column(JSONB)
     built_at: Mapped[datetime] = mapped_column(TZ, server_default=NOW)
-

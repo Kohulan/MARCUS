@@ -18,7 +18,7 @@ from marcus.api.schemas import CurationOut, PaperSummary, PredictionOut, Segment
 from marcus.core import compound_ids, storage
 from marcus.core.agreement import COUNTED as AGREE_ENGINES
 from marcus.core.agreement import SLOTS as AGREE_SLOTS
-from marcus.core.agreement import majority, newest_by_engine, pick_prediction
+from marcus.core.agreement import badge, majority, newest_by_engine, pick_prediction
 from marcus.core.built import is_built_idx
 from marcus.core.enums import (
     FINISHED_STEPS,
@@ -697,7 +697,9 @@ def agreement_out(
     engines_run of the segment. The badge waits until no agreement engine is still reading. It
     counts the engines that read (a failed one too, not one that never ran): "3 agree", "2
     agree" or differ of three; "2 of 2 agree" or "2 differ" of two (owner decision
-    2026-11-22). No badge with fewer than two engines read, with fewer than two newest
+    2026-11-22). `agree_state` is the stereo-aware state (agreement.badge, owner decision
+    2026-11-26): engines agree on the full InChIKey; "stereo" when only the connectivity is
+    shared. No badge with fewer than two engines read, with fewer than two newest
     predictions that have an InChIKey (older predictions have none: no backfill), or for an
     R-group scaffold shown. `frozen`: Curation.shown_prediction_id (pick_prediction)."""
     group = majority(predictions)
@@ -709,6 +711,7 @@ def agreement_out(
     shown = not any(ran.values()) and len(engines) >= 2 and len(keyed) >= 2 and not scaffold
     return {
         "agree": len(group) if shown else None,
+        "agree_state": badge(predictions) if shown else None,
         "agree_of": len(engines) if shown else None,
         "agree_engines": [p.engine for p in group],
         "default_prediction_id": pick.id if pick is not None else None,
