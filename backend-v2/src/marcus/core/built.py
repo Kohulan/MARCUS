@@ -27,6 +27,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from marcus.core.enums import BUILT_ENGINE, PaperStatus
+from marcus.core.locks import lock_row
 from marcus.core.models import (
     BuiltSegment,
     Curation,
@@ -124,13 +125,11 @@ def apply_build(
     """Write a build of the scaffold's rows (enumeration.build_rows outcomes) and apply the
     rebuild rule. Locks the paper first. Caller commits. Raises ValueError for a missing segment
     or a deleted paper, IsBuilt when the scaffold is itself built."""
-    from marcus.core.pipeline import _lock  # the planner's row lock (no import cycle at load)
-
     names = names or {}
     seg = session.get(Segment, scaffold_segment_id)
     if seg is None:
         raise ValueError("segment not found")
-    paper = _lock(session, Paper, seg.paper_id)
+    paper = lock_row(session, Paper, seg.paper_id)
     if paper is None or paper.status == PaperStatus.DELETED.value:
         raise ValueError("paper is deleted")
     if session.get(BuiltSegment, seg.id) is not None:
