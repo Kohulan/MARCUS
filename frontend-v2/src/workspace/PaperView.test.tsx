@@ -1293,6 +1293,18 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     await waitFor(() => expect(document.activeElement).toBe(card("[01]")));
   });
 
+  it("Use this one in Compare (an accept) opens the form too (owner, 2026-11-26)", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const preds = ["decimer", "molparser", "molscribe"].map((engine) => prediction({ id: `p-${engine}`, engine }));
+    renderAt(paper([segment("s1", { page: 0, compound_id: "12", predictions: preds })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Compare [01]" }));
+    const dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
+    const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
+    expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12");
+  });
+
   it("Reject opens nothing", async () => {
     vi.spyOn(api, "putCuration").mockImplementation(() => new Promise<never>(() => undefined));
     renderAt(paper([segment("s1", { page: 0 })]));

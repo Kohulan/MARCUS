@@ -123,6 +123,8 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
   // below hides) and the structure whose COCONUT form is open there.
   const [pickPage, setPickPage] = useState<number | null>(null);
   const [pickForm, setPickForm] = useState<string | null>(null);
+  // The Paper view's form for a structure accepted in Compare (a new object each time).
+  const [paperForm, setPaperForm] = useState<{ id: string } | null>(null);
   const pickPageOpen = paper.ocsr_mode === "pick" && pickPage !== null;
   useEffect(() => {
     if (pickPage === null) setPickForm(null); // back on the page tiles: the form goes
@@ -304,7 +306,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
 
       {pickPageOpen ? null : ws.view === "paper" ? (
         <section className="ws-view ws-view--paper" aria-label="Paper view">
-          <PaperView ws={ws} rows={rows} />
+          <PaperView ws={ws} rows={rows} formRequest={paperForm} />
         </section>
       ) : (
         <section className="ws-view ws-view--review" aria-label="Review view">
@@ -323,7 +325,17 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
         </section>
       )}
 
-      <OpenDialog ws={ws} paper={paper} rows={rows} />
+      {/* "Use this one" accepts, as Accept does: the COCONUT form opens where Accept opens it
+          (the pick page beside the open page, the Paper view; owner, 2026-11-26). */}
+      <OpenDialog
+        ws={ws}
+        paper={paper}
+        rows={rows}
+        onAccepted={(id) => {
+          if (pickPageOpen) setPickForm(id);
+          else if (ws.view === "paper") setPaperForm({ id });
+        }}
+      />
 
       {sending && (
         <SubmitForm
@@ -351,10 +363,13 @@ function OpenDialog({
   ws,
   paper,
   rows,
+  onAccepted,
 }: {
   ws: WorkspaceState;
   paper: PaperDetail;
   rows: ReviewRow[];
+  /** "Use this one" accepted this structure (the COCONUT form may open for it). */
+  onAccepted?: (segmentId: string) => void;
 }) {
   const { started } = useCardActions(paper.id, ws.live.reconnect);
   const segment = ws.dialog && ws.segments.find((s) => s.id === ws.dialog!.segmentId);
@@ -383,11 +398,12 @@ function OpenDialog({
       onClose={ws.closeDialog}
       // "Use this one" accepts: the card's Compare button goes (it leaves To check), so a
       // focus that fell with it goes to the card (after the next frame, once re-rendered).
-      onSaved={() =>
+      onSaved={() => {
+        onAccepted?.(segment.id);
         requestAnimationFrame(() => {
           if (focusLost()) segmentCard(document, segment.id)?.focus();
-        })
-      }
+        });
+      }}
     />
   );
 }
