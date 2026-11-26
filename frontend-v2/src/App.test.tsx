@@ -160,6 +160,14 @@ describe("App routes", () => {
     expect(container.querySelector(".frame > .sheet")).not.toBeNull();
   });
 
+  it("the tool uses the whole width of a wide screen; the info pages keep their frame", () => {
+    const tool = renderAt("/app");
+    expect(tool.container.querySelector(".frame")).toHaveClass("frame--tool");
+    tool.unmount();
+    const about = renderAt("/about");
+    expect(about.container.querySelector(".frame")).not.toHaveClass("frame--tool");
+  });
+
   it.each(["/", "/about", "/privacy"])(
     "on %s the first focusable element is Skip to content, and it leads to the page's main",
     (path) => {

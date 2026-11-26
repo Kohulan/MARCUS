@@ -133,10 +133,27 @@ describe("mode ask: the paper page asks", () => {
     await waitFor(() => expect(setMode).toHaveBeenCalledWith(ID, "auto"));
   });
 
+  it("asks in a dialog right after the upload (owner, 2026-11-26)", async () => {
+    renderAt(paper([], { ocsr_mode: "ask" }));
+    const dialog = await screen.findByRole("dialog", { name: "How should MARCUS read it?" });
+    expect(within(dialog).getByRole("button", { name: "Read all pages" })).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Pick a structure" })).toBeInTheDocument();
+  });
+
+  it("Esc closes the dialog; the two choices stay on the page", async () => {
+    renderAt(paper([], { ocsr_mode: "ask" }));
+    const dialog = await screen.findByRole("dialog", { name: "How should MARCUS read it?" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const bar = screen.getByRole("region", { name: "What to read" });
+    expect(within(bar).getByRole("button", { name: "Pick a structure" })).toBeInTheDocument();
+  });
+
   it("is not shown on a paper that reads all pages", async () => {
     renderAt(paper([], { ocsr_mode: "auto" }));
     await screen.findByRole("heading", { name: "Alkaloids" });
     expect(screen.queryByRole("button", { name: "Pick a structure" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

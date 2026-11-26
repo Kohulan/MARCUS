@@ -61,3 +61,335 @@
 .pick__note {
   color: var(--text-2);
 }
+
+/*
+ * The upload's question (owner, 2026-11-26): a dialog on the sheet, two choices drawn as
+ * plates. "Read all pages" lights every box in the reading outline (orange dashes: the one
+ * first action); "Pick a structure" points at one box and chooses it (green). The drawings
+ * play once when the dialog opens and again on hover or focus; still under reduced motion.
+ */
+.mode-ask {
+  width: min(760px, calc(100vw - 48px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--charcoal);
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--lift-dialog);
+}
+
+.mode-ask::backdrop {
+  background-color: var(--scrim);
+}
+
+.mode-ask[open]:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.mode-ask:focus {
+  outline: none;
+}
+
+.mode-ask__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mode-ask__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  text-wrap: balance;
+  color: var(--green);
+}
+
+.mode-ask__readout {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Two cells on 1px rules, as the sheet's own cells. */
+.mode-ask__choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--line);
+}
+
+/* The cell is one click target: the button's ::after covers it (the line stays outside the
+   button, so the button's name is its visible title). */
+.mode-ask__choice {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 20px 24px 24px;
+  background-color: var(--surface);
+}
+
+.mode-ask__choice:hover {
+  background-color: var(--paper);
+}
+
+.mode-ask__choice:has(.mode-ask__go:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: -4px;
+}
+
+.mode-ask__go {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode-ask__go::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.mode-ask__go:focus-visible {
+  outline: none;
+}
+
+.mode-ask__go:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.mode-ask__name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.mode-ask__line {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.mode-ask__foot {
+  margin: 0;
+  padding: 12px 24px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The drawings: a plate of paper with a hair frame, the pages white on it. */
+.mode-art {
+  display: block;
+  width: 100%;
+  height: 196px;
+  border: 1px solid var(--hair);
+  background-color: var(--paper);
+}
+
+.mode-art__sheet {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.mode-art__text {
+  fill: var(--hair);
+}
+
+.mode-art__box {
+  fill: none;
+  stroke-width: 1;
+}
+
+.mode-art__box--idle {
+  stroke: var(--control-border);
+  stroke-dasharray: 3 3;
+}
+
+.mode-art__box--read {
+  stroke: var(--orange);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.mode-art__box--chosen {
+  fill: var(--selection);
+  stroke: var(--green);
+  stroke-width: 2;
+}
+
+.mode-art__pointer {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.mode-art__back,
+.mode-art__mid,
+.mode-art__hand,
+.mode-art__box {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mode-ask[open] {
+    animation: mode-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .mode-ask[open]::backdrop {
+    animation: mode-dim 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* The stack fans a little on hover or focus. */
+  .mode-art__back,
+  .mode-art__mid {
+    transition: transform 500ms var(--ease);
+  }
+
+  .mode-ask__choice--all:is(:hover, :has(.mode-ask__go:focus-visible)) .mode-art__back {
+    transform: translate(8px, -4px);
+  }
+
+  .mode-ask__choice--all:is(:hover, :has(.mode-ask__go:focus-visible)) .mode-art__mid {
+    transform: translate(4px, -2px);
+  }
+
+  /* Every box lights up in turn. */
+  .mode-art__box--read {
+    animation: mode-read 500ms var(--ease) both;
+  }
+
+  .mode-art__box--1 {
+    animation-delay: 280ms;
+  }
+
+  .mode-art__box--2 {
+    animation-delay: 460ms;
+  }
+
+  .mode-art__box--3 {
+    animation-delay: 640ms;
+  }
+
+  .mode-ask__choice--all:is(:hover, :has(.mode-ask__go:focus-visible)) .mode-art__box--read {
+    animation-name: mode-read-again;
+  }
+
+  /* The pointer comes to one box; then that box is chosen. */
+  .mode-art__hand {
+    animation: mode-point 700ms var(--ease) 300ms both;
+  }
+
+  .mode-art__box--chosen {
+    animation: mode-choose 300ms var(--ease) 950ms both;
+  }
+
+  .mode-ask__choice--pick:is(:hover, :has(.mode-ask__go:focus-visible)) .mode-art__hand {
+    animation-name: mode-point-again;
+    animation-delay: 0ms;
+  }
+
+  .mode-ask__choice--pick:is(:hover, :has(.mode-ask__go:focus-visible)) .mode-art__box--chosen {
+    animation-name: mode-choose-again;
+    animation-delay: 650ms;
+  }
+}
+
+@keyframes mode-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes mode-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Two copies of each: a change of name starts the drawing again on hover or focus. */
+@keyframes mode-read {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes mode-read-again {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes mode-point {
+  from {
+    opacity: 0;
+    transform: translate(34px, 70px);
+  }
+}
+
+@keyframes mode-point-again {
+  from {
+    transform: translate(34px, 70px);
+  }
+}
+
+@keyframes mode-choose {
+  from {
+    fill: transparent;
+    stroke: var(--control-border);
+    stroke-width: 1;
+  }
+}
+
+@keyframes mode-choose-again {
+  from {
+    fill: transparent;
+    stroke: var(--control-border);
+    stroke-width: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .mode-ask__choices {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-art {
+    height: 150px;
+  }
+}

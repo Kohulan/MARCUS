@@ -65,6 +65,9 @@ export default function App() {
   usePageViews();
   useScrollOnNavigate();
   useFirstScreenDone();
+  // The tool uses the whole width of a wide screen (owner, 2026-11-26); the info pages keep
+  // their 1440 px frame.
+  const tool = useLocation().pathname.startsWith("/app");
   return (
     <ToastProvider>
       <GlassFilter />
@@ -73,7 +76,7 @@ export default function App() {
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <div className="frame">
+      <div className={tool ? "frame frame--tool" : "frame"}>
         <div className="sheet">
           <Header />
           <div className="sheet__page" id="main">

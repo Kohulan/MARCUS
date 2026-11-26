@@ -15,6 +15,11 @@
   padding: 8px 8px 12px;
 }
 
+/* The tool: as wide as the screen (owner, 2026-11-26). */
+.frame--tool {
+  max-width: none;
+}
+
 .frame > .sheet {
   display: flex;
   flex-direction: column;
