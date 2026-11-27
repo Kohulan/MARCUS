@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select, update
 from starlette.datastructures import Headers
 
-from marcus.api.deps import client_ip, current_owner
+from marcus.api.deps import CLIENT_HEADER, client_ip, current_owner
 from marcus.api.main import create_app
 from marcus.core.db import get_db
 from marcus.core.enums import OwnerKind, PriorityClass
@@ -66,8 +66,13 @@ def app(async_db_session):
     return app
 
 
-def make_client(app):
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
+def make_client(app, *, header: bool = True):
+    """A client like the web app: it sends the client header (`header=False`: like a cross-site
+    navigation or form, which cannot send it)."""
+    headers = {CLIENT_HEADER: "test"} if header else {}
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://test", headers=headers
+    )
 
 
 def test_token_helpers():
@@ -118,6 +123,69 @@ async def test_unknown_cookie_gets_new_owner(app):
         r = await c.get("/api/v2/_whoami")
     assert r.status_code == 200
     assert COOKIE in r.headers["set-cookie"]
+
+
+async def _owners(db) -> int:
+    return (await db.execute(select(func.count()).select_from(Owner))).scalar_one()
+
+
+@pytest.mark.parametrize(
+    ("method", "headers", "cookie"),
+    [
+        ("GET", {}, None),  # a plain link or `location = ...` from another site
+        (
+            "GET",
+            {"sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate"},
+            None,
+        ),
+        ("GET", {"sec-fetch-site": "none"}, None),  # an old browser that sends no fetch metadata
+        ("GET", {CLIENT_HEADER: "   "}, None),  # blank
+        ("GET", {}, "stale-cookie"),  # a cookie that names no owner
+        ("POST", {"origin": "https://evil.example"}, None),  # an auto-submitted form
+    ],
+)
+async def test_no_new_owner_without_the_client_header(
+    app, async_db_session, method, headers, cookie
+):
+    """A cross-site navigation or form arrives without the Strict cookie; making it a new owner
+    would replace the visitor's cookie (Claude Security F1, 2026-11-27). Only the web app's own
+    fetch sends the client header, which no navigation or form can add."""
+    async with make_client(app, header=False) as c:
+        if cookie:
+            c.cookies.set(COOKIE, cookie, path="/api/v2")
+        if method == "POST":  # the upload route, as a cross-site multipart form sends it
+            files = {"file": ("x.pdf", b"%PDF-1.4\n" + b"0" * 2048, "application/pdf")}
+            r = await c.post("/api/v2/papers", headers=headers, files=files)
+        else:
+            r = await c.get("/api/v2/_whoami", headers=headers)
+    assert r.status_code == 403
+    assert "set-cookie" not in r.headers
+    assert await _owners(async_db_session) == 0
+
+
+async def test_a_refused_request_uses_no_new_session_slot(
+    app, async_db_session, monkeypatch, clear_settings_cache
+):
+    monkeypatch.setenv("MARCUS_IP_MAX_NEW_SESSIONS_PER_HOUR", "1")
+    clear_settings_cache()
+    async with make_client(app, header=False) as c:
+        for _ in range(5):
+            assert (await c.get("/api/v2/_whoami")).status_code == 403
+    async with make_client(app) as c:
+        assert (await c.get("/api/v2/_whoami")).status_code == 200
+
+
+async def test_a_known_cookie_needs_no_client_header(app, async_db_session):
+    """Links, images, EventSource and downloads cannot add headers: a known owner's cookie is
+    enough for them."""
+    async with make_client(app) as c:
+        first = await c.get("/api/v2/_whoami")
+        token = first.cookies[COOKIE]
+    async with make_client(app, header=False) as c:
+        c.cookies.set(COOKIE, token, path="/api/v2")
+        again = await c.get("/api/v2/_whoami")
+    assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+    assert await _owners(async_db_session) == 1
 
 
 async def test_api_key_owner_and_revoked_key_401(app, async_db_session):

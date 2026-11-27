@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   api,
   ApiError,
+  CLIENT_HEADER,
   errorText,
   ownerReady,
   resetOwnerGate,
@@ -131,6 +132,20 @@ describe("api", () => {
     await api.listPapers();
     expect(calls[0]?.url).toBe("/api/v2/papers");
     expect(calls[0]?.init.credentials).toBe("same-origin");
+  });
+
+  it("every call sends the client header a new session needs, beside its own headers", async () => {
+    reply = json(200, { papers: [] });
+    await api.listPapers();
+    reply = json(200, { format: "svg", data: "<svg/>" });
+    await api.depict("CCO", {});
+    reply = json(202, { paper_id: "p9", status: "checking" });
+    await api.uploadPaper(new File(["%PDF-1.4"], "a.pdf"), { engine: "molparser", ocsr: "off" });
+    const sent = calls.map((c) => new Headers(c.init.headers));
+    expect(CLIENT_HEADER).toBe("X-Marcus-Client");
+    expect(sent.map((h) => h.get(CLIENT_HEADER))).toEqual(["web", "web", "web"]);
+    expect(sent[1]?.get("Content-Type")).toBe("application/json");
+    expect(sent[2]?.has("Content-Type")).toBe(false);
   });
 
   it("reads pass the query signal to fetch, so a cancelled query aborts its request", async () => {

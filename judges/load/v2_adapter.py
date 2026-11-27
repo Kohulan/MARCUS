@@ -258,7 +258,7 @@ def _note(r: httpx.Response) -> None:
 
 def _client(base_url: str) -> httpx.Client:
     # no keep-alive, as client_v1/client_v2 (and the nginx in front of production) do
-    return client_v1.no_keepalive_client(target._check(base_url))
+    return client_v1.no_keepalive_client(target._check(base_url), headers={client_v2.CLIENT_HEADER: "judge"})
 
 
 class Owner:

@@ -83,7 +83,8 @@ class Owner:
     (the stack may mark it Secure, which httpx would not send over plain http)."""
 
     def __init__(self) -> None:
-        self.client = httpx.Client(base_url=BASE, timeout=30)
+        # the header a new owner needs, as the web app sends it (api/deps.py CLIENT_HEADER)
+        self.client = httpx.Client(base_url=BASE, timeout=30, headers={"X-Marcus-Client": "e2e"})
         r = self.client.get("/api/v2/papers")
         r.raise_for_status()
         raw = r.headers.get("set-cookie")

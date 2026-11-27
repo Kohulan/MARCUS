@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from marcus.api.deps import CLIENT_HEADER
 from marcus.api.main import create_app
 from marcus.cli import main
 from marcus.core import storage
@@ -115,7 +116,11 @@ def app(async_db_session):
 
 
 def client(app) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://test",
+        headers={CLIENT_HEADER: "test"},
+    )
 
 
 def pdf() -> bytes:

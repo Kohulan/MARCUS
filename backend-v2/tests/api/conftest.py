@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from marcus.api.deps import COOKIE_NAME
+from marcus.api.deps import CLIENT_HEADER, COOKIE_NAME
 from marcus.api.main import create_app
 from marcus.core import storage
 from marcus.core.db import get_db
@@ -46,7 +46,12 @@ def app(async_db_session):
 
 
 def make_client(app, token: str | None = None) -> httpx.AsyncClient:
-    c = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
+    """A client like the web app: it sends the client header a new owner needs."""
+    c = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://test",
+        headers={CLIENT_HEADER: "test"},
+    )
     if token is not None:
         c.cookies.set(COOKIE_NAME, token)  # no domain: the cookie jar sends it to any host
     return c

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Response
 from starlette.datastructures import Headers
 
 from marcus.api import security
-from marcus.api.deps import UNKNOWN_IP, client_ip, rate_key_for_ip
+from marcus.api.deps import CLIENT_HEADER, UNKNOWN_IP, client_ip, rate_key_for_ip
 from marcus.api.main import create_app
 from marcus.api.routes import events as events_route
 from marcus.api.routes import health as health_route
@@ -138,6 +138,7 @@ def app(async_db_session):
 
 def client(app, peer=("127.0.0.1", 123), **kw) -> httpx.AsyncClient:
     transport = httpx.ASGITransport(app=app, client=peer)
+    kw.setdefault("headers", {CLIENT_HEADER: "test"})
     return httpx.AsyncClient(transport=transport, base_url="https://test", **kw)
 
 

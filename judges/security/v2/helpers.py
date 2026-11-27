@@ -38,7 +38,8 @@ class V2Owner:
         self.anonymous = anonymous
         self.cookie: str | None = None
         self.set_cookie_headers: list[str] = []
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        # the client header a new browser owner needs (backend-v2 api/deps.py CLIENT_HEADER)
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {"X-Marcus-Client": "judge"}
         self.http = httpx.Client(
             base_url=base,
             timeout=HTTP_TIMEOUT_S,
