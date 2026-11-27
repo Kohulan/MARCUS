@@ -5,6 +5,8 @@ import { structureTag } from "../ui/tag";
 
 export const BUILD = "Build structures";
 export const COULD_NOT_BUILD = "Could not build";
+/** Build left another engine's reading out: it differs outside the R-group points. */
+export const READINGS_DIFFER = "The engines read the scaffold differently outside the R-groups: check it";
 
 /** One row that was not built: "3c: unknown substituent "Tig"". */
 export const failureText = (f: BuildFailure): string => `${f.compound}: ${f.reason}`;
