@@ -33,7 +33,7 @@ import { SegmentEditor } from "./SegmentEditor";
 import { coconutStructures, submissionTitle } from "./coconutList";
 import { CARD_OPEN_HINT, filterCounts, hasScaffold, segmentCard } from "./cardState";
 import StatusBar from "./StatusBar";
-import { useAnnotation, useAutoRunRefresh } from "./useAnnotation";
+import { annotationBusy, useAnnotation, useAutoRunRefresh } from "./useAnnotation";
 import { useCardActions } from "./useCardActions";
 import { useReviewRows, type ReviewRow } from "./useReviewRows";
 import { RgroupPaper, useRgroupList } from "./useRgroupRows";
@@ -159,8 +159,9 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     [ws.segments, paper.engine],
   );
   // The open form's starting organisms, fixed when it opens (a later change of the annotation
-  // does not rewrite them); `waiting`: the annotation had not answered yet, so its first answer
-  // still starts them (the form takes them only if the curator has not typed organisms).
+  // does not rewrite them); `waiting`: the annotation had not answered yet or was still running,
+  // so its answer when it ends still starts them (the form takes them only if the curator has not
+  // typed organisms).
   const [sending, setSending] = useState<(CoconutStart & { waiting: boolean }) | null>(null);
   // Repeats not linked on this read: a compound could be sent twice, so wait for the next one.
   const linking = paper.links_ready === false;
@@ -173,7 +174,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
     [ws.segments, paper.engine],
   );
   useRgroupList(paper.id, scaffolds);
-  if (sending?.waiting && annotation !== undefined) {
+  if (sending?.waiting && annotation !== undefined && !annotationBusy(annotation)) {
     setSending({ ...coconutStart(annotation), waiting: false });
   }
   return (
@@ -214,7 +215,10 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
               describedBy={sendCount === 0 ? reasonId : undefined}
               hasPopup="dialog"
               onClick={() =>
-                setSending({ ...coconutStart(annotation), waiting: annotation === undefined })
+                setSending({
+                  ...coconutStart(annotation),
+                  waiting: annotation === undefined || annotationBusy(annotation),
+                })
               }
             >
               {`Send ${sendCount} to COCONUT`}

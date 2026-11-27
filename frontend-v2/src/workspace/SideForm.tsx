@@ -4,7 +4,7 @@
 import CoconutSidePanel from "../coconut/CoconutSidePanel";
 import { shownPrediction } from "./cardState";
 import { coconutStart } from "./coconutList";
-import { useAnnotation } from "./useAnnotation";
+import { annotationBusy, useAnnotation } from "./useAnnotation";
 import type { ReviewRow } from "./useReviewRows";
 import { useRgroupReading } from "./useRgroupRows";
 import type { Workspace } from "./useWorkspace";
@@ -39,6 +39,7 @@ export default function SideForm({
       start={coconutStart(annotation)}
       built={built}
       row={rgroupRow}
+      annotating={annotationBusy(annotation)}
       onClose={onClose}
     />
   );

@@ -35,15 +35,34 @@ type Props = {
   built: BuiltFrom | null;
   /** The scaffold's row this structure was built from (null otherwise). */
   row: RgroupRow | null;
+  /** The paper's annotation is running: its organisms fill the form when it ends. */
+  annotating?: boolean;
   onClose: () => void;
 };
 
-export default function CoconutSidePanel({ paper, segment, n, start, built, row, onClose }: Props) {
+export default function CoconutSidePanel({
+  paper,
+  segment,
+  n,
+  start,
+  built,
+  row,
+  annotating = false,
+  onClose,
+}: Props) {
   const id = useId();
   // the typed fields start from what MARCUS knows when the form opens
   const [first] = useState(() => sideStart(segment, paper, start, built, row));
   const [paperFields, setPaper] = useState<PaperFields>(first.paper);
   const [fields, setFields] = useState<StructureFields>(first.fields);
+  // Organisms that arrive after the form opened (the annotation ended later, or was corrected)
+  // fill it as if they had been there, unless the curator has changed the organisms meanwhile.
+  const [startOrganisms, setStartOrganisms] = useState(first.paper.organisms);
+  if (JSON.stringify(start.organisms) !== JSON.stringify(startOrganisms)) {
+    const untouched = JSON.stringify(paperFields.organisms) === JSON.stringify(startOrganisms);
+    setStartOrganisms(start.organisms);
+    if (untouched) setPaper((p) => ({ ...p, organisms: start.organisms }));
+  }
   const [token, setToken] = useState<string | null>(() => getToken());
   const [busy, setBusy] = useState(false);
   const busyNow = useRef(false);
@@ -160,6 +179,11 @@ export default function CoconutSidePanel({ paper, segment, n, start, built, row,
           {suggested && (
             <p id={`${id}-note`} className="coconut-side__note">
               {start.note}
+            </p>
+          )}
+          {annotating && !organism.name.trim() && (
+            <p className="coconut-side__note" role="status">
+              Annotation running: organism fills in when it ends
             </p>
           )}
           {input("doi", "DOI")}

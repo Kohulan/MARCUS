@@ -184,5 +184,40 @@ describe("final review (fable, 2026-11-25)", () => {
     expect(screen.getByRole("button", { name: "Send to COCONUT" })).toBeDisabled();
     expect(screen.getByText("Fill in name")).toBeInTheDocument();
   });
-});
 
+  describe("the annotation ends after the form opened (owner 2026-11-27)", () => {
+    const EMPTY = { organisms: [], note: undefined };
+    const LATE = {
+      organisms: [{ name: "Wikstroemia nutans", parts: "stems, roots", location: "China", ecosystems: "" }],
+      note: "Organisms: model suggestion",
+    };
+    function late(start: typeof EMPTY | typeof LATE, annotating: boolean) {
+      return (
+        <CoconutSidePanel paper={PAPER} segment={SEG} n={2} start={start} built={null} row={null}
+          annotating={annotating} onClose={vi.fn()} />
+      );
+    }
+
+    it("says it waits, then fills the organism, its parts and place", () => {
+      vi.spyOn(coconutApi, "getToken").mockReturnValue(null);
+      const { rerender } = render(late(EMPTY, true));
+      expect(screen.getByLabelText("Organism")).toHaveValue("");
+      expect(screen.getByRole("status")).toHaveTextContent("Annotation running");
+      rerender(late(LATE, false));
+      expect(screen.getByLabelText("Organism")).toHaveValue("Wikstroemia nutans");
+      expect(screen.getByLabelText("Parts")).toHaveValue("stems, roots");
+      expect(screen.getByLabelText("Location")).toHaveValue("China");
+      expect(screen.getByText("Organisms: model suggestion")).toBeInTheDocument();
+      expect(screen.queryByText(/Annotation running/)).toBeNull();
+    });
+
+    it("keeps what the curator typed meanwhile", () => {
+      vi.spyOn(coconutApi, "getToken").mockReturnValue(null);
+      const { rerender } = render(late(EMPTY, true));
+      fireEvent.change(screen.getByLabelText("Organism"), { target: { value: "Typed plant" } });
+      rerender(late(LATE, false));
+      expect(screen.getByLabelText("Organism")).toHaveValue("Typed plant");
+      expect(screen.getByLabelText("Location")).toHaveValue("");
+    });
+  });
+});
