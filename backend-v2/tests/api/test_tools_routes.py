@@ -41,6 +41,17 @@ async def test_depict_passes_an_orientation_template(app, calls):
     assert "template" not in calls[1][1]
 
 
+async def test_smiles_to_molfile_passes_the_paper_layout(app, calls):
+    """The editor opens an engine's answer laid out like the paper (owner, 2026-11-27: Edit and
+    use lost the coordinates): the template goes to the task; without one the task gets none."""
+    async with make_client(app) as c:
+        r = await c.post(f"{BASE}/smiles-to-molfile", json={"smiles": "CCO", "template": "a molfile"})
+        plain = await c.post(f"{BASE}/smiles-to-molfile", json={"smiles": "CCO"})
+    assert r.status_code == plain.status_code == 200
+    assert calls[0][1]["template"] == "a molfile"
+    assert "template" not in calls[1][1]
+
+
 async def test_depict_template_over_the_molfile_limit_422(app, calls):
     async with make_client(app) as c:
         r = await c.post(f"{BASE}/depict", json={"smiles": "C", "template": "x" * 200_001})

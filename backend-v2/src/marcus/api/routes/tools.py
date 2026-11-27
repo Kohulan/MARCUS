@@ -89,6 +89,11 @@ class SmilesIn(BaseModel):
     smiles: Smiles
 
 
+class MolfileIn(SmilesIn):
+    # the paper's layout (an OCSR or MolScribe layout molfile): the molfile follows the drawing
+    template: str | None = Field(None, max_length=MAX_MOLFILE_BYTES)
+
+
 class McsIn(BaseModel):
     molfiles: list[Molfile] = Field(min_length=2, max_length=MAX_MOLFILES)
 
@@ -148,8 +153,11 @@ async def depict(request: Request, body: DepictIn, _owner: Owner = Depends(curre
 
 
 @router.post("/smiles-to-molfile")
-async def smiles_to_molfile(body: SmilesIn, _owner: Owner = Depends(current_owner)):
-    data = await call_tool("marcus.tools.smiles_to_molfile", {"smiles": body.smiles})
+async def smiles_to_molfile(body: MolfileIn, _owner: Owner = Depends(current_owner)):
+    kwargs: dict = {"smiles": body.smiles}
+    if body.template:  # only then: a tools worker from before the template still answers
+        kwargs["template"] = body.template
+    data = await call_tool("marcus.tools.smiles_to_molfile", kwargs)
     return {"molfile": data}
 
 

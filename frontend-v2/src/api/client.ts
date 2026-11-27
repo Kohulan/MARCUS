@@ -385,10 +385,11 @@ export const api = {
   compare: (smilesA: string, smilesB: string) =>
     sendJson<CompareReply>("POST", "/tools/compare", { smiles_a: smilesA, smiles_b: smilesB }),
   mcs: (molfiles: string[]) => sendJson<McsReply>("POST", "/tools/mcs", { molfiles }),
-  /** The molfile text. */
-  async smilesToMolfile(smiles: string): Promise<string> {
+  /** The molfile text; with `template` (the paper's layout) the atoms sit as in the drawing. */
+  async smilesToMolfile(smiles: string, template?: string | null): Promise<string> {
     const out = await sendJson<{ molfile: string }>("POST", "/tools/smiles-to-molfile", {
       smiles,
+      ...(template ? { template } : {}),
     });
     return out.molfile;
   },

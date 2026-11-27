@@ -1,12 +1,13 @@
 // The structure editor for a segment of the paper workspace (opened from focus mode or a card):
 // it opens on the structure the card shows and saves through useSaveCuration with
 // editorChange, so curationBody keeps the note and a structure still to check is accepted.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { orientationTemplate } from "../api/engines";
 import { useSaveCuration } from "../api/queries";
 import type { SegmentOut } from "../api/types";
 import { shownStructure } from "./cardState";
-import Editor, { editorChange, type EditorStructure } from "./Editor";
+import Editor, { editorChange, hasImagePositions, type EditorStructure } from "./Editor";
 
 /**
  * What the editor opens with: the structure the card shows (the curated one, else the shown
@@ -44,6 +45,23 @@ export function SegmentEditor({
   // Fixed at open: a live update while the dialog is open does not move the starting point.
   // The host keys this by segment, so the save goes to the segment it opened on.
   const [initial] = useState(() => start ?? editorStart(segment, paperEngine));
+  // An engine's answer without positions of its own (DECIMER, MolParser) opens laid out like the
+  // paper, as Compare draws it: same atoms and bonds, the drawing's positions (owner, 2026-11-27:
+  // Edit and use lost the coordinates). Fetched once at open; on failure, the start as it is.
+  const [template] = useState(() => orientationTemplate(segment.predictions)?.molfile ?? null);
+  const relayout = initial.engine != null && Boolean(initial.smiles) && template !== null && !hasImagePositions(initial);
+  const [ready, setReady] = useState(relayout ? null : initial);
+  useEffect(() => {
+    if (!relayout) return;
+    let live = true;
+    api.smilesToMolfile(initial.smiles!, template).then(
+      (molfile) => live && setReady({ ...initial, molfile }),
+      () => live && setReady(initial),
+    );
+    return () => {
+      live = false;
+    };
+  }, [relayout, initial, template]);
   // The editor reads its props through a ref refreshed every render, so the status rule
   // sees the curation as it is when Save is pressed. The save's promise goes back to the
   // dialog: a 422 keeps it open with "Save failed: …".
@@ -56,5 +74,6 @@ export function SegmentEditor({
     image: api.segmentImageUrl(segment.id),
     page: { url: api.pageImageUrl(paperId, segment.page), bbox: segment.bbox, page0: segment.page },
   };
-  return <Editor initial={initial} source={source} onSave={onSave} onClose={onClose} />;
+  if (ready === null) return null; // the laid-out molfile is on its way (well under a second)
+  return <Editor initial={ready} source={source} onSave={onSave} onClose={onClose} />;
 }
