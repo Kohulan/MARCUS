@@ -1305,6 +1305,27 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     expect(await within(form).findByLabelText("Name")).toHaveValue("Compound 12");
   });
 
+  it("Edit and use opens the editor on that engine's answer; saving accepts the edit and opens the form (owner, 2026-11-27)", async () => {
+    const put = vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const preds = ["decimer", "molparser", "molscribe"].map((engine, i) =>
+      prediction({ id: `p-${engine}`, engine, smiles: ["CCO", "CCN", "CCC"][i]! }),
+    );
+    renderAt(paper([segment("s1", { page: 0, compound_id: "12", predictions: preds })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Compare [01]" }));
+    const compare = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(compare).getByRole("button", { name: "Edit and use, MolParser" }));
+    const editor = await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(within(editor).getByLabelText("SMILES")).toHaveValue("CCN");
+    expect(screen.queryByRole("dialog", { name: /Compare engines/ })).toBeNull();
+    fireEvent.change(within(editor).getByLabelText("SMILES"), { target: { value: "CCNC" } });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save SMILES" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: "CCNC" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
+    expect(await screen.findByRole("complementary", { name: "COCONUT [01]" })).toBeInTheDocument();
+  });
+
   it("a closed form stays closed after Review and back (simplify review, 2026-11-26)", async () => {
     vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
     vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });

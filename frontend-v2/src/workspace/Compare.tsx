@@ -33,6 +33,7 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
 import { drawable, ocsrSteps } from "./cardState";
+import { SegmentEditor } from "./SegmentEditor";
 import {
   engineRows,
   enginesToRun,
@@ -54,6 +55,8 @@ export type CompareProps = {
   predictions: PredictionOut[];
   /** Its OCSR steps, newest first. */
   steps: CompareStep[];
+  /** "Edit and use": open the editor on this answer (segments only). */
+  onEdit?: ((p: PredictionOut) => void) | undefined;
   /** "Use this one". */
   onPick: (p: PredictionOut) => void;
   /** After an engine start was accepted: the page reopens its own live stream. */
@@ -80,6 +83,7 @@ export default function Compare({
   predictions,
   steps,
   onPick,
+  onEdit,
   onStarted,
   onClose,
   tag,
@@ -323,6 +327,16 @@ export default function Compare({
                       onClick={() => onPick(r.prediction!)}
                     >
                       Use this one
+                    </GlassButton>
+                  )}
+                  {r.prediction && drawable(r.prediction) && onEdit && (
+                    <GlassButton
+                      tint="clear"
+                      size="sm"
+                      label={`Edit and use, ${r.label}`}
+                      onClick={() => onEdit(r.prediction!)}
+                    >
+                      Edit and use
                     </GlassButton>
                   )}
                 </td>
@@ -592,6 +606,8 @@ export function SegmentCompare({
   const { save } = useSaveCuration(paperId);
   const toast = useToast();
   const own = useMemo(() => ocsrSteps(segment, steps), [segment, steps]);
+  // "Edit and use": the editor takes Compare's place, on that engine's answer (owner, 2026-11-27)
+  const [editing, setEditing] = useState<PredictionOut | null>(null);
   const pick = (p: PredictionOut) => {
     onClose();
     // DECIMER's R-group answer ([R1], [X]) is kept as it is: the server takes it (R tokens only),
@@ -604,12 +620,25 @@ export function SegmentCompare({
       (err: unknown) => toast(`Not saved: ${errorText(err)}`, "error"),
     );
   };
+  if (editing !== null) {
+    return (
+      <SegmentEditor
+        paperId={paperId}
+        paperEngine={paperEngine}
+        segment={segment}
+        start={{ smiles: editing.smiles, molfile: editing.molfile ?? null, engine: editing.engine }}
+        onSaved={onSaved}
+        onClose={onClose}
+      />
+    );
+  }
   return (
     <Compare
       target={{ kind: "segment", id: segment.id }}
       predictions={segment.predictions}
       steps={own}
       onPick={pick}
+      onEdit={setEditing}
       onStarted={onStarted}
       onClose={onClose}
       tag={tag}
