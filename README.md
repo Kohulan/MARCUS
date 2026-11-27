@@ -272,6 +272,13 @@ Part of the [DECIMER](https://decimer.ai) project, connected to
 
 ## Licence and contact
 
+<p>
+  Built with <img src="docs/assets/coffee.svg" height="18" alt="coffee"> by
+  <a href="https://kohulanr.com">Kohulan.R</a> at the
+  <a href="https://github.com/Steinbeck-Lab">Steinbeck Lab</a>,
+  <a href="https://www.uni-jena.de">Friedrich Schiller University Jena</a>
+</p>
+
 MIT, see [LICENSE](LICENSE). Questions:
 [Kohulan Rajan](mailto:kohulan.rajan@uni-jena.de) ·
 [decimer.ai](https://decimer.ai) ·
