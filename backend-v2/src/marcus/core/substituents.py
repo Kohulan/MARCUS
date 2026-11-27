@@ -61,6 +61,10 @@ _ALKYL_FORMULA = re.compile(r"C(\d+)H(\d+)")
 # simple group anyway, and it runs in the shared chem process).
 MAX_CONDENSED = 30
 MAX_BRANCHES = 4
+# A branch is one single bond and carbon has four, one to its parent: no atom carries more than
+# three branches, so a larger repeat count ("C(C)999999999") is never a structure and is not
+# expanded.
+MAX_REPEAT = 3
 
 
 @dataclass(frozen=True)
@@ -143,6 +147,8 @@ def _branches(text: str, pos: int):
             continue
         m = re.match(r"\d*", text[end + 1 :])
         times = int(m.group(0)) if m.group(0) else 1
+        if times > MAX_REPEAT:
+            continue
         after = end + 1 + len(m.group(0))
         for more, last in _branches(text, after):
             if more or after == last:
