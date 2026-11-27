@@ -11,6 +11,7 @@ import type { CurationOut } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
 import ProgressBar from "../ui/ProgressBar";
 import { Modal } from "../ui/modal";
+import Switch from "../ui/Switch";
 import { listenToFrame, postToFrame } from "./editorBridge";
 import { EditorSource, type EditorSourceInfo } from "./EditorSource";
 import "./editor.css";
@@ -164,8 +165,7 @@ export default function Editor({ initial, onSave, onClose, source }: EditorProps
 
   // Switching loads the starting structure again (unsaved drawing changes are lost); before
   // marcus:ready nothing is posted: the ready handler reads the current state.
-  const toggleCoords = () => {
-    const next = !coords;
+  const toggleCoords = (next: boolean) => {
     setCoords(next);
     latest.current.coords = next;
     const frame = iframe.current?.contentWindow;
@@ -206,15 +206,12 @@ export default function Editor({ initial, onSave, onClose, source }: EditorProps
       ) : null}
 
       <div className="editor__coords">
-        <GlassButton
-          tint="clear"
-          size="sm"
+        <Switch
+          label="Use coordinates"
           disabled={!canCoords || saving}
-          pressed={canCoords && coords}
-          onClick={toggleCoords}
-        >
-          Use coordinates
-        </GlassButton>
+          checked={canCoords && coords}
+          onChange={toggleCoords}
+        />
       </div>
 
       <div className="editor__frame" aria-busy={!ready}>

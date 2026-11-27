@@ -21,6 +21,7 @@ import Stamp from "./Stamp";
 import StateBadge from "./StateBadge";
 import Structure from "./Structure";
 import { structureTag } from "./tag";
+import Switch from "./Switch";
 import { ToastHost, ToastProvider, useToast } from "./Toasts";
 import { reduceMotion } from "../test/reduceMotion";
 
@@ -654,5 +655,26 @@ describe("server rendering of the pre-rendered parts", () => {
 
   it("DesktopOnly renders its children on the server", () => {
     expect(renderToString(<DesktopOnly>tool</DesktopOnly>)).toContain("tool");
+  });
+});
+
+describe("Switch", () => {
+  it("is a switch named by label; text is the shorter name shown; a click hands the new state", () => {
+    const onChange = vi.fn();
+    render(<Switch label="Use coordinates, MolScribe" text="Use coordinates" checked onChange={onChange} />);
+    const sw = screen.getByRole("switch", { name: "Use coordinates, MolScribe" });
+    expect(sw).toHaveAttribute("aria-checked", "true");
+    expect(sw).toHaveTextContent(/^Use coordinatesOnOff$/);
+    fireEvent.click(sw);
+    expect(onChange).toHaveBeenCalledWith(false);
+  });
+
+  it("shows label when there is no text; disabled hands nothing", () => {
+    const onChange = vi.fn();
+    render(<Switch label="Hand-drawn" checked={false} onChange={onChange} disabled />);
+    const sw = screen.getByRole("switch", { name: "Hand-drawn" });
+    expect(sw).toHaveTextContent(/^Hand-drawn/);
+    fireEvent.click(sw);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

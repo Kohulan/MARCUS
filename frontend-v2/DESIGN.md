@@ -380,7 +380,7 @@ The sheet is flat. Depth comes from tone (paper, white cells, sunken bands, the 
 
 ## Shapes
 
-Rectangles with square corners for everything that holds content: the frame, cells, structure cards, specimen tables, toasts, segmented controls. Small radii only on form controls (2px on selects and inputs, 3px on key caps). Round forms are reserved: the 999px pill for actions, the 50% circle for stamps, count dots and switch knobs. The drawing-sheet primitives repeat everywhere: the "+" corner mark, horizontal and vertical ruler ticks (1px every 8px, 7px deep), the 16px glass-bed grid behind button clusters, the 135deg hatch, and the 2px charcoal diagonal strike across a rejected structure.
+Rectangles with square corners for everything that holds content: the frame, cells, structure cards, specimen tables, toasts, segmented controls. Small radii only on form controls (2px on selects and inputs, 3px on key caps). Round forms are reserved: the 999px pill for actions, the 50% circle for stamps, count dots, and the switch rocker's pill halves. The drawing-sheet primitives repeat everywhere: the "+" corner mark, horizontal and vertical ruler ticks (1px every 8px, 7px deep), the 16px glass-bed grid behind button clusters, the 135deg hatch, and the 2px charcoal diagonal strike across a rejected structure.
 
 ## Components
 
@@ -409,7 +409,7 @@ Liquid glass on paper: tactile pills that are the only shiny thing on a matte sh
 - **R-groups:** a structure that still has R-group placeholders (a scaffold, several compounds) carries the tag "R-groups: R1, R2" beside its state badge: mono 11px uppercase ink in a square 1px ink outline on surface, no orange (information, not a state); it drops below the badge when both do not fit and ends in an ellipsis when long (title and the card's name hold all of it). The same tag hangs under its Paper view marker. The engine readout says "R-group scaffold (R1, R2)" instead of Valid or Invalid.
 
 ### Inputs / Fields
-- **Style:** surface ground, 1px control-border edge, 2px radius, 40px tall, 15px Geist; labels in mono over text-2.
+- **Switch** (ui/Switch, every on/off control: Marks, Hand-drawn, Use coordinates): a mono name, then a porcelain rocker of two pill halves; the half that holds stands raised (On in green), the other pressed in. In a narrow column the name wraps above the rocker.
 - **Switch:** 38 by 22px pill with a control-border edge and a round knob.
 - **Focus:** the global 2px forest-green outline at 2px offset.
 - **Disabled:** 55% opacity, not-allowed cursor.

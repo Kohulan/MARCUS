@@ -2,8 +2,9 @@
    sits pressed into the glaze. On: the On half raised in green. */
 .switch {
   display: inline-flex;
+  flex-wrap: wrap; /* a narrow column: the name above the rocker */
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   padding: 0;
   border: 0;
   background: none;

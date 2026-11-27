@@ -4,14 +4,17 @@ import "./switch.css";
 
 export default function Switch({
   label,
+  text = label,
   checked,
   onChange,
   disabled = false,
   on = "On",
   off = "Off",
 }: {
-  /** Its name, shown before the rocker. */
+  /** Its accessible name. */
   label: string;
+  /** The name shown before the rocker, when it is shorter than label (default: label). */
+  text?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -29,7 +32,7 @@ export default function Switch({
       onClick={() => onChange(!checked)}
     >
       <span className="switch__name" aria-hidden="true">
-        {label}
+        {text}
       </span>
       <span className="switch__rocker" aria-hidden="true">
         <span className="switch__half switch__half--on">{on}</span>
