@@ -581,6 +581,11 @@ describe("ImageResult", () => {
             <button type="button" onClick={() => props.onPick(molparser)}>
               Use this one
             </button>
+            {props.onEdit && (
+              <button type="button" onClick={() => props.onEdit!(molparser)}>
+                Edit and use
+              </button>
+            )}
           </div>
         );
       }
@@ -598,6 +603,13 @@ describe("ImageResult", () => {
       expect(await screen.findByText("c1ccccc1O")).toBeInTheDocument();
       expect(screen.getByText("Picked here, not saved")).toBeInTheDocument();
       expect(within(screen.getByRole("table")).getByText("MolParser 1.0")).toBeInTheDocument();
+
+      // Edit and use (owner, 2026-11-27): the editor opens on that answer, Compare closes
+      fireEvent.click(screen.getByRole("button", { name: "Compare" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Edit and use" }));
+      const editor = await screen.findByRole("dialog", { name: "Edit structure" });
+      expect(within(editor).getByLabelText("SMILES")).toHaveValue("c1ccccc1O");
+      expect(screen.queryByRole("button", { name: "Edit and use" })).toBeNull();
     });
   });
 });

@@ -24,22 +24,32 @@ export function SegmentEditor({
   paperId,
   paperEngine,
   segment,
+  start,
+  accept = false,
+  onSaved,
   onClose,
 }: {
   paperId: string;
   paperEngine: string;
   segment: SegmentOut;
+  /** Open on this structure (Compare's "Edit and use": one engine's answer). */
+  start?: { smiles: string | null; molfile: string | null; engine: string | null };
+  /** The save is a choice, as "Use this one": accepted whatever the card's status was. */
+  accept?: boolean;
+  /** After the save landed. */
+  onSaved?: (() => void) | undefined;
   onClose: () => void;
 }) {
   const { save } = useSaveCuration(paperId);
   // Fixed at open: a live update while the dialog is open does not move the starting point.
   // The host keys this by segment, so the save goes to the segment it opened on.
-  const [initial] = useState(() => editorStart(segment, paperEngine));
+  const [initial] = useState(() => start ?? editorStart(segment, paperEngine));
   // The editor reads its props through a ref refreshed every render, so the status rule
   // sees the curation as it is when Save is pressed. The save's promise goes back to the
   // dialog: a 422 keeps it open with "Save failed: …".
   const onSave = async (s: EditorStructure) => {
-    await save(segment.id, editorChange(segment.curation, s));
+    await save(segment.id, accept ? { status: "accepted", structure: s } : editorChange(segment.curation, s));
+    onSaved?.();
   };
   // Left of Ketcher: the crop the engines read, and its page with this structure's box.
   const source = {
