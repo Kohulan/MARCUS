@@ -236,7 +236,9 @@ def core_of(smiles, molfile=None):
 
 def test_readings_that_differ_only_at_r_points_share_a_core():
     """MolScribe read R1 as [Rf] and R5 as "Rs", DECIMER read them: one core (BJOC 18/23)."""
-    assert core_of("[Rf]c1ccc([1*])cc1") == core_of("[R1]c1ccc([R2])cc1") is not None
+    core = core_of("[R1]c1ccc([R2])cc1")
+    assert core is not None
+    assert core_of("[Rf]c1ccc([1*])cc1") == core
 
 
 def test_a_drawn_group_name_counts_as_that_group():
