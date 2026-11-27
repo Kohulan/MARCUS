@@ -6,6 +6,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError } from "../api/client";
+import { paperLayout } from "../test/paperLayout";
 import { createQueryClient } from "../api/queries";
 import type {
   AnnotationOut,
@@ -1324,6 +1325,24 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     expect(put.mock.calls[0]![1]).toMatchObject({ status: "accepted", smiles: "CCNC" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit structure" })).toBeNull());
     expect(await screen.findByRole("complementary", { name: "COCONUT [01]" })).toBeInTheDocument();
+  });
+
+  it("Edit and use keeps the paper's coordinates: the editor opens the answer laid out like the paper (owner, 2026-11-27)", async () => {
+    vi.spyOn(api, "putCuration").mockImplementation((_id, body) => Promise.resolve({ ...body }) as never);
+    vi.spyOn(api, "runPrediction").mockResolvedValue({ step_id: "st" });
+    const laidOut = vi.spyOn(api, "smilesToMolfile").mockResolvedValue("LAID OUT MOLFILE");
+    const layout = paperLayout();
+    const preds = [
+      prediction({ id: "p-decimer", engine: "decimer", smiles: "CCO" }),
+      prediction({ id: "p-molparser", engine: "molparser", smiles: "CCN" }),
+      prediction({ id: "p-molscribe", engine: "molscribe", smiles: "CCC", valid: false, layout }),
+    ];
+    renderAt(paper([segment("s1", { page: 0, predictions: preds })]));
+    fireEvent.click(await screen.findByRole("button", { name: "Compare [01]" }));
+    const compare = await screen.findByRole("dialog", { name: /Compare engines/ });
+    fireEvent.click(within(compare).getByRole("button", { name: "Edit and use, MolParser" }));
+    await screen.findByRole("dialog", { name: "Edit structure" });
+    expect(laidOut).toHaveBeenCalledWith("CCN", layout);
   });
 
   it("a closed form stays closed after Review and back (simplify review, 2026-11-26)", async () => {

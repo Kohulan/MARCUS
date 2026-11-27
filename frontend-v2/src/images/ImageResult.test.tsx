@@ -11,6 +11,7 @@ import { ApiError, api } from "../api/client";
 import { createQueryClient } from "../api/queries";
 import type { ImageJobOut, PredictionOut } from "../api/types";
 import { ToastHost, ToastProvider } from "../ui/Toasts";
+import { paperLayout } from "../test/paperLayout";
 import ImageResult, { type ImageCompareProps } from "./ImageResult";
 
 // The fixed MolNexTR's molfile of a CC BY crop (backend-v2/tests/fixtures): image positions.
@@ -560,6 +561,18 @@ describe("ImageResult", () => {
       renderPage();
       await screen.findByRole("button", { name: "Edit" });
       expect(screen.getAllByRole("button", { name: "Copy SMILES" })).toHaveLength(1);
+    });
+
+    it("Edit opens a DECIMER answer laid out like the paper (owner, 2026-11-27)", async () => {
+      const layout = paperLayout();
+      vi.spyOn(api, "getImageJob").mockResolvedValue(
+        job({ predictions: [pred(), pred({ id: "s1", engine: "molscribe", smiles: "CCC", valid: false, layout })] }),
+      );
+      const laidOut = vi.spyOn(api, "smilesToMolfile").mockResolvedValue("LAID OUT MOLFILE");
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+      await screen.findByRole("dialog", { name: "Edit structure" });
+      expect(laidOut).toHaveBeenCalledWith(pred().smiles, layout);
     });
 
     it("hands Compare the image target, predictions, steps and the page's reconnect", async () => {

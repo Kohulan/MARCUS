@@ -6,7 +6,8 @@ import { api } from "../api/client";
 import { useSaveCuration } from "../api/queries";
 import type { SegmentOut } from "../api/types";
 import { shownStructure } from "./cardState";
-import Editor, { editorChange, type EditorStructure } from "./Editor";
+import { editorChange, type EditorStructure } from "./Editor";
+import PaperLayoutEditor from "./PaperLayoutEditor";
 
 /**
  * What the editor opens with: the structure the card shows (the curated one, else the shown
@@ -56,5 +57,13 @@ export function SegmentEditor({
     image: api.segmentImageUrl(segment.id),
     page: { url: api.pageImageUrl(paperId, segment.page), bbox: segment.bbox, page0: segment.page },
   };
-  return <Editor initial={initial} source={source} onSave={onSave} onClose={onClose} />;
+  return (
+    <PaperLayoutEditor
+      predictions={segment.predictions}
+      initial={initial}
+      source={source}
+      onSave={onSave}
+      onClose={onClose}
+    />
+  );
 }

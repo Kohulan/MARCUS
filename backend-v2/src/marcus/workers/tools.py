@@ -410,11 +410,14 @@ def differences(smiles: list[str]) -> dict[str, Any]:
         raise ToolInputError(str(exc)) from exc
 
 
-def smiles_to_molfile(smiles: str) -> str:
-    """CDK structure diagram layout as a V2000 molfile (v1 get_CDK_SDG_mol)."""
+def smiles_to_molfile(smiles: str, template: str | list[str] = "") -> str:
+    """CDK structure diagram layout as a V2000 molfile (v1 get_CDK_SDG_mol); with `template`
+    (the paper's layout, as depict takes it) the atoms sit as in the drawing (_layout), so the
+    editor opens an engine's answer laid out like the paper (owner, 2026-11-27)."""
     jpype = _jvm()
     J = jpype.JClass
-    mol = _sdg(_smiles_to_cdk(smiles))
+    mol = _smiles_to_cdk(smiles)
+    mol = _layout(mol, smiles, template) if template else _sdg(mol)
     writer_out = J("java.io.StringWriter")()
     sdf = J(f"{CDK}.io.SDFWriter")(writer_out)
     try:
@@ -535,8 +538,8 @@ def depict_task(
 
 
 @celery_app.task(name="marcus.tools.smiles_to_molfile", **_LIMITS)
-def smiles_to_molfile_task(smiles: str) -> dict:
-    return _envelope(smiles_to_molfile, smiles)
+def smiles_to_molfile_task(smiles: str, template: str | list[str] = "") -> dict:
+    return _envelope(smiles_to_molfile, smiles, template)
 
 
 @celery_app.task(name="marcus.tools.mcs", **_LIMITS)

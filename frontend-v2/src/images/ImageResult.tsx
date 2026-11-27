@@ -25,7 +25,8 @@ import StateBadge from "../ui/StateBadge";
 import Structure from "../ui/Structure";
 import { useToast } from "../ui/Toasts";
 import Compare from "../workspace/Compare";
-import Editor, { type EditorStructure } from "../workspace/Editor";
+import { type EditorStructure } from "../workspace/Editor";
+import PaperLayoutEditor from "../workspace/PaperLayoutEditor";
 import { labelList, rgroupsOf } from "../workspace/rgroups";
 import StructureActions from "../workspace/StructureActions";
 import "./imageResult.css";
@@ -370,7 +371,8 @@ function Result({
       )}
 
       {editing && (
-        <Editor
+        <PaperLayoutEditor
+          predictions={job.predictions}
           initial={{ smiles, molfile, engine: edit ? null : (prediction?.engine ?? null) }}
           source={{ image: api.imageUrl(job.id), page: null }}
           onSave={async (structure) => {
