@@ -16,7 +16,7 @@ import type {
   SegmentOut,
 } from "../api/types";
 import { hasScaffold, scaffoldPrediction, shownStructure } from "./cardState";
-import { BUILD, COULD_NOT_BUILD, failureText } from "./built";
+import { BUILD, COULD_NOT_BUILD, READINGS_DIFFER, failureText } from "./built";
 import RgroupRows from "./RgroupRows";
 import {
   anyRgroupActive,
@@ -400,6 +400,17 @@ describe("Build structures (Markush Phase 3)", () => {
     show();
     fireEvent.click(await screen.findByRole("button", { name: BUILD }));
     expect(await screen.findByText("Built on DECIMER's reading")).toBeInTheDocument();
+  });
+
+  it("a reading left out for another core says so (owner, 2026-11-27)", async () => {
+    vi.spyOn(api, "getPaperRgroups").mockResolvedValue(list(true, extraction()));
+    vi.spyOn(api, "buildStructures").mockResolvedValue({
+      built: 0, kept: 0, removed: 0, failures: [], scaffold_engine: null, readings_differ: true,
+    });
+    vi.spyOn(api, "getPaper").mockResolvedValue({} as never);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: BUILD }));
+    expect(await screen.findByText(READINGS_DIFFER)).toBeInTheDocument();
   });
 
   it("a failed build says why", async () => {

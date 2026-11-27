@@ -48,7 +48,7 @@ from marcus.core.agreement import newest_by_engine, shown_prediction
 from marcus.core.built import IsBuilt, apply_build
 from marcus.core.db import get_db
 from marcus.core.drawable import is_drawable
-from marcus.core.enumeration import build_rows
+from marcus.core.enumeration import build_rows, scaffold_core
 from marcus.core.enums import Engine
 from marcus.core.models import (
     BuiltSegment,
@@ -237,7 +237,9 @@ async def build_structures(
     the rows are the shown prediction's. Not curated, and another engine's newest reading of the
     drawing builds more rows (the shown one missed or misread a label: MolScribe read R1 as
     [Rf] and R5 as "Rs" on BJOC 18/23, DECIMER read both), Build uses that reading's scaffold and
-    names its engine (`scaffold_engine`; owner, 2026-11-26).
+    names its engine (`scaffold_engine`; owner, 2026-11-26) - only a reading with the same core
+    (marcus.core.enumeration.scaffold_core); `readings_differ` when another reading was left out
+    for that (owner, 2026-11-27).
     409 {"detail": "built" | "no_rgroups" | "no_rows"}."""
     segment, paper = await get_owned_segment(db, owner, segment_id)
     if await db.get(BuiltSegment, segment.id) is not None:
@@ -270,6 +272,7 @@ async def build_structures(
     names = found[1] if found is not None else {}
     outcomes = await CHEM.run(build_rows, smiles, molfile, extraction.rows)
     used: str | None = None
+    differ = False
     if not curated and any("smiles" not in o for o in outcomes):
         others = [
             p for p in newest_by_engine(predictions).values()
@@ -277,7 +280,13 @@ async def build_structures(
             and drawn_labels(p.rgroups or [])
         ]  # fmt: skip
         best = sum("smiles" in o for o in outcomes)
+        core = await CHEM.run(scaffold_core, smiles, molfile)
         for other in others:
+            # only a reading that says the same outside the R points: a wrong molecule is worse
+            # than none (DECIMER read the drawn GlcO of BJOC 18/23 as OMe; owner, 2026-11-27)
+            if core is None or await CHEM.run(scaffold_core, other.smiles, other.molfile) != core:
+                differ = True
+                continue
             tried = await CHEM.run(build_rows, other.smiles, other.molfile, extraction.rows)
             if (n := sum("smiles" in o for o in tried)) > best:
                 best, outcomes, used = n, tried, other.engine
@@ -298,6 +307,7 @@ async def build_structures(
         removed=summary.removed,
         failures=[BuildFailure(**f) for f in summary.failures],
         scaffold_engine=used,
+        readings_differ=differ and used is None,
     )
 
 

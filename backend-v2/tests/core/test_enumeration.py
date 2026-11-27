@@ -223,3 +223,30 @@ def test_a_scaffold_with_an_element_a_misread_label_makes_is_not_built(element):
 def test_the_usual_elements_and_salts_still_build():
     for smiles in ("FC(Cl)(Br)c1cc(I)c(S)c(P)c1[1*]", "[Na+].[O-]C(=O)c1ccc([1*])cc1"):
         assert not isinstance(build_row(scaffold_of(smiles, None), {"R1": "OH"}), str), smiles
+
+
+# --- the scaffold's core: what Build may swap readings on (owner, 2026-11-27) ----------------
+
+
+def core_of(smiles, molfile=None):
+    from marcus.core.enumeration import scaffold_core
+
+    return scaffold_core(smiles, molfile)
+
+
+def test_readings_that_differ_only_at_r_points_share_a_core():
+    """MolScribe read R1 as [Rf] and R5 as "Rs", DECIMER read them: one core (BJOC 18/23)."""
+    assert core_of("[Rf]c1ccc([1*])cc1") == core_of("[R1]c1ccc([R2])cc1") is not None
+
+
+def test_a_drawn_group_name_counts_as_that_group():
+    mol = Chem.MolFromSmiles("*c1ccc([1*])cc1")
+    mol.GetAtomWithIdx(0).SetProp("molFileAlias", "OMe")
+    assert core_of(None, Chem.MolToMolBlock(mol)) == core_of("COc1ccc([1*])cc1")
+
+
+def test_a_group_read_otherwise_is_another_core():
+    """DECIMER read the drawn "GlcO" as OMe: not the core MolScribe read (GlcO kept)."""
+    mol = Chem.MolFromSmiles("*c1ccc([1*])cc1")
+    mol.GetAtomWithIdx(0).SetProp("molFileAlias", "GlcO")
+    assert core_of(None, Chem.MolToMolBlock(mol)) != core_of("COc1ccc([1*])cc1")

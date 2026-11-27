@@ -256,6 +256,8 @@ class BuildOut(BaseModel):
     failures: list[BuildFailure]
     # the engine whose reading gave the scaffold, when it is not the shown one (it built more)
     scaffold_engine: str | None = None
+    # another engine's reading was left out: it says something else outside the R-group points
+    readings_differ: bool = False
 
 
 class StepAccepted(BaseModel):

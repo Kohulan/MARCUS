@@ -97,14 +97,65 @@ def _read(smiles: str | None, molfile: str | None) -> tuple[Chem.Mol | None, dic
 
 def scaffold_of(smiles: str | None, molfile: str | None) -> Scaffold | str:
     """The scaffold from the molfile (its labelled dummies win), else from the SMILES (DECIMER's
-    [R1] tokens read as labelled dummies); NOT_READ when RDKit reads neither."""
+    [R1] tokens read as labelled dummies); NOT_READ when RDKit reads neither, MISREAD_LABEL when
+    it holds an element a misread R label makes."""
+    found = _scaffold(smiles, molfile)
+    if isinstance(found, str):
+        return found
+    if odd := next((a.GetSymbol() for a in found.mol.GetAtoms()
+                    if a.GetSymbol() in MISREAD_ELEMENTS), None):  # fmt: skip
+        return MISREAD_LABEL.format(odd)
+    return found
+
+
+def scaffold_core(smiles: str | None, molfile: str | None) -> str | None:
+    """What a reading of a scaffold says outside its R-group points, as one canonical SMILES
+    (no stereo): every R point (and an element a misread label makes, [Rf]) a plain `*`, every
+    point labelled with a known group as drawn ("OMe", "GlcO") that group. Two readings with one
+    core differ only in their R points, so Build may take one for the other (owner, 2026-11-27:
+    DECIMER read the drawn GlcO of BJOC 18/23 as OMe; its core differs). None when unreadable."""
+    found = _scaffold(smiles, molfile)
+    if isinstance(found, str):
+        return None
+    mol = Chem.RWMol(found.mol)
+    pieces = Chem.Mol()
+    for idx, lab in found.labels.items():
+        atom = mol.GetAtomWithIdx(idx)
+        if lab != UNLABELLED and as_label(lab) != lab:
+            frag = resolve(lab)
+            if isinstance(frag, str) or frag.attachments != 1:
+                return None
+            piece = Chem.RWMol(Chem.MolFromSmiles(frag.smiles))
+            star = next(a for a in piece.GetAtoms() if a.GetAtomicNum() == 0)
+            star.SetAtomMapNum(atom.GetAtomMapNum())
+            pieces = Chem.CombineMols(pieces, piece)
+        else:
+            atom.SetAtomMapNum(0)
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() in MISREAD_ELEMENTS:
+            atom.SetAtomicNum(0)
+            atom.SetNoImplicit(True)
+    try:
+        with BlockLogs():
+            out = Chem.molzip(mol, pieces) if pieces.GetNumAtoms() else mol.GetMol()
+            for atom in out.GetAtoms():
+                if atom.GetAtomicNum() == 0:
+                    atom.SetIsotope(0)
+                    atom.SetAtomMapNum(0)
+                    for prop in ("molFileAlias", "_MolFileRLabel", "dummyLabel"):
+                        if atom.HasProp(prop):
+                            atom.ClearProp(prop)
+            out = Chem.RemoveHs(out, sanitize=False)
+            return Chem.MolToSmiles(out, isomericSmiles=False)
+    except Exception:  # noqa: BLE001 - RDKit refused it: no core to compare
+        return None
+
+
+def _scaffold(smiles: str | None, molfile: str | None) -> Scaffold | str:
+    """scaffold_of without the misread-element guard."""
     mol, tokens = _read(smiles, molfile)
     if mol is None:
         return NOT_READ
-    if odd := next(
-        (a.GetSymbol() for a in mol.GetAtoms() if a.GetSymbol() in MISREAD_ELEMENTS), None
-    ):
-        return MISREAD_LABEL.format(odd)
     mol = Chem.RWMol(mol)
     for a in mol.GetAtoms():
         if a.GetAtomicNum() != 0:
