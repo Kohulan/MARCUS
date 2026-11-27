@@ -51,12 +51,13 @@ type EditorStart = {
 /**
  * Whether the starting structure has its own image positions: a molfile that keeps the
  * positions its engine read from the image (hasImageLayout, as Compare's usableTemplate). Only then does
- * "Use coordinates" apply; no borrowed positions from another engine. A prediction of an
- * engine without image positions (MolParser: a computed layout) never counts.
+ * "Use coordinates" apply (a toggle). A prediction of an engine without image positions
+ * (MolParser: a computed layout) never counts here; such an answer is laid out on the paper's
+ * layout once at open instead (PaperLayoutEditor), with no toggle.
  */
 export function hasImagePositions(initial: EditorStart): boolean {
   if (initial.engine != null && !TEMPLATE_ENGINES.includes(initial.engine)) return false;
-  // never a paper layout: that is a reading aid for the drawings, not a structure to edit
+  // never the paper layout molfile itself (MolScribe's raw graph, not a structure to edit)
   if (layoutInfo(initial.molfile) !== null) return false;
   // a SMILES too: "off" loads the SMILES alone, which must not open Ketcher empty
   return Boolean(initial.smiles?.trim()) && hasImageLayout(initial.molfile);

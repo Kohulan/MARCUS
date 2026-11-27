@@ -6,7 +6,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { api, ApiError, errorText } from "../api/client";
 import type { Glow } from "../api/depictions";
-import { ENGINES, engineName } from "../api/engines";
+import { ENGINES, engineName, type Template } from "../api/engines";
 import { reasonText } from "../api/reasons";
 import { isStepActive } from "../api/status";
 import type { CompareReply, Engine, PredictionOut } from "../api/types";
@@ -194,10 +194,11 @@ export function useSimilarity(rows: EngineRow[]): Pair[] {
 }
 
 /** A SMILES as a molfile from /tools/smiles-to-molfile: key ["molfile", smiles]. */
-export function molfileQuery(smiles: string) {
+export function molfileQuery(smiles: string, template?: Template | null) {
   return {
-    queryKey: ["molfile", smiles] as const,
-    queryFn: () => api.smilesToMolfile(smiles),
+    // laid out on a paper layout: its own entry, keyed by the template's id (not its text)
+    queryKey: template ? (["molfile", smiles, template.id] as const) : (["molfile", smiles] as const),
+    queryFn: () => (template ? api.smilesToMolfile(smiles, template.molfile) : api.smilesToMolfile(smiles)),
     staleTime: Infinity,
   };
 }
