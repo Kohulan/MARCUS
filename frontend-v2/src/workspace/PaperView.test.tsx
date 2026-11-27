@@ -315,7 +315,7 @@ describe("Paper view", () => {
     await screen.findAllByRole("article");
     expect(getText).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Paper" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Paper" }));
     await screen.findByRole("heading", { name: "Results" });
     expect(getText).toHaveBeenCalledTimes(1);
   });
@@ -1355,8 +1355,8 @@ describe("COCONUT side form (owner decision 2026-11-25)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Use this one, DECIMER" }));
     const form = await screen.findByRole("complementary", { name: "COCONUT [01]" });
     fireEvent.click(within(form).getByRole("button", { name: "Close" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Paper" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Review" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Paper" }));
     await screen.findByRole("region", { name: "Paper view" });
     expect(screen.queryByRole("complementary", { name: /^COCONUT/ })).toBeNull();
   });

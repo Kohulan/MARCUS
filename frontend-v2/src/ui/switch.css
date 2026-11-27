@@ -1,0 +1,102 @@
+/* Switch: a porcelain rocker. The half that holds stands raised (water-drop lift); the other
+   sits pressed into the glaze. On: the On half raised in green. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.switch__name {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.switch__rocker {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: 999px;
+  background-color: var(--sunken);
+  box-shadow: var(--porcelain);
+}
+
+.switch__half {
+  min-width: 44px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+  box-shadow: var(--pressed);
+}
+
+.switch[aria-checked="true"] .switch__half--on,
+.switch[aria-checked="false"] .switch__half--off {
+  box-shadow: var(--water-drop);
+}
+
+.switch[aria-checked="true"] .switch__half--on {
+  background-color: var(--green);
+  color: var(--on-green);
+}
+
+.switch[aria-checked="false"] .switch__half--off {
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+.switch:not(:disabled):hover .switch__name {
+  color: var(--ink);
+}
+
+.switch:focus-visible {
+  outline: none;
+}
+
+.switch:focus-visible .switch__rocker {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+}
+
+.switch:disabled .switch__rocker {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .switch__half {
+    transition:
+      background-color 300ms var(--ease),
+      color 300ms var(--ease),
+      box-shadow 300ms var(--ease);
+  }
+}
+
+@media (forced-colors: active) {
+  .switch__rocker {
+    border: 1px solid ButtonBorder;
+  }
+
+  .switch[aria-checked="true"] .switch__half--on,
+  .switch[aria-checked="false"] .switch__half--off {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

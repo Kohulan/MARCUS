@@ -1,7 +1,6 @@
 import {
   faFileLines,
   faTableCellsLarge,
-  type IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -16,6 +15,7 @@ import { coconutCountForDoi, coconutLabel, type CoconutDoiCount } from "../looku
 import { usePageTitle } from "../pages/meta";
 import { GlassButton } from "../ui/GlassButton";
 import Icon from "../ui/Icon";
+import SegmentedControl, { type SegmentedOption } from "../ui/SegmentedControl";
 import GonePage, { OpenFailed } from "../ui/GonePage";
 import { focusLost } from "../ui/focus";
 import { paperName, structureTag } from "../ui/tag";
@@ -102,9 +102,9 @@ function PaperWorkspace({ id }: { id: string }) {
   );
 }
 
-const VIEWS: { view: WorkspaceView; label: string; icon: IconDefinition }[] = [
-  { view: "review", label: "Review", icon: faTableCellsLarge },
-  { view: "paper", label: "Paper", icon: faFileLines },
+const VIEW_OPTIONS: SegmentedOption<WorkspaceView>[] = [
+  { value: "review", label: <><Icon icon={faTableCellsLarge} className="seg__icon" />Review</> },
+  { value: "paper", label: <><Icon icon={faFileLines} className="seg__icon" />Paper</> },
 ];
 
 function Frame({ id }: { id: string }) {
@@ -234,21 +234,7 @@ function PaperFrame({ ws, paper }: { ws: WorkspaceState; paper: PaperDetail }) {
 
       <div className="ws-tools">
         {/* One porcelain pill; the green knob slides under the view shown (owner, 2026-11-26). */}
-        <div className="ws-toggle" role="group" aria-label="View" data-view={ws.view}>
-          <span className="ws-toggle__knob" aria-hidden="true" />
-          {VIEWS.map(({ view, label, icon }) => (
-            <button
-              key={view}
-              type="button"
-              className="ws-toggle__button"
-              aria-pressed={ws.view === view}
-              onClick={() => ws.setView(view)}
-            >
-              <Icon icon={icon} className="ws-toggle__icon" />
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="View" value={ws.view} options={VIEW_OPTIONS} onChange={ws.setView} />
         {/* From the rows, as the grid's filters count; the tool home, which has no rows,
             reads the server's counts (GET /papers). */}
         <ul className="ws-counts" aria-label="Counts">

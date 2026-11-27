@@ -270,13 +270,22 @@
   gap: 8px;
 }
 
-.cmp__actions {
+/* The marks: the porcelain On/Off rocker, then Differences | Common part. */
+.cmp__marks {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--hair);
+  gap: 16px;
+}
+
+/* "Show on paper", under the crop it draws on. */
+.cmp-table__onpaper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .cmp__msg {
@@ -321,7 +330,7 @@
 
 /* Why "Show on paper" is off. */
 .cmp__why {
-  align-self: center;
   font-size: 12px;
+  text-align: center;
   color: var(--muted);
 }

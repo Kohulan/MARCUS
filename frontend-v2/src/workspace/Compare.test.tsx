@@ -53,7 +53,8 @@ function differencesOf(by: Record<string, { marks: number[]; common: number[] }>
     });
 }
 const CCO_CCN = { CCO: { marks: [2], common: [0, 1] }, CCN: { marks: [2], common: [0, 1] } };
-const mode = (name: string) => screen.getByRole("button", { name });
+const mode = (name: string) => screen.getByRole("radio", { name });
+const marks = () => screen.getByRole("switch", { name: "Marks" });
 /** The template each /tools/depict call of `smiles` sent (undefined: the normal layout). */
 const templatesOf = (smiles: string) =>
   vi.mocked(api.depict).mock.calls.filter((c) => c[0] === smiles).map((c) => c[1]?.template);
@@ -584,9 +585,9 @@ describe("Compare", () => {
         prediction({ engine: "molparser", smiles: "CCN" }),
       ],
     });
-    expect(mode("Differences")).toHaveAttribute("aria-pressed", "true");
-    expect(mode("Common part")).toHaveAttribute("aria-pressed", "false");
-    expect(mode("Off")).toHaveAttribute("aria-pressed", "false");
+    expect(mode("Differences")).toHaveAttribute("aria-checked", "true");
+    expect(mode("Common part")).toHaveAttribute("aria-checked", "false");
+    expect(marks()).toHaveAttribute("aria-checked", "true");
     await waitFor(() => expect(litCalls()).toHaveLength(2));
     // one question for all answers, the distinct SMILES in a fixed order
     expect(api.differences).toHaveBeenCalledTimes(1);
@@ -616,11 +617,13 @@ describe("Compare", () => {
       ],
     });
     fireEvent.click(mode("Common part"));
-    expect(mode("Common part")).toHaveAttribute("aria-pressed", "true");
-    expect(mode("Differences")).toHaveAttribute("aria-pressed", "false");
+    expect(mode("Common part")).toHaveAttribute("aria-checked", "true");
+    expect(mode("Differences")).toHaveAttribute("aria-checked", "false");
     await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO", { common: [0, 1] }));
     expect(api.depict).toHaveBeenCalledWith("CCN", { common: [0, 1] });
-    fireEvent.click(mode("Off"));
+    fireEvent.click(marks());
+    expect(marks()).toHaveAttribute("aria-checked", "false");
+    expect(mode("Common part")).toBeDisabled();
     await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
     expect(api.depict).toHaveBeenCalledWith("CCN");
     expect(api.differences).toHaveBeenCalledTimes(1);
@@ -631,9 +634,10 @@ describe("Compare", () => {
     const { rerender, props } = renderCompare({ predictions: same });
     for (const name of ["Differences", "Common part"]) {
       expect(mode(name)).toBeDisabled();
-      expect(mode(name)).toHaveAttribute("aria-pressed", "false");
+      expect(mode(name)).toHaveAttribute("aria-checked", "false");
     }
-    expect(mode("Off")).toHaveAttribute("aria-pressed", "true");
+    expect(marks()).toHaveAttribute("aria-checked", "false");
+    expect(marks()).toBeDisabled();
     await waitFor(() => expect(api.depict).toHaveBeenCalledWith("CCO"));
     expect(api.differences).not.toHaveBeenCalled();
     // a second, different answer arrives: Differences comes on by itself
@@ -645,7 +649,7 @@ describe("Compare", () => {
         </ToastProvider>
       </QueryClientProvider>,
     );
-    expect(mode("Differences")).toHaveAttribute("aria-pressed", "true");
+    expect(mode("Differences")).toHaveAttribute("aria-checked", "true");
   });
 
   it("the same structure written two ways: No differences", async () => {
@@ -896,7 +900,7 @@ describe("Compare in the workspace", () => {
         prediction({ engine: "molparser", smiles: "*c1ccccc1", rgroups: ["R"] }),
       ],
     });
-    expect(screen.getByRole("button", { name: "Differences" })).toBeEnabled();
+    expect(mode("Differences")).toBeEnabled();
     await waitFor(() =>
       expect(api.differences).toHaveBeenCalledWith(["*c1ccccc1", "[R]c1ccccc1"]),
     );

@@ -28,6 +28,7 @@ const EXPECTED_TOKENS: Record<string, string> = {
   "--orange": "#FA3600",
   "--orange-ink": "#B82800",
   "--on-orange": "#141414",
+  "--common": "#ADD8E6",
   "--amber": "#F0B429",
   "--on-amber": "#1C211D",
   "--charcoal": "#1C211D",
@@ -65,6 +66,7 @@ const EXPECTED_TOKENS: Record<string, string> = {
     "inset 0 1px 0 #FFFFFF, inset 0 -1.5px 2px rgba(28, 33, 29, 0.1), " +
     "inset 0 0 0 1px rgba(28, 33, 29, 0.07), 0 1px 1px rgba(15, 30, 22, 0.1), " +
     "0 8px 16px -10px rgba(15, 30, 22, 0.45)",
+  "--pressed": "inset 0 1px 2px rgba(28, 33, 29, 0.12)",
   "--water-drop":
     "inset 0 1.5px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.35), " +
     "inset 0 -8px 10px -8px rgba(30, 77, 51, 0.55), 0 5px 10px -7px rgba(15, 30, 22, 0.45)",

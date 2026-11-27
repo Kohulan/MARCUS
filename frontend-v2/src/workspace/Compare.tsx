@@ -24,6 +24,8 @@ import type {
   StepOut,
 } from "../api/types";
 import { GlassButton } from "../ui/GlassButton";
+import SegmentedControl, { type SegmentedOption } from "../ui/SegmentedControl";
+import Switch from "../ui/Switch";
 import { Modal } from "../ui/modal";
 import ProgressBar, { useHeldAfter } from "../ui/ProgressBar";
 import { END_HOLD_MS } from "../ui/progressMotion";
@@ -125,8 +127,10 @@ export default function Compare({
   // drawn (owner, 2026-11-26); with fewer there is nothing to mark.
   const drawn = rows.filter((r) => r.prediction !== null && drawable(r.prediction));
   const canMark = new Set(drawn.map((r) => r.prediction!.smiles)).size >= 2;
-  const [chosen, setChosen] = useState<MarkMode>("differences");
-  const mark: MarkMode = canMark ? chosen : "off";
+  // Marks on (a porcelain switch) and which ones (Differences | Common part): owner, 2026-11-27
+  const [marksOn, setMarksOn] = useState(true);
+  const [kind, setKind] = useState<MarkKind>("differences");
+  const mark: MarkMode = canMark && marksOn ? kind : "off";
   const part = useDifferences(
     drawn.map((r) => r.prediction!.smiles),
     mark,
@@ -262,6 +266,19 @@ export default function Compare({
                   src={target.kind === "image" ? api.imageUrl(target.id) : api.segmentImageUrl(target.id)}
                   alt={target.kind === "image" ? "The uploaded image" : "Crop from the paper"}
                 />
+                {/* under the crop: each answer drawn over it (owner, 2026-11-27) */}
+                <div className="cmp-table__onpaper">
+                  <GlassButton
+                    tint="clear"
+                    size="sm"
+                    disabled={paperWhy !== null}
+                    pressed={onPaper}
+                    onClick={() => setPaper((p) => !p)}
+                  >
+                    Show on paper
+                  </GlassButton>
+                  {paperWhy !== null && <span className="cmp__why">{paperWhy}</span>}
+                </div>
               </td>
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__figure">
@@ -363,29 +380,15 @@ export default function Compare({
           </div>
         )}
         <div className="cmp__side">
-          <div className="cmp__actions glassbed" role="group" aria-label="Mark in the drawings">
-            {MARK_MODES.map(([value, label]) => (
-              <GlassButton
-                key={value}
-                tint="clear"
-                size="sm"
-                disabled={!canMark && value !== "off"}
-                pressed={mark === value}
-                onClick={() => setChosen(value)}
-              >
-                {label}
-              </GlassButton>
-            ))}
-            <GlassButton
-              tint="clear"
-              size="sm"
-              disabled={paperWhy !== null}
-              pressed={onPaper}
-              onClick={() => setPaper((p) => !p)}
-            >
-              Show on paper
-            </GlassButton>
-            {paperWhy !== null && <span className="cmp__why">{paperWhy}</span>}
+          <div className="cmp__marks" role="group" aria-label="Mark in the drawings">
+            <Switch label="Marks" checked={mark !== "off"} disabled={!canMark} onChange={setMarksOn} />
+            <SegmentedControl
+              label="What to mark"
+              value={kind}
+              options={MARK_KINDS}
+              onChange={setKind}
+              disabled={mark === "off"}
+            />
           </div>
           {showBatch && (
             <div className="cmp__run">
@@ -437,11 +440,13 @@ export default function Compare({
   );
 }
 
-/** The marks switch, in order. */
-const MARK_MODES: readonly (readonly [MarkMode, string])[] = [
-  ["differences", "Differences"],
-  ["common", "Common part"],
-  ["off", "Off"],
+type MarkKind = Exclude<MarkMode, "off">;
+
+/** What the marks show; each knob takes its marks' own colour (the drawings' glows), so the
+ * control is its own legend. */
+const MARK_KINDS: readonly SegmentedOption<MarkKind>[] = [
+  { value: "differences", label: "Differences", tone: { fill: "var(--orange)", ink: "var(--on-orange)", dot: "var(--orange)" } },
+  { value: "common", label: "Common part", tone: { fill: "var(--common)", ink: "var(--ink)", dot: "var(--common)" } },
 ];
 
 /** A column's key: the DECIMER column keeps its own whichever model it shows (the toggle in
