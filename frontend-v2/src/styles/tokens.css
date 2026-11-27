@@ -49,6 +49,8 @@
   /* Text set on a filled ground */
   --on-green: #FFFFFF;
   --on-orange: #141414;
+  /* The common part's glow in the drawings (backend workers/tools.py COMMON_COLOUR), ink on it */
+  --common: #ADD8E6;
   --on-amber: #1C211D;
   --on-charcoal: #F4F3EA;
 
@@ -91,6 +93,8 @@
     inset 0 0 0 1px rgba(28, 33, 29, 0.07),
     0 1px 1px rgba(15, 30, 22, 0.1),
     0 8px 16px -10px rgba(15, 30, 22, 0.45);
+  /* A porcelain part pressed into the glaze (the Switch's resting half): a soft shade at its top */
+  --pressed: inset 0 1px 2px rgba(28, 33, 29, 0.12);
   /* The Waterline nav's drop of green water: its meniscus and a small lift */
   --water-drop:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
