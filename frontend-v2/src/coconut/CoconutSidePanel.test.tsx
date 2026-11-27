@@ -185,6 +185,16 @@ describe("final review (fable, 2026-11-25)", () => {
     expect(screen.getByText("Fill in name")).toBeInTheDocument();
   });
 
+  it("Send waits for a DOI (COCONUT needs one on each reference)", () => {
+    vi.spyOn(coconutApi, "getToken").mockReturnValue("tok");
+    render(panel(SEG));
+    const send = screen.getByRole("button", { name: "Send to COCONUT" });
+    expect(send).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("DOI"), { target: { value: "  " } });
+    expect(send).toBeDisabled();
+    expect(screen.getByText("Fill in DOI")).toBeInTheDocument();
+  });
+
   describe("the annotation ends after the form opened (owner 2026-11-27)", () => {
     const EMPTY = { organisms: [], note: undefined };
     const LATE = {

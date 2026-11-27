@@ -268,10 +268,11 @@ export default function SubmitForm({
                 onChange={(e) => setPaper("title", e.target.value)}
               />
             </Field>
-            <Field id="coconut-doi" label="DOI">
+            <Field id="coconut-doi" label="DOI" required>
               <input
                 id="coconut-doi"
                 className="coconut-input coconut-input--mono"
+                aria-required="true"
                 value={fields.doi}
                 onChange={(e) => setPaper("doi", e.target.value)}
                 spellCheck={false}

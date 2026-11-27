@@ -123,11 +123,15 @@ describe("coconutLogin", () => {
     expect(getToken()).toBeNull();
   });
 
-  it("keeps COCONUT's own status through the relay: 403 and 422 wrong login, 429 too many", async () => {
-    for (const status of [403, 422]) {
-      stubFetch(async () => json({ message: "no" }, status));
-      await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
-    }
+  it("keeps COCONUT's own status through the relay: 422 wrong login, 403 unverified, 429 too many", async () => {
+    stubFetch(async () => json({ message: "no" }, 422));
+    await expect(coconutLogin("a@b.c", "bad")).rejects.toThrow("Wrong email or password");
+    // COCONUT LoginController: right password, email not yet verified
+    stubFetch(async () => json({ message: "Account is not yet verified." }, 403));
+    await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow(
+      "Verify your COCONUT email first (link in COCONUT's email)",
+    );
+    expect(getToken()).toBeNull();
     // 429 on login: the relay's own login limit (or COCONUT's): too many attempts, not "busy"
     stubFetch(async () => json({ message: "Too Many Attempts." }, 429));
     await expect(coconutLogin("a@b.c", "pw")).rejects.toThrow(
@@ -634,18 +638,27 @@ describe("SubmitForm", () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN);
     renderForm();
     const sheet = screen.getByRole("group", { name: "Paper" });
-    for (const name of ["Title", "Evidence", "Organism"]) {
+    for (const name of ["Title", "DOI", "Evidence", "Organism"]) {
       const field = within(sheet).getByLabelText(name);
       expect(field).toBeRequired();
       expect(field.closest(".coconut-field")).toHaveTextContent(/Required/);
     }
-    for (const name of ["DOI", "Comment"]) {
-      expect(within(sheet).getByLabelText(name)).not.toBeRequired();
-    }
+    expect(within(sheet).getByLabelText("Comment")).not.toBeRequired();
     expect(screen.getByLabelText("Name for structure 1")).toBeRequired();
     const send = screen.getByRole("button", { name: "Send 3 to COCONUT" });
     expect(send).toBeDisabled();
     expect(send).toHaveAccessibleDescription("Fill in title, organism");
+  });
+
+  it("keeps Send off without a DOI: COCONUT needs one on each reference", () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN);
+    render(<SubmitForm paper={{ id: "p1", title: "T", doi: null }} structures={structures} onClose={() => {}} />);
+    fillPaper();
+    const send = screen.getByRole("button", { name: "Send 3 to COCONUT" });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAccessibleDescription("Fill in DOI");
+    fireEvent.change(screen.getByLabelText("DOI"), { target: { value: " 10.1/x " } });
+    expect(send).toBeEnabled();
   });
 
   it("sends the token only on the relay's mutate call, never to the MARCUS API", async () => {
@@ -813,7 +826,7 @@ describe("SubmitForm closing", () => {
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onClose = vi.fn();
-    render(<SubmitForm paper={{ id: "p1", title: "T", doi: null }} structures={structures} onClose={onClose} />);
+    render(<SubmitForm paper={{ id: "p1", title: "T", doi: "10.1/x" }} structures={structures} onClose={onClose} />);
     fillPaper();
     fireEvent.click(screen.getByRole("button", { name: "Send 3 to COCONUT" }));
     await screen.findByText("Sent 0 of 3");

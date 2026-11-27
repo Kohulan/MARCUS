@@ -30,6 +30,7 @@ const MAX_ERROR = 300;
 export const UNKNOWN_ERROR = "Unknown: check COCONUT before sending again";
 export const NOT_SENT_ERROR = "Not sent";
 export const AUTH_ERROR = "Log in to COCONUT again";
+export const UNVERIFIED_ERROR = "Verify your COCONUT email first (link in COCONUT's email)";
 const BUSY_ERROR = "COCONUT is busy. Try again later";
 const TOO_LARGE_ERROR = "Too large for COCONUT";
 
@@ -93,9 +94,11 @@ export async function coconutLogin(email: string, password: string): Promise<str
   } catch {
     throw new CoconutLoginError("Could not reach COCONUT");
   }
-  if (res.status === 401 || res.status === 403 || res.status === 422) {
+  if (res.status === 401 || res.status === 422) {
     throw new CoconutLoginError("Wrong email or password");
   }
+  // COCONUT's LoginController: the password is right but the email is not yet verified.
+  if (res.status === 403) throw new CoconutLoginError(UNVERIFIED_ERROR);
   // The relay limits logins per client (3 a minute) and COCONUT may too: "busy" would mislead.
   if (res.status === 429) throw new CoconutLoginError("Too many login attempts. Try again in a minute");
   // The relay's own failure (COCONUT unreachable, or too slow): nginx's 502 / 504; 503 alike.
@@ -450,10 +453,14 @@ export function loginEnded(results: SubmitResult[]): boolean {
   return ended;
 }
 
-/** The paper fields still empty ("title", "evidence", "organism") for these structures. */
+/**
+ * The paper fields still empty ("title", "DOI", "evidence", "organism") for these structures.
+ * COCONUT needs a DOI on each reference (ReportResource createRules).
+ */
 export function missingFields(paper: PaperFields, structures: StructureFields[]): string[] {
   return [
     !paper.title.trim() && "title",
+    !paper.doi.trim() && "DOI",
     !paper.evidence.trim() && "evidence",
     structures.some((s) => organismsFor(paper, s).length === 0) && "organism",
   ].filter((x): x is string => typeof x === "string");

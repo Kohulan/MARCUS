@@ -65,6 +65,7 @@ test("log in, fill the form and send one structure to COCONUT through the relay"
   );
 
   await dialog.getByLabel("Title").fill("Relay e2e");
+  await dialog.getByLabel("DOI").fill(FAKE_DOI);
   await dialog.getByLabel("Evidence").fill("Isolated from the bark");
   await dialog.getByLabel("Organism", { exact: true }).fill("Taxus brevifolia");
   await dialog.getByLabel("Name for structure 1").fill("Benzene");
