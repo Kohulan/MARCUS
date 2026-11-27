@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If MARCUS helps your work, please cite the paper below."
+title: "MARCUS: Molecular Annotation and Recognition for Curating Unravelled Structures"
+abstract: >-
+  MARCUS turns chemistry papers (PDF) into checked chemical structures for the
+  COCONUT natural products database. It finds every structure drawing, reads it
+  with several recognition engines (DECIMER, MolScribe, MolParser), annotates the
+  text with the MARCUS model, reads R-group tables and builds their compounds,
+  and puts a person in charge of accepting, fixing or rejecting each structure.
+type: software
+version: 2.0.0
+license: MIT
+url: "https://marcus.decimer.ai"
+repository-code: "https://github.com/Kohulan/MARCUS"
+authors:
+  - family-names: Rajan
+    given-names: Kohulan
+    affiliation: Friedrich Schiller University Jena
+keywords:
+  - cheminformatics
+  - optical chemical structure recognition
+  - OCSR
+  - natural products
+  - COCONUT
+  - DECIMER
+  - text mining
+  - Markush structures
+  - data curation
+identifiers:
+  - type: doi
+    value: 10.1039/d5dd00313j
+    description: The MARCUS paper (Digital Discovery, 2025)
+  - type: doi
+    value: 10.5281/zenodo.24562147
+    description: The MARCUS model nuextract3-marcus-multi-v1 on Zenodo
+preferred-citation:
+  type: article
+  title: "MARCUS: molecular annotation and recognition for curating unravelled structures"
+  authors:
+    - family-names: Rajan
+      given-names: Kohulan
+    - family-names: Weißenborn
+      given-names: Viktor
+    - family-names: Lederer
+      given-names: Laurin
+    - family-names: Zielesny
+      given-names: Achim
+    - family-names: Steinbeck
+      given-names: Christoph
+  journal: Digital Discovery
+  year: 2025
+  volume: 4
+  issue: 11
+  start: 3137
+  end: 3148
+  doi: 10.1039/d5dd00313j
