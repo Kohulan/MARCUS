@@ -244,11 +244,11 @@ describe("Compare", () => {
   it("Hand-drawn (off by default) reads DECIMER hand-drawn in the DECIMER column; its first run says it loads the model", async () => {
     const first = [prediction({ engine: "decimer" }), prediction({ engine: "molparser" }), prediction({ engine: "molscribe" })];
     const { props, rerender } = renderCompare({ predictions: first });
-    const toggle = screen.getByRole("button", { name: "Hand-drawn" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const toggle = screen.getByRole("switch", { name: "Hand-drawn" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(api.runPrediction).not.toHaveBeenCalled();
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     expect(api.runPrediction).toHaveBeenCalledWith("s1", "decimer-hand");
     const note = "The first run can take about 30 s";
@@ -274,7 +274,7 @@ describe("Compare", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use this one, DECIMER hand-drawn" }));
     expect(props.onPick).toHaveBeenCalledWith(hand);
     // Off: normal DECIMER again, nothing started
-    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Hand-drawn" }));
     expect(cell("SMILES", "DECIMER")).toHaveTextContent("c1ccccc1");
     expect(screen.queryByRole("button", { name: "Use this one, DECIMER hand-drawn" })).toBeNull();
     expect(api.runPrediction).toHaveBeenCalledTimes(1);
@@ -285,13 +285,13 @@ describe("Compare", () => {
       handDrawn: true,
       predictions: [prediction({ engine: "molparser" }), prediction({ engine: "molscribe" })],
     });
-    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("switch", { name: "Hand-drawn" })).toHaveAttribute("aria-checked", "true");
     expect(cell("Result", "DECIMER hand-drawn")).toBeDefined();
     await waitFor(() => expect(props.onStarted).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.runPrediction).mock.calls.map((c) => c[1])).toEqual(["decimer-hand"]);
     // off: normal DECIMER, started then (it is not read)
-    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
-    expect(screen.getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("switch", { name: "Hand-drawn" }));
+    expect(screen.getByRole("switch", { name: "Hand-drawn" })).toHaveAttribute("aria-checked", "false");
     expect(cell("Result", "DECIMER")).toHaveTextContent("Not read yet");
   });
 
@@ -312,7 +312,7 @@ describe("Compare", () => {
     });
     const label = await screen.findByRole("table", { name: "Similarity" });
     expect(within(label).getByRole("row", { name: /DECIMER · MolScribe/ })).toHaveTextContent("1.00");
-    fireEvent.click(screen.getByRole("button", { name: "Hand-drawn" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Hand-drawn" }));
     await waitFor(() =>
       expect(within(label).getByRole("row", { name: /DECIMER hand-drawn · MolParser/ })).toHaveTextContent("1.00"),
     );
@@ -383,7 +383,7 @@ describe("Compare", () => {
         prediction({ engine: "molparser", smiles: "CCN", molfile: NEXTR }),
       ],
     });
-    expect(screen.queryByRole("button", { name: /Use coordinates, MolParser/ })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Use coordinates, MolParser/ })).toBeNull();
     await waitFor(() => expect(templatesOf("CCN")).toEqual([undefined]));
     expect(templatesOf("CCO")).toEqual([undefined]);
   });
@@ -427,8 +427,8 @@ describe("Compare", () => {
       ],
     });
     for (const engine of ["MolNexTR", "MolScribe"]) {
-      expect(screen.getByRole("button", { name: `Use coordinates, ${engine}` })).toHaveAttribute(
-        "aria-pressed",
+      expect(screen.getByRole("switch", { name: `Use coordinates, ${engine}` })).toHaveAttribute(
+        "aria-checked",
         "true",
       );
     }
@@ -446,15 +446,15 @@ describe("Compare", () => {
       ],
     });
     await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE]));
-    fireEvent.click(screen.getByRole("button", { name: "Use coordinates, MolScribe" }));
-    expect(screen.getByRole("button", { name: "Use coordinates, MolScribe" })).toHaveAttribute(
-      "aria-pressed",
+    fireEvent.click(screen.getByRole("switch", { name: "Use coordinates, MolScribe" }));
+    expect(screen.getByRole("switch", { name: "Use coordinates, MolScribe" })).toHaveAttribute(
+      "aria-checked",
       "false",
     );
     // MolScribe plain; DECIMER now on MolNexTR's positions
     await waitFor(() => expect(templatesOf("CCC")).toEqual([SCRIBE, undefined]));
     await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE, NEXTR]));
-    fireEvent.click(screen.getByRole("button", { name: "Use coordinates, MolNexTR" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Use coordinates, MolNexTR" }));
     await waitFor(() => expect(templatesOf("CCN")).toEqual([NEXTR, undefined]));
     await waitFor(() => expect(templatesOf("CCO")).toEqual([SCRIBE, NEXTR, undefined]));
   });
@@ -467,11 +467,11 @@ describe("Compare", () => {
         prediction({ engine: "molscribe", smiles: "CCC", molfile: null }),
       ],
     });
-    const old = screen.getByRole("button", { name: "Use coordinates, MolNexTR" });
+    const old = screen.getByRole("switch", { name: "Use coordinates, MolNexTR" });
     expect(old).toBeDisabled();
-    expect(old).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByRole("button", { name: "Use coordinates, MolScribe" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Use coordinates, DECIMER/ })).toBeNull();
+    expect(old).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("switch", { name: "Use coordinates, MolScribe" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Use coordinates, DECIMER/ })).toBeNull();
     // nothing to orient by: every drawing in the normal layout
     await waitFor(() => expect(templatesOf("CCN")).toEqual([undefined]));
     expect(templatesOf("CCO")).toEqual([undefined]);
@@ -973,13 +973,13 @@ describe("Compare in the workspace", () => {
     await screen.findByRole("region", { name: /^Focus/ });
     press("c");
     let dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
-    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("switch", { name: "Hand-drawn" })).toHaveAttribute("aria-checked", "true");
     first.unmount();
     renderWorkspace(paper([segment("s1")]), "?s=s1&focus=1");
     await screen.findByRole("region", { name: /^Focus/ });
     press("c");
     dialog = await screen.findByRole("dialog", { name: /Compare engines/ });
-    expect(within(dialog).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(dialog).getByRole("switch", { name: "Hand-drawn" })).toHaveAttribute("aria-checked", "false");
   });
 
   it("a card's engine menu and a To check card open Compare in the grid", async () => {
@@ -1025,9 +1025,9 @@ describe("Compare: the paper layout", () => {
     renderCompare({ predictions: answers() });
     await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT]));
     expect(templatesOf("CCN")).toEqual([LAYOUT]);
-    const coords = screen.getByRole("button", { name: "Use coordinates, MolScribe" });
+    const coords = screen.getByRole("switch", { name: "Use coordinates, MolScribe" });
     expect(coords).toBeEnabled();
-    expect(coords).toHaveAttribute("aria-pressed", "true");
+    expect(coords).toHaveAttribute("aria-checked", "true");
     fireEvent.click(coords);
     await waitFor(() => expect(templatesOf("CCO")).toEqual([LAYOUT, undefined]));
     expect(templatesOf("CCN")).toEqual([LAYOUT, undefined]);

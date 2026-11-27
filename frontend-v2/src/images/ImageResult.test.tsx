@@ -542,7 +542,7 @@ describe("ImageResult", () => {
     it.each([
       ["decimer-hand", "true"],
       ["decimer", "false"],
-    ])("an image read with %s opens Compare with Hand-drawn pressed=%s", async (engine, pressed) => {
+    ])("an image read with %s opens Compare with Hand-drawn on=%s", async (engine, pressed) => {
       vi.spyOn(api, "getImageJob").mockResolvedValue(
         job({ engine, prediction: pred({ engine }) }),
       );
@@ -550,8 +550,8 @@ describe("ImageResult", () => {
       renderPage();
       fireEvent.click(await screen.findByRole("button", { name: "Compare" }));
       const section = await screen.findByRole("region", { name: "Compare engines" });
-      expect(within(section).getByRole("button", { name: "Hand-drawn" })).toHaveAttribute(
-        "aria-pressed",
+      expect(within(section).getByRole("switch", { name: "Hand-drawn" })).toHaveAttribute(
+        "aria-checked",
         pressed,
       );
     });

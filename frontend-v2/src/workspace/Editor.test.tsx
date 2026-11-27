@@ -512,7 +512,7 @@ describe("the editor never starts from the paper layout", () => {
 
 describe("Use coordinates", () => {
   function coordsButton() {
-    return screen.getByRole("button", { name: "Use coordinates" });
+    return screen.getByRole("switch", { name: "Use coordinates" });
   }
   function spyFrame() {
     const post = vi.spyOn(frame().contentWindow as Window, "postMessage");
@@ -522,7 +522,7 @@ describe("Use coordinates", () => {
 
   it("is on at opening; switching it loads the start again with or without the molfile", () => {
     renderEditor({ initial: { smiles: "CC", molfile: IMAGE_MOL } });
-    expect(coordsButton()).toHaveAttribute("aria-pressed", "true");
+    expect(coordsButton()).toHaveAttribute("aria-checked", "true");
     expect(coordsButton()).toBeEnabled();
     const post = spyFrame();
     fromKetcher({ type: "marcus:ready" });
@@ -531,7 +531,7 @@ describe("Use coordinates", () => {
       ORIGIN,
     );
     fireEvent.click(coordsButton());
-    expect(coordsButton()).toHaveAttribute("aria-pressed", "false");
+    expect(coordsButton()).toHaveAttribute("aria-checked", "false");
     expect(post).toHaveBeenCalledTimes(2);
     expect(post).toHaveBeenLastCalledWith({ type: "marcus:load", molfile: null, smiles: "CC" }, ORIGIN);
     fireEvent.click(coordsButton());
@@ -545,7 +545,7 @@ describe("Use coordinates", () => {
   it("is off and disabled without image positions; Ketcher gets the start as today", () => {
     renderEditor({ initial: { smiles: "CC", molfile: COMPUTED_MOL } });
     expect(coordsButton()).toBeDisabled();
-    expect(coordsButton()).toHaveAttribute("aria-pressed", "false");
+    expect(coordsButton()).toHaveAttribute("aria-checked", "false");
     const post = spyFrame();
     fromKetcher({ type: "marcus:ready" });
     expect(post).toHaveBeenCalledWith(

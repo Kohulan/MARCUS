@@ -159,7 +159,7 @@ test("the editor shows the crop, and Find on paper shows its page", { tag: "@moc
   const crop = dialog.getByRole("img", { name: "Crop the engines read" });
   await expect(crop).toBeVisible();
   await expect.poll(() => crop.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  await expect(dialog.getByRole("button", { name: "Use coordinates" })).toBeVisible();
+  await expect(dialog.getByRole("switch", { name: "Use coordinates" })).toBeVisible();
 
   await dialog.getByRole("button", { name: "Find on paper" }).click();
   const sheet = dialog.getByRole("img", { name: /^Page \d+$/ });

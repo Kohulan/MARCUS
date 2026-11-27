@@ -102,8 +102,7 @@ export default function Compare({
     () => engineRows(predictions, steps, requested, hand),
     [predictions, steps, requested, hand],
   );
-  const toggleHand = () => {
-    const on = !hand;
+  const toggleHand = (on: boolean) => {
     setHand(on);
     // On: read it now unless it is read or running (its first run loads the model).
     if (on) run(enginesToRun(engineRows(predictions, steps, requested, true)).filter((e) => e === "decimer-hand"));
@@ -234,23 +233,18 @@ export default function Compare({
                   )}
                   {i === 0 && (
                     <span className="cmp-table__toggle">
-                      <GlassButton tint="clear" size="sm" pressed={hand} onClick={toggleHand}>
-                        Hand-drawn
-                      </GlassButton>
+                      <Switch label="Hand-drawn" checked={hand} onChange={toggleHand} />
                     </span>
                   )}
                   {TEMPLATE_ENGINES.includes(r.engine) && (r.prediction?.molfile || ownTemplate(r)) && (
                     <span className="cmp-table__toggle">
-                      <GlassButton
-                        tint="clear"
-                        size="sm"
+                      <Switch
                         label={`Use coordinates, ${r.label}`}
+                        text="Use coordinates"
                         disabled={!ownTemplate(r)}
-                        pressed={ownTemplate(r) !== null && coordsOn(r.engine)}
-                        onClick={() => setCoords((c) => ({ ...c, [r.engine]: !coordsOn(r.engine) }))}
-                      >
-                        Use coordinates
-                      </GlassButton>
+                        checked={ownTemplate(r) !== null && coordsOn(r.engine)}
+                        onChange={(on) => setCoords((c) => ({ ...c, [r.engine]: on }))}
+                      />
                     </span>
                   )}
                 </th>
