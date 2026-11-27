@@ -320,24 +320,26 @@ export default function Compare({
               {rows.map((r) => (
                 <td key={r.engine} className="cmp-table__use">
                   {r.prediction && drawable(r.prediction) && (
-                    <GlassButton
-                      tint="green"
-                      size="sm"
-                      label={`Use this one, ${r.label}`}
-                      onClick={() => onPick(r.prediction!)}
-                    >
-                      Use this one
-                    </GlassButton>
-                  )}
-                  {r.prediction && drawable(r.prediction) && onEdit && (
-                    <GlassButton
-                      tint="clear"
-                      size="sm"
-                      label={`Edit and use, ${r.label}`}
-                      onClick={() => onEdit(r.prediction!)}
-                    >
-                      Edit and use
-                    </GlassButton>
+                    <>
+                      <GlassButton
+                        tint="green"
+                        size="sm"
+                        label={`Use this one, ${r.label}`}
+                        onClick={() => onPick(r.prediction!)}
+                      >
+                        Use this one
+                      </GlassButton>
+                      {onEdit && (
+                        <GlassButton
+                          tint="clear"
+                          size="sm"
+                          label={`Edit and use, ${r.label}`}
+                          onClick={() => onEdit(r.prediction!)}
+                        >
+                          Edit and use
+                        </GlassButton>
+                      )}
+                    </>
                   )}
                 </td>
               ))}
@@ -627,6 +629,7 @@ export function SegmentCompare({
         paperEngine={paperEngine}
         segment={segment}
         start={{ smiles: editing.smiles, molfile: editing.molfile ?? null, engine: editing.engine }}
+        accept
         onSaved={onSaved}
         onClose={onClose}
       />

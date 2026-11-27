@@ -25,14 +25,17 @@ export function SegmentEditor({
   paperEngine,
   segment,
   start,
+  accept = false,
   onSaved,
   onClose,
 }: {
   paperId: string;
   paperEngine: string;
   segment: SegmentOut;
-  /** Open on this structure (Compare's "Edit and use": one engine's answer), accepted on save. */
+  /** Open on this structure (Compare's "Edit and use": one engine's answer). */
   start?: { smiles: string | null; molfile: string | null; engine: string | null };
+  /** The save is a choice, as "Use this one": accepted whatever the card's status was. */
+  accept?: boolean;
   /** After the save landed. */
   onSaved?: (() => void) | undefined;
   onClose: () => void;
@@ -45,8 +48,7 @@ export function SegmentEditor({
   // sees the curation as it is when Save is pressed. The save's promise goes back to the
   // dialog: a 422 keeps it open with "Save failed: …".
   const onSave = async (s: EditorStructure) => {
-    // Compare's "Edit and use" is a choice, as "Use this one": the edit is accepted
-    await save(segment.id, start ? { status: "accepted", structure: s } : editorChange(segment.curation, s));
+    await save(segment.id, accept ? { status: "accepted", structure: s } : editorChange(segment.curation, s));
     onSaved?.();
   };
   // Left of Ketcher: the crop the engines read, and its page with this structure's box.

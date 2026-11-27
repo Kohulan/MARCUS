@@ -43,6 +43,8 @@ export type ImageCompareProps = {
     error_class: string | null;
   }[];
   onPick: (p: PredictionOut) => void;
+  /** "Edit and use": the editor opens on this answer. */
+  onEdit?: (p: PredictionOut) => void;
   onStarted: () => void;
   /** The section's Close, at the end of Compare's head. */
   headAction?: ReactNode;
@@ -349,6 +351,12 @@ function Result({
             onPick={(p) => {
               setPicked(p);
               setEdit(null);
+            }}
+            onEdit={(p) => {
+              setPicked(p);
+              setEdit(null);
+              endCompare();
+              setEditing(true);
             }}
             onStarted={live.reconnect}
             handDrawn={job.engine === "decimer-hand"}
