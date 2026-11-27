@@ -47,7 +47,7 @@ MAX_HIGHLIGHT_ATOMS = 128
 # engines' answers differ (the brand orange, frontend tokens.css --orange), and `common`, what
 # they share (the highlight's light blue). marcus.workers.differences gives both lists.
 MARK_COLOUR = (250, 54, 0)
-COMMON_COLOUR = (173, 216, 230)
+COMMON_COLOUR = (173, 216, 230)  # = frontend tokens.css --common #ADD8E6 (Compare's legend)
 MAX_MARKS = 250  # = marcus.workers.orient.MAX_ATOMS
 
 

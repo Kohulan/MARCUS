@@ -381,7 +381,7 @@ export default function Compare({
         )}
         <div className="cmp__side">
           <div className="cmp__marks" role="group" aria-label="Mark in the drawings">
-            <Switch label="Marks" checked={canMark && marksOn} disabled={!canMark} onChange={setMarksOn} />
+            <Switch label="Marks" checked={mark !== "off"} disabled={!canMark} onChange={setMarksOn} />
             <SegmentedControl
               label="What to mark"
               value={kind}

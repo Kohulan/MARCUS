@@ -1,5 +1,6 @@
-/* SegmentedControl: the Review/Paper switch's porcelain pill (workspace.css .ws-toggle) for any
-   number of options; the knob slides to --seg-at and takes the chosen option's tone. */
+/* SegmentedControl: a porcelain pill, as the footer's bubbles, for any number of options (the
+   Review | Paper switch, Compare's marks); the knob slides to --seg-at on the one curve (it jumps
+   under reduced motion) and takes the chosen option's tone. */
 .seg {
   position: relative;
   display: inline-grid;
@@ -30,7 +31,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 132px;
+  min-width: 112px;
   padding: 9px 18px;
   border: 0;
   border-radius: 999px;
@@ -59,6 +60,12 @@
 .seg__option:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
+}
+
+.seg__icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
 /* A dot of the option's own mark colour: the control is its own legend. */

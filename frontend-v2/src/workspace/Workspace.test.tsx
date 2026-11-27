@@ -600,26 +600,26 @@ describe("view in the URL", () => {
   it("opens the review view by default", async () => {
     renderWorkspace();
     await title();
-    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: "Review" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("region", { name: "Review view" })).toBeInTheDocument();
   });
 
   it("the view switch is one porcelain pill whose knob sits under the view shown (owner, 2026-11-26)", async () => {
     renderWorkspace();
     await title();
-    const toggle = screen.getByRole("group", { name: "View" });
-    expect(toggle).toHaveAttribute("data-view", "review");
-    expect(toggle.querySelector(".ws-toggle__knob")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Paper" }));
-    expect(toggle).toHaveAttribute("data-view", "paper");
+    const toggle = screen.getByRole("radiogroup", { name: "View" });
+    expect(toggle.style.getPropertyValue("--seg-at")).toBe("0");
+    expect(toggle.querySelector(".seg__knob")).not.toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Paper" }));
+    expect(toggle.style.getPropertyValue("--seg-at")).toBe("1");
   });
 
   it("?view=paper opens the paper view, and the toggle writes the URL", async () => {
     renderWorkspace({ search: "?view=paper&s=g7" });
     await title();
-    expect(screen.getByRole("button", { name: "Paper" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: "Paper" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("region", { name: "Paper view" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Review" }));
     expect(screen.getByRole("region", { name: "Review view" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent(`/app/papers/${ID}?s=g7`);
   });

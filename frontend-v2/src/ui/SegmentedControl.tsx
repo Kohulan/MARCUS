@@ -57,7 +57,12 @@ export default function SegmentedControl<T extends string>({
       if (v) el.style.setProperty(name, v);
       else el.style.removeProperty(name);
     }
-  }, [options.length, at, chosen]);
+    // each dot its option's colour (set here once, not by a ref on every render)
+    el.querySelectorAll<HTMLElement>(".seg__dot").forEach((dot) => {
+      const tone = options.find((o) => o.value === dot.dataset.value)?.tone;
+      if (tone?.dot) dot.style.setProperty("--seg-dot", tone.dot);
+    });
+  }, [options, at, chosen]);
 
   return (
     <div ref={group} className="seg" role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
@@ -80,11 +85,7 @@ export default function SegmentedControl<T extends string>({
             onKeyDown={(event) => move(event, index)}
           >
             {option.tone?.dot && (
-              <span
-                className="seg__dot"
-                ref={(node) => node?.style.setProperty("--seg-dot", option.tone!.dot!)}
-                aria-hidden="true"
-              />
+              <span className="seg__dot" data-value={option.value} aria-hidden="true" />
             )}
             {option.label}
           </button>
