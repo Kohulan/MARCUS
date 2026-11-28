@@ -30,6 +30,12 @@ UNKNOWN_IP = "unknown"
 # request.state key: SecurityMiddleware adds the cookie for it to whatever response goes out.
 # Set for a new owner and, to renew the cookie's Max-Age (sliding expiry), for a known one.
 NEW_OWNER_TOKEN = "new_owner_token"
+# A new browser owner is made only for a request with this header (any non-blank value). The
+# web app's own fetch sends it; a cross-site link, form or window.open cannot add a header, and a
+# cross-site fetch that adds one fails CORS. Such a request arrives without the SameSite=Strict
+# cookie, and a new owner's cookie would replace the visitor's (Claude Security F1, 2026-11-27).
+CLIENT_HEADER = "X-Marcus-Client"
+NO_CLIENT_HEADER = f"A new session needs the {CLIENT_HEADER} header"
 TOUCH_EVERY = timedelta(seconds=60)  # last_seen_at is written at most this often
 IPV6_RATE_PREFIX = 64  # one IPv6 client usually holds a whole /64
 
@@ -247,7 +253,8 @@ async def known_browser_owner(request: Request, db: AsyncSession = Depends(get_d
 async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) -> Owner:
     """The caller's owner: API key, else browser cookie, else a new browser owner (limits per
     client address and hour: ip_max_new_owners_per_hour used owners, ip_max_new_sessions_per_hour
-    owner rows in all).
+    owner rows in all). A new owner needs the CLIENT_HEADER; without it the answer is 403, with
+    no cookie and no session slot used.
 
     A new owner's token goes on `request.state`; SecurityMiddleware sets the cookie on the
     response, whatever it is (an error, a file, a stream), not only on a route's own one.
@@ -281,6 +288,9 @@ async def current_owner(request: Request, db: AsyncSession = Depends(get_db)) ->
             if await _touch(db, owner):
                 setattr(request.state, NEW_OWNER_TOKEN, cookie)  # sliding expiry
             return owner
+
+    if not request.headers.get(CLIENT_HEADER, "").strip():
+        raise HTTPException(status_code=403, detail=NO_CLIENT_HEADER)
 
     ip = client_ip(request)
     ip_valid = _parse_ip(ip) is not None

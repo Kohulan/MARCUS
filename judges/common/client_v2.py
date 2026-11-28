@@ -79,6 +79,9 @@ from .client_v1 import (
 
 API = "/api/v2"
 OWNER_COOKIE = "marcus_owner"
+# The API makes a new browser owner only for a request with this header, as the web app sends it
+# (backend-v2 api/deps.py CLIENT_HEADER); a known cookie needs none.
+CLIENT_HEADER = "X-Marcus-Client"
 POLL_S = 2.0
 UI_SEGMENT_TIMEOUT_S = 300
 UI_OCSR_TIMEOUT_S = 60
@@ -240,7 +243,8 @@ def run_paper(
     }
 
     client = no_keepalive_client(
-        base_url, max_connections=4, timeout=httpx.Timeout(connect=15.0, read=60.0, write=120.0, pool=30.0)
+        base_url, max_connections=4, timeout=httpx.Timeout(connect=15.0, read=60.0, write=120.0, pool=30.0),
+        headers={CLIENT_HEADER: "judge"},
     )
     _ACTIVE.add(client)
 

@@ -117,7 +117,7 @@ Results: `results/<target>_v2_<scenario>_<time>.json`; the S2 slowdown uses the 
 | v1 call (scenarios.py) | v2 form |
 |---|---|
 | `GET /health` | `GET /api/v2/health` |
-| `POST /session/create` | a browser owner: `GET /api/v2/papers` without a cookie, cookie `marcus_owner` from Set-Cookie (Secure, so sent by hand) |
+| `POST /session/create` | a browser owner: `GET /api/v2/papers` without a cookie but with `X-Marcus-Client` (the header a new owner needs), cookie `marcus_owner` from Set-Cookie (Secure, so sent by hand) |
 | `POST /session/heartbeat/{sid}` | `GET /api/v2/papers` with the owner cookie |
 | `DELETE /session/remove/{sid}` | none (no sessions) |
 | `POST /latest/ocsr/generate_smiles` | `POST /api/v2/images` + `GET /api/v2/images/{id}` every 0.25 s until done/failed |

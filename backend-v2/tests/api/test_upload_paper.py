@@ -2,6 +2,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from marcus.api.deps import CLIENT_HEADER
 from marcus.api.main import create_app
 from marcus.api.uploads import sanitize_display_name
 from marcus.core.db import get_db
@@ -24,7 +25,11 @@ def app(async_db_session):
 
 
 def make_client(app):
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://test",
+        headers={CLIENT_HEADER: "test"},
+    )
 
 
 async def test_upload_returns_202_and_one_check_pdf_step(app, async_db_session):

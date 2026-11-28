@@ -1,5 +1,5 @@
 // The one HTTP client of the tool: every call is same-origin under /api/v2 (the owner
-// cookie rides along), and every non-2xx becomes an ApiError with a text fit to show.
+// cookie rides along, and CLIENT_HEADER lets a first call make the owner), and every non-2xx becomes an ApiError with a text fit to show.
 import type {
   AnnotationOut,
   AnnotationStarted,
@@ -37,6 +37,12 @@ import type {
 } from "./types";
 
 export const BASE = "/api/v2";
+/**
+ * Sent on every call: the API makes a new owner (and its cookie) only for a request with it, which
+ * a cross-site link or form cannot send (backend api/deps.py CLIENT_HEADER). Links, images,
+ * EventSource and downloads need no header: they run once the owner cookie exists.
+ */
+export const CLIENT_HEADER = "X-Marcus-Client";
 
 export const TOO_LARGE = "This file is larger than 20 MB.";
 const BUSY = "The server is busy, try again in a moment.";
@@ -204,7 +210,9 @@ export function resetOwnerGate(): void {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await send(`${BASE}${path}`, { ...init, credentials: "same-origin" });
+  const headers = new Headers(init.headers);
+  headers.set(CLIENT_HEADER, "web");
+  const res = await send(`${BASE}${path}`, { ...init, headers, credentials: "same-origin" });
   if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return undefined as T;
   const text = await res.text();
