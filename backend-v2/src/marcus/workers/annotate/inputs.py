@@ -7,7 +7,8 @@ the format the model was trained on), unchanged but for the corpus-only parts:
 
 A part that is not found is left out with its marker; with neither an abstract nor an
 introduction, the opening body paragraphs follow the title, tab-separated. At most MAX_CHARS
-characters, cut at paragraph, then sentence boundaries. Then every e-mail address is removed
+characters, cut at paragraph, then sentence boundaries; the title alone is cut to MAX_CHARS too
+(not in the training builder). Then every e-mail address is removed
 (owner ruling 7, applied to every training text: corpus/harmonise/build.py `scrub_emails`).
 
 Standard library only. Keep it in step with the training builder: a change here changes what
@@ -197,6 +198,9 @@ def build(d: dict) -> dict:
     items = [it for it in linearize(d) if it["label"] in KEEP_LABELS and it["text"]]
     notes: list[str] = []
     title, ti, how = pick_title(items)
+    # not in the training builder: a title is never longer than the whole input. No real title
+    # comes near MAX_CHARS; an uncut one (a crafted PDF) made scrub_emails' regexes quadratic
+    title = sentence_cut(title, MAX_CHARS)
     notes.append(f"title:{how}")
     body = items[(ti + 1) if ti is not None else 0 :]
     bound = [is_boundary(it) for it in body]
@@ -349,7 +353,7 @@ EMAIL_BLOCK = re.compile(
 
 def scrub_emails(text: str) -> str:
     """Every e-mail address out, with its label (harmonise/build.py scrub_emails)."""
-    if not EMAIL_RE.search(text):
+    if "@" not in text or not EMAIL_RE.search(text):
         return text
     out = EMAIL_BLOCK.sub("", text)
     return re.sub(r"[ ]{2,}", " ", out)

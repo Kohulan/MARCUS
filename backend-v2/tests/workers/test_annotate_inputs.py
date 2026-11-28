@@ -57,6 +57,20 @@ def test_emails_are_removed_with_their_label():
     assert scrub_emails("no address here") == "no address here"
 
 
+def test_an_absurdly_long_title_is_cut_before_the_email_scrub():
+    """A crafted first-page line made scrub_emails' regexes quadratic (minutes per paper): a long
+    run with no '@', or an 'e-mail' label then a long U+00A0 run (clean() keeps it, \\s matches
+    it) with an address elsewhere. The title is cut to MAX_CHARS; real titles are kept whole."""
+    nbsp = "Isolation of compounds x@y.org e-mail" + "\u00a0" * 200_000 + "z" + "a" * 250_000
+    assert model_input(_doc([("title", nbsp)])) == "Isolation of compounds "
+    no_at = "Isolation of " + "a" * 300_000 + " compounds"
+    assert model_input(_doc([("title", no_at)])) == "Isolation of"
+    label = "Isolation x@y.org e-mail" + "\u00a0" * 20 + "a@b.org next"
+    assert scrub_emails(label) == "Isolation next"
+    real = "Clerodane Diterpenoids from Casearia sylvestris " * 20
+    assert model_input(_doc([("title", real.strip())])) == real.strip()
+
+
 def test_a_document_without_text_gives_an_empty_input():
     assert model_input({"body": {"children": []}, "texts": []}) == ""
 

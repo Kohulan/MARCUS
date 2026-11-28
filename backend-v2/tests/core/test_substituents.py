@@ -122,6 +122,16 @@ def test_the_condensed_parser_stays_fast_on_long_branchy_text():
     assert time.monotonic() - start < 1.0
 
 
+def test_a_repeat_count_no_atom_can_carry_is_not_expanded():
+    import time
+
+    start = time.monotonic()
+    assert parse_condensed("C(C)999999") is None
+    assert parse_condensed("C(CH3)4") is None
+    assert time.monotonic() - start < 1.0
+    assert parse_condensed("C(CH3)3") is not None
+
+
 def test_oco_is_not_mirrored_into_a_carboxylate():
     assert resolve("OCO") == 'unknown substituent "OCO"'
 
